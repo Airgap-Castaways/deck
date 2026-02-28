@@ -31,6 +31,18 @@ func NewHandler(root string) http.Handler {
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "accepted"})
 	})
 
+	mux.HandleFunc("/api/agent/lease", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "ok",
+			"job":    nil,
+		})
+	})
+
 	mux.Handle("/files/", http.StripPrefix("/files/", http.FileServer(http.Dir(filesDir))))
 	mux.Handle("/packages/", http.StripPrefix("/packages/", http.FileServer(http.Dir(packagesDir))))
 

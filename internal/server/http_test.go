@@ -76,4 +76,16 @@ func TestNewHandler(t *testing.T) {
 			t.Fatalf("expected 200, got %d", rr.Code)
 		}
 	})
+
+	t.Run("serves agent lease", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/agent/lease", strings.NewReader(`{"agent":"x"}`))
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rr.Code)
+		}
+		if !strings.Contains(rr.Body.String(), `"status":"ok"`) {
+			t.Fatalf("unexpected lease response: %q", rr.Body.String())
+		}
+	})
 }

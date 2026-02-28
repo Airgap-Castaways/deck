@@ -270,11 +270,15 @@ func TestRunAgent(t *testing.T) {
 
 	t.Run("once heartbeat success", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/api/agent/heartbeat" {
+			switch r.URL.Path {
+			case "/api/agent/heartbeat":
+				w.WriteHeader(http.StatusOK)
+			case "/api/agent/lease":
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"status":"ok","job":null}`))
+			default:
 				http.NotFound(w, r)
-				return
 			}
-			w.WriteHeader(http.StatusOK)
 		}))
 		defer srv.Close()
 
