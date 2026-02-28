@@ -94,6 +94,26 @@ func TestRunBundleImport(t *testing.T) {
 	})
 }
 
+func TestRunBundleCollect(t *testing.T) {
+	root := t.TempDir()
+	bundleDir := filepath.Join(root, "bundle")
+	if err := os.MkdirAll(filepath.Join(bundleDir, "files"), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "files", "a.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write bundle file: %v", err)
+	}
+
+	out := filepath.Join(root, "bundle.tar")
+	if err := run([]string{"bundle", "collect", "--bundle", bundleDir, "--output", out}); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+
+	if _, err := os.Stat(out); err != nil {
+		t.Fatalf("expected output archive: %v", err)
+	}
+}
+
 func writeManifestForMainTest(bundleRoot, rel string, content []byte) error {
 	sum := sha256.Sum256(content)
 	manifest := map[string]any{

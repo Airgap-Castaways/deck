@@ -44,7 +44,7 @@ func run(args []string) error {
 
 func runBundle(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: deck bundle verify --bundle <path> | deck bundle import --file <bundle.tar> --dest <dir>")
+		return errors.New("usage: deck bundle verify --bundle <path> | deck bundle import --file <bundle.tar> --dest <dir> | deck bundle collect --bundle <dir> --output <bundle.tar>")
 	}
 
 	switch args[0] {
@@ -86,6 +86,28 @@ func runBundle(args []string) error {
 		}
 
 		fmt.Fprintf(os.Stdout, "bundle import: ok (%s -> %s)\n", *archiveFile, *destDir)
+		return nil
+
+	case "collect":
+		fs := flag.NewFlagSet("bundle collect", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		bundleDir := fs.String("bundle", "", "bundle directory")
+		outputFile := fs.String("output", "", "output tar archive path")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *bundleDir == "" {
+			return errors.New("--bundle is required")
+		}
+		if *outputFile == "" {
+			return errors.New("--output is required")
+		}
+
+		if err := bundle.CollectArchive(*bundleDir, *outputFile); err != nil {
+			return err
+		}
+
+		fmt.Fprintf(os.Stdout, "bundle collect: ok (%s -> %s)\n", *bundleDir, *outputFile)
 		return nil
 
 	default:
@@ -226,5 +248,5 @@ func runDiagnose(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: deck validate -f <file> | deck run --file <file> --phase <phase> | deck resume --file <file> | deck diagnose --preflight --file <file> | deck bundle verify --bundle <path> | deck bundle import --file <bundle.tar> --dest <dir>")
+	return errors.New("usage: deck validate -f <file> | deck run --file <file> --phase <phase> | deck resume --file <file> | deck diagnose --preflight --file <file> | deck bundle verify --bundle <path> | deck bundle import --file <bundle.tar> --dest <dir> | deck bundle collect --bundle <dir> --output <bundle.tar>")
 }
