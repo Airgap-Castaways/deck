@@ -131,6 +131,47 @@ func TestNewHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("persists queue and reports across handler restart", func(t *testing.T) {
+		enqReq := httptest.NewRequest(http.MethodPost, "/api/agent/job", strings.NewReader(`{"id":"j-persist","type":"noop"}`))
+		enqRR := httptest.NewRecorder()
+		h.ServeHTTP(enqRR, enqReq)
+		if enqRR.Code != http.StatusOK {
+			t.Fatalf("expected enqueue 200, got %d", enqRR.Code)
+		}
+
+		repReq := httptest.NewRequest(http.MethodPost, "/api/agent/report", strings.NewReader(`{"job_id":"j-persist","status":"success"}`))
+		repRR := httptest.NewRecorder()
+		h.ServeHTTP(repRR, repReq)
+		if repRR.Code != http.StatusOK {
+			t.Fatalf("expected report 200, got %d", repRR.Code)
+		}
+
+		h2, err := NewHandler(root)
+		if err != nil {
+			t.Fatalf("NewHandler restart: %v", err)
+		}
+
+		leaseReq := httptest.NewRequest(http.MethodPost, "/api/agent/lease", strings.NewReader(`{"agent":"x"}`))
+		leaseRR := httptest.NewRecorder()
+		h2.ServeHTTP(leaseRR, leaseReq)
+		if leaseRR.Code != http.StatusOK {
+			t.Fatalf("expected lease 200, got %d", leaseRR.Code)
+		}
+		if !strings.Contains(leaseRR.Body.String(), `"id":"j-persist"`) {
+			t.Fatalf("expected persisted queued job in lease response: %q", leaseRR.Body.String())
+		}
+
+		reportsReq := httptest.NewRequest(http.MethodGet, "/api/agent/reports?job_id=j-persist", nil)
+		reportsRR := httptest.NewRecorder()
+		h2.ServeHTTP(reportsRR, reportsReq)
+		if reportsRR.Code != http.StatusOK {
+			t.Fatalf("expected reports 200, got %d", reportsRR.Code)
+		}
+		if !strings.Contains(reportsRR.Body.String(), `"job_id":"j-persist"`) {
+			t.Fatalf("expected persisted report in response: %q", reportsRR.Body.String())
+		}
+	})
+
 	t.Run("accepts agent report", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/agent/report", strings.NewReader(`{"job_id":"j-1","status":"success"}`))
 		rr := httptest.NewRecorder()

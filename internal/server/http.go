@@ -61,6 +61,11 @@ type alphaReportStore struct {
 	reports []map[string]any
 }
 
+type alphaServerState struct {
+	Queue   []alphaJob       `json:"queue"`
+	Reports []map[string]any `json:"reports"`
+}
+
 func (q *alphaJobQueue) enqueue(job alphaJob) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -76,6 +81,21 @@ func (q *alphaJobQueue) dequeue() (alphaJob, bool) {
 	job := q.jobs[0]
 	q.jobs = q.jobs[1:]
 	return job, true
+}
+
+func (q *alphaJobQueue) snapshot() []alphaJob {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	out := make([]alphaJob, len(q.jobs))
+	copy(out, q.jobs)
+	return out
+}
+
+func (q *alphaJobQueue) setJobs(jobs []alphaJob) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.jobs = make([]alphaJob, len(jobs))
+	copy(q.jobs, jobs)
 }
 
 func (s *alphaReportStore) add(report map[string]any) {
@@ -99,6 +119,26 @@ func (s *alphaReportStore) list() []map[string]any {
 		out = append(out, c)
 	}
 	return out
+}
+
+func (s *alphaReportStore) snapshot() []map[string]any {
+	return s.list()
+}
+
+func (s *alphaReportStore) setReports(reports []map[string]any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reports = make([]map[string]any, 0, len(reports))
+	for _, r := range reports {
+		c := map[string]any{}
+		for k, v := range r {
+			c[k] = v
+		}
+		s.reports = append(s.reports, c)
+	}
+	if len(s.reports) > s.max {
+		s.reports = s.reports[len(s.reports)-s.max:]
+	}
 }
 
 func (s *alphaReportStore) listFiltered(limit int, jobID string) []map[string]any {
@@ -143,6 +183,20 @@ func NewHandler(root string) (http.Handler, error) {
 	queue := &alphaJobQueue{jobs: []alphaJob{}}
 	reports := &alphaReportStore{max: 200, reports: []map[string]any{}}
 
+	state, err := loadAlphaServerState(root)
+	if err != nil {
+		return nil, err
+	}
+	queue.setJobs(state.Queue)
+	reports.setReports(state.Reports)
+
+	persist := func() error {
+		return saveAlphaServerState(root, alphaServerState{
+			Queue:   queue.snapshot(),
+			Reports: reports.snapshot(),
+		})
+	}
+
 	filesDir := filepath.Join(root, "files")
 	packagesDir := filepath.Join(root, "packages")
 
@@ -173,6 +227,11 @@ func NewHandler(root string) (http.Handler, error) {
 		var jobPayload any
 		if ok {
 			jobPayload = job
+			if err := persist(); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]string{"status": "persist_error"})
+				return
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -203,6 +262,11 @@ func NewHandler(root string) (http.Handler, error) {
 		}
 
 		queue.enqueue(job)
+		if err := persist(); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "persist_error"})
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "accepted"})
 	})
@@ -219,6 +283,11 @@ func NewHandler(root string) (http.Handler, error) {
 			}
 			report["received_at"] = time.Now().UTC().Format(time.RFC3339)
 			reports.add(report)
+			if err := persist(); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]string{"status": "persist_error"})
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "accepted"})
 		case http.MethodGet:
@@ -281,4 +350,46 @@ func NewHandler(root string) (http.Handler, error) {
 			"duration_ms": time.Since(start).Milliseconds(),
 		})
 	}), nil
+}
+
+func loadAlphaServerState(root string) (alphaServerState, error) {
+	path := filepath.Join(root, ".deck", "state", "server-alpha.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return alphaServerState{Queue: []alphaJob{}, Reports: []map[string]any{}}, nil
+		}
+		return alphaServerState{}, fmt.Errorf("read alpha state file: %w", err)
+	}
+
+	var state alphaServerState
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return alphaServerState{}, fmt.Errorf("parse alpha state file: %w", err)
+	}
+	if state.Queue == nil {
+		state.Queue = []alphaJob{}
+	}
+	if state.Reports == nil {
+		state.Reports = []map[string]any{}
+	}
+	return state, nil
+}
+
+func saveAlphaServerState(root string, state alphaServerState) error {
+	path := filepath.Join(root, ".deck", "state", "server-alpha.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create alpha state directory: %w", err)
+	}
+	raw, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode alpha state: %w", err)
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+		return fmt.Errorf("write alpha state temp: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("replace alpha state file: %w", err)
+	}
+	return nil
 }
