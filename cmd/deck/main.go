@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/taedi90/deck/internal/bundle"
 	"github.com/taedi90/deck/internal/config"
 	"github.com/taedi90/deck/internal/diagnose"
 	"github.com/taedi90/deck/internal/install"
@@ -34,9 +35,37 @@ func run(args []string) error {
 		return runResume(args[1:])
 	case "diagnose":
 		return runDiagnose(args[1:])
+	case "bundle":
+		return runBundle(args[1:])
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+func runBundle(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: deck bundle verify --bundle <path>")
+	}
+	if args[0] != "verify" {
+		return fmt.Errorf("unknown bundle command %q", args[0])
+	}
+
+	fs := flag.NewFlagSet("bundle verify", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	bundlePath := fs.String("bundle", "", "bundle path")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *bundlePath == "" {
+		return errors.New("--bundle is required")
+	}
+
+	if err := bundle.VerifyManifest(*bundlePath); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(os.Stdout, "bundle verify: ok (%s)\n", *bundlePath)
+	return nil
 }
 
 func runValidate(args []string) error {
@@ -172,5 +201,5 @@ func runDiagnose(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: deck validate -f <file> | deck run --file <file> --phase <phase> | deck resume --file <file> | deck diagnose --preflight --file <file>")
+	return errors.New("usage: deck validate -f <file> | deck run --file <file> --phase <phase> | deck resume --file <file> | deck diagnose --preflight --file <file> | deck bundle verify --bundle <path>")
 }

@@ -2,8 +2,6 @@ package install
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taedi90/deck/internal/bundle"
 	"github.com/taedi90/deck/internal/config"
 )
 
@@ -128,59 +127,8 @@ func findPhase(wf *config.Workflow, name string) (config.Phase, bool) {
 	return config.Phase{}, false
 }
 
-type manifestFile struct {
-	Entries []manifestEntry `json:"entries"`
-}
-
-type manifestEntry struct {
-	Path   string `json:"path"`
-	SHA256 string `json:"sha256"`
-	Size   int64  `json:"size"`
-}
-
 func verifyBundleManifest(bundleRoot string) error {
-	manifestPath := filepath.Join(bundleRoot, "manifest.json")
-	raw, err := os.ReadFile(manifestPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("E_MANIFEST_MISSING: %s", manifestPath)
-		}
-		return fmt.Errorf("read manifest: %w", err)
-	}
-
-	var mf manifestFile
-	if err := json.Unmarshal(raw, &mf); err != nil {
-		return fmt.Errorf("parse manifest: %w", err)
-	}
-	if len(mf.Entries) == 0 {
-		return fmt.Errorf("E_MANIFEST_EMPTY: %s", manifestPath)
-	}
-
-	for _, e := range mf.Entries {
-		if strings.TrimSpace(e.Path) == "" {
-			return fmt.Errorf("E_BUNDLE_INTEGRITY: empty path entry")
-		}
-		abs := filepath.Join(bundleRoot, filepath.FromSlash(e.Path))
-		content, err := os.ReadFile(abs)
-		if err != nil {
-			return fmt.Errorf("E_BUNDLE_INTEGRITY: missing artifact %s: %w", e.Path, err)
-		}
-		fi, err := os.Stat(abs)
-		if err != nil {
-			return fmt.Errorf("E_BUNDLE_INTEGRITY: stat artifact %s: %w", e.Path, err)
-		}
-		if e.Size > 0 && fi.Size() != e.Size {
-			return fmt.Errorf("E_BUNDLE_INTEGRITY: size mismatch for %s", e.Path)
-		}
-
-		h := sha256.Sum256(content)
-		actual := hex.EncodeToString(h[:])
-		if !strings.EqualFold(actual, e.SHA256) {
-			return fmt.Errorf("E_BUNDLE_INTEGRITY: sha256 mismatch for %s", e.Path)
-		}
-	}
-
-	return nil
+	return bundle.VerifyManifest(bundleRoot)
 }
 
 func executeStep(kind string, spec map[string]any) error {
