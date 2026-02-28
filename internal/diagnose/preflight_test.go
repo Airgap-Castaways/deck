@@ -1,8 +1,10 @@
 package diagnose
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/taedi90/deck/internal/config"
@@ -40,4 +42,131 @@ func TestPreflight(t *testing.T) {
 			t.Fatalf("expected preflight failure")
 		}
 	})
+}
+
+func TestPreflight_PrepareBackendChecks(t *testing.T) {
+	t.Run("passes when runtime and skopeo are available", func(t *testing.T) {
+		dir := t.TempDir()
+		bundle := filepath.Join(dir, "bundle")
+		if err := os.MkdirAll(bundle, 0o755); err != nil {
+			t.Fatalf("mkdir bundle: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(bundle, "manifest.json"), []byte(`{"entries":[{"path":"x","sha256":"a","size":1}]}`), 0o644); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		wf := &config.Workflow{
+			Version: "v1",
+			Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")},
+			Phases: []config.Phase{
+				{
+					Name: "prepare",
+					Steps: []config.Step{
+						{
+							ID:   "pkg",
+							Kind: "DownloadPackages",
+							Spec: map[string]any{"backend": map[string]any{"mode": "container", "runtime": "auto", "image": "ubuntu:22.04"}},
+						},
+						{
+							ID:   "img",
+							Kind: "DownloadImages",
+							Spec: map[string]any{"backend": map[string]any{"engine": "skopeo"}},
+						},
+					},
+				},
+				{Name: "install"},
+			},
+		}
+
+		out, err := Preflight(wf, RunOptions{LookPath: availableLookPath("docker", "skopeo")})
+		if err != nil {
+			t.Fatalf("expected pass, got %v", err)
+		}
+		if out.Summary.Failed != 0 {
+			t.Fatalf("expected zero failures, got %d", out.Summary.Failed)
+		}
+	})
+
+	t.Run("fails when auto runtime is unavailable", func(t *testing.T) {
+		dir := t.TempDir()
+		bundle := filepath.Join(dir, "bundle")
+		if err := os.MkdirAll(bundle, 0o755); err != nil {
+			t.Fatalf("mkdir bundle: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(bundle, "manifest.json"), []byte(`{"entries":[{"path":"x","sha256":"a","size":1}]}`), 0o644); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		wf := &config.Workflow{
+			Version: "v1",
+			Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")},
+			Phases: []config.Phase{
+				{
+					Name: "prepare",
+					Steps: []config.Step{{
+						ID:   "pkg",
+						Kind: "DownloadPackages",
+						Spec: map[string]any{"backend": map[string]any{"mode": "container", "runtime": "auto", "image": "ubuntu:22.04"}},
+					}},
+				},
+				{Name: "install"},
+			},
+		}
+
+		_, err := Preflight(wf, RunOptions{LookPath: availableLookPath("skopeo")})
+		if err == nil {
+			t.Fatalf("expected preflight failure")
+		}
+		if !strings.Contains(err.Error(), "preflight failed") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("fails when local skopeo is unavailable", func(t *testing.T) {
+		dir := t.TempDir()
+		bundle := filepath.Join(dir, "bundle")
+		if err := os.MkdirAll(bundle, 0o755); err != nil {
+			t.Fatalf("mkdir bundle: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(bundle, "manifest.json"), []byte(`{"entries":[{"path":"x","sha256":"a","size":1}]}`), 0o644); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		wf := &config.Workflow{
+			Version: "v1",
+			Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")},
+			Phases: []config.Phase{
+				{
+					Name: "prepare",
+					Steps: []config.Step{{
+						ID:   "img",
+						Kind: "DownloadImages",
+						Spec: map[string]any{"backend": map[string]any{"engine": "skopeo"}},
+					}},
+				},
+				{Name: "install"},
+			},
+		}
+
+		_, err := Preflight(wf, RunOptions{LookPath: availableLookPath("docker")})
+		if err == nil {
+			t.Fatalf("expected preflight failure")
+		}
+		if !strings.Contains(err.Error(), "preflight failed") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func availableLookPath(bins ...string) func(file string) (string, error) {
+	set := map[string]bool{}
+	for _, b := range bins {
+		set[b] = true
+	}
+	return func(file string) (string, error) {
+		if set[file] {
+			return "/usr/bin/" + file, nil
+		}
+		return "", fmt.Errorf("not found")
+	}
 }
