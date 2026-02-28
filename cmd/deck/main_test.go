@@ -237,6 +237,14 @@ func TestRunServerTLSFlagValidation(t *testing.T) {
 	if !strings.Contains(err.Error(), "--tls-cert and --tls-key must be provided together") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
+	err = run([]string{"server", "start", "--tls-self-signed", "--tls-cert", "server.crt", "--tls-key", "server.key"})
+	if err == nil {
+		t.Fatalf("expected self-signed conflict error")
+	}
+	if !strings.Contains(err.Error(), "--tls-self-signed cannot be combined") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func writeManifestForMainTest(bundleRoot, rel string, content []byte) error {

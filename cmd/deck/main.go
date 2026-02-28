@@ -95,7 +95,7 @@ func runApply(args []string) error {
 
 func runServer(args []string) error {
 	if len(args) == 0 || args[0] != "start" {
-		return errors.New("usage: deck server start --root <dir> --addr <host:port>")
+		return errors.New("usage: deck server start --root <dir> --addr <host:port> [--tls-cert <crt> --tls-key <key> | --tls-self-signed]")
 	}
 
 	fs := flag.NewFlagSet("server start", flag.ContinueOnError)
@@ -104,6 +104,7 @@ func runServer(args []string) error {
 	addr := fs.String("addr", ":8080", "server listen address")
 	tlsCert := fs.String("tls-cert", "", "TLS certificate path")
 	tlsKey := fs.String("tls-key", "", "TLS private key path")
+	tlsSelfSigned := fs.Bool("tls-self-signed", false, "auto-generate and use self-signed TLS cert")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -111,11 +112,24 @@ func runServer(args []string) error {
 	if (*tlsCert == "") != (*tlsKey == "") {
 		return errors.New("--tls-cert and --tls-key must be provided together")
 	}
+	if *tlsSelfSigned && (*tlsCert != "" || *tlsKey != "") {
+		return errors.New("--tls-self-signed cannot be combined with --tls-cert/--tls-key")
+	}
+
+	certPath := *tlsCert
+	keyPath := *tlsKey
+	if *tlsSelfSigned {
+		var err error
+		certPath, keyPath, err = server.EnsureSelfSignedTLS(*root, *addr)
+		if err != nil {
+			return err
+		}
+	}
 
 	h := server.NewHandler(*root)
-	if *tlsCert != "" {
+	if certPath != "" {
 		fmt.Fprintf(os.Stdout, "server start: listening on https://%s (root=%s)\n", *addr, *root)
-		return http.ListenAndServeTLS(*addr, *tlsCert, *tlsKey, h)
+		return http.ListenAndServeTLS(*addr, certPath, keyPath, h)
 	}
 
 	fmt.Fprintf(os.Stdout, "server start: listening on http://%s (root=%s)\n", *addr, *root)
