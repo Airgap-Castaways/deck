@@ -6,17 +6,23 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/taedi90/deck/internal/config"
 )
 
 type RunOptions struct {
-	WorkflowPath string
-	BundleRoot   string
-	OutputPath   string
-	LookPath     func(file string) (string, error)
+	WorkflowPath      string
+	BundleRoot        string
+	OutputPath        string
+	LookPath          func(file string) (string, error)
+	EnforceHostChecks bool
+	ReadFile          func(path string) ([]byte, error)
+	RunCommandOutput  func(name string, args ...string) ([]byte, error)
+	DiskAvailableFunc func(path string) (uint64, error)
 }
 
 type Report struct {
@@ -63,6 +69,9 @@ func Preflight(wf *config.Workflow, opts RunOptions) (*Report, error) {
 	check("phase.prepare.exists", hasPhase(wf, "prepare"), "prepare phase required")
 	check("phase.install.exists", hasPhase(wf, "install"), "install phase required")
 	checkPrepareBackendPrerequisites(wf, opts, check)
+	if opts.EnforceHostChecks {
+		checkHostPrerequisites(opts, check)
+	}
 
 	bundleRoot := opts.BundleRoot
 	if bundleRoot == "" {
@@ -90,6 +99,110 @@ func Preflight(wf *config.Workflow, opts RunOptions) (*Report, error) {
 	}
 
 	return report, nil
+}
+
+func checkHostPrerequisites(opts RunOptions, check func(name string, ok bool, msg string)) {
+	readFile := opts.ReadFile
+	if readFile == nil {
+		readFile = os.ReadFile
+	}
+	runOutput := opts.RunCommandOutput
+	if runOutput == nil {
+		runOutput = func(name string, args ...string) ([]byte, error) {
+			cmd := exec.Command(name, args...)
+			return cmd.CombinedOutput()
+		}
+	}
+	diskAvailable := opts.DiskAvailableFunc
+	if diskAvailable == nil {
+		diskAvailable = rootDiskAvailableBytes
+	}
+	lookPath := opts.LookPath
+	if lookPath == nil {
+		lookPath = exec.LookPath
+	}
+
+	osReleaseRaw, err := readFile("/etc/os-release")
+	if err != nil {
+		check("host.os_release", false, "cannot read /etc/os-release")
+	} else {
+		id := parseOSReleaseID(string(osReleaseRaw))
+		ok := id != ""
+		msg := "os id detected: " + id
+		if !ok {
+			msg = "os id not found in /etc/os-release"
+		}
+		check("host.os_release", ok, msg)
+	}
+
+	arch := runtime.GOARCH
+	archOK := arch == "amd64" || arch == "arm64"
+	check("host.arch", archOK, "goarch="+arch)
+
+	swapsRaw, err := readFile("/proc/swaps")
+	if err != nil {
+		check("host.swap_disabled", false, "cannot read /proc/swaps")
+	} else {
+		lines := strings.Split(strings.TrimSpace(string(swapsRaw)), "\n")
+		check("host.swap_disabled", len(lines) <= 1, "swap entries="+fmt.Sprint(max(0, len(lines)-1)))
+	}
+
+	modsRaw, err := readFile("/proc/modules")
+	if err != nil {
+		check("host.kernel_modules", false, "cannot read /proc/modules")
+	} else {
+		hasOverlay := strings.Contains(string(modsRaw), "overlay ")
+		hasBrNetfilter := strings.Contains(string(modsRaw), "br_netfilter ")
+		check("host.kernel_modules", hasOverlay && hasBrNetfilter, fmt.Sprintf("overlay=%t br_netfilter=%t", hasOverlay, hasBrNetfilter))
+	}
+
+	bytesAvail, err := diskAvailable("/")
+	if err != nil {
+		check("host.disk_root", false, "cannot read root disk availability")
+	} else {
+		minBytes := uint64(5 * 1024 * 1024 * 1024)
+		check("host.disk_root", bytesAvail >= minBytes, fmt.Sprintf("available=%d required=%d", bytesAvail, minBytes))
+	}
+
+	if _, err := lookPath("timedatectl"); err != nil {
+		check("host.ntp_sync", false, "timedatectl not found")
+	} else {
+		out, err := runOutput("timedatectl", "show", "-p", "NTPSynchronized", "--value")
+		if err != nil {
+			check("host.ntp_sync", false, "timedatectl query failed")
+		} else {
+			v := strings.TrimSpace(string(out))
+			check("host.ntp_sync", strings.EqualFold(v, "yes"), "NTPSynchronized="+v)
+		}
+	}
+}
+
+func parseOSReleaseID(raw string) string {
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "ID=") {
+			continue
+		}
+		v := strings.TrimPrefix(line, "ID=")
+		v = strings.Trim(v, "\"")
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+func rootDiskAvailableBytes(path string) (uint64, error) {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		return 0, err
+	}
+	return stat.Bavail * uint64(stat.Bsize), nil
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func checkPrepareBackendPrerequisites(wf *config.Workflow, opts RunOptions, check func(name string, ok bool, msg string)) {

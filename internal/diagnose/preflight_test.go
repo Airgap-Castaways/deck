@@ -158,6 +158,90 @@ func TestPreflight_PrepareBackendChecks(t *testing.T) {
 	})
 }
 
+func TestPreflight_HostChecks(t *testing.T) {
+	t.Run("passes with host checks when prerequisites are satisfied", func(t *testing.T) {
+		dir := t.TempDir()
+		bundle := filepath.Join(dir, "bundle")
+		if err := os.MkdirAll(bundle, 0o755); err != nil {
+			t.Fatalf("mkdir bundle: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(bundle, "manifest.json"), []byte(`{"entries":[{"path":"x","sha256":"a","size":1}]}`), 0o644); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		wf := &config.Workflow{Version: "v1", Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")}, Phases: []config.Phase{{Name: "prepare"}, {Name: "install"}}}
+		_, err := Preflight(wf, RunOptions{
+			EnforceHostChecks: true,
+			LookPath:          availableLookPath("timedatectl"),
+			ReadFile: func(path string) ([]byte, error) {
+				switch path {
+				case "/etc/os-release":
+					return []byte("ID=ubuntu\n"), nil
+				case "/proc/swaps":
+					return []byte("Filename\tType\tSize\tUsed\tPriority\n"), nil
+				case "/proc/modules":
+					return []byte("overlay 1 0 - Live 0x0\nbr_netfilter 1 0 - Live 0x0\n"), nil
+				default:
+					return nil, fmt.Errorf("unknown file")
+				}
+			},
+			RunCommandOutput: func(name string, args ...string) ([]byte, error) {
+				if name == "timedatectl" {
+					return []byte("yes\n"), nil
+				}
+				return nil, fmt.Errorf("unsupported command")
+			},
+			DiskAvailableFunc: func(path string) (uint64, error) {
+				return uint64(20 * 1024 * 1024 * 1024), nil
+			},
+		})
+		if err != nil {
+			t.Fatalf("expected host checks pass, got %v", err)
+		}
+	})
+
+	t.Run("fails with host checks when prerequisites are missing", func(t *testing.T) {
+		dir := t.TempDir()
+		bundle := filepath.Join(dir, "bundle")
+		if err := os.MkdirAll(bundle, 0o755); err != nil {
+			t.Fatalf("mkdir bundle: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(bundle, "manifest.json"), []byte(`{"entries":[{"path":"x","sha256":"a","size":1}]}`), 0o644); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		wf := &config.Workflow{Version: "v1", Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")}, Phases: []config.Phase{{Name: "prepare"}, {Name: "install"}}}
+		_, err := Preflight(wf, RunOptions{
+			EnforceHostChecks: true,
+			LookPath:          availableLookPath(),
+			ReadFile: func(path string) ([]byte, error) {
+				switch path {
+				case "/etc/os-release":
+					return []byte(""), nil
+				case "/proc/swaps":
+					return []byte("Filename\tType\tSize\tUsed\tPriority\n/dev/sda file 1 0 -2\n"), nil
+				case "/proc/modules":
+					return []byte("overlay 1 0 - Live 0x0\n"), nil
+				default:
+					return nil, fmt.Errorf("unknown file")
+				}
+			},
+			RunCommandOutput: func(name string, args ...string) ([]byte, error) {
+				return []byte("no\n"), nil
+			},
+			DiskAvailableFunc: func(path string) (uint64, error) {
+				return uint64(1024), nil
+			},
+		})
+		if err == nil {
+			t.Fatalf("expected host checks failure")
+		}
+		if !strings.Contains(err.Error(), "preflight failed") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 func availableLookPath(bins ...string) func(file string) (string, error) {
 	set := map[string]bool{}
 	for _, b := range bins {

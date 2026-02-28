@@ -36,6 +36,16 @@ func TestRun_InstallTools(t *testing.T) {
 	sysctlPath := filepath.Join(dir, "sysctl.conf")
 	modprobePath := filepath.Join(dir, "modules.conf")
 	joinPath := filepath.Join(dir, "join.txt")
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	fakeApt := filepath.Join(binDir, "apt-get")
+	if err := os.WriteFile(fakeApt, []byte("#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fake apt-get: %v", err)
+	}
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, originalPath))
 
 	wf := &config.Workflow{
 		Version: "v1",
@@ -788,6 +798,108 @@ func TestRun_WhenInvalidExpression(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "E_CONDITION_EVAL") {
 		t.Fatalf("expected E_CONDITION_EVAL, got %v", err)
+	}
+}
+
+func TestRun_InstallPackagesExecutesPackageManager(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	marker := filepath.Join(dir, "apt-invoked.txt")
+	fakeApt := filepath.Join(binDir, "apt-get")
+	script := "#!/usr/bin/env bash\nset -euo pipefail\necho \"$*\" > \"" + marker + "\"\nexit 0\n"
+	if err := os.WriteFile(fakeApt, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake apt-get: %v", err)
+	}
+
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, originalPath))
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Context: config.Context{StateFile: statePath},
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "install-pkgs",
+				Kind: "InstallPackages",
+				Spec: map[string]any{"packages": []any{"containerd", "kubelet"}},
+			}},
+		}},
+	}
+
+	if err := Run(wf, RunOptions{BundleRoot: bundle}); err != nil {
+		t.Fatalf("expected install packages success, got %v", err)
+	}
+
+	raw, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("read marker: %v", err)
+	}
+	args := strings.TrimSpace(string(raw))
+	if !strings.Contains(args, "install -y containerd kubelet") {
+		t.Fatalf("unexpected apt-get args: %q", args)
+	}
+}
+
+func TestRun_InstallPackagesSourcePathValidation(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Context: config.Context{StateFile: statePath},
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "install-pkgs",
+				Kind: "InstallPackages",
+				Spec: map[string]any{
+					"packages": []any{"containerd"},
+					"source":   map[string]any{"type": "local-repo", "path": filepath.Join(dir, "missing")},
+				},
+			}},
+		}},
+	}
+
+	err := Run(wf, RunOptions{BundleRoot: bundle})
+	if err == nil {
+		t.Fatalf("expected source validation error")
+	}
+	if !strings.Contains(err.Error(), "E_INSTALL_PACKAGES_SOURCE_INVALID") {
+		t.Fatalf("expected E_INSTALL_PACKAGES_SOURCE_INVALID, got %v", err)
 	}
 }
 

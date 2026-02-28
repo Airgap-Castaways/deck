@@ -36,6 +36,9 @@ var templateRefPattern = regexp.MustCompile(`\{\s*\.([A-Za-z0-9_\.]+)\s*\}`)
 const (
 	errCodeInstallKindUnsupported  = "E_INSTALL_KIND_UNSUPPORTED"
 	errCodeInstallPackagesRequired = "E_INSTALL_PACKAGES_REQUIRED"
+	errCodeInstallPkgMgrMissing    = "E_INSTALL_PACKAGES_MANAGER_NOT_FOUND"
+	errCodeInstallPkgSourceInvalid = "E_INSTALL_PACKAGES_SOURCE_INVALID"
+	errCodeInstallPkgFailed        = "E_INSTALL_PACKAGES_INSTALL_FAILED"
 	errCodeInstallWritePathMissing = "E_INSTALL_WRITEFILE_PATH_REQUIRED"
 	errCodeInstallEditPathMissing  = "E_INSTALL_EDITFILE_PATH_REQUIRED"
 	errCodeInstallEditsMissing     = "E_INSTALL_EDITFILE_EDITS_REQUIRED"
@@ -201,11 +204,7 @@ func verifyBundleManifest(bundleRoot string) error {
 func executeStep(kind string, spec map[string]any) error {
 	switch kind {
 	case "InstallPackages":
-		pkgs := stringSlice(spec["packages"])
-		if len(pkgs) == 0 {
-			return fmt.Errorf("%s: InstallPackages requires packages", errCodeInstallPackagesRequired)
-		}
-		return nil
+		return runInstallPackages(spec)
 	case "WriteFile":
 		return runWriteFile(spec)
 	case "EditFile":
@@ -227,6 +226,45 @@ func executeStep(kind string, spec map[string]any) error {
 	default:
 		return fmt.Errorf("%s: unsupported step kind %s", errCodeInstallKindUnsupported, kind)
 	}
+}
+
+func runInstallPackages(spec map[string]any) error {
+	pkgs := stringSlice(spec["packages"])
+	if len(pkgs) == 0 {
+		return fmt.Errorf("%s: InstallPackages requires packages", errCodeInstallPackagesRequired)
+	}
+
+	if src, ok := spec["source"].(map[string]any); ok {
+		typeVal := stringValue(src, "type")
+		if typeVal != "" && typeVal != "local-repo" {
+			return fmt.Errorf("%s: unsupported source type %q", errCodeInstallPkgSourceInvalid, typeVal)
+		}
+		if path := stringValue(src, "path"); path != "" {
+			if info, err := os.Stat(path); err != nil || !info.IsDir() {
+				return fmt.Errorf("%s: source path must be an existing directory: %s", errCodeInstallPkgSourceInvalid, path)
+			}
+		}
+	}
+
+	installer := ""
+	if _, err := exec.LookPath("apt-get"); err == nil {
+		installer = "apt-get"
+	} else if _, err := exec.LookPath("dnf"); err == nil {
+		installer = "dnf"
+	}
+	if installer == "" {
+		return fmt.Errorf("%s: apt-get or dnf not found", errCodeInstallPkgMgrMissing)
+	}
+
+	args := []string{"install", "-y"}
+	args = append(args, pkgs...)
+	if err := runTimedCommand(installer, args, commandTimeoutWithDefault(spec, 10*time.Minute)); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("%s: package installation timed out: %w", errCodeInstallPkgFailed, err)
+		}
+		return fmt.Errorf("%s: package installation failed: %w", errCodeInstallPkgFailed, err)
+	}
+	return nil
 }
 
 func runWriteFile(spec map[string]any) error {

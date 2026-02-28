@@ -381,7 +381,7 @@ func runDiagnose(args []string) error {
 		return err
 	}
 
-	report, err := diagnose.Preflight(wf, diagnose.RunOptions{WorkflowPath: *file, BundleRoot: *bundle, OutputPath: *out})
+	report, err := diagnose.Preflight(wf, diagnose.RunOptions{WorkflowPath: *file, BundleRoot: *bundle, OutputPath: *out, EnforceHostChecks: true})
 	if err != nil {
 		fmt.Fprintf(os.Stdout, "diagnose preflight: failed (%d failed checks)\n", report.Summary.Failed)
 		return err
