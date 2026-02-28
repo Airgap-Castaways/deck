@@ -239,6 +239,160 @@ func TestRun_ResumeFromFailedStep(t *testing.T) {
 	}
 }
 
+func TestRun_UnsupportedInstallKindFails(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Context: config.Context{StateFile: statePath},
+		Phases: []config.Phase{{
+			Name:  "install",
+			Steps: []config.Step{{ID: "x", Kind: "UnknownKind", Spec: map[string]any{}}},
+		}},
+	}
+
+	err := Run(wf, RunOptions{BundleRoot: bundle})
+	if err == nil {
+		t.Fatalf("expected unsupported kind error")
+	}
+	if !strings.Contains(err.Error(), "E_INSTALL_KIND_UNSUPPORTED") {
+		t.Fatalf("expected E_INSTALL_KIND_UNSUPPORTED, got %v", err)
+	}
+}
+
+func TestRun_RunCommandErrorCodes(t *testing.T) {
+	t.Run("non-zero exit", func(t *testing.T) {
+		dir := t.TempDir()
+		bundle := filepath.Join(dir, "bundle")
+		statePath := filepath.Join(dir, "state", "state.json")
+		if err := os.MkdirAll(bundle, 0o755); err != nil {
+			t.Fatalf("mkdir bundle: %v", err)
+		}
+		artifact := filepath.Join(bundle, "files", "a.txt")
+		if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+			t.Fatalf("mkdir files: %v", err)
+		}
+		if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+			t.Fatalf("write artifact: %v", err)
+		}
+		if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		wf := &config.Workflow{
+			Version: "v1",
+			Context: config.Context{StateFile: statePath},
+			Phases: []config.Phase{{
+				Name:  "install",
+				Steps: []config.Step{{ID: "cmd", Kind: "RunCommand", Spec: map[string]any{"command": []any{"false"}}}},
+			}},
+		}
+
+		err := Run(wf, RunOptions{BundleRoot: bundle})
+		if err == nil {
+			t.Fatalf("expected run command failure")
+		}
+		if !strings.Contains(err.Error(), "E_INSTALL_RUNCOMMAND_FAILED") {
+			t.Fatalf("expected E_INSTALL_RUNCOMMAND_FAILED, got %v", err)
+		}
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		dir := t.TempDir()
+		bundle := filepath.Join(dir, "bundle")
+		statePath := filepath.Join(dir, "state", "state.json")
+		if err := os.MkdirAll(bundle, 0o755); err != nil {
+			t.Fatalf("mkdir bundle: %v", err)
+		}
+		artifact := filepath.Join(bundle, "files", "a.txt")
+		if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+			t.Fatalf("mkdir files: %v", err)
+		}
+		if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+			t.Fatalf("write artifact: %v", err)
+		}
+		if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		wf := &config.Workflow{
+			Version: "v1",
+			Context: config.Context{StateFile: statePath},
+			Phases: []config.Phase{{
+				Name: "install",
+				Steps: []config.Step{{
+					ID:   "cmd",
+					Kind: "RunCommand",
+					Spec: map[string]any{"command": []any{"sleep", "1"}, "timeout": "10ms"},
+				}},
+			}},
+		}
+
+		err := Run(wf, RunOptions{BundleRoot: bundle})
+		if err == nil {
+			t.Fatalf("expected run command timeout")
+		}
+		if !strings.Contains(err.Error(), "E_INSTALL_RUNCOMMAND_TIMEOUT") {
+			t.Fatalf("expected E_INSTALL_RUNCOMMAND_TIMEOUT, got %v", err)
+		}
+	})
+}
+
+func TestRun_KubeadmJoinMissingFileErrorCode(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Context: config.Context{StateFile: statePath},
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "join",
+				Kind: "KubeadmJoin",
+				Spec: map[string]any{"joinFile": filepath.Join(dir, "missing-join.txt")},
+			}},
+		}},
+	}
+
+	err := Run(wf, RunOptions{BundleRoot: bundle})
+	if err == nil {
+		t.Fatalf("expected kubeadm join missing file error")
+	}
+	if !strings.Contains(err.Error(), "E_INSTALL_KUBEADM_JOIN_FILE_NOT_FOUND") {
+		t.Fatalf("expected E_INSTALL_KUBEADM_JOIN_FILE_NOT_FOUND, got %v", err)
+	}
+}
+
 func writeManifestForTest(bundleRoot, relPath string, content []byte) error {
 	sum := sha256.Sum256(content)
 	entry := map[string]any{

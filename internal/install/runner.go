@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -28,6 +29,24 @@ type State struct {
 }
 
 var templateRefPattern = regexp.MustCompile(`\{\s*\.([A-Za-z0-9_\.]+)\s*\}`)
+
+const (
+	errCodeInstallKindUnsupported  = "E_INSTALL_KIND_UNSUPPORTED"
+	errCodeInstallPackagesRequired = "E_INSTALL_PACKAGES_REQUIRED"
+	errCodeInstallWritePathMissing = "E_INSTALL_WRITEFILE_PATH_REQUIRED"
+	errCodeInstallEditPathMissing  = "E_INSTALL_EDITFILE_PATH_REQUIRED"
+	errCodeInstallEditsMissing     = "E_INSTALL_EDITFILE_EDITS_REQUIRED"
+	errCodeInstallCopyPathMissing  = "E_INSTALL_COPYFILE_PATH_REQUIRED"
+	errCodeInstallSysctlPathMiss   = "E_INSTALL_SYSCTL_PATH_REQUIRED"
+	errCodeInstallSysctlValsMiss   = "E_INSTALL_SYSCTL_VALUES_REQUIRED"
+	errCodeInstallModulesMissing   = "E_INSTALL_MODPROBE_MODULES_REQUIRED"
+	errCodeInstallCommandMissing   = "E_INSTALL_RUNCOMMAND_REQUIRED"
+	errCodeInstallCommandTimeout   = "E_INSTALL_RUNCOMMAND_TIMEOUT"
+	errCodeInstallCommandFailed    = "E_INSTALL_RUNCOMMAND_FAILED"
+	errCodeInstallInitJoinMissing  = "E_INSTALL_KUBEADM_INIT_JOINFILE_REQUIRED"
+	errCodeInstallJoinPathMissing  = "E_INSTALL_KUBEADM_JOIN_JOINFILE_REQUIRED"
+	errCodeInstallJoinFileMissing  = "E_INSTALL_KUBEADM_JOIN_FILE_NOT_FOUND"
+)
 
 func Run(wf *config.Workflow, opts RunOptions) error {
 	if wf == nil {
@@ -169,7 +188,7 @@ func executeStep(kind string, spec map[string]any) error {
 	case "InstallPackages":
 		pkgs := stringSlice(spec["packages"])
 		if len(pkgs) == 0 {
-			return fmt.Errorf("InstallPackages requires packages")
+			return fmt.Errorf("%s: InstallPackages requires packages", errCodeInstallPackagesRequired)
 		}
 		return nil
 	case "WriteFile":
@@ -189,14 +208,14 @@ func executeStep(kind string, spec map[string]any) error {
 	case "KubeadmJoin":
 		return runKubeadmJoin(spec)
 	default:
-		return nil
+		return fmt.Errorf("%s: unsupported step kind %s", errCodeInstallKindUnsupported, kind)
 	}
 }
 
 func runWriteFile(spec map[string]any) error {
 	path := stringValue(spec, "path")
 	if path == "" {
-		return fmt.Errorf("WriteFile requires path")
+		return fmt.Errorf("%s: WriteFile requires path", errCodeInstallWritePathMissing)
 	}
 
 	content := stringValue(spec, "content")
@@ -218,7 +237,7 @@ func runWriteFile(spec map[string]any) error {
 func runEditFile(spec map[string]any) error {
 	path := stringValue(spec, "path")
 	if path == "" {
-		return fmt.Errorf("EditFile requires path")
+		return fmt.Errorf("%s: EditFile requires path", errCodeInstallEditPathMissing)
 	}
 
 	content, err := os.ReadFile(path)
@@ -229,7 +248,7 @@ func runEditFile(spec map[string]any) error {
 
 	edits, ok := spec["edits"].([]any)
 	if !ok || len(edits) == 0 {
-		return fmt.Errorf("EditFile requires edits")
+		return fmt.Errorf("%s: EditFile requires edits", errCodeInstallEditsMissing)
 	}
 
 	for _, e := range edits {
@@ -252,7 +271,7 @@ func runCopyFile(spec map[string]any) error {
 	src := stringValue(spec, "src")
 	dest := stringValue(spec, "dest")
 	if src == "" || dest == "" {
-		return fmt.Errorf("CopyFile requires src and dest")
+		return fmt.Errorf("%s: CopyFile requires src and dest", errCodeInstallCopyPathMissing)
 	}
 
 	content, err := os.ReadFile(src)
@@ -271,12 +290,12 @@ func runSysctl(spec map[string]any) error {
 		path = stringValue(spec, "dest")
 	}
 	if path == "" {
-		return fmt.Errorf("Sysctl requires writeFile or dest")
+		return fmt.Errorf("%s: Sysctl requires writeFile or dest", errCodeInstallSysctlPathMiss)
 	}
 
 	values, ok := spec["values"].(map[string]any)
 	if !ok || len(values) == 0 {
-		return fmt.Errorf("Sysctl requires values")
+		return fmt.Errorf("%s: Sysctl requires values", errCodeInstallSysctlValsMiss)
 	}
 
 	lines := make([]string, 0, len(values))
@@ -298,7 +317,7 @@ func runModprobe(spec map[string]any) error {
 
 	mods := stringSlice(spec["modules"])
 	if len(mods) == 0 {
-		return fmt.Errorf("Modprobe requires modules")
+		return fmt.Errorf("%s: Modprobe requires modules", errCodeInstallModulesMissing)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(persistPath), 0o755); err != nil {
@@ -310,7 +329,7 @@ func runModprobe(spec map[string]any) error {
 func runCommand(spec map[string]any) error {
 	cmdArgs := stringSlice(spec["command"])
 	if len(cmdArgs) == 0 {
-		return fmt.Errorf("RunCommand requires command")
+		return fmt.Errorf("%s: RunCommand requires command", errCodeInstallCommandMissing)
 	}
 
 	timeout := 30 * time.Second
@@ -327,13 +346,24 @@ func runCommand(spec map[string]any) error {
 	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err := cmd.Run()
+	if err == nil {
+		return nil
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("%s: command timed out after %s", errCodeInstallCommandTimeout, timeout)
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return fmt.Errorf("%s: command exited non-zero: %w", errCodeInstallCommandFailed, err)
+	}
+	return err
 }
 
 func runKubeadmInit(spec map[string]any) error {
 	joinFile := stringValue(spec, "outputJoinFile")
 	if joinFile == "" {
-		return fmt.Errorf("KubeadmInit requires outputJoinFile")
+		return fmt.Errorf("%s: KubeadmInit requires outputJoinFile", errCodeInstallInitJoinMissing)
 	}
 	if err := os.MkdirAll(filepath.Dir(joinFile), 0o755); err != nil {
 		return err
@@ -345,10 +375,10 @@ func runKubeadmInit(spec map[string]any) error {
 func runKubeadmJoin(spec map[string]any) error {
 	joinFile := stringValue(spec, "joinFile")
 	if joinFile == "" {
-		return fmt.Errorf("KubeadmJoin requires joinFile")
+		return fmt.Errorf("%s: KubeadmJoin requires joinFile", errCodeInstallJoinPathMissing)
 	}
 	if _, err := os.Stat(joinFile); err != nil {
-		return fmt.Errorf("join file not found: %w", err)
+		return fmt.Errorf("%s: join file not found: %w", errCodeInstallJoinFileMissing, err)
 	}
 	return nil
 }
