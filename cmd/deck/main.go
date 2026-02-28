@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
+	"github.com/taedi90/deck/internal/agent"
 	"github.com/taedi90/deck/internal/bundle"
 	"github.com/taedi90/deck/internal/config"
 	"github.com/taedi90/deck/internal/diagnose"
@@ -43,9 +45,43 @@ func run(args []string) error {
 		return runBundle(args[1:])
 	case "server":
 		return runServer(args[1:])
+	case "agent":
+		return runAgent(args[1:])
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+func runAgent(args []string) error {
+	if len(args) == 0 || args[0] != "start" {
+		return errors.New("usage: deck agent start --server <url> [--interval <duration>] [--once]")
+	}
+
+	fs := flag.NewFlagSet("agent start", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	serverURL := fs.String("server", "", "agent control server url")
+	intervalRaw := fs.String("interval", "10s", "heartbeat interval")
+	once := fs.Bool("once", false, "send one heartbeat and exit")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if *serverURL == "" {
+		return errors.New("--server is required")
+	}
+
+	interval, err := time.ParseDuration(*intervalRaw)
+	if err != nil {
+		return fmt.Errorf("invalid --interval: %w", err)
+	}
+
+	if err := agent.Run(agent.RunOptions{ServerURL: *serverURL, Interval: interval, Once: *once}); err != nil {
+		return err
+	}
+
+	if *once {
+		fmt.Fprintln(os.Stdout, "agent start: heartbeat sent")
+	}
+	return nil
 }
 
 func runApply(args []string) error {
@@ -342,5 +378,5 @@ func runDiagnose(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: deck apply --file <file> | deck validate -f <file> | deck run --file <file> --phase <phase> | deck resume --file <file> | deck diagnose --preflight --file <file> | deck bundle verify --bundle <path> | deck bundle import --file <bundle.tar> --dest <dir> | deck bundle collect --bundle <dir> --output <bundle.tar> | deck server start --root <dir> --addr <host:port>")
+	return errors.New("usage: deck apply --file <file> | deck validate -f <file> | deck run --file <file> --phase <phase> | deck resume --file <file> | deck diagnose --preflight --file <file> | deck bundle verify --bundle <path> | deck bundle import --file <bundle.tar> --dest <dir> | deck bundle collect --bundle <dir> --output <bundle.tar> | deck server start --root <dir> --addr <host:port> | deck agent start --server <url>")
 }

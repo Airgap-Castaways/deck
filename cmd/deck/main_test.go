@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -245,6 +247,42 @@ func TestRunServerTLSFlagValidation(t *testing.T) {
 	if !strings.Contains(err.Error(), "--tls-self-signed cannot be combined") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+func TestRunAgent(t *testing.T) {
+	t.Run("usage validation", func(t *testing.T) {
+		err := run([]string{"agent"})
+		if err == nil {
+			t.Fatalf("expected usage error")
+		}
+		if !strings.Contains(err.Error(), "usage: deck agent start") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		err = run([]string{"agent", "start"})
+		if err == nil {
+			t.Fatalf("expected --server required error")
+		}
+		if !strings.Contains(err.Error(), "--server is required") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("once heartbeat success", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/agent/heartbeat" {
+				http.NotFound(w, r)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		err := run([]string{"agent", "start", "--server", srv.URL, "--once"})
+		if err != nil {
+			t.Fatalf("expected success, got %v", err)
+		}
+	})
 }
 
 func writeManifestForMainTest(bundleRoot, rel string, content []byte) error {
