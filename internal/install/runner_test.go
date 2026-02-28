@@ -592,6 +592,205 @@ func TestRun_KubeadmJoinRealModeRejectsInvalidCommand(t *testing.T) {
 	}
 }
 
+func TestRun_WhenAndRegisterSemantics(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	joinPath := filepath.Join(dir, "join.txt")
+	registeredOutputPath := filepath.Join(dir, "registered.txt")
+	skippedOutputPath := filepath.Join(dir, "skipped.txt")
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Vars:    map[string]any{"role": "control-plane"},
+		Context: config.Context{StateFile: statePath},
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{
+				{ID: "init", Kind: "KubeadmInit", Spec: map[string]any{"outputJoinFile": joinPath}, Register: map[string]string{"workerJoinFile": "joinFile"}},
+				{ID: "use-register", Kind: "WriteFile", When: "role == \"control-plane\"", Spec: map[string]any{"path": registeredOutputPath, "content": "{ .runtime.workerJoinFile }"}},
+				{ID: "skip-worker", Kind: "WriteFile", When: "role == \"worker\"", Spec: map[string]any{"path": skippedOutputPath, "content": "worker"}},
+			},
+		}},
+	}
+
+	if err := Run(wf, RunOptions{BundleRoot: bundle}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	raw, err := os.ReadFile(registeredOutputPath)
+	if err != nil {
+		t.Fatalf("read registered output: %v", err)
+	}
+	if strings.TrimSpace(string(raw)) != joinPath {
+		t.Fatalf("expected registered content to be %q, got %q", joinPath, strings.TrimSpace(string(raw)))
+	}
+
+	if _, err := os.Stat(skippedOutputPath); err == nil {
+		t.Fatalf("expected skipped step output to not exist")
+	}
+
+	stateRaw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	var st State
+	if err := json.Unmarshal(stateRaw, &st); err != nil {
+		t.Fatalf("parse state: %v", err)
+	}
+	if st.RuntimeVars["workerJoinFile"] != joinPath {
+		t.Fatalf("expected runtime var workerJoinFile=%q, got %#v", joinPath, st.RuntimeVars["workerJoinFile"])
+	}
+	if len(st.SkippedSteps) != 1 || st.SkippedSteps[0] != "skip-worker" {
+		t.Fatalf("unexpected skipped steps: %#v", st.SkippedSteps)
+	}
+}
+
+func TestRun_RetrySemantics(t *testing.T) {
+	t.Run("retry succeeds on second attempt", func(t *testing.T) {
+		dir := t.TempDir()
+		bundle := filepath.Join(dir, "bundle")
+		statePath := filepath.Join(dir, "state", "state.json")
+		if err := os.MkdirAll(bundle, 0o755); err != nil {
+			t.Fatalf("mkdir bundle: %v", err)
+		}
+		artifact := filepath.Join(bundle, "files", "a.txt")
+		if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+			t.Fatalf("mkdir files: %v", err)
+		}
+		if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+			t.Fatalf("write artifact: %v", err)
+		}
+		if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		marker := filepath.Join(dir, "marker")
+		scriptPath := filepath.Join(dir, "fail-once.sh")
+		script := "#!/usr/bin/env bash\nset -euo pipefail\nif [[ ! -f \"" + marker + "\" ]]; then\n  touch \"" + marker + "\"\n  exit 1\nfi\nexit 0\n"
+		if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+			t.Fatalf("write script: %v", err)
+		}
+
+		wf := &config.Workflow{
+			Version: "v1",
+			Context: config.Context{StateFile: statePath},
+			Phases: []config.Phase{{
+				Name:  "install",
+				Steps: []config.Step{{ID: "retry-cmd", Kind: "RunCommand", Retry: 1, Spec: map[string]any{"command": []any{scriptPath}}}},
+			}},
+		}
+
+		if err := Run(wf, RunOptions{BundleRoot: bundle}); err != nil {
+			t.Fatalf("expected retry success, got %v", err)
+		}
+	})
+
+	t.Run("retry exhausted keeps failure", func(t *testing.T) {
+		dir := t.TempDir()
+		bundle := filepath.Join(dir, "bundle")
+		statePath := filepath.Join(dir, "state", "state.json")
+		if err := os.MkdirAll(bundle, 0o755); err != nil {
+			t.Fatalf("mkdir bundle: %v", err)
+		}
+		artifact := filepath.Join(bundle, "files", "a.txt")
+		if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+			t.Fatalf("mkdir files: %v", err)
+		}
+		if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+			t.Fatalf("write artifact: %v", err)
+		}
+		if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		counterPath := filepath.Join(dir, "counter")
+		scriptPath := filepath.Join(dir, "always-fail.sh")
+		script := "#!/usr/bin/env bash\nset -euo pipefail\ncount=0\nif [[ -f \"" + counterPath + "\" ]]; then\n  count=$(cat \"" + counterPath + "\")\nfi\ncount=$((count+1))\necho \"${count}\" > \"" + counterPath + "\"\nexit 1\n"
+		if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+			t.Fatalf("write script: %v", err)
+		}
+
+		wf := &config.Workflow{
+			Version: "v1",
+			Context: config.Context{StateFile: statePath},
+			Phases: []config.Phase{{
+				Name:  "install",
+				Steps: []config.Step{{ID: "retry-cmd", Kind: "RunCommand", Retry: 1, Spec: map[string]any{"command": []any{scriptPath}}}},
+			}},
+		}
+
+		err := Run(wf, RunOptions{BundleRoot: bundle})
+		if err == nil {
+			t.Fatalf("expected failure after retry exhaustion")
+		}
+
+		counterRaw, err := os.ReadFile(counterPath)
+		if err != nil {
+			t.Fatalf("read counter: %v", err)
+		}
+		if strings.TrimSpace(string(counterRaw)) != "2" {
+			t.Fatalf("expected 2 attempts with retry=1, got %q", strings.TrimSpace(string(counterRaw)))
+		}
+	})
+}
+
+func TestRun_WhenInvalidExpression(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Vars:    map[string]any{"role": "worker"},
+		Context: config.Context{StateFile: statePath},
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "bad-when",
+				Kind: "RunCommand",
+				When: "role = \"worker\"",
+				Spec: map[string]any{"command": []any{"true"}},
+			}},
+		}},
+	}
+
+	err := Run(wf, RunOptions{BundleRoot: bundle})
+	if err == nil {
+		t.Fatalf("expected condition evaluation failure")
+	}
+	if !strings.Contains(err.Error(), "E_CONDITION_EVAL") {
+		t.Fatalf("expected E_CONDITION_EVAL, got %v", err)
+	}
+}
+
 func writeManifestForTest(bundleRoot, relPath string, content []byte) error {
 	sum := sha256.Sum256(content)
 	entry := map[string]any{
