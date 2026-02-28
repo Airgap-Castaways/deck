@@ -114,6 +114,16 @@ func TestRunBundleCollect(t *testing.T) {
 	}
 }
 
+func TestRunServerUsageValidation(t *testing.T) {
+	err := run([]string{"server"})
+	if err == nil {
+		t.Fatalf("expected usage error")
+	}
+	if !strings.Contains(err.Error(), "usage: deck server start") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func writeManifestForMainTest(bundleRoot, rel string, content []byte) error {
 	sum := sha256.Sum256(content)
 	manifest := map[string]any{

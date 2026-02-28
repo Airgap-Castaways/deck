@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/taedi90/deck/internal/bundle"
@@ -11,6 +12,7 @@ import (
 	"github.com/taedi90/deck/internal/diagnose"
 	"github.com/taedi90/deck/internal/install"
 	"github.com/taedi90/deck/internal/prepare"
+	"github.com/taedi90/deck/internal/server"
 	"github.com/taedi90/deck/internal/validate"
 )
 
@@ -37,9 +39,29 @@ func run(args []string) error {
 		return runDiagnose(args[1:])
 	case "bundle":
 		return runBundle(args[1:])
+	case "server":
+		return runServer(args[1:])
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+func runServer(args []string) error {
+	if len(args) == 0 || args[0] != "start" {
+		return errors.New("usage: deck server start --root <dir> --addr <host:port>")
+	}
+
+	fs := flag.NewFlagSet("server start", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	root := fs.String("root", "./bundle", "server content root")
+	addr := fs.String("addr", ":8080", "server listen address")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+
+	h := server.NewHandler(*root)
+	fmt.Fprintf(os.Stdout, "server start: listening on %s (root=%s)\n", *addr, *root)
+	return http.ListenAndServe(*addr, h)
 }
 
 func runBundle(args []string) error {
@@ -248,5 +270,5 @@ func runDiagnose(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: deck validate -f <file> | deck run --file <file> --phase <phase> | deck resume --file <file> | deck diagnose --preflight --file <file> | deck bundle verify --bundle <path> | deck bundle import --file <bundle.tar> --dest <dir> | deck bundle collect --bundle <dir> --output <bundle.tar>")
+	return errors.New("usage: deck validate -f <file> | deck run --file <file> --phase <phase> | deck resume --file <file> | deck diagnose --preflight --file <file> | deck bundle verify --bundle <path> | deck bundle import --file <bundle.tar> --dest <dir> | deck bundle collect --bundle <dir> --output <bundle.tar> | deck server start --root <dir> --addr <host:port>")
 }
