@@ -16,6 +16,7 @@ jobs:
     timeout-minutes: 90
     env:
       DECK_VAGRANT_PROVIDER: ${{ vars.DECK_VAGRANT_PROVIDER }}
+      DECK_FORCE_OFFLINE: "1"
 
     steps:
       - name: Checkout
