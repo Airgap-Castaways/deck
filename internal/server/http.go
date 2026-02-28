@@ -17,6 +17,13 @@ type auditLogger struct {
 	f  *os.File
 }
 
+const (
+	auditEventJobEnqueued    = "alpha_job_enqueued"
+	auditEventJobLeased      = "alpha_job_leased"
+	auditEventJobRequeued    = "alpha_job_requeued"
+	auditEventJobFinalFailed = "alpha_job_final_failed"
+)
+
 func newAuditLogger(root string) (*auditLogger, error) {
 	logPath := filepath.Join(root, ".deck", "logs", "server-audit.log")
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
@@ -37,6 +44,18 @@ func (a *auditLogger) Write(entry map[string]any) {
 		return
 	}
 	_, _ = a.f.Write(append(raw, '\n'))
+}
+
+func writeAlphaLifecycleAudit(logger *auditLogger, eventType string, job alphaJob, decision string) {
+	logger.Write(map[string]any{
+		"timestamp":    time.Now().UTC().Format(time.RFC3339),
+		"event_type":   eventType,
+		"job_id":       job.ID,
+		"job_type":     job.Type,
+		"attempt":      job.Attempt,
+		"max_attempts": job.MaxAttempts,
+		"decision":     decision,
+	})
 }
 
 type statusRecorder struct {
@@ -277,6 +296,7 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 				job.MaxAttempts = 1
 			}
 			inFlight.set(job)
+			writeAlphaLifecycleAudit(logger, auditEventJobLeased, job, "leased")
 			jobPayload = job
 			if err := persist(); err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -322,6 +342,7 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 		job.Attempt = 0
 
 		queue.enqueue(job)
+		writeAlphaLifecycleAudit(logger, auditEventJobEnqueued, job, "accepted")
 		if err := persist(); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "persist_error"})
@@ -361,6 +382,9 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 			if leasedJob, ok := inFlight.pop(strings.TrimSpace(jobID)); ok {
 				if strings.EqualFold(strings.TrimSpace(status), "failed") && leasedJob.Attempt < leasedJob.MaxAttempts {
 					queue.enqueue(leasedJob)
+					writeAlphaLifecycleAudit(logger, auditEventJobRequeued, leasedJob, "retry")
+				} else if strings.EqualFold(strings.TrimSpace(status), "failed") {
+					writeAlphaLifecycleAudit(logger, auditEventJobFinalFailed, leasedJob, "exhausted")
 				}
 			}
 

@@ -450,4 +450,92 @@ func TestNewHandler(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("writes alpha lifecycle audit events", func(t *testing.T) {
+		rootAudit := t.TempDir()
+		hAudit, err := NewHandler(rootAudit, HandlerOptions{})
+		if err != nil {
+			t.Fatalf("NewHandler: %v", err)
+		}
+
+		enqueueReq := httptest.NewRequest(http.MethodPost, "/api/agent/job", strings.NewReader(`{"id":"j-audit","type":"noop","max_attempts":2}`))
+		enqueueRR := httptest.NewRecorder()
+		hAudit.ServeHTTP(enqueueRR, enqueueReq)
+		if enqueueRR.Code != http.StatusOK {
+			t.Fatalf("expected enqueue 200, got %d", enqueueRR.Code)
+		}
+
+		leaseReq1 := httptest.NewRequest(http.MethodPost, "/api/agent/lease", strings.NewReader(`{"agent":"x"}`))
+		leaseRR1 := httptest.NewRecorder()
+		hAudit.ServeHTTP(leaseRR1, leaseReq1)
+		if leaseRR1.Code != http.StatusOK {
+			t.Fatalf("expected lease 200, got %d", leaseRR1.Code)
+		}
+
+		reportReq1 := httptest.NewRequest(http.MethodPost, "/api/agent/report", strings.NewReader(`{"job_id":"j-audit","status":"failed"}`))
+		reportRR1 := httptest.NewRecorder()
+		hAudit.ServeHTTP(reportRR1, reportReq1)
+		if reportRR1.Code != http.StatusOK {
+			t.Fatalf("expected report 200, got %d", reportRR1.Code)
+		}
+
+		leaseReq2 := httptest.NewRequest(http.MethodPost, "/api/agent/lease", strings.NewReader(`{"agent":"x"}`))
+		leaseRR2 := httptest.NewRecorder()
+		hAudit.ServeHTTP(leaseRR2, leaseReq2)
+		if leaseRR2.Code != http.StatusOK {
+			t.Fatalf("expected second lease 200, got %d", leaseRR2.Code)
+		}
+
+		reportReq2 := httptest.NewRequest(http.MethodPost, "/api/agent/report", strings.NewReader(`{"job_id":"j-audit","status":"failed"}`))
+		reportRR2 := httptest.NewRecorder()
+		hAudit.ServeHTTP(reportRR2, reportReq2)
+		if reportRR2.Code != http.StatusOK {
+			t.Fatalf("expected second report 200, got %d", reportRR2.Code)
+		}
+
+		auditPath := filepath.Join(rootAudit, ".deck", "logs", "server-audit.log")
+		raw, err := os.ReadFile(auditPath)
+		if err != nil {
+			t.Fatalf("read audit log: %v", err)
+		}
+		lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+		if len(lines) == 0 {
+			t.Fatalf("expected audit lines")
+		}
+
+		eventSeen := map[string]bool{}
+		finalMatched := false
+		for _, line := range lines {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			var entry map[string]any
+			if err := json.Unmarshal([]byte(line), &entry); err != nil {
+				t.Fatalf("parse audit json: %v", err)
+			}
+			etype, _ := entry["event_type"].(string)
+			if etype == "" {
+				continue
+			}
+			eventSeen[etype] = true
+			if etype == "alpha_job_final_failed" {
+				decision, _ := entry["decision"].(string)
+				jobID, _ := entry["job_id"].(string)
+				attempt, _ := entry["attempt"].(float64)
+				maxAttempts, _ := entry["max_attempts"].(float64)
+				if decision == "exhausted" && jobID == "j-audit" && int(attempt) == 2 && int(maxAttempts) == 2 {
+					finalMatched = true
+				}
+			}
+		}
+
+		for _, eventType := range []string{"alpha_job_enqueued", "alpha_job_leased", "alpha_job_requeued", "alpha_job_final_failed"} {
+			if !eventSeen[eventType] {
+				t.Fatalf("expected lifecycle event %s in audit log", eventType)
+			}
+		}
+		if !finalMatched {
+			t.Fatalf("expected final failure audit metadata for j-audit")
+		}
+	})
 }
