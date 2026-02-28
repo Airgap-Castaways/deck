@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: ci-main-vagrant-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   vagrant-smoke:
     runs-on: [self-hosted, linux, x64, vagrant]
