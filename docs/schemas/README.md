@@ -9,6 +9,11 @@ Validation flow:
 1. Validate workflow shape with `deck-workflow.schema.json`.
 2. Validate each step with the matching `tools/<kind>.schema.json`.
 
+Current implementation status:
+
+- implemented: top-level workflow validation (`deck-workflow.schema.json`)
+- planned: per-step tool schema validation (`tools/<kind>.schema.json`)
+
 Step common fields include `id`, `apiVersion`, `kind`, `spec`, optional `when/retry/timeout/register`.
 
 Current tool schemas:
