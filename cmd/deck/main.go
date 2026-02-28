@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/install"
 	"github.com/taedi90/deck/internal/prepare"
 	"github.com/taedi90/deck/internal/validate"
 )
@@ -28,6 +29,8 @@ func run(args []string) error {
 		return runValidate(args[1:])
 	case "run":
 		return runRun(args[1:])
+	case "resume":
+		return runResume(args[1:])
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -88,11 +91,45 @@ func runRun(args []string) error {
 		}
 		fmt.Fprintln(os.Stdout, "run prepare: ok")
 		return nil
+	case "install":
+		if err := install.Run(wf, install.RunOptions{BundleRoot: *bundle}); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stdout, "run install: ok")
+		return nil
 	default:
 		return fmt.Errorf("unsupported phase: %s", *phase)
 	}
 }
 
+func runResume(args []string) error {
+	fs := flag.NewFlagSet("resume", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	file := fs.String("file", "", "path to workflow file")
+	bundle := fs.String("bundle", "", "bundle path")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *file == "" {
+		return errors.New("--file is required")
+	}
+
+	if err := validate.File(*file); err != nil {
+		return err
+	}
+
+	wf, err := config.Load(*file)
+	if err != nil {
+		return err
+	}
+	if err := install.Run(wf, install.RunOptions{BundleRoot: *bundle}); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stdout, "resume install: ok")
+	return nil
+}
+
 func usageError() error {
-	return errors.New("usage: deck validate -f <file> | deck run --file <file> --phase <phase>")
+	return errors.New("usage: deck validate -f <file> | deck run --file <file> --phase <phase> | deck resume --file <file>")
 }
