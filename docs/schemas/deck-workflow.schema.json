@@ -82,6 +82,7 @@
             "Sysctl",
             "Modprobe",
             "RunCommand",
+            "VerifyImages",
             "KubeadmInit",
             "KubeadmJoin"
           ]

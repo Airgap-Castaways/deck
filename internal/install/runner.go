@@ -42,6 +42,9 @@ const (
 	errCodeInstallCommandMissing   = "E_INSTALL_RUNCOMMAND_REQUIRED"
 	errCodeInstallCommandTimeout   = "E_INSTALL_RUNCOMMAND_TIMEOUT"
 	errCodeInstallCommandFailed    = "E_INSTALL_RUNCOMMAND_FAILED"
+	errCodeInstallImagesMissing    = "E_INSTALL_VERIFY_IMAGES_REQUIRED"
+	errCodeInstallImagesCmdFailed  = "E_INSTALL_VERIFY_IMAGES_COMMAND_FAILED"
+	errCodeInstallImagesNotFound   = "E_INSTALL_VERIFY_IMAGES_NOT_FOUND"
 	errCodeInstallInitJoinMissing  = "E_INSTALL_KUBEADM_INIT_JOINFILE_REQUIRED"
 	errCodeInstallJoinPathMissing  = "E_INSTALL_KUBEADM_JOIN_JOINFILE_REQUIRED"
 	errCodeInstallJoinFileMissing  = "E_INSTALL_KUBEADM_JOIN_FILE_NOT_FOUND"
@@ -157,6 +160,8 @@ func executeStep(kind string, spec map[string]any) error {
 		return runModprobe(spec)
 	case "RunCommand":
 		return runCommand(spec)
+	case "VerifyImages":
+		return runVerifyImages(spec)
 	case "KubeadmInit":
 		return runKubeadmInit(spec)
 	case "KubeadmJoin":
@@ -298,6 +303,53 @@ func runCommand(spec map[string]any) error {
 		return fmt.Errorf("%s: command exited non-zero: %w", errCodeInstallCommandFailed, err)
 	}
 	return err
+}
+
+func runVerifyImages(spec map[string]any) error {
+	required := stringSlice(spec["images"])
+	if len(required) == 0 {
+		return fmt.Errorf("%s: VerifyImages requires images", errCodeInstallImagesMissing)
+	}
+
+	cmdArgs := stringSlice(spec["command"])
+	if len(cmdArgs) == 0 {
+		cmdArgs = []string{"ctr", "-n", "k8s.io", "images", "list", "-q"}
+	}
+
+	timeout := 20 * time.Second
+	if ts := stringValue(spec, "timeout"); ts != "" {
+		d, err := time.ParseDuration(ts)
+		if err == nil && d > 0 {
+			timeout = d
+		}
+	}
+
+	output, err := runCommandOutput(cmdArgs, timeout)
+	if err != nil {
+		return fmt.Errorf("%s: %w", errCodeInstallImagesCmdFailed, err)
+	}
+
+	available := map[string]bool{}
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		available[line] = true
+	}
+
+	missing := make([]string, 0)
+	for _, image := range required {
+		if !available[image] {
+			missing = append(missing, image)
+		}
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("%s: missing images: %s", errCodeInstallImagesNotFound, strings.Join(missing, ", "))
+	}
+
+	return nil
 }
 
 func runKubeadmInit(spec map[string]any) error {
@@ -463,6 +515,29 @@ func runTimedCommand(name string, args []string, timeout time.Duration) error {
 		return context.DeadlineExceeded
 	}
 	return err
+}
+
+func runCommandOutput(cmdArgs []string, timeout time.Duration) (string, error) {
+	if len(cmdArgs) == 0 {
+		return "", fmt.Errorf("empty command")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
+	output, err := cmd.CombinedOutput()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return "", fmt.Errorf("command timed out after %s", timeout)
+	}
+	if err != nil {
+		msg := strings.TrimSpace(string(output))
+		if msg != "" {
+			return "", fmt.Errorf("command failed: %w: %s", err, msg)
+		}
+		return "", fmt.Errorf("command failed: %w", err)
+	}
+	return string(output), nil
 }
 
 func loadState(path string) (*State, error) {
