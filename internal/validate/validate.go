@@ -33,6 +33,7 @@ var toolSchemaByKind = map[string]string{
 }
 
 var registerOutputContract = map[string][]string{
+	"CheckHost":           {"passed", "failedChecks"},
 	"DownloadFile":        {"path", "artifacts"},
 	"DownloadPackages":    {"artifacts"},
 	"DownloadK8sPackages": {"artifacts"},

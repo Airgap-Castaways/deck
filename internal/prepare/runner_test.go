@@ -651,6 +651,112 @@ func TestRun_WhenInvalidExpression(t *testing.T) {
 	}
 }
 
+func TestRun_CheckHostStep(t *testing.T) {
+	t.Run("pass and register", func(t *testing.T) {
+		bundle := t.TempDir()
+		wf := &config.Workflow{
+			Version: "v1",
+			Vars:    map[string]any{"want": "ok"},
+			Phases: []config.Phase{{
+				Name: "prepare",
+				Steps: []config.Step{
+					{
+						ID:       "host-check",
+						Kind:     "CheckHost",
+						Register: map[string]string{"hostPassed": "passed"},
+						Spec: map[string]any{
+							"checks":   []any{"os", "arch", "binaries"},
+							"binaries": []any{"docker"},
+						},
+					},
+					{
+						ID:   "runtime-branch",
+						Kind: "DownloadPackages",
+						When: "runtime.hostPassed == true and vars.want == \"ok\"",
+						Spec: map[string]any{
+							"packages": []any{"containerd"},
+							"backend": map[string]any{
+								"mode":    "container",
+								"runtime": "docker",
+								"image":   "ubuntu:22.04",
+							},
+						},
+					},
+				},
+			}},
+		}
+
+		oldRead := readFileFn
+		oldGOOS := goosFn
+		oldGOARCH := goarchFn
+		readFileFn = func(path string) ([]byte, error) {
+			return os.ReadFile(path)
+		}
+		goosFn = func() string { return "linux" }
+		goarchFn = func() string { return "arm64" }
+		defer func() {
+			readFileFn = oldRead
+			goosFn = oldGOOS
+			goarchFn = oldGOARCH
+		}()
+
+		if err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}}); err != nil {
+			t.Fatalf("expected checkhost pass, got %v", err)
+		}
+	})
+
+	t.Run("failfast false aggregates errors", func(t *testing.T) {
+		bundle := t.TempDir()
+		wf := &config.Workflow{
+			Version: "v1",
+			Phases: []config.Phase{{
+				Name: "prepare",
+				Steps: []config.Step{{
+					ID:   "host-check",
+					Kind: "CheckHost",
+					Spec: map[string]any{
+						"checks":   []any{"os", "arch", "binaries", "swap", "kernelModules"},
+						"binaries": []any{"missing-bin"},
+						"failFast": false,
+					},
+				}},
+			}},
+		}
+
+		oldRead := readFileFn
+		oldGOOS := goosFn
+		oldGOARCH := goarchFn
+		readFileFn = func(path string) ([]byte, error) {
+			switch path {
+			case "/proc/swaps":
+				return []byte("Filename\tType\tSize\tUsed\tPriority\n/dev/sda file 1 0 -2\n"), nil
+			case "/proc/modules":
+				return []byte("overlay 1 0 - Live 0x0\n"), nil
+			default:
+				return os.ReadFile(path)
+			}
+		}
+		goosFn = func() string { return "darwin" }
+		goarchFn = func() string { return "386" }
+		defer func() {
+			readFileFn = oldRead
+			goosFn = oldGOOS
+			goarchFn = oldGOARCH
+		}()
+
+		err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: &noRuntimeRunner{}})
+		if err == nil {
+			t.Fatalf("expected checkhost failure")
+		}
+		if !strings.Contains(err.Error(), "E_PREPARE_CHECKHOST_FAILED") {
+			t.Fatalf("expected E_PREPARE_CHECKHOST_FAILED, got %v", err)
+		}
+		if !strings.Contains(err.Error(), "os:") || !strings.Contains(err.Error(), "arch:") || !strings.Contains(err.Error(), "binaries:") {
+			t.Fatalf("expected aggregated failures, got %v", err)
+		}
+	})
+}
+
 type fakeRunner struct{}
 
 type failOnceRunner struct {

@@ -237,4 +237,28 @@ phases:
 			t.Fatalf("expected valid register output, got %v", err)
 		}
 	})
+
+	t.Run("register output key valid for checkhost", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1
+phases:
+  - name: prepare
+    steps:
+      - id: c1
+        apiVersion: deck/v1
+        kind: CheckHost
+        register:
+          hostOk: passed
+        spec:
+          checks: [os, arch]
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected valid checkhost register output, got %v", err)
+		}
+	})
 }
