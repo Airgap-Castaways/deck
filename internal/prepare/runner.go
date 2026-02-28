@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/fetch"
 )
 
 type RunOptions struct {
@@ -178,14 +179,9 @@ func runDownloadFile(bundleRoot string, spec map[string]any) (string, error) {
 	defer f.Close()
 
 	if sourcePath != "" {
-		resolvedPath, err := resolveLocalSourcePath(spec, sourcePath)
+		raw, err := resolveSourceBytes(spec, sourcePath)
 		if err == nil {
-			src, err := os.Open(resolvedPath)
-			if err != nil {
-				return "", fmt.Errorf("open source file %s: %w", resolvedPath, err)
-			}
-			defer src.Close()
-			if _, err := io.Copy(f, src); err != nil {
+			if _, err := f.Write(raw); err != nil {
 				return "", fmt.Errorf("write output file: %w", err)
 			}
 		} else {
@@ -242,35 +238,37 @@ func downloadURLToFile(target *os.File, url string) error {
 	return nil
 }
 
-func resolveLocalSourcePath(spec map[string]any, sourcePath string) (string, error) {
-	fetch := mapValue(spec, "fetch")
-	sourcesRaw, ok := fetch["sources"].([]any)
+func resolveSourceBytes(spec map[string]any, sourcePath string) ([]byte, error) {
+	fetchCfg := mapValue(spec, "fetch")
+	sourcesRaw, ok := fetchCfg["sources"].([]any)
 	if ok && len(sourcesRaw) > 0 {
+		sources := make([]fetch.SourceConfig, 0, len(sourcesRaw))
 		for _, raw := range sourcesRaw {
 			s, ok := raw.(map[string]any)
 			if !ok {
 				continue
 			}
-			typeName := stringValue(s, "type")
-			if typeName != "local" && typeName != "bundle" {
-				continue
-			}
-			base := stringValue(s, "path")
-			if base == "" {
-				continue
-			}
-			candidate := filepath.Join(base, filepath.FromSlash(sourcePath))
-			if fileExists(candidate) {
-				return candidate, nil
-			}
+			sources = append(sources, fetch.SourceConfig{
+				Type: stringValue(s, "type"),
+				Path: stringValue(s, "path"),
+				URL:  stringValue(s, "url"),
+			})
 		}
-		return "", fmt.Errorf("%s: source.path %s not found in configured fetch sources", errCodePrepareSourceNotFound, sourcePath)
+		if len(sources) == 0 {
+			return nil, fmt.Errorf("%s: source.path %s not found in configured fetch sources", errCodePrepareSourceNotFound, sourcePath)
+		}
+		raw, err := fetch.ResolveBytes(sourcePath, sources)
+		if err == nil {
+			return raw, nil
+		}
+		return nil, fmt.Errorf("%s: source.path %s not found in configured fetch sources", errCodePrepareSourceNotFound, sourcePath)
 	}
 
-	if fileExists(sourcePath) {
-		return sourcePath, nil
+	raw, err := os.ReadFile(sourcePath)
+	if err == nil {
+		return raw, nil
 	}
-	return "", fmt.Errorf("%s: source.path %s not found", errCodePrepareSourceNotFound, sourcePath)
+	return nil, fmt.Errorf("%s: source.path %s not found", errCodePrepareSourceNotFound, sourcePath)
 }
 
 func verifyFileSHA256(path, expected string) error {
@@ -284,14 +282,6 @@ func verifyFileSHA256(path, expected string) error {
 		return fmt.Errorf("%s: expected %s got %s", errCodePrepareChecksumMismatch, expected, actual)
 	}
 	return nil
-}
-
-func fileExists(path string) bool {
-	fi, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return !fi.IsDir()
 }
 
 func runDownloadPackages(runner CommandRunner, bundleRoot string, spec map[string]any, defaultDir string) ([]string, error) {

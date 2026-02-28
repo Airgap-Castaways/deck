@@ -46,10 +46,15 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["type", "path"],
+                "required": ["type"],
+                "anyOf": [
+                  { "required": ["path"] },
+                  { "required": ["url"] }
+                ],
                 "properties": {
-                  "type": { "type": "string", "enum": ["local", "bundle"] },
-                  "path": { "type": "string", "minLength": 1 }
+                  "type": { "type": "string", "enum": ["local", "bundle", "repo", "online"] },
+                  "path": { "type": "string", "minLength": 1 },
+                  "url": { "type": "string", "format": "uri" }
                 }
               }
             }

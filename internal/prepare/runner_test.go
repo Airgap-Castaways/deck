@@ -369,6 +369,60 @@ func TestRun_DownloadFileFallbackSourceMissing(t *testing.T) {
 	}
 }
 
+func TestRun_DownloadFileFallbackRepoThenOnline(t *testing.T) {
+	bundleOut := t.TempDir()
+
+	repo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer repo.Close()
+
+	online := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/files/remote.bin" {
+			_, _ = w.Write([]byte("from-online-source"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer online.Close()
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{{
+				ID:   "download-file",
+				Kind: "DownloadFile",
+				Spec: map[string]any{
+					"source": map[string]any{
+						"path": "files/remote.bin",
+					},
+					"fetch": map[string]any{
+						"strategy": "fallback",
+						"sources": []any{
+							map[string]any{"type": "repo", "url": repo.URL},
+							map[string]any{"type": "online", "url": online.URL},
+						},
+					},
+					"output": map[string]any{"path": "files/fetched-online.bin"},
+				},
+			}},
+		}},
+	}
+
+	if err := Run(wf, RunOptions{BundleRoot: bundleOut}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(bundleOut, "files", "fetched-online.bin"))
+	if err != nil {
+		t.Fatalf("read fetched output: %v", err)
+	}
+	if string(raw) != "from-online-source" {
+		t.Fatalf("unexpected fetched content: %q", string(raw))
+	}
+}
+
 type fakeRunner struct{}
 
 type noRuntimeRunner struct{}
