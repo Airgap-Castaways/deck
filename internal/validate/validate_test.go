@@ -37,4 +37,16 @@ func TestFile(t *testing.T) {
 			t.Fatalf("expected error for invalid yaml")
 		}
 	})
+
+	t.Run("unsupported version", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		if err := os.WriteFile(path, []byte("version: v2\nphases: []\n"), 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err == nil {
+			t.Fatalf("expected error for unsupported version")
+		}
+	})
 }
