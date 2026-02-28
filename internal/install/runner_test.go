@@ -1,9 +1,12 @@
 package install
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/taedi90/deck/internal/config"
@@ -12,6 +15,21 @@ import (
 func TestRun_InstallTools(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state", "state.json")
+	bundle := filepath.Join(dir, "bundle")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
 	fileA := filepath.Join(dir, "a.txt")
 	fileB := filepath.Join(dir, "b.txt")
 	sysctlPath := filepath.Join(dir, "sysctl.conf")
@@ -37,7 +55,7 @@ func TestRun_InstallTools(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{}); err != nil {
+	if err := Run(wf, RunOptions{BundleRoot: bundle}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -75,9 +93,92 @@ func TestRun_InstallTools(t *testing.T) {
 	}
 }
 
+func TestRun_ManifestIntegrityVerified(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("hello")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Context: config.Context{StateFile: statePath},
+		Phases: []config.Phase{{
+			Name:  "install",
+			Steps: []config.Step{{ID: "s1", Kind: "RunCommand", Spec: map[string]any{"command": []any{"true"}}}},
+		}},
+	}
+
+	if err := Run(wf, RunOptions{BundleRoot: bundle}); err != nil {
+		t.Fatalf("expected install success, got %v", err)
+	}
+}
+
+func TestRun_ManifestIntegrityMismatch(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("different")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Context: config.Context{StateFile: statePath},
+		Phases: []config.Phase{{
+			Name:  "install",
+			Steps: []config.Step{{ID: "s1", Kind: "RunCommand", Spec: map[string]any{"command": []any{"true"}}}},
+		}},
+	}
+
+	err := Run(wf, RunOptions{BundleRoot: bundle})
+	if err == nil {
+		t.Fatalf("expected manifest integrity error")
+	}
+	if !strings.Contains(err.Error(), "E_BUNDLE_INTEGRITY") {
+		t.Fatalf("expected E_BUNDLE_INTEGRITY error, got %v", err)
+	}
+}
+
 func TestRun_ResumeFromFailedStep(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state", "state.json")
+	bundle := filepath.Join(dir, "bundle")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
 	first := filepath.Join(dir, "first.txt")
 	second := filepath.Join(dir, "second.txt")
 
@@ -94,7 +195,7 @@ func TestRun_ResumeFromFailedStep(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{}); err == nil {
+	if err := Run(wf, RunOptions{BundleRoot: bundle}); err == nil {
 		t.Fatalf("expected failure on s2")
 	}
 
@@ -114,7 +215,7 @@ func TestRun_ResumeFromFailedStep(t *testing.T) {
 	}
 
 	wf.Phases[0].Steps[1].Spec = map[string]any{"command": []any{"true"}}
-	if err := Run(wf, RunOptions{}); err != nil {
+	if err := Run(wf, RunOptions{BundleRoot: bundle}); err != nil {
 		t.Fatalf("resume run failed: %v", err)
 	}
 
@@ -136,4 +237,19 @@ func TestRun_ResumeFromFailedStep(t *testing.T) {
 	if final.FailedStep != "" {
 		t.Fatalf("expected empty failed step, got %q", final.FailedStep)
 	}
+}
+
+func writeManifestForTest(bundleRoot, relPath string, content []byte) error {
+	sum := sha256.Sum256(content)
+	entry := map[string]any{
+		"path":   relPath,
+		"sha256": hex.EncodeToString(sum[:]),
+		"size":   len(content),
+	}
+	manifest := map[string]any{"entries": []any{entry}}
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(bundleRoot, "manifest.json"), raw, 0o644)
 }
