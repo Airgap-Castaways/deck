@@ -43,6 +43,34 @@ type statusRecorder struct {
 	status int
 }
 
+type alphaJob struct {
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Message string `json:"message,omitempty"`
+}
+
+type alphaJobQueue struct {
+	mu   sync.Mutex
+	jobs []alphaJob
+}
+
+func (q *alphaJobQueue) enqueue(job alphaJob) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.jobs = append(q.jobs, job)
+}
+
+func (q *alphaJobQueue) dequeue() (alphaJob, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.jobs) == 0 {
+		return alphaJob{}, false
+	}
+	job := q.jobs[0]
+	q.jobs = q.jobs[1:]
+	return job, true
+}
+
 func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
@@ -55,6 +83,7 @@ func NewHandler(root string) (http.Handler, error) {
 	}
 
 	mux := http.NewServeMux()
+	queue := &alphaJobQueue{jobs: []alphaJob{}}
 
 	filesDir := filepath.Join(root, "files")
 	packagesDir := filepath.Join(root, "packages")
@@ -82,11 +111,42 @@ func NewHandler(root string) (http.Handler, error) {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		job, ok := queue.dequeue()
+		var jobPayload any
+		if ok {
+			jobPayload = job
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status": "ok",
-			"job":    nil,
+			"job":    jobPayload,
 		})
+	})
+
+	mux.HandleFunc("/api/agent/job", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		defer r.Body.Close()
+
+		var job alphaJob
+		if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "bad_request"})
+			return
+		}
+		job.ID = strings.TrimSpace(job.ID)
+		job.Type = strings.TrimSpace(job.Type)
+		if job.ID == "" || (job.Type != "noop" && job.Type != "echo") {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "invalid_job"})
+			return
+		}
+
+		queue.enqueue(job)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "accepted"})
 	})
 
 	mux.HandleFunc("/api/agent/report", func(w http.ResponseWriter, r *http.Request) {

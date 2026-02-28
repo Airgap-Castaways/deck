@@ -93,6 +93,44 @@ func TestNewHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("enqueues and dequeues alpha job", func(t *testing.T) {
+		enqReq := httptest.NewRequest(http.MethodPost, "/api/agent/job", strings.NewReader(`{"id":"j-1","type":"echo","message":"hello"}`))
+		enqRR := httptest.NewRecorder()
+		h.ServeHTTP(enqRR, enqReq)
+		if enqRR.Code != http.StatusOK {
+			t.Fatalf("expected enqueue 200, got %d", enqRR.Code)
+		}
+
+		leaseReq := httptest.NewRequest(http.MethodPost, "/api/agent/lease", strings.NewReader(`{"agent":"x"}`))
+		leaseRR := httptest.NewRecorder()
+		h.ServeHTTP(leaseRR, leaseReq)
+		if leaseRR.Code != http.StatusOK {
+			t.Fatalf("expected lease 200, got %d", leaseRR.Code)
+		}
+		if !strings.Contains(leaseRR.Body.String(), `"id":"j-1"`) {
+			t.Fatalf("expected leased job in response: %q", leaseRR.Body.String())
+		}
+
+		leaseReq2 := httptest.NewRequest(http.MethodPost, "/api/agent/lease", strings.NewReader(`{"agent":"x"}`))
+		leaseRR2 := httptest.NewRecorder()
+		h.ServeHTTP(leaseRR2, leaseReq2)
+		if leaseRR2.Code != http.StatusOK {
+			t.Fatalf("expected second lease 200, got %d", leaseRR2.Code)
+		}
+		if !strings.Contains(leaseRR2.Body.String(), `"job":null`) {
+			t.Fatalf("expected empty queue on second lease: %q", leaseRR2.Body.String())
+		}
+	})
+
+	t.Run("rejects invalid alpha job payload", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/agent/job", strings.NewReader(`{"id":"","type":"invalid"}`))
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", rr.Code)
+		}
+	})
+
 	t.Run("accepts agent report", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/agent/report", strings.NewReader(`{"job_id":"j-1","status":"success"}`))
 		rr := httptest.NewRecorder()
