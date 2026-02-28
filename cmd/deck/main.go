@@ -102,12 +102,23 @@ func runServer(args []string) error {
 	fs.SetOutput(os.Stderr)
 	root := fs.String("root", "./bundle", "server content root")
 	addr := fs.String("addr", ":8080", "server listen address")
+	tlsCert := fs.String("tls-cert", "", "TLS certificate path")
+	tlsKey := fs.String("tls-key", "", "TLS private key path")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
 
+	if (*tlsCert == "") != (*tlsKey == "") {
+		return errors.New("--tls-cert and --tls-key must be provided together")
+	}
+
 	h := server.NewHandler(*root)
-	fmt.Fprintf(os.Stdout, "server start: listening on %s (root=%s)\n", *addr, *root)
+	if *tlsCert != "" {
+		fmt.Fprintf(os.Stdout, "server start: listening on https://%s (root=%s)\n", *addr, *root)
+		return http.ListenAndServeTLS(*addr, *tlsCert, *tlsKey, h)
+	}
+
+	fmt.Fprintf(os.Stdout, "server start: listening on http://%s (root=%s)\n", *addr, *root)
 	return http.ListenAndServe(*addr, h)
 }
 

@@ -221,6 +221,24 @@ func TestRunServerUsageValidation(t *testing.T) {
 	}
 }
 
+func TestRunServerTLSFlagValidation(t *testing.T) {
+	err := run([]string{"server", "start", "--tls-cert", "server.crt"})
+	if err == nil {
+		t.Fatalf("expected tls flag validation error")
+	}
+	if !strings.Contains(err.Error(), "--tls-cert and --tls-key must be provided together") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	err = run([]string{"server", "start", "--tls-key", "server.key"})
+	if err == nil {
+		t.Fatalf("expected tls flag validation error")
+	}
+	if !strings.Contains(err.Error(), "--tls-cert and --tls-key must be provided together") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func writeManifestForMainTest(bundleRoot, rel string, content []byte) error {
 	sum := sha256.Sum256(content)
 	manifest := map[string]any{
