@@ -262,16 +262,18 @@ func runValidate(args []string) error {
 	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 
-	file := fs.String("f", "", "path to workflow file")
+	var file string
+	fs.StringVar(&file, "f", "", "path to workflow file")
+	fs.StringVar(&file, "file", "", "path to workflow file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	if *file == "" {
-		return errors.New("-f is required")
+	if file == "" {
+		return errors.New("--file (or -f) is required")
 	}
 
-	if err := validate.File(*file); err != nil {
+	if err := validate.File(file); err != nil {
 		return err
 	}
 
@@ -391,5 +393,5 @@ func runDiagnose(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: deck apply --file <file> | deck validate -f <file> | deck run --file <file> --phase <phase> | deck resume --file <file> | deck diagnose --preflight --file <file> | deck bundle verify --bundle <path> | deck bundle import --file <bundle.tar> --dest <dir> | deck bundle collect --bundle <dir> --output <bundle.tar> | deck server start --root <dir> --addr <host:port> | deck agent start --server <url> | deck agent run-once --server <url>")
+	return errors.New("usage: deck apply --file <file> | deck validate --file <file> (-f alias) | deck run --file <file> --phase <phase> | deck resume --file <file> | deck diagnose --preflight --file <file> | deck bundle verify --bundle <path> | deck bundle import --file <bundle.tar> --dest <dir> | deck bundle collect --bundle <dir> --output <bundle.tar> | deck server start --root <dir> --addr <host:port> | deck agent start --server <url> | deck agent run-once --server <url>")
 }

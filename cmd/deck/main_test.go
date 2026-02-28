@@ -110,6 +110,36 @@ phases:
 	})
 }
 
+func TestRunValidateFlagAliases(t *testing.T) {
+	root := t.TempDir()
+	workflowPath := filepath.Join(root, "workflow.yaml")
+	workflow := `version: v1
+phases:
+  - name: install
+    steps:
+      - id: s1
+        apiVersion: deck/v1
+        kind: RunCommand
+        spec:
+          command: ["true"]
+`
+	if err := os.WriteFile(workflowPath, []byte(workflow), 0o644); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	t.Run("short -f flag", func(t *testing.T) {
+		if err := run([]string{"validate", "-f", workflowPath}); err != nil {
+			t.Fatalf("expected validate -f success, got %v", err)
+		}
+	})
+
+	t.Run("long --file flag", func(t *testing.T) {
+		if err := run([]string{"validate", "--file", workflowPath}); err != nil {
+			t.Fatalf("expected validate --file success, got %v", err)
+		}
+	})
+}
+
 func TestRunBundleVerify(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		bundle := t.TempDir()
