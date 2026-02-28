@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://deck.local/schemas/tools/sysctl.schema.json",
-  "title": "SysctlStep",
+  "$id": "https://deck.local/schemas/tools/verify-images.schema.json",
+  "title": "VerifyImagesStep",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "apiVersion", "kind", "spec"],
   "properties": {
     "id": { "type": "string" },
     "apiVersion": { "const": "deck/v1" },
-    "kind": { "const": "Sysctl" },
+    "kind": { "const": "VerifyImages" },
     "metadata": { "type": "object", "additionalProperties": true },
     "when": { "type": "string" },
     "retry": { "type": "integer", "minimum": 0 },
@@ -21,22 +21,19 @@
     "spec": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["values", "writeFile"],
+      "required": ["images"],
       "properties": {
-        "values": {
-          "type": "object",
-          "minProperties": 1,
-          "additionalProperties": {
-            "anyOf": [
-              { "type": "string" },
-              { "type": "number" },
-              { "type": "integer" },
-              { "type": "boolean" }
-            ]
-          }
+        "images": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
         },
-        "writeFile": { "type": "string" },
-        "apply": { "type": "boolean", "default": true }
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "timeout": { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" }
       }
     }
   }

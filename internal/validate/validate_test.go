@@ -3,6 +3,7 @@ package validate
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -152,6 +153,88 @@ phases:
 
 		if err := File(path); err == nil {
 			t.Fatalf("expected runtime var redefinition error")
+		}
+	})
+
+	t.Run("tool schema invalid step spec", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1
+phases:
+  - name: install
+    steps:
+      - id: bad-run-command
+        apiVersion: deck/v1
+        kind: RunCommand
+        spec:
+          command: []
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.HasPrefix(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("register output key invalid for kind", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1
+phases:
+  - name: install
+    steps:
+      - id: w1
+        apiVersion: deck/v1
+        kind: WriteFile
+        register:
+          x: notARealOutput
+        spec:
+          path: /tmp/a.txt
+          content: hello
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected register output error")
+		}
+		if got := err.Error(); !strings.HasPrefix(got, "E_REGISTER_OUTPUT_NOT_FOUND") {
+			t.Fatalf("expected E_REGISTER_OUTPUT_NOT_FOUND, got %v", err)
+		}
+	})
+
+	t.Run("register output key valid for kind", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1
+phases:
+  - name: prepare
+    steps:
+      - id: d1
+        apiVersion: deck/v1
+        kind: DownloadFile
+        register:
+          fetched: path
+        spec:
+          source:
+            url: https://example.local/a
+          output:
+            path: files/a
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected valid register output, got %v", err)
 		}
 	})
 }

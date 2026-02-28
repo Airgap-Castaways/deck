@@ -12,7 +12,7 @@ Validation flow:
 Current implementation status:
 
 - implemented: top-level workflow validation (`deck-workflow.schema.json`)
-- planned: per-step tool schema validation (`tools/<kind>.schema.json`)
+- implemented: per-step tool schema validation (`tools/<kind>.schema.json`)
 
 Step common fields include `id`, `apiVersion`, `kind`, `spec`, optional `when/retry/timeout/register`.
 
@@ -30,5 +30,6 @@ Current tool schemas:
 - `sysctl.schema.json`
 - `modprobe.schema.json`
 - `run-command.schema.json`
+- `verify-images.schema.json`
 - `kubeadm-init.schema.json`
 - `kubeadm-join.schema.json`

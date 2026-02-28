@@ -23,8 +23,14 @@
       "additionalProperties": false,
       "required": ["joinFile"],
       "properties": {
+        "mode": { "type": "string", "enum": ["stub", "real"] },
         "joinFile": { "type": "string" },
-        "asControlPlane": { "type": "boolean", "default": false }
+        "asControlPlane": { "type": "boolean", "default": false },
+        "extraArgs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "timeout": { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" }
       }
     }
   }

@@ -21,7 +21,7 @@
     "spec": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source", "packages"],
+      "required": ["packages"],
       "properties": {
         "source": {
           "type": "object",

@@ -21,10 +21,24 @@
     "spec": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["configTemplate", "outputJoinFile"],
+      "required": ["outputJoinFile"],
       "properties": {
+        "mode": { "type": "string", "enum": ["stub", "real"] },
+        "configFile": { "type": "string" },
         "configTemplate": { "type": "string" },
         "outputJoinFile": { "type": "string" },
+        "advertiseAddress": { "type": "string" },
+        "podNetworkCIDR": { "type": "string" },
+        "criSocket": { "type": "string" },
+        "ignorePreflightErrors": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "extraArgs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "timeout": { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" },
         "skipIfAdminConfExists": { "type": "boolean", "default": true }
       }
     }

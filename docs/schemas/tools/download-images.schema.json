@@ -21,7 +21,7 @@
     "spec": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["images", "backend", "output"],
+      "required": ["images"],
       "properties": {
         "images": {
           "type": "array",
