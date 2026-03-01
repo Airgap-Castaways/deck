@@ -1,0 +1,14 @@
+version: v1
+context:
+  stateFile: /tmp/deck/state-vagrant-smoke-example.json
+phases:
+  - name: install
+    steps:
+      - id: create-smoke-marker
+        apiVersion: deck/v1
+        kind: RunCommand
+        spec:
+          command:
+            - bash
+            - -lc
+            - mkdir -p /tmp/deck/examples && printf '%s\n' ok > /tmp/deck/examples/vagrant-smoke.txt
