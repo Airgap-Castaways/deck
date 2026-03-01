@@ -55,7 +55,7 @@ phases:
         spec:
           mode: real
           outputJoinFile: /tmp/deck/join-real.txt
-          advertiseAddress: 192.168.56.10
+          advertiseAddress: 192.168.57.10
           podNetworkCIDR: 10.244.0.0/16
           criSocket: unix:///run/containerd/containerd.sock
           ignorePreflightErrors: [Swap]
