@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type SourceConfig struct {
@@ -17,7 +18,14 @@ type SourceConfig struct {
 
 type ResolveOptions struct {
 	OfflineOnly bool
+	MaxBytes    int64
+	Timeout     time.Duration
 }
+
+const (
+	defaultHTTPMaxBytes = int64(32 << 20) // 32MiB
+	defaultHTTPTimeout  = 30 * time.Second
+)
 
 func ResolveBytes(relPath string, sources []SourceConfig, opts ResolveOptions) ([]byte, error) {
 	if strings.TrimSpace(relPath) == "" {
@@ -52,11 +60,11 @@ func ResolveBytes(relPath string, sources []SourceConfig, opts ResolveOptions) (
 				continue
 			}
 			targetURL := strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(filepath.ToSlash(relPath), "/")
-			raw, err := readHTTP(targetURL)
+			raw, err := readHTTP(targetURL, opts)
 			if err == nil {
 				return raw, nil
 			}
-			attempts = append(attempts, fmt.Sprintf("%s(%s)", typ, targetURL))
+			attempts = append(attempts, fmt.Sprintf("%s(%s:%s)", typ, targetURL, strings.TrimSpace(err.Error())))
 
 		default:
 			attempts = append(attempts, fmt.Sprintf("unknown(%s)", typ))
@@ -69,18 +77,40 @@ func ResolveBytes(relPath string, sources []SourceConfig, opts ResolveOptions) (
 	return nil, fmt.Errorf("all fetch sources failed for %s: %s", relPath, strings.Join(attempts, ", "))
 }
 
-func readHTTP(url string) ([]byte, error) {
-	resp, err := http.Get(url) //nolint:gosec
+func readHTTP(url string, opts ResolveOptions) ([]byte, error) {
+	maxBytes := opts.MaxBytes
+	if maxBytes <= 0 {
+		maxBytes = defaultHTTPMaxBytes
+	}
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = defaultHTTPTimeout
+	}
+
+	client := &http.Client{Timeout: timeout}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
-	raw, err := io.ReadAll(resp.Body)
+	if resp.ContentLength > maxBytes && resp.ContentLength > 0 {
+		return nil, fmt.Errorf("http response exceeds max bytes: %d > %d", resp.ContentLength, maxBytes)
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
 		return nil, err
+	}
+	if int64(len(raw)) > maxBytes {
+		return nil, fmt.Errorf("http response exceeds max bytes: %d > %d", len(raw), maxBytes)
 	}
 	return raw, nil
 }

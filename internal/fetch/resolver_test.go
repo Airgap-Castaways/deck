@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestResolveBytes(t *testing.T) {
@@ -76,6 +77,21 @@ func TestResolveBytes(t *testing.T) {
 			t.Fatalf("expected offline policy error")
 		}
 		if !strings.Contains(err.Error(), "blocked-by-offline-policy") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects oversized http response", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("0123456789ABCDEF"))
+		}))
+		defer srv.Close()
+
+		_, err := ResolveBytes("files/a.txt", []SourceConfig{{Type: "online", URL: srv.URL}}, ResolveOptions{MaxBytes: 10, Timeout: time.Second})
+		if err == nil {
+			t.Fatalf("expected max-bytes error")
+		}
+		if !strings.Contains(err.Error(), "exceeds max bytes") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
