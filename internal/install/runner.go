@@ -336,7 +336,10 @@ func runWriteFile(spec map[string]any) error {
 	content := stringValue(spec, "content")
 	if content == "" {
 		if tmpl := stringValue(spec, "contentFromTemplate"); tmpl != "" {
-			content = fmt.Sprintf("template:%s\n", tmpl)
+			content = tmpl
+			if !strings.HasSuffix(content, "\n") {
+				content += "\n"
+			}
 		}
 	}
 
