@@ -3,7 +3,7 @@ offline-k8s-control-plane.yaml	validate
 offline-k8s-worker.yaml	validate
 offline-pull-control-plane.yaml	validate
 offline-pull-worker.yaml	validate
-offline-verify-images.yaml	validate
-offline-repo-preinstall.yaml	validate
 offline-containerd-mirror.yaml	validate
+offline-repo-preinstall.yaml	validate
+offline-verify-images.yaml	validate
 vagrant-smoke-install.yaml	run-install

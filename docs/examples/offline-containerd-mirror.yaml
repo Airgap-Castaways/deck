@@ -1,83 +1,48 @@
 version: v1
 vars:
-  registryHost: 192.168.56.1:8080
+  serverRegistryHost: 127.0.0.1:5000
+  seedRegistries: "registry.k8s.io docker.io quay.io ghcr.io gcr.io k8s.gcr.io"
 context:
   stateFile: /tmp/deck/state-offline-containerd-mirror.json
 phases:
   - name: install
     steps:
-      - id: write-containerd-mirror-registry-k8s-io
+      - id: prep-containerd-certsd-config
         apiVersion: deck/v1
-        kind: WriteFile
+        kind: RunCommand
         spec:
-          path: /etc/containerd/certs.d/registry.k8s.io/hosts.toml
-          mode: "0644"
-          contentFromTemplate: |
-            server = "https://registry.k8s.io"
-
-            [host."http://{ .vars.registryHost }"]
-              capabilities = ["pull", "resolve"]
-              skip_verify = true
-      - id: write-containerd-mirror-docker-io
+          command:
+            - bash
+            - -lc
+            - |
+              mkdir -p /etc/containerd/certs.d /etc/containerd
+              if [ ! -f /etc/containerd/config.toml ]; then
+                containerd config default > /etc/containerd/config.toml
+              fi
+              if grep -q 'config_path = ""' /etc/containerd/config.toml; then
+                sed -i 's|config_path = ""|config_path = "/etc/containerd/certs.d"|' /etc/containerd/config.toml
+              elif ! grep -q 'config_path = "/etc/containerd/certs.d"' /etc/containerd/config.toml; then
+                echo 'containerd registry config_path not configured' >&2
+                exit 1
+              fi
+      - id: write-containerd-mirror-hosts
         apiVersion: deck/v1
-        kind: WriteFile
+        kind: RunCommand
         spec:
-          path: /etc/containerd/certs.d/docker.io/hosts.toml
-          mode: "0644"
-          contentFromTemplate: |
-            server = "https://docker.io"
+          command:
+            - bash
+            - -lc
+            - |
+              for registry in { .vars.seedRegistries }; do
+                install -d "/etc/containerd/certs.d/$registry"
+                cat > "/etc/containerd/certs.d/$registry/hosts.toml" <<EOF
+              server = "http://{ .vars.serverRegistryHost }"
 
-            [host."http://{ .vars.registryHost }"]
-              capabilities = ["pull", "resolve"]
-              skip_verify = true
-      - id: write-containerd-mirror-quay-io
-        apiVersion: deck/v1
-        kind: WriteFile
-        spec:
-          path: /etc/containerd/certs.d/quay.io/hosts.toml
-          mode: "0644"
-          contentFromTemplate: |
-            server = "https://quay.io"
-
-            [host."http://{ .vars.registryHost }"]
-              capabilities = ["pull", "resolve"]
-              skip_verify = true
-      - id: write-containerd-mirror-ghcr-io
-        apiVersion: deck/v1
-        kind: WriteFile
-        spec:
-          path: /etc/containerd/certs.d/ghcr.io/hosts.toml
-          mode: "0644"
-          contentFromTemplate: |
-            server = "https://ghcr.io"
-
-            [host."http://{ .vars.registryHost }"]
-              capabilities = ["pull", "resolve"]
-              skip_verify = true
-      - id: write-containerd-mirror-gcr-io
-        apiVersion: deck/v1
-        kind: WriteFile
-        spec:
-          path: /etc/containerd/certs.d/gcr.io/hosts.toml
-          mode: "0644"
-          contentFromTemplate: |
-            server = "https://gcr.io"
-
-            [host."http://{ .vars.registryHost }"]
-              capabilities = ["pull", "resolve"]
-              skip_verify = true
-      - id: write-containerd-mirror-k8s-gcr-io
-        apiVersion: deck/v1
-        kind: WriteFile
-        spec:
-          path: /etc/containerd/certs.d/k8s.gcr.io/hosts.toml
-          mode: "0644"
-          contentFromTemplate: |
-            server = "https://k8s.gcr.io"
-
-            [host."http://{ .vars.registryHost }"]
-              capabilities = ["pull", "resolve"]
-              skip_verify = true
+              [host."http://{ .vars.serverRegistryHost }"]
+                capabilities = ["pull", "resolve"]
+                skip_verify = true
+              EOF
+              done
       - id: restart-containerd
         apiVersion: deck/v1
         kind: RunCommand
