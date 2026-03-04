@@ -1,0 +1,90 @@
+version: v1
+vars:
+  registryHost: 192.168.56.1:8080
+context:
+  stateFile: /tmp/deck/state-offline-containerd-mirror.json
+phases:
+  - name: install
+    steps:
+      - id: write-containerd-mirror-registry-k8s-io
+        apiVersion: deck/v1
+        kind: WriteFile
+        spec:
+          path: /etc/containerd/certs.d/registry.k8s.io/hosts.toml
+          mode: "0644"
+          contentFromTemplate: |
+            server = "https://registry.k8s.io"
+
+            [host."http://{ .vars.registryHost }"]
+              capabilities = ["pull", "resolve"]
+              skip_verify = true
+      - id: write-containerd-mirror-docker-io
+        apiVersion: deck/v1
+        kind: WriteFile
+        spec:
+          path: /etc/containerd/certs.d/docker.io/hosts.toml
+          mode: "0644"
+          contentFromTemplate: |
+            server = "https://docker.io"
+
+            [host."http://{ .vars.registryHost }"]
+              capabilities = ["pull", "resolve"]
+              skip_verify = true
+      - id: write-containerd-mirror-quay-io
+        apiVersion: deck/v1
+        kind: WriteFile
+        spec:
+          path: /etc/containerd/certs.d/quay.io/hosts.toml
+          mode: "0644"
+          contentFromTemplate: |
+            server = "https://quay.io"
+
+            [host."http://{ .vars.registryHost }"]
+              capabilities = ["pull", "resolve"]
+              skip_verify = true
+      - id: write-containerd-mirror-ghcr-io
+        apiVersion: deck/v1
+        kind: WriteFile
+        spec:
+          path: /etc/containerd/certs.d/ghcr.io/hosts.toml
+          mode: "0644"
+          contentFromTemplate: |
+            server = "https://ghcr.io"
+
+            [host."http://{ .vars.registryHost }"]
+              capabilities = ["pull", "resolve"]
+              skip_verify = true
+      - id: write-containerd-mirror-gcr-io
+        apiVersion: deck/v1
+        kind: WriteFile
+        spec:
+          path: /etc/containerd/certs.d/gcr.io/hosts.toml
+          mode: "0644"
+          contentFromTemplate: |
+            server = "https://gcr.io"
+
+            [host."http://{ .vars.registryHost }"]
+              capabilities = ["pull", "resolve"]
+              skip_verify = true
+      - id: write-containerd-mirror-k8s-gcr-io
+        apiVersion: deck/v1
+        kind: WriteFile
+        spec:
+          path: /etc/containerd/certs.d/k8s.gcr.io/hosts.toml
+          mode: "0644"
+          contentFromTemplate: |
+            server = "https://k8s.gcr.io"
+
+            [host."http://{ .vars.registryHost }"]
+              capabilities = ["pull", "resolve"]
+              skip_verify = true
+      - id: restart-containerd
+        apiVersion: deck/v1
+        kind: RunCommand
+        spec:
+          command: ["bash", "-lc", "systemctl restart containerd"]
+      - id: verify-containerd-active
+        apiVersion: deck/v1
+        kind: RunCommand
+        spec:
+          command: ["bash", "-lc", "systemctl is-active --quiet containerd"]
