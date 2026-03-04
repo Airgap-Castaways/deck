@@ -54,6 +54,26 @@ jobs:
           fi
           ./deck validate -f cluster.yaml
 
+      - name: Validate docs examples (mode=validate)
+        run: |
+          while IFS=$'\t' read -r file mode; do
+            if [ -z "${file}" ] || [ "${file#\#}" != "${file}" ]; then
+              continue
+            fi
+            if [ "${mode}" != "validate" ]; then
+              continue
+            fi
+
+            example_path="docs/examples/${file}"
+            if [ ! -f "${example_path}" ]; then
+              echo "missing example case: ${example_path}"
+              exit 1
+            fi
+
+            echo "validating ${example_path}"
+            ./deck validate -f "${example_path}"
+          done < docs/examples/cases.tsv
+
       - name: Run L2 prepare backend integration checks
         run: |
           go test ./internal/prepare -run 'TestRun_ContainerBackendsWithFakeRunner|TestRun_PrepareArtifactsAndManifest|TestRun_DownloadFileFallbackLocalThenBundle|TestRun_DownloadFileFallbackRepoThenOnline|TestRun_DownloadFileOfflinePolicyBlocksOnlineFallback|TestRun_DownloadFileOfflinePolicyBlocksDirectURL'
