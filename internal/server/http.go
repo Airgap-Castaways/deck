@@ -25,34 +25,64 @@ import (
 type auditLogger struct {
 	mu sync.Mutex
 	f  *os.File
+
+	path         string
+	maxSizeBytes int64
+	maxFiles     int
+}
+
+type auditLoggerOptions struct {
+	maxSizeBytes int64
+	maxFiles     int
 }
 
 const (
-	auditEventJobEnqueued    = "alpha_job_enqueued"
-	auditEventJobLeased      = "alpha_job_leased"
-	auditEventJobRequeued    = "alpha_job_requeued"
-	auditEventJobFinalFailed = "alpha_job_final_failed"
-	auditEventRegistrySeed   = "registry_seed"
+	auditSchemaVersion = 1
+	auditSourceServer  = "server"
+	auditEventRequest  = "http_request"
+
+	auditEventJobEnqueued     = "alpha_job_enqueued"
+	auditEventJobLeased       = "alpha_job_leased"
+	auditEventJobRequeued     = "alpha_job_requeued"
+	auditEventJobLeaseExpired = "alpha_job_lease_expired"
+	auditEventJobFinalFailed  = "alpha_job_final_failed"
+	auditEventReportAccepted  = "alpha_report_accepted"
+	auditEventReportLate      = "alpha_report_late"
+	auditEventRegistrySeed    = "registry_seed"
 
 	maxAgentJobBodyBytes    int64 = 16 * 1024
 	maxAgentReportBodyBytes int64 = 16 * 1024
+	defaultLeaseTTLSec            = 300
+	leaseSweepInterval            = 10 * time.Second
+
+	defaultAuditMaxSizeMB = 50
+	defaultAuditMaxFiles  = 10
 )
 
-func newAuditLogger(root string) (*auditLogger, error) {
+func newAuditLogger(root string, opts auditLoggerOptions) (*auditLogger, error) {
 	logPath := filepath.Join(root, ".deck", "logs", "server-audit.log")
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
 		return nil, fmt.Errorf("create audit log directory: %w", err)
+	}
+	if opts.maxSizeBytes <= 0 {
+		opts.maxSizeBytes = int64(defaultAuditMaxSizeMB) * 1024 * 1024
+	}
+	if opts.maxFiles <= 0 {
+		opts.maxFiles = defaultAuditMaxFiles
 	}
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("open audit log file: %w", err)
 	}
-	return &auditLogger{f: f}, nil
+	return &auditLogger{f: f, path: logPath, maxSizeBytes: opts.maxSizeBytes, maxFiles: opts.maxFiles}, nil
 }
 
 func (a *auditLogger) Write(entry map[string]any) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.shouldRotateLocked() {
+		_ = a.rotateLocked()
+	}
 	raw, err := json.Marshal(entry)
 	if err != nil {
 		return
@@ -60,21 +90,106 @@ func (a *auditLogger) Write(entry map[string]any) {
 	_, _ = a.f.Write(append(raw, '\n'))
 }
 
-func writeAlphaLifecycleAudit(logger *auditLogger, eventType string, job alphaJob, decision string) {
-	logger.Write(map[string]any{
-		"timestamp":    time.Now().UTC().Format(time.RFC3339),
-		"event_type":   eventType,
-		"job_id":       job.ID,
-		"job_type":     job.Type,
-		"attempt":      job.Attempt,
-		"max_attempts": job.MaxAttempts,
-		"decision":     decision,
-	})
+func (a *auditLogger) shouldRotateLocked() bool {
+	if a.maxSizeBytes <= 0 {
+		return false
+	}
+	info, err := a.f.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Size() > a.maxSizeBytes
+}
+
+func (a *auditLogger) rotateLocked() error {
+	if err := a.f.Close(); err != nil {
+		return err
+	}
+	var firstErr error
+
+	oldestPath := fmt.Sprintf("%s.%d", a.path, a.maxFiles)
+	if err := os.Remove(oldestPath); err != nil && !os.IsNotExist(err) {
+		firstErr = err
+	}
+	if firstErr == nil {
+		for i := a.maxFiles - 1; i >= 1; i-- {
+			src := fmt.Sprintf("%s.%d", a.path, i)
+			dst := fmt.Sprintf("%s.%d", a.path, i+1)
+			if err := os.Rename(src, dst); err != nil && !os.IsNotExist(err) {
+				firstErr = err
+				break
+			}
+		}
+	}
+	if firstErr == nil {
+		if err := os.Rename(a.path, fmt.Sprintf("%s.1", a.path)); err != nil && !os.IsNotExist(err) {
+			firstErr = err
+		}
+	}
+	f, err := os.OpenFile(a.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		if firstErr != nil {
+			return fmt.Errorf("%v; reopen audit log: %w", firstErr, err)
+		}
+		return err
+	}
+	a.f = f
+	return firstErr
+}
+
+func buildServerAuditRecord(ts time.Time, eventType, level, message string) map[string]any {
+	return map[string]any{
+		"ts":             ts.UTC().Format(time.RFC3339Nano),
+		"schema_version": auditSchemaVersion,
+		"source":         auditSourceServer,
+		"event_type":     eventType,
+		"level":          level,
+		"message":        message,
+	}
+}
+
+func addExtra(entry map[string]any, extra map[string]any) {
+	if len(extra) == 0 {
+		return
+	}
+	entry["extra"] = extra
+}
+
+func addJobAuditFields(entry map[string]any, job alphaJob) {
+	if strings.TrimSpace(job.ID) != "" {
+		entry["job_id"] = strings.TrimSpace(job.ID)
+	}
+	if strings.TrimSpace(job.Type) != "" {
+		entry["job_type"] = strings.TrimSpace(job.Type)
+	}
+	entry["attempt"] = job.Attempt
+	entry["max_attempts"] = job.MaxAttempts
+	if hostname := strings.TrimSpace(job.TargetHostname); hostname != "" {
+		entry["hostname"] = hostname
+	}
+}
+
+func writeAlphaLifecycleAudit(logger *auditLogger, eventType string, job alphaJob, decision string, hostname string) {
+	entry := buildServerAuditRecord(time.Now().UTC(), eventType, "info", "alpha lifecycle event")
+	addJobAuditFields(entry, job)
+	if target := strings.TrimSpace(hostname); target != "" {
+		entry["hostname"] = target
+	}
+	addExtra(entry, map[string]any{"decision": strings.TrimSpace(decision)})
+	logger.Write(entry)
 }
 
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
+}
+
+type serverHandler struct {
+	base     http.Handler
+	queue    *alphaJobQueue
+	inFlight *alphaInFlightJobs
+	logger   *auditLogger
+	persist  func() error
 }
 
 type alphaJob struct {
@@ -98,7 +213,14 @@ type alphaJobQueue struct {
 
 type alphaInFlightJobs struct {
 	mu   sync.Mutex
-	jobs map[string]alphaJob
+	jobs map[string]alphaInFlightLease
+}
+
+type alphaInFlightLease struct {
+	Job         alphaJob `json:"job"`
+	LeasedAt    string   `json:"leased_at"`
+	LeaseTTLSec int      `json:"lease_ttl_sec"`
+	LeasedBy    string   `json:"leased_by"`
 }
 
 type alphaReportStore struct {
@@ -108,8 +230,9 @@ type alphaReportStore struct {
 }
 
 type alphaServerState struct {
-	Queue   []alphaJob       `json:"queue"`
-	Reports []map[string]any `json:"reports"`
+	Queue    []alphaJob           `json:"queue"`
+	InFlight []alphaInFlightLease `json:"in_flight"`
+	Reports  []map[string]any     `json:"reports"`
 }
 
 type HandlerOptions struct {
@@ -117,6 +240,8 @@ type HandlerOptions struct {
 	RegistryEnable  bool
 	RegistryRoot    string
 	RegistryHandler http.Handler
+	AuditMaxSizeMB  int
+	AuditMaxFiles   int
 }
 
 type RegistrySeedOptions struct {
@@ -139,9 +264,14 @@ func writeRegistrySeedAudit(logPath string, entry map[string]any) {
 	}
 	defer f.Close()
 
-	entry["timestamp"] = time.Now().UTC().Format(time.RFC3339)
-	entry["event_type"] = auditEventRegistrySeed
-	raw, err := json.Marshal(entry)
+	status, _ := entry["status"].(string)
+	level := "info"
+	if strings.EqualFold(strings.TrimSpace(status), "failed") {
+		level = "error"
+	}
+	auditEntry := buildServerAuditRecord(time.Now().UTC(), auditEventRegistrySeed, level, "registry seed event")
+	addExtra(auditEntry, entry)
+	raw, err := json.Marshal(auditEntry)
 	if err != nil {
 		return
 	}
@@ -217,13 +347,13 @@ func isJobEligible(job alphaJob, now time.Time) bool {
 	return !now.Before(readyAt)
 }
 
-func (f *alphaInFlightJobs) set(job alphaJob) {
+func (f *alphaInFlightJobs) set(lease alphaInFlightLease) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.jobs[job.ID] = job
+	f.jobs[lease.Job.ID] = lease
 }
 
-func (f *alphaInFlightJobs) pop(id string) (alphaJob, bool) {
+func (f *alphaInFlightJobs) pop(id string) (alphaInFlightLease, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	job, ok := f.jobs[id]
@@ -231,6 +361,60 @@ func (f *alphaInFlightJobs) pop(id string) (alphaJob, bool) {
 		delete(f.jobs, id)
 	}
 	return job, ok
+}
+
+func (f *alphaInFlightJobs) snapshot() []alphaInFlightLease {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]alphaInFlightLease, 0, len(f.jobs))
+	for _, lease := range f.jobs {
+		out = append(out, lease)
+	}
+	return out
+}
+
+func (f *alphaInFlightJobs) setLeases(leases []alphaInFlightLease) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.jobs = make(map[string]alphaInFlightLease, len(leases))
+	for _, lease := range leases {
+		if strings.TrimSpace(lease.Job.ID) == "" {
+			continue
+		}
+		f.jobs[lease.Job.ID] = lease
+	}
+}
+
+func (f *alphaInFlightJobs) sweepExpired(now time.Time) []alphaInFlightLease {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	expired := make([]alphaInFlightLease, 0)
+	for id, lease := range f.jobs {
+		ttlSec := lease.LeaseTTLSec
+		if ttlSec <= 0 {
+			ttlSec = defaultLeaseTTLSec
+		}
+		leasedAt, err := time.Parse(time.RFC3339, lease.LeasedAt)
+		if err != nil || now.Sub(leasedAt) > time.Duration(ttlSec)*time.Second {
+			delete(f.jobs, id)
+			expired = append(expired, lease)
+		}
+	}
+	return expired
+}
+
+func sweepExpiredLeases(now time.Time, queue *alphaJobQueue, inFlight *alphaInFlightJobs, logger *auditLogger) bool {
+	expiredLeases := inFlight.sweepExpired(now)
+	if len(expiredLeases) == 0 {
+		return false
+	}
+	for _, lease := range expiredLeases {
+		job := lease.Job
+		job.NextEligibleAt = ""
+		queue.enqueue(job)
+		writeAlphaLifecycleAudit(logger, auditEventJobLeaseExpired, job, "requeued", lease.LeasedBy)
+	}
+	return true
 }
 
 func (q *alphaJobQueue) snapshot() []alphaJob {
@@ -337,6 +521,18 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
+func (h *serverHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.base.ServeHTTP(w, r)
+}
+
+func (h *serverHandler) sweepLeasesOnce(now time.Time) bool {
+	if !sweepExpiredLeases(now, h.queue, h.inFlight, h.logger) {
+		return false
+	}
+	_ = h.persist()
+	return true
+}
+
 func addStaticHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Accept-Ranges", "bytes")
@@ -346,7 +542,16 @@ func addStaticHeaders(next http.Handler) http.Handler {
 }
 
 func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
-	logger, err := newAuditLogger(root)
+	auditMaxSizeMB := opts.AuditMaxSizeMB
+	if auditMaxSizeMB <= 0 {
+		auditMaxSizeMB = defaultAuditMaxSizeMB
+	}
+	auditMaxFiles := opts.AuditMaxFiles
+	if auditMaxFiles <= 0 {
+		auditMaxFiles = defaultAuditMaxFiles
+	}
+
+	logger, err := newAuditLogger(root, auditLoggerOptions{maxSizeBytes: int64(auditMaxSizeMB) * 1024 * 1024, maxFiles: auditMaxFiles})
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +562,7 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	queue := &alphaJobQueue{jobs: []alphaJob{}}
-	inFlight := &alphaInFlightJobs{jobs: map[string]alphaJob{}}
+	inFlight := &alphaInFlightJobs{jobs: map[string]alphaInFlightLease{}}
 	reports := &alphaReportStore{max: reportMax, reports: []map[string]any{}}
 
 	state, err := loadAlphaServerState(root)
@@ -365,14 +570,31 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 		return nil, err
 	}
 	queue.setJobs(state.Queue)
+	inFlight.setLeases(state.InFlight)
 	reports.setReports(state.Reports)
 
 	persist := func() error {
 		return saveAlphaServerState(root, alphaServerState{
-			Queue:   queue.snapshot(),
-			Reports: reports.snapshot(),
+			Queue:    queue.snapshot(),
+			InFlight: inFlight.snapshot(),
+			Reports:  reports.snapshot(),
 		})
 	}
+
+	srv := &serverHandler{
+		queue:    queue,
+		inFlight: inFlight,
+		logger:   logger,
+		persist:  persist,
+	}
+
+	go func() {
+		ticker := time.NewTicker(leaseSweepInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			srv.sweepLeasesOnce(time.Now().UTC())
+		}
+	}()
 
 	filesDir := filepath.Join(root, "files")
 	packagesDir := filepath.Join(root, "packages")
@@ -433,7 +655,9 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "bad_request"})
 			return
 		}
-		job, ok := queue.dequeueEligible(time.Now().UTC(), leaseRequest.Hostname)
+		leaseTime := time.Now().UTC()
+		hostname := strings.TrimSpace(leaseRequest.Hostname)
+		job, ok := queue.dequeueEligible(leaseTime, hostname)
 		var jobPayload any
 		if ok {
 			job.Attempt++
@@ -441,8 +665,13 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 				job.MaxAttempts = 1
 			}
 			job.NextEligibleAt = ""
-			inFlight.set(job)
-			writeAlphaLifecycleAudit(logger, auditEventJobLeased, job, "leased")
+			inFlight.set(alphaInFlightLease{
+				Job:         job,
+				LeasedAt:    leaseTime.Format(time.RFC3339),
+				LeaseTTLSec: defaultLeaseTTLSec,
+				LeasedBy:    hostname,
+			})
+			writeAlphaLifecycleAudit(logger, auditEventJobLeased, job, "leased", hostname)
 			jobPayload = job
 			if err := persist(); err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -509,7 +738,7 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 		job.NextEligibleAt = ""
 
 		queue.enqueue(job)
-		writeAlphaLifecycleAudit(logger, auditEventJobEnqueued, job, "accepted")
+		writeAlphaLifecycleAudit(logger, auditEventJobEnqueued, job, "accepted", "")
 		if err := persist(); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "persist_error"})
@@ -552,8 +781,11 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 
 			jobID, _ := report["job_id"].(string)
 			status, _ := report["status"].(string)
-			if leasedJob, ok := inFlight.pop(strings.TrimSpace(jobID)); ok {
-				if strings.EqualFold(strings.TrimSpace(status), "failed") && leasedJob.Attempt < leasedJob.MaxAttempts {
+			trimmedJobID := strings.TrimSpace(jobID)
+			trimmedStatus := strings.TrimSpace(status)
+			if leased, ok := inFlight.pop(trimmedJobID); ok {
+				leasedJob := leased.Job
+				if strings.EqualFold(trimmedStatus, "failed") && leasedJob.Attempt < leasedJob.MaxAttempts {
 					if leasedJob.RetryDelaySec > 0 {
 						next := time.Now().UTC().Add(time.Duration(leasedJob.RetryDelaySec) * time.Second)
 						leasedJob.NextEligibleAt = next.Format(time.RFC3339)
@@ -561,11 +793,28 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 						leasedJob.NextEligibleAt = ""
 					}
 					queue.enqueue(leasedJob)
-					writeAlphaLifecycleAudit(logger, auditEventJobRequeued, leasedJob, "retry")
-				} else if strings.EqualFold(strings.TrimSpace(status), "failed") {
-					writeAlphaLifecycleAudit(logger, auditEventJobFinalFailed, leasedJob, "exhausted")
+					writeAlphaLifecycleAudit(logger, auditEventJobRequeued, leasedJob, "retry", leased.LeasedBy)
+				} else if strings.EqualFold(trimmedStatus, "failed") {
+					writeAlphaLifecycleAudit(logger, auditEventJobFinalFailed, leasedJob, "exhausted", leased.LeasedBy)
 				}
+			} else {
+				lateEntry := buildServerAuditRecord(time.Now().UTC(), auditEventReportLate, "warn", "alpha report arrived without active lease")
+				if trimmedJobID != "" {
+					lateEntry["job_id"] = trimmedJobID
+				}
+				logger.Write(lateEntry)
 			}
+			acceptedEntry := buildServerAuditRecord(time.Now().UTC(), auditEventReportAccepted, "info", "alpha report accepted")
+			if trimmedJobID != "" {
+				acceptedEntry["job_id"] = trimmedJobID
+			}
+			if trimmedStatus != "" {
+				acceptedEntry["status"] = trimmedStatus
+			}
+			if jobType, ok := report["job_type"].(string); ok && strings.TrimSpace(jobType) != "" {
+				acceptedEntry["job_type"] = strings.TrimSpace(jobType)
+			}
+			logger.Write(acceptedEntry)
 
 			if err := persist(); err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -623,19 +872,28 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 		http.NotFound(w, r)
 	})
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv.base = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rw := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		base.ServeHTTP(rw, r)
-		logger.Write(map[string]any{
-			"timestamp":   start.UTC().Format(time.RFC3339),
+		requestLevel := "info"
+		if rw.status >= http.StatusInternalServerError {
+			requestLevel = "error"
+		} else if rw.status >= http.StatusBadRequest {
+			requestLevel = "warn"
+		}
+		entry := buildServerAuditRecord(start.UTC(), auditEventRequest, requestLevel, "http request handled")
+		addExtra(entry, map[string]any{
 			"method":      r.Method,
 			"path":        r.URL.Path,
 			"status":      rw.status,
 			"remote_addr": r.RemoteAddr,
 			"duration_ms": time.Since(start).Milliseconds(),
 		})
-	}), nil
+		logger.Write(entry)
+	})
+
+	return srv, nil
 }
 
 func loadAlphaServerState(root string) (alphaServerState, error) {
@@ -643,7 +901,7 @@ func loadAlphaServerState(root string) (alphaServerState, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return alphaServerState{Queue: []alphaJob{}, Reports: []map[string]any{}}, nil
+			return alphaServerState{Queue: []alphaJob{}, InFlight: []alphaInFlightLease{}, Reports: []map[string]any{}}, nil
 		}
 		return alphaServerState{}, fmt.Errorf("read alpha state file: %w", err)
 	}
@@ -654,6 +912,9 @@ func loadAlphaServerState(root string) (alphaServerState, error) {
 	}
 	if state.Queue == nil {
 		state.Queue = []alphaJob{}
+	}
+	if state.InFlight == nil {
+		state.InFlight = []alphaInFlightLease{}
 	}
 	if state.Reports == nil {
 		state.Reports = []map[string]any{}

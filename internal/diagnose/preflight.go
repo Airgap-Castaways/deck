@@ -65,7 +65,7 @@ func Preflight(wf *config.Workflow, opts RunOptions) (*Report, error) {
 		report.Checks = append(report.Checks, CheckEntry{Name: name, Status: status, Message: msg})
 	}
 
-	check("workflow.version", wf.Version == "v1", fmt.Sprintf("version=%s", wf.Version))
+	check("workflow.version", wf.Version == "v1alpha1", fmt.Sprintf("version=%s (required=v1alpha1)", wf.Version))
 	check("phase.prepare.exists", hasPhase(wf, "prepare"), "prepare phase required")
 	check("phase.install.exists", hasPhase(wf, "install"), "install phase required")
 	checkPrepareBackendPrerequisites(wf, opts, check)

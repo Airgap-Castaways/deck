@@ -57,8 +57,8 @@ func File(path string) error {
 	if wf.Version == "" {
 		return fmt.Errorf("version is required")
 	}
-	if strings.TrimSpace(wf.Version) != "v1" {
-		return fmt.Errorf("unsupported version: %s", wf.Version)
+	if strings.TrimSpace(wf.Version) != "v1alpha1" {
+		return fmt.Errorf("unsupported version: %s (supported: v1alpha1)", wf.Version)
 	}
 
 	if err := validateSchema(wf); err != nil {

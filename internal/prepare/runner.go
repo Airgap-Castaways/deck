@@ -344,6 +344,10 @@ func evaluateWhen(expr string, vars map[string]any, runtime map[string]any, ctx 
 	return b, nil
 }
 
+func EvaluateWhen(expr string, vars map[string]any, runtime map[string]any, ctx map[string]any) (bool, error) {
+	return evaluateWhen(expr, vars, runtime, ctx)
+}
+
 type condToken struct {
 	kind  string
 	value string

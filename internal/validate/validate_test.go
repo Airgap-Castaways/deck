@@ -11,12 +11,12 @@ func TestFile(t *testing.T) {
 	t.Run("valid yaml", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "cluster.yaml")
-		content := []byte(`version: v1
+		content := []byte(`version: v1alpha1
 phases:
   - name: prepare
     steps:
       - id: prepare-images
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: DownloadImages
         spec:
           images: [registry.k8s.io/kube-apiserver:v1.30.1]
@@ -39,12 +39,12 @@ phases:
 	t.Run("tool schema valid InstallPackages without source", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`version: v1
+		content := []byte(`version: v1alpha1
 phases:
   - name: install
     steps:
       - id: install-packages
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: InstallPackages
         spec:
           packages: [containerd]
@@ -61,12 +61,12 @@ phases:
 	t.Run("install phase accepts InstallPackages with only spec.packages", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`version: v1
+		content := []byte(`version: v1alpha1
 phases:
   - name: install
     steps:
       - id: install-packages-curl
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: InstallPackages
         spec:
           packages: [curl]
@@ -113,12 +113,12 @@ phases:
 	t.Run("schema invalid kind", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`version: v1
+		content := []byte(`version: v1alpha1
 phases:
   - name: prepare
     steps:
       - id: invalid-kind
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: NotARealKind
         spec: {}
 `)
@@ -134,12 +134,12 @@ phases:
 	t.Run("duplicate step id", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`version: v1
+		content := []byte(`version: v1alpha1
 phases:
   - name: prepare
     steps:
       - id: dup-id
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: DownloadFile
         spec:
           source:
@@ -149,7 +149,7 @@ phases:
   - name: install
     steps:
       - id: dup-id
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: RunCommand
         spec:
           command: ["true"]
@@ -166,12 +166,12 @@ phases:
 	t.Run("runtime register redefinition", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`version: v1
+		content := []byte(`version: v1alpha1
 phases:
   - name: prepare
     steps:
       - id: s1
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: DownloadFile
         register:
           token: outputA
@@ -181,7 +181,7 @@ phases:
           output:
             path: files/a
       - id: s2
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: DownloadFile
         register:
           token: outputB
@@ -203,12 +203,12 @@ phases:
 	t.Run("tool schema invalid step spec", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`version: v1
+		content := []byte(`version: v1alpha1
 phases:
   - name: install
     steps:
       - id: bad-run-command
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: RunCommand
         spec:
           command: []
@@ -229,12 +229,12 @@ phases:
 	t.Run("register output key invalid for kind", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`version: v1
+		content := []byte(`version: v1alpha1
 phases:
   - name: install
     steps:
       - id: w1
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: WriteFile
         register:
           x: notARealOutput
@@ -258,12 +258,12 @@ phases:
 	t.Run("register output key valid for kind", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`version: v1
+		content := []byte(`version: v1alpha1
 phases:
   - name: prepare
     steps:
       - id: d1
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: DownloadFile
         register:
           fetched: path
@@ -285,12 +285,12 @@ phases:
 	t.Run("register output key valid for checkhost", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`version: v1
+		content := []byte(`version: v1alpha1
 phases:
   - name: prepare
     steps:
       - id: c1
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: CheckHost
         register:
           hostOk: passed

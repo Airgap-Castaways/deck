@@ -22,7 +22,7 @@ func TestPreflight(t *testing.T) {
 			t.Fatalf("write manifest: %v", err)
 		}
 
-		wf := &config.Workflow{Version: "v1", Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")}, Phases: []config.Phase{{Name: "prepare"}, {Name: "install"}}}
+		wf := &config.Workflow{Version: "v1alpha1", Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")}, Phases: []config.Phase{{Name: "prepare"}, {Name: "install"}}}
 		out, err := Preflight(wf, RunOptions{OutputPath: report})
 		if err != nil {
 			t.Fatalf("expected pass, got %v", err)
@@ -37,7 +37,7 @@ func TestPreflight(t *testing.T) {
 
 	t.Run("fail without install phase", func(t *testing.T) {
 		dir := t.TempDir()
-		wf := &config.Workflow{Version: "v1", Context: config.Context{BundleRoot: dir, StateFile: filepath.Join(dir, "state.json")}, Phases: []config.Phase{{Name: "prepare"}}}
+		wf := &config.Workflow{Version: "v1alpha1", Context: config.Context{BundleRoot: dir, StateFile: filepath.Join(dir, "state.json")}, Phases: []config.Phase{{Name: "prepare"}}}
 		if _, err := Preflight(wf, RunOptions{}); err == nil {
 			t.Fatalf("expected preflight failure")
 		}
@@ -56,7 +56,7 @@ func TestPreflight_PrepareBackendChecks(t *testing.T) {
 		}
 
 		wf := &config.Workflow{
-			Version: "v1",
+			Version: "v1alpha1",
 			Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")},
 			Phases: []config.Phase{
 				{
@@ -98,7 +98,7 @@ func TestPreflight_PrepareBackendChecks(t *testing.T) {
 		}
 
 		wf := &config.Workflow{
-			Version: "v1",
+			Version: "v1alpha1",
 			Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")},
 			Phases: []config.Phase{
 				{
@@ -133,7 +133,7 @@ func TestPreflight_PrepareBackendChecks(t *testing.T) {
 		}
 
 		wf := &config.Workflow{
-			Version: "v1",
+			Version: "v1alpha1",
 			Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")},
 			Phases: []config.Phase{
 				{
@@ -169,7 +169,7 @@ func TestPreflight_HostChecks(t *testing.T) {
 			t.Fatalf("write manifest: %v", err)
 		}
 
-		wf := &config.Workflow{Version: "v1", Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")}, Phases: []config.Phase{{Name: "prepare"}, {Name: "install"}}}
+		wf := &config.Workflow{Version: "v1alpha1", Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")}, Phases: []config.Phase{{Name: "prepare"}, {Name: "install"}}}
 		_, err := Preflight(wf, RunOptions{
 			EnforceHostChecks: true,
 			LookPath:          availableLookPath("timedatectl"),
@@ -210,7 +210,7 @@ func TestPreflight_HostChecks(t *testing.T) {
 			t.Fatalf("write manifest: %v", err)
 		}
 
-		wf := &config.Workflow{Version: "v1", Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")}, Phases: []config.Phase{{Name: "prepare"}, {Name: "install"}}}
+		wf := &config.Workflow{Version: "v1alpha1", Context: config.Context{BundleRoot: bundle, StateFile: filepath.Join(dir, "state.json")}, Phases: []config.Phase{{Name: "prepare"}, {Name: "install"}}}
 		_, err := Preflight(wf, RunOptions{
 			EnforceHostChecks: true,
 			LookPath:          availableLookPath(),

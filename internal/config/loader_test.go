@@ -13,7 +13,7 @@ func TestLoad_MergeImports(t *testing.T) {
 	base := filepath.Join(dir, "base.yaml")
 	root := filepath.Join(dir, "cluster.yaml")
 
-	baseContent := []byte(`version: v1
+	baseContent := []byte(`version: v1alpha1
 vars:
   role: worker
   imageRepo: registry.local
@@ -23,11 +23,11 @@ phases:
   - name: prepare
     steps:
       - id: from-base
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: DownloadFile
         spec: {}
 `)
-	rootContent := []byte(`version: v1
+	rootContent := []byte(`version: v1alpha1
 imports:
   - ./base.yaml
 vars:
@@ -38,7 +38,7 @@ phases:
   - name: prepare
     steps:
       - id: from-root
-        apiVersion: deck/v1
+        apiVersion: deck/v1alpha1
         kind: DownloadImages
         spec: {}
 `)

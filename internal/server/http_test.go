@@ -678,9 +678,21 @@ func TestNewHandler(t *testing.T) {
 		if err := json.Unmarshal([]byte(lines[len(lines)-1]), &entry); err != nil {
 			t.Fatalf("parse audit log json: %v", err)
 		}
-		for _, k := range []string{"timestamp", "method", "path", "status", "duration_ms"} {
+		for _, k := range []string{"ts", "schema_version", "source", "event_type", "level", "message", "extra"} {
 			if _, ok := entry[k]; !ok {
 				t.Fatalf("missing audit field %s in %+v", k, entry)
+			}
+		}
+		if eventType, _ := entry["event_type"].(string); eventType != auditEventRequest {
+			t.Fatalf("expected request event type, got %q", eventType)
+		}
+		extra, ok := entry["extra"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected extra object in request audit: %+v", entry)
+		}
+		for _, k := range []string{"method", "path", "status", "duration_ms"} {
+			if _, ok := extra[k]; !ok {
+				t.Fatalf("missing request extra field %s in %+v", extra, entry)
 			}
 		}
 	})
@@ -753,7 +765,8 @@ func TestNewHandler(t *testing.T) {
 			}
 			eventSeen[etype] = true
 			if etype == "alpha_job_final_failed" {
-				decision, _ := entry["decision"].(string)
+				extra, _ := entry["extra"].(map[string]any)
+				decision, _ := extra["decision"].(string)
 				jobID, _ := entry["job_id"].(string)
 				attempt, _ := entry["attempt"].(float64)
 				maxAttempts, _ := entry["max_attempts"].(float64)
@@ -900,7 +913,8 @@ func TestSeedRegistryFromDirWritesAuditEvents(t *testing.T) {
 		if eventType != "registry_seed" {
 			continue
 		}
-		status, _ := entry["status"].(string)
+		extra, _ := entry["extra"].(map[string]any)
+		status, _ := extra["status"].(string)
 		if status == "started" {
 			seenStarted = true
 		}
