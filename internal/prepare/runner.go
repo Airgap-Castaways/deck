@@ -72,7 +72,14 @@ const (
 	errCodePrepareConditionEval      = "E_CONDITION_EVAL"
 	errCodePrepareRegisterMissing    = "E_REGISTER_OUTPUT_NOT_FOUND"
 	errCodePrepareCheckHostFailed    = "E_PREPARE_CHECKHOST_FAILED"
+	envPrepareForceRedownload        = "DECK_PREPARE_FORCE_REDOWNLOAD"
+	packageCacheMetaFile             = ".deck-cache-packages.json"
 )
+
+type packageCacheMeta struct {
+	Packages []string `json:"packages"`
+	Files    []string `json:"files"`
+}
 
 var (
 	readFileFn            = os.ReadFile
@@ -681,6 +688,14 @@ func runDownloadFile(bundleRoot string, spec map[string]any) (string, error) {
 		return "", fmt.Errorf("create output directory: %w", err)
 	}
 
+	reuse, err := canReuseDownloadFile(bundleRoot, spec, target)
+	if err != nil {
+		return "", err
+	}
+	if reuse {
+		return outPath, nil
+	}
+
 	f, err := os.Create(target)
 	if err != nil {
 		return "", fmt.Errorf("create output file: %w", err)
@@ -843,10 +858,36 @@ func runDownloadPackages(runner CommandRunner, bundleRoot string, spec map[strin
 				return nil, fmt.Errorf("DownloadPackages repo.type must be apt-flat or yum")
 			}
 
-			return runContainerPackageRepoBuild(runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, spec, packages)
+			if files, reused, err := tryReusePackageArtifacts(bundleRoot, repoRoot, packages); err != nil {
+				return nil, err
+			} else if reused {
+				return files, nil
+			}
+
+			files, err := runContainerPackageRepoBuild(runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, spec, packages)
+			if err != nil {
+				return nil, err
+			}
+			if err := writePackageArtifactsMeta(bundleRoot, repoRoot, packages, files); err != nil {
+				return nil, err
+			}
+			return files, nil
 		}
 
-		return runContainerPackageDownloadAll(runner, bundleRoot, dir, spec, packages)
+		if files, reused, err := tryReusePackageArtifacts(bundleRoot, dir, packages); err != nil {
+			return nil, err
+		} else if reused {
+			return files, nil
+		}
+
+		files, err := runContainerPackageDownloadAll(runner, bundleRoot, dir, spec, packages)
+		if err != nil {
+			return nil, err
+		}
+		if err := writePackageArtifactsMeta(bundleRoot, dir, packages, files); err != nil {
+			return nil, err
+		}
+		return files, nil
 	}
 
 	return writePackagePlaceholders(bundleRoot, dir, packages), nil
@@ -979,10 +1020,14 @@ func runContainerPackageRepoBuild(
 	}
 
 	outAbs := filepath.Join(bundleRoot, filepath.FromSlash(repoRoot))
+	if forceRedownloadEnabled() {
+		if err := os.RemoveAll(outAbs); err != nil {
+			return nil, err
+		}
+	}
 	if err := os.MkdirAll(outAbs, 0o755); err != nil {
 		return nil, err
 	}
-	before, _ := listRelativeFiles(outAbs)
 
 	cmdScript := buildPackageRepoBuildScript(family, packages, repoType, generate, pkgsDir)
 	args := []string{"run", "--rm", "-v", outAbs + ":/out", image, "bash", "-lc", cmdScript}
@@ -991,20 +1036,11 @@ func runContainerPackageRepoBuild(
 	}
 
 	after, _ := listRelativeFiles(outAbs)
-	newFiles := make([]string, 0)
-	seen := map[string]bool{}
-	for _, f := range before {
-		seen[f] = true
-	}
-	for _, f := range after {
-		if !seen[f] {
-			newFiles = append(newFiles, filepath.ToSlash(filepath.Join(repoRoot, f)))
-		}
-	}
-	if len(newFiles) == 0 {
+	files := packageFilesFromDirListing(repoRoot, after)
+	if len(files) == 0 {
 		return nil, fmt.Errorf("%s: no package artifacts generated in %s", errCodePrepareArtifactsEmpty, repoRoot)
 	}
-	return newFiles, nil
+	return files, nil
 }
 
 func runContainerPackageDownloadAll(runner CommandRunner, bundleRoot, dir string, spec map[string]any, packages []string) ([]string, error) {
@@ -1026,10 +1062,14 @@ func runContainerPackageDownloadAll(runner CommandRunner, bundleRoot, dir string
 	}
 
 	outAbs := filepath.Join(bundleRoot, filepath.FromSlash(dir))
+	if forceRedownloadEnabled() {
+		if err := os.RemoveAll(outAbs); err != nil {
+			return nil, err
+		}
+	}
 	if err := os.MkdirAll(outAbs, 0o755); err != nil {
 		return nil, err
 	}
-	before, _ := listRelativeFiles(outAbs)
 
 	cmdScript := buildPackageDownloadAllScript(family, packages)
 	args := []string{"run", "--rm", "-v", outAbs + ":/out", image, "bash", "-lc", cmdScript}
@@ -1038,20 +1078,11 @@ func runContainerPackageDownloadAll(runner CommandRunner, bundleRoot, dir string
 	}
 
 	after, _ := listRelativeFiles(outAbs)
-	newFiles := make([]string, 0)
-	seen := map[string]bool{}
-	for _, f := range before {
-		seen[f] = true
-	}
-	for _, f := range after {
-		if !seen[f] {
-			newFiles = append(newFiles, filepath.ToSlash(filepath.Join(dir, f)))
-		}
-	}
-	if len(newFiles) == 0 {
+	files := packageFilesFromDirListing(dir, after)
+	if len(files) == 0 {
 		return nil, fmt.Errorf("%s: no package artifacts generated in %s", errCodePrepareArtifactsEmpty, dir)
 	}
-	return newFiles, nil
+	return files, nil
 }
 
 func buildPackageDownloadAllScript(family string, packages []string) string {
@@ -1240,10 +1271,14 @@ func runContainerPackageDownloadWithScript(runner CommandRunner, bundleRoot, dir
 	}
 
 	outAbs := filepath.Join(bundleRoot, filepath.FromSlash(dir))
+	if forceRedownloadEnabled() {
+		if err := os.RemoveAll(outAbs); err != nil {
+			return nil, err
+		}
+	}
 	if err := os.MkdirAll(outAbs, 0o755); err != nil {
 		return nil, err
 	}
-	before, _ := listRelativeFiles(outAbs)
 
 	for _, pkg := range packages {
 		cmdScript := scriptBuilder(family, pkg)
@@ -1254,20 +1289,11 @@ func runContainerPackageDownloadWithScript(runner CommandRunner, bundleRoot, dir
 	}
 
 	after, _ := listRelativeFiles(outAbs)
-	newFiles := make([]string, 0)
-	seen := map[string]bool{}
-	for _, f := range before {
-		seen[f] = true
-	}
-	for _, f := range after {
-		if !seen[f] {
-			newFiles = append(newFiles, filepath.ToSlash(filepath.Join(dir, f)))
-		}
-	}
-	if len(newFiles) == 0 {
+	files := packageFilesFromDirListing(dir, after)
+	if len(files) == 0 {
 		return nil, fmt.Errorf("%s: no package artifacts generated in %s", errCodePrepareArtifactsEmpty, dir)
 	}
-	return newFiles, nil
+	return files, nil
 }
 
 func buildPackageDownloadScript(family, pkg string) string {
@@ -1344,6 +1370,24 @@ func runDownloadImages(runner CommandRunner, bundleRoot string, spec map[string]
 func runGoContainerRegistryDownloads(bundleRoot, dir string, images []string) ([]string, error) {
 	files := make([]string, 0, len(images))
 	for _, img := range images {
+		rel := filepath.ToSlash(filepath.Join(dir, sanitizeImageName(img)+".tar"))
+		target := filepath.Join(bundleRoot, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return nil, err
+		}
+		if !forceRedownloadEnabled() {
+			if info, err := os.Stat(target); err == nil {
+				if info.Size() > 0 {
+					files = append(files, rel)
+					continue
+				}
+			} else if !os.IsNotExist(err) {
+				return nil, err
+			}
+		} else if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+
 		ref, err := parseImageReferenceFn(img)
 		if err != nil {
 			return nil, fmt.Errorf("parse image reference %s: %w", img, err)
@@ -1357,11 +1401,6 @@ func runGoContainerRegistryDownloads(bundleRoot, dir string, images []string) ([
 			return nil, fmt.Errorf("pull image %s: %w", img, err)
 		}
 
-		rel := filepath.ToSlash(filepath.Join(dir, sanitizeImageName(img)+".tar"))
-		target := filepath.Join(bundleRoot, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return nil, err
-		}
 		if err := tarballWriteToFileFn(target, ref, imageObj); err != nil {
 			return nil, fmt.Errorf("write image archive %s: %w", img, err)
 		}
@@ -1375,6 +1414,152 @@ func runGoContainerRegistryDownloads(bundleRoot, dir string, images []string) ([
 		files = append(files, rel)
 	}
 	return files, nil
+}
+
+func forceRedownloadEnabled() bool {
+	v := strings.TrimSpace(os.Getenv(envPrepareForceRedownload))
+	return v == "1" || strings.EqualFold(v, "true")
+}
+
+func fileSHA256(path string) (string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func canReuseDownloadFile(bundleRoot string, spec map[string]any, target string) (bool, error) {
+	if forceRedownloadEnabled() {
+		return false, nil
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if info.Size() == 0 {
+		return false, nil
+	}
+
+	source := mapValue(spec, "source")
+	expectedSHA := strings.ToLower(stringValue(source, "sha256"))
+	if expectedSHA != "" {
+		if err := verifyFileSHA256(target, expectedSHA); err == nil {
+			return true, nil
+		}
+		return false, nil
+	}
+
+	sourcePath := stringValue(source, "path")
+	if sourcePath == "" {
+		return false, nil
+	}
+	raw, err := resolveSourceBytes(spec, sourcePath)
+	if err != nil {
+		return false, nil
+	}
+	targetSHA, err := fileSHA256(target)
+	if err != nil {
+		return false, err
+	}
+	sum := sha256.Sum256(raw)
+	return strings.EqualFold(targetSHA, hex.EncodeToString(sum[:])), nil
+}
+
+func packageFilesFromDirListing(base string, relFiles []string) []string {
+	out := make([]string, 0, len(relFiles))
+	for _, f := range relFiles {
+		if filepath.ToSlash(f) == packageCacheMetaFile {
+			continue
+		}
+		out = append(out, filepath.ToSlash(filepath.Join(base, f)))
+	}
+	sort.Strings(out)
+	return out
+}
+
+func normalizeStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		s := strings.TrimSpace(v)
+		if s == "" {
+			continue
+		}
+		out = append(out, filepath.ToSlash(s))
+	}
+	sort.Strings(out)
+	return out
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func packageMetaFileAbs(bundleRoot, rootRel string) string {
+	return filepath.Join(bundleRoot, filepath.FromSlash(rootRel), packageCacheMetaFile)
+}
+
+func tryReusePackageArtifacts(bundleRoot, rootRel string, packages []string) ([]string, bool, error) {
+	if forceRedownloadEnabled() {
+		return nil, false, nil
+	}
+	metaPath := packageMetaFileAbs(bundleRoot, rootRel)
+	raw, err := os.ReadFile(metaPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	var meta packageCacheMeta
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return nil, false, nil
+	}
+	want := normalizeStrings(packages)
+	got := normalizeStrings(meta.Packages)
+	if !equalStrings(want, got) {
+		return nil, false, nil
+	}
+	files := normalizeStrings(meta.Files)
+	if len(files) == 0 {
+		return nil, false, nil
+	}
+	for _, rel := range files {
+		abs := filepath.Join(bundleRoot, filepath.FromSlash(rel))
+		info, statErr := os.Stat(abs)
+		if statErr != nil || info.Size() == 0 {
+			return nil, false, nil
+		}
+	}
+	return files, true, nil
+}
+
+func writePackageArtifactsMeta(bundleRoot, rootRel string, packages, files []string) error {
+	meta := packageCacheMeta{
+		Packages: normalizeStrings(packages),
+		Files:    normalizeStrings(files),
+	}
+	metaPath := packageMetaFileAbs(bundleRoot, rootRel)
+	if err := os.MkdirAll(filepath.Dir(metaPath), 0o755); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(metaPath, raw, 0o644)
 }
 
 func detectRuntime(runner CommandRunner, preferred string) (string, error) {
