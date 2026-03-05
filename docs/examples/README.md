@@ -14,13 +14,13 @@
 로컬 libvirt Vagrant 실행:
 
 ```bash
-.ci/vagrant/run-examples.sh
+test/vagrant/run-examples.sh
 ```
 
 검증 스크립트:
 
 ```bash
-.ci/vagrant/verify-examples.sh <artifact-dir>
+test/vagrant/verify-examples.sh <artifact-dir>
 ```
 
 ## 아티팩트
