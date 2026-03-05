@@ -18,6 +18,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/taedi90/deck/internal/config"
 	"github.com/taedi90/deck/internal/fetch"
 )
@@ -60,8 +64,8 @@ var templateRefPattern = regexp.MustCompile(`\{\s*\.([A-Za-z0-9_\.]+)\s*\}`)
 const (
 	errCodePrepareRuntimeMissing     = "E_PREPARE_RUNTIME_NOT_FOUND"
 	errCodePrepareRuntimeUnsupported = "E_PREPARE_RUNTIME_UNSUPPORTED"
+	errCodePrepareEngineUnsupported  = "E_PREPARE_ENGINE_UNSUPPORTED"
 	errCodePrepareArtifactsEmpty     = "E_PREPARE_NO_ARTIFACTS"
-	errCodePrepareSkopeoMissing      = "E_PREPARE_SKOPEO_NOT_FOUND"
 	errCodePrepareSourceNotFound     = "E_PREPARE_SOURCE_NOT_FOUND"
 	errCodePrepareChecksumMismatch   = "E_PREPARE_CHECKSUM_MISMATCH"
 	errCodePrepareOfflinePolicyBlock = "E_PREPARE_OFFLINE_POLICY_BLOCK"
@@ -71,9 +75,12 @@ const (
 )
 
 var (
-	readFileFn = os.ReadFile
-	goosFn     = func() string { return runtime.GOOS }
-	goarchFn   = func() string { return runtime.GOARCH }
+	readFileFn            = os.ReadFile
+	goosFn                = func() string { return runtime.GOOS }
+	goarchFn              = func() string { return runtime.GOARCH }
+	parseImageReferenceFn = func(v string) (name.Reference, error) { return name.ParseReference(v, name.WeakValidation) }
+	remoteImageFetchFn    = remote.Image
+	tarballWriteToFileFn  = tarball.WriteToFile
 )
 
 func Run(wf *config.Workflow, opts RunOptions) error {
@@ -1309,6 +1316,7 @@ func writePackagePlaceholders(bundleRoot, dir string, packages []string) []strin
 }
 
 func runDownloadImages(runner CommandRunner, bundleRoot string, spec map[string]any) ([]string, error) {
+	_ = runner
 	output := mapValue(spec, "output")
 	dir := stringValue(output, "dir")
 	if dir == "" {
@@ -1323,76 +1331,47 @@ func runDownloadImages(runner CommandRunner, bundleRoot string, spec map[string]
 	backend := mapValue(spec, "backend")
 	engine := stringValue(backend, "engine")
 	if engine == "" {
-		engine = "skopeo"
+		engine = "go-containerregistry"
 	}
 
-	if engine == "skopeo" && len(backend) > 0 {
-		return runSkopeoDownloads(runner, bundleRoot, dir, images, backend)
+	if engine != "go-containerregistry" {
+		return nil, fmt.Errorf("%s: unsupported image engine: %s", errCodePrepareEngineUnsupported, engine)
 	}
 
+	return runGoContainerRegistryDownloads(bundleRoot, dir, images)
+}
+
+func runGoContainerRegistryDownloads(bundleRoot, dir string, images []string) ([]string, error) {
 	files := make([]string, 0, len(images))
 	for _, img := range images {
-		safe := sanitizeImageName(img)
-		rel := filepath.ToSlash(filepath.Join(dir, safe+".tar"))
-		target := filepath.Join(bundleRoot, rel)
+		ref, err := parseImageReferenceFn(img)
+		if err != nil {
+			return nil, fmt.Errorf("parse image reference %s: %w", img, err)
+		}
+
+		imageObj, err := remoteImageFetchFn(
+			ref,
+			remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("pull image %s: %w", img, err)
+		}
+
+		rel := filepath.ToSlash(filepath.Join(dir, sanitizeImageName(img)+".tar"))
+		target := filepath.Join(bundleRoot, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return nil, err
 		}
-		content := fmt.Sprintf("image=%s\n", img)
-		if err := os.WriteFile(target, []byte(content), 0o644); err != nil {
+		if err := tarballWriteToFileFn(target, ref, imageObj); err != nil {
+			return nil, fmt.Errorf("write image archive %s: %w", img, err)
+		}
+
+		if info, err := os.Stat(target); err != nil {
 			return nil, err
-		}
-		files = append(files, rel)
-	}
-	return files, nil
-}
-
-func runSkopeoDownloads(runner CommandRunner, bundleRoot, dir string, images []string, backend map[string]any) ([]string, error) {
-	files := make([]string, 0, len(images))
-	sandbox := mapValue(backend, "sandbox")
-	useSandbox := stringValue(sandbox, "mode") == "container"
-
-	absBundle, err := filepath.Abs(bundleRoot)
-	if err != nil {
-		return nil, err
-	}
-
-	var runtimeSel string
-	var sandboxImage string
-	if useSandbox {
-		runtimeSel, err = detectRuntime(runner, stringValue(sandbox, "runtime"))
-		if err != nil {
-			return nil, err
-		}
-		sandboxImage = stringValue(sandbox, "image")
-		if sandboxImage == "" {
-			sandboxImage = "quay.io/skopeo/stable:latest"
-		}
-	} else {
-		if _, err := runner.LookPath("skopeo"); err != nil {
-			return nil, fmt.Errorf("%s: skopeo not found in PATH", errCodePrepareSkopeoMissing)
-		}
-	}
-
-	for _, img := range images {
-		rel := filepath.ToSlash(filepath.Join(dir, sanitizeImageName(img)+".tar"))
-		abs := filepath.Join(bundleRoot, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-			return nil, err
+		} else if info.Size() == 0 {
+			return nil, fmt.Errorf("write image archive %s: empty archive", img)
 		}
 
-		dest := "docker-archive:" + abs + ":" + img
-		if useSandbox {
-			bundleMountDest := "/bundle/" + rel
-			args := []string{"run", "--rm", "-v", absBundle + ":/bundle", sandboxImage, "copy", "docker://" + img, "docker-archive:" + bundleMountDest + ":" + img}
-			if err := runner.Run(context.Background(), runtimeSel, args...); err != nil {
-				return nil, fmt.Errorf("skopeo sandbox copy failed for %s: %w", img, err)
-			}
-		} else {
-			if err := runner.Run(context.Background(), "skopeo", "copy", "docker://"+img, dest); err != nil {
-				return nil, fmt.Errorf("skopeo copy failed for %s: %w", img, err)
-			}
-		}
 		files = append(files, rel)
 	}
 	return files, nil
