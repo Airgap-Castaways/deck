@@ -3,6 +3,8 @@ package config
 type Workflow struct {
 	Role           string         `yaml:"role" json:"-"`
 	Version        string         `yaml:"version" json:"version"`
+	Imports        []string       `yaml:"imports,omitempty" json:"imports,omitempty"`
+	VarImports     []string       `yaml:"varImports,omitempty" json:"varImports,omitempty"`
 	Vars           map[string]any `yaml:"vars" json:"vars,omitempty"`
 	Phases         []Phase        `yaml:"phases,omitempty" json:"phases,omitempty"`
 	Steps          []Step         `yaml:"steps,omitempty" json:"-"`
@@ -11,8 +13,14 @@ type Workflow struct {
 }
 
 type Phase struct {
-	Name  string `yaml:"name" json:"name"`
-	Steps []Step `yaml:"steps" json:"steps"`
+	Name    string        `yaml:"name" json:"name"`
+	Imports []PhaseImport `yaml:"imports,omitempty" json:"imports,omitempty"`
+	Steps   []Step        `yaml:"steps,omitempty" json:"steps,omitempty"`
+}
+
+type PhaseImport struct {
+	Path string `yaml:"path" json:"path"`
+	When string `yaml:"when,omitempty" json:"when,omitempty"`
 }
 
 type Step struct {

@@ -368,13 +368,55 @@ steps:
 	}
 }
 
-func TestSchema_RejectsContextAndImports(t *testing.T) {
+func TestSchema_AcceptsImports(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "workflow.yaml")
 	content := []byte(`role: apply
 version: v1alpha1
 imports:
   - ./legacy.yaml
+steps:
+  - id: ok-step
+    kind: RunCommand
+    spec:
+      command: ["true"]
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	if err := File(path); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestSchema_AcceptsVarImportsAndPhaseImports(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	content := []byte(`role: apply
+version: v1alpha1
+varImports:
+  - ./vars/common.yaml
+phases:
+  - name: install
+    imports:
+      - path: ./fragments/install-common.yaml
+        when: vars.osFamily == "rhel"
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	if err := File(path); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestSchema_RejectsContext(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	content := []byte(`role: apply
+version: v1alpha1
 context:
   bundleRoot: /tmp/bundle
 steps:
