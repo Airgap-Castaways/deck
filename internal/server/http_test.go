@@ -5,12 +5,17 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/random"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
 )
 
 func TestServe_StaticETagAndPut(t *testing.T) {
@@ -32,13 +37,69 @@ func TestServe_StaticETagAndPut(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "files", "a.txt"), originalBody, 0o644); err != nil {
 		t.Fatalf("write seed file: %v", err)
 	}
+	registryTag, err := name.NewTag("registry.k8s.io/kube-apiserver:v1.30.1", name.WeakValidation)
+	if err != nil {
+		t.Fatalf("name.NewTag: %v", err)
+	}
+	registryImage, err := random.Image(1024, 1)
+	if err != nil {
+		t.Fatalf("random.Image: %v", err)
+	}
+	registryTarPath := filepath.Join(root, "images", "registry.k8s.io_kube-apiserver_v1.30.1.tar")
+	if err := tarball.WriteToFile(registryTarPath, registryTag, registryImage); err != nil {
+		t.Fatalf("tarball.WriteToFile: %v", err)
+	}
+	rawManifest, err := registryImage.RawManifest()
+	if err != nil {
+		t.Fatalf("RawManifest: %v", err)
+	}
+	manifestDigest, err := registryImage.Digest()
+	if err != nil {
+		t.Fatalf("Digest: %v", err)
+	}
+	manifest, err := registryImage.Manifest()
+	if err != nil {
+		t.Fatalf("Manifest: %v", err)
+	}
+	rawConfig, err := registryImage.RawConfigFile()
+	if err != nil {
+		t.Fatalf("RawConfigFile: %v", err)
+	}
+	layers, err := registryImage.Layers()
+	if err != nil {
+		t.Fatalf("Layers: %v", err)
+	}
+	if len(layers) == 0 {
+		t.Fatal("expected at least one layer")
+	}
+	layerRC, err := layers[0].Compressed()
+	if err != nil {
+		t.Fatalf("Compressed: %v", err)
+	}
+	firstLayerBytes, err := io.ReadAll(layerRC)
+	_ = layerRC.Close()
+	if err != nil {
+		t.Fatalf("ReadAll layer: %v", err)
+	}
+	nestedTag, err := name.NewTag("registry.k8s.io/coredns/coredns:v1.11.1", name.WeakValidation)
+	if err != nil {
+		t.Fatalf("name.NewTag nested: %v", err)
+	}
+	nestedImage, err := random.Image(512, 1)
+	if err != nil {
+		t.Fatalf("random.Image nested: %v", err)
+	}
+	nestedTarPath := filepath.Join(root, "images", "registry.k8s.io_coredns_coredns_v1.11.1.tar")
+	if err := tarball.WriteToFile(nestedTarPath, nestedTag, nestedImage); err != nil {
+		t.Fatalf("tarball.WriteToFile nested: %v", err)
+	}
 
 	h, err := NewHandler(root, HandlerOptions{})
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	t.Run("health and removed endpoints", func(t *testing.T) {
+	t.Run("health and removed alpha endpoints", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 		rr := httptest.NewRecorder()
 		h.ServeHTTP(rr, req)
@@ -46,13 +107,75 @@ func TestServe_StaticETagAndPut(t *testing.T) {
 			t.Fatalf("expected /healthz 200, got %d", rr.Code)
 		}
 
-		for _, route := range []string{"/api/agent/job", "/api/agent/lease", "/v2/", "/v2"} {
+		for _, route := range []string{"/api/agent/job", "/api/agent/lease"} {
 			req = httptest.NewRequest(http.MethodGet, route, nil)
 			rr = httptest.NewRecorder()
 			h.ServeHTTP(rr, req)
 			if rr.Code != http.StatusNotFound {
 				t.Fatalf("expected %s 404, got %d", route, rr.Code)
 			}
+		}
+	})
+
+	t.Run("v2 registry manifest and blob serving", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v2/", nil)
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected /v2/ 200, got %d", rr.Code)
+		}
+		if got := rr.Header().Get("Docker-Distribution-API-Version"); got != "registry/2.0" {
+			t.Fatalf("unexpected registry header: %q", got)
+		}
+
+		manifestReq := httptest.NewRequest(http.MethodGet, "/v2/kube-apiserver/manifests/v1.30.1", nil)
+		manifestRR := httptest.NewRecorder()
+		h.ServeHTTP(manifestRR, manifestReq)
+		if manifestRR.Code != http.StatusOK {
+			t.Fatalf("expected manifest GET 200, got %d", manifestRR.Code)
+		}
+		if !bytes.Equal(manifestRR.Body.Bytes(), rawManifest) {
+			t.Fatalf("unexpected manifest body")
+		}
+		if got := manifestRR.Header().Get("Docker-Content-Digest"); got != manifestDigest.String() {
+			t.Fatalf("unexpected manifest digest header: %q", got)
+		}
+
+		headReq := httptest.NewRequest(http.MethodHead, "/v2/kube-apiserver/manifests/"+manifestDigest.String(), nil)
+		headRR := httptest.NewRecorder()
+		h.ServeHTTP(headRR, headReq)
+		if headRR.Code != http.StatusOK {
+			t.Fatalf("expected manifest HEAD 200, got %d", headRR.Code)
+		}
+		if headRR.Body.Len() != 0 {
+			t.Fatalf("expected manifest HEAD empty body")
+		}
+
+		configReq := httptest.NewRequest(http.MethodGet, "/v2/kube-apiserver/blobs/"+manifest.Config.Digest.String(), nil)
+		configRR := httptest.NewRecorder()
+		h.ServeHTTP(configRR, configReq)
+		if configRR.Code != http.StatusOK {
+			t.Fatalf("expected config blob GET 200, got %d", configRR.Code)
+		}
+		if !bytes.Equal(configRR.Body.Bytes(), rawConfig) {
+			t.Fatalf("unexpected config blob body")
+		}
+
+		layerReq := httptest.NewRequest(http.MethodGet, "/v2/kube-apiserver/blobs/"+manifest.Layers[0].Digest.String(), nil)
+		layerRR := httptest.NewRecorder()
+		h.ServeHTTP(layerRR, layerReq)
+		if layerRR.Code != http.StatusOK {
+			t.Fatalf("expected layer blob GET 200, got %d", layerRR.Code)
+		}
+		if !bytes.Equal(layerRR.Body.Bytes(), firstLayerBytes) {
+			t.Fatalf("unexpected layer blob body")
+		}
+
+		nestedReq := httptest.NewRequest(http.MethodGet, "/v2/coredns/coredns/manifests/v1.11.1", nil)
+		nestedRR := httptest.NewRecorder()
+		h.ServeHTTP(nestedRR, nestedReq)
+		if nestedRR.Code != http.StatusOK {
+			t.Fatalf("expected nested repo manifest GET 200, got %d", nestedRR.Code)
 		}
 	})
 
