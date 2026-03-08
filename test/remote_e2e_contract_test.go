@@ -41,10 +41,9 @@ func TestRemoteVMDocModeContracts(t *testing.T) {
 	content := string(raw)
 
 	expectContainsAll(t, content,
-		"- `single`",
-		"- `smoke`",
-		"- `vm-ssh`",
-		"--mode smoke",
+		"- 모드: `offline-multinode`",
+		"--mode offline-multinode",
+		"--skip-cleanup",
 	)
 }
 
