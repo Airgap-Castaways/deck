@@ -39,11 +39,11 @@ func LoadWithOptions(source string, opts LoadOptions) (*Workflow, error) {
 		return nil, err
 	}
 
-	var wf Workflow
-	if err := yaml.Unmarshal(workflowBytes, &wf); err != nil {
-		return nil, fmt.Errorf("parse yaml: %w", err)
+	resolved, resolvedWorkflowBytes, err := loadWorkflowWithImports(workflowBytes, origin, map[string]bool{})
+	if err != nil {
+		return nil, err
 	}
-	if len(wf.Phases) > 0 && len(wf.Steps) > 0 {
+	if len(resolved.Phases) > 0 && len(resolved.Steps) > 0 {
 		return nil, fmt.Errorf("workflow cannot set both phases and steps")
 	}
 
@@ -53,13 +53,305 @@ func LoadWithOptions(source string, opts LoadOptions) (*Workflow, error) {
 		return nil, err
 	}
 	mergeVars(effectiveVars, baseVars)
-	mergeVars(effectiveVars, wf.Vars)
+	mergeVars(effectiveVars, resolved.Vars)
 	mergeVars(effectiveVars, opts.VarOverrides)
 
-	wf.Vars = effectiveVars
-	wf.StateKey = computeStateKey(workflowBytes, effectiveVars)
-	wf.WorkflowSHA256 = computeWorkflowSHA256(workflowBytes)
-	return &wf, nil
+	resolved.Vars = effectiveVars
+	resolved.StateKey = computeStateKey(resolvedWorkflowBytes, effectiveVars)
+	resolved.WorkflowSHA256 = computeWorkflowSHA256(resolvedWorkflowBytes)
+	return resolved, nil
+}
+
+func loadWorkflowWithImports(workflowBytes []byte, origin workflowOrigin, visiting map[string]bool) (*Workflow, []byte, error) {
+	originKey := workflowOriginKey(origin)
+	if visiting[originKey] {
+		return nil, nil, fmt.Errorf("workflow import cycle detected at %s", originKey)
+	}
+	visiting[originKey] = true
+	defer delete(visiting, originKey)
+
+	var wf Workflow
+	if err := yaml.Unmarshal(workflowBytes, &wf); err != nil {
+		return nil, nil, fmt.Errorf("parse yaml: %w", err)
+	}
+	if len(wf.Phases) > 0 && len(wf.Steps) > 0 {
+		return nil, nil, fmt.Errorf("workflow cannot set both phases and steps")
+	}
+
+	workflowImportVars, err := loadWorkflowVarImports(origin, wf.VarImports)
+	if err != nil {
+		return nil, nil, err
+	}
+	if wf.Vars == nil {
+		wf.Vars = map[string]any{}
+	}
+	baseWorkflowVars := map[string]any{}
+	mergeVars(baseWorkflowVars, workflowImportVars)
+	mergeVars(baseWorkflowVars, wf.Vars)
+	wf.Vars = baseWorkflowVars
+	wf.VarImports = nil
+
+	if err := expandPhaseImports(&wf, origin, visiting); err != nil {
+		return nil, nil, err
+	}
+
+	aggregated := &Workflow{}
+	for _, importRef := range wf.Imports {
+		importBytes, importOrigin, err := loadImportSource(origin, importRef)
+		if err != nil {
+			return nil, nil, err
+		}
+		importedWorkflow, _, err := loadWorkflowWithImports(importBytes, importOrigin, visiting)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := mergeWorkflow(aggregated, importedWorkflow, fmt.Sprintf("import %q", importRef)); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	wf.Imports = nil
+	if err := mergeWorkflow(aggregated, &wf, "workflow"); err != nil {
+		return nil, nil, err
+	}
+
+	resolvedBytes, err := canonicalWorkflowBytes(aggregated)
+	if err != nil {
+		return nil, nil, err
+	}
+	return aggregated, resolvedBytes, nil
+}
+
+func expandPhaseImports(wf *Workflow, origin workflowOrigin, visiting map[string]bool) error {
+	if wf == nil {
+		return nil
+	}
+	for i := range wf.Phases {
+		phase := &wf.Phases[i]
+		if len(phase.Imports) == 0 {
+			continue
+		}
+		importedSteps := make([]Step, 0)
+		for _, phaseImport := range phase.Imports {
+			pathRef := strings.TrimSpace(phaseImport.Path)
+			if pathRef == "" {
+				return fmt.Errorf("phase import path is empty in phase %q", phase.Name)
+			}
+			importBytes, importOrigin, err := loadImportSource(origin, pathRef)
+			if err != nil {
+				return err
+			}
+			importedWorkflow, _, err := loadWorkflowWithImports(importBytes, importOrigin, visiting)
+			if err != nil {
+				return err
+			}
+			phaseSteps, err := extractPhaseImportSteps(importedWorkflow, phase.Name, pathRef)
+			if err != nil {
+				return err
+			}
+			for si := range phaseSteps {
+				phaseSteps[si].When = combineWhen(phaseImport.When, phaseSteps[si].When)
+			}
+			importedSteps = append(importedSteps, phaseSteps...)
+		}
+		phase.Steps = append(importedSteps, phase.Steps...)
+		phase.Imports = nil
+	}
+	return nil
+}
+
+func extractPhaseImportSteps(imported *Workflow, targetPhaseName string, sourceRef string) ([]Step, error) {
+	if imported == nil {
+		return nil, fmt.Errorf("phase import %q is nil", sourceRef)
+	}
+	if len(imported.Steps) > 0 {
+		steps := append([]Step(nil), imported.Steps...)
+		return steps, nil
+	}
+	if len(imported.Phases) == 0 {
+		return nil, fmt.Errorf("phase import %q does not contain steps", sourceRef)
+	}
+
+	matched := make([]Step, 0)
+	for _, p := range imported.Phases {
+		if p.Name == targetPhaseName {
+			matched = append(matched, p.Steps...)
+		}
+	}
+	if len(matched) > 0 {
+		return matched, nil
+	}
+	if len(imported.Phases) == 1 {
+		steps := append([]Step(nil), imported.Phases[0].Steps...)
+		return steps, nil
+	}
+	return nil, fmt.Errorf("phase import %q has phases but none match %q", sourceRef, targetPhaseName)
+}
+
+func combineWhen(outer string, inner string) string {
+	outer = strings.TrimSpace(outer)
+	inner = strings.TrimSpace(inner)
+	if outer == "" {
+		return inner
+	}
+	if inner == "" {
+		return outer
+	}
+	return fmt.Sprintf("(%s) && (%s)", outer, inner)
+}
+
+func mergeWorkflow(target *Workflow, src *Workflow, sourceLabel string) error {
+	if target == nil || src == nil {
+		return nil
+	}
+
+	srcRole := strings.TrimSpace(src.Role)
+	if srcRole != "" {
+		targetRole := strings.TrimSpace(target.Role)
+		if targetRole == "" {
+			target.Role = srcRole
+		} else if targetRole != srcRole {
+			return fmt.Errorf("workflow role mismatch in %s: expected %s, got %s", sourceLabel, targetRole, srcRole)
+		}
+	}
+
+	srcVersion := strings.TrimSpace(src.Version)
+	if srcVersion != "" {
+		targetVersion := strings.TrimSpace(target.Version)
+		if targetVersion == "" {
+			target.Version = srcVersion
+		} else if targetVersion != srcVersion {
+			return fmt.Errorf("workflow version mismatch in %s: expected %s, got %s", sourceLabel, targetVersion, srcVersion)
+		}
+	}
+
+	hasSrcPhases := len(src.Phases) > 0
+	hasSrcSteps := len(src.Steps) > 0
+	if hasSrcPhases && hasSrcSteps {
+		return fmt.Errorf("workflow cannot set both phases and steps in %s", sourceLabel)
+	}
+	if hasSrcPhases && len(target.Steps) > 0 {
+		return fmt.Errorf("workflow phase/step mode mismatch in %s: cannot merge phases into steps workflow", sourceLabel)
+	}
+	if hasSrcSteps && len(target.Phases) > 0 {
+		return fmt.Errorf("workflow phase/step mode mismatch in %s: cannot merge steps into phases workflow", sourceLabel)
+	}
+	if hasSrcPhases {
+		for _, srcPhase := range src.Phases {
+			merged := false
+			for i := range target.Phases {
+				if target.Phases[i].Name == srcPhase.Name {
+					target.Phases[i].Steps = append(target.Phases[i].Steps, srcPhase.Steps...)
+					merged = true
+					break
+				}
+			}
+			if !merged {
+				target.Phases = append(target.Phases, srcPhase)
+			}
+		}
+	}
+	if hasSrcSteps {
+		target.Steps = append(target.Steps, src.Steps...)
+	}
+
+	if target.Vars == nil {
+		target.Vars = map[string]any{}
+	}
+	mergeVars(target.Vars, src.Vars)
+	return nil
+}
+
+func workflowOriginKey(origin workflowOrigin) string {
+	if origin.localPath != "" {
+		return "file:" + origin.localPath
+	}
+	if origin.remoteURL != nil {
+		return "url:" + origin.remoteURL.String()
+	}
+	return "unknown"
+}
+
+func loadImportSource(origin workflowOrigin, importRef string) ([]byte, workflowOrigin, error) {
+	ref := strings.TrimSpace(importRef)
+	if ref == "" {
+		return nil, workflowOrigin{}, fmt.Errorf("workflow import path is empty")
+	}
+
+	if u, ok := parseHTTPURL(ref); ok {
+		b, err := getRequiredHTTP(u.String())
+		if err != nil {
+			return nil, workflowOrigin{}, err
+		}
+		return b, workflowOrigin{remoteURL: u}, nil
+	}
+
+	if origin.localPath != "" {
+		joined := filepath.Clean(filepath.Join(filepath.Dir(origin.localPath), ref))
+		abs, err := filepath.Abs(joined)
+		if err != nil {
+			return nil, workflowOrigin{}, fmt.Errorf("resolve import path: %w", err)
+		}
+		b, err := os.ReadFile(abs)
+		if err != nil {
+			return nil, workflowOrigin{}, fmt.Errorf("read workflow file: %w", err)
+		}
+		return b, workflowOrigin{localPath: abs}, nil
+	}
+
+	if origin.remoteURL != nil {
+		importURL, err := resolveImportURL(origin.remoteURL, ref)
+		if err != nil {
+			return nil, workflowOrigin{}, err
+		}
+		b, err := getRequiredHTTP(importURL.String())
+		if err != nil {
+			return nil, workflowOrigin{}, err
+		}
+		return b, workflowOrigin{remoteURL: importURL}, nil
+	}
+
+	return nil, workflowOrigin{}, fmt.Errorf("cannot resolve workflow import %q", ref)
+}
+
+func resolveImportURL(base *url.URL, ref string) (*url.URL, error) {
+	rel, err := url.Parse(ref)
+	if err != nil {
+		return nil, fmt.Errorf("parse import url: %w", err)
+	}
+	if rel.Scheme != "" && rel.Scheme != "http" && rel.Scheme != "https" {
+		return nil, fmt.Errorf("unsupported import url scheme: %s", rel.Scheme)
+	}
+	resolved := base.ResolveReference(rel)
+	if strings.TrimSpace(resolved.Host) == "" {
+		return nil, fmt.Errorf("invalid import url: %s", resolved.String())
+	}
+	return resolved, nil
+}
+
+func canonicalWorkflowBytes(wf *Workflow) ([]byte, error) {
+	if wf == nil {
+		return nil, fmt.Errorf("workflow is nil")
+	}
+	type canonicalWorkflow struct {
+		Role    string         `json:"role"`
+		Version string         `json:"version"`
+		Vars    map[string]any `json:"vars,omitempty"`
+		Phases  []Phase        `json:"phases,omitempty"`
+		Steps   []Step         `json:"steps,omitempty"`
+	}
+	payload := canonicalWorkflow{
+		Role:    wf.Role,
+		Version: wf.Version,
+		Vars:    wf.Vars,
+		Phases:  wf.Phases,
+		Steps:   wf.Steps,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal workflow: %w", err)
+	}
+	return raw, nil
 }
 
 func computeStateKey(workflowBytes []byte, effectiveVars map[string]any) string {
@@ -168,6 +460,26 @@ func loadBaseVars(origin workflowOrigin) (map[string]any, error) {
 	}
 
 	return map[string]any{}, nil
+}
+
+func loadWorkflowVarImports(origin workflowOrigin, refs []string) (map[string]any, error) {
+	merged := map[string]any{}
+	for _, ref := range refs {
+		trimmed := strings.TrimSpace(ref)
+		if trimmed == "" {
+			return nil, fmt.Errorf("var import path is empty")
+		}
+		b, _, err := loadImportSource(origin, trimmed)
+		if err != nil {
+			return nil, err
+		}
+		vars, err := parseVarsYAML(b)
+		if err != nil {
+			return nil, fmt.Errorf("parse var import %q: %w", trimmed, err)
+		}
+		mergeVars(merged, vars)
+	}
+	return merged, nil
 }
 
 func parseVarsYAML(content []byte) (map[string]any, error) {

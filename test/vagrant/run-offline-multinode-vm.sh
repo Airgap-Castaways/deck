@@ -92,33 +92,24 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-render_template() {
-  local src="$1"
-  local dst="$2"
-  python3 - "$src" "$dst" <<'PY'
-import os
-import re
-import sys
+render_prepare_fragments() {
+	local target_dir="$1"
+	mkdir -p "${target_dir}"
+	for src in "${TEMPLATE_DIR}/offline-multinode/"*.yaml; do
+		local name
+		name="$(basename "${src}")"
+		cp "${src}" "${target_dir}/${name}"
+	done
+}
 
-src_path = sys.argv[1]
-dst_path = sys.argv[2]
-
-with open(src_path, "r", encoding="utf-8") as fp:
-    text = fp.read()
-
-def replace(match):
-    key = match.group(1)
-    return os.environ.get(key, match.group(0))
-
-text = re.sub(r"\$\{([A-Z0-9_]+)\}", replace, text)
-
-parent = os.path.dirname(dst_path)
-if parent:
-    os.makedirs(parent, exist_ok=True)
-
-with open(dst_path, "w", encoding="utf-8") as fp:
-    fp.write(text)
-PY
+render_apply_fragments() {
+	local target_dir="$1"
+	mkdir -p "${target_dir}"
+	for src in "${TEMPLATE_DIR}/offline-multinode/"*.yaml; do
+		local name
+		name="$(basename "${src}")"
+		cp "${src}" "${target_dir}/${name}"
+	done
 }
 
 wait_server_health() {
@@ -132,14 +123,40 @@ wait_server_health() {
   return 1
 }
 
+detect_local_ipv4() {
+  local candidate=""
+  candidate="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i=="src") {print $(i+1); exit}}')"
+  if [[ -n "${candidate}" ]]; then
+    printf '%s\n' "${candidate}"
+    return 0
+  fi
+  candidate="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1)"
+  if [[ -n "${candidate}" ]]; then
+    printf '%s\n' "${candidate}"
+    return 0
+  fi
+  return 1
+}
+
+ensure_advertise_address() {
+  if ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | grep -Fx "${KUBEADM_ADVERTISE_ADDRESS}" >/dev/null 2>&1; then
+    return 0
+  fi
+  local detected=""
+  detected="$(detect_local_ipv4 || true)"
+  if [[ -n "${detected}" ]]; then
+    KUBEADM_ADVERTISE_ADDRESS="${detected}"
+  fi
+}
+
 write_prepare_workflows() {
-  local root="/tmp/deck/offline-pack"
-  local wf_dir="${root}/workflows"
-  rm -rf "${root}"
-  mkdir -p "${wf_dir}"
-  export KUBERNETES_VERSION SERVER_ROOT ARCH
-  export BACKEND_RUNTIME="docker"
-  render_template "${TEMPLATE_DIR}/offline-multinode-prepare.yaml" "${wf_dir}/pack.yaml"
+	local root="/tmp/deck/offline-pack"
+	local wf_dir="${root}/workflows"
+	local fragment_dir="${wf_dir}/offline-multinode"
+	rm -rf "${root}"
+	mkdir -p "${wf_dir}"
+	render_prepare_fragments "${fragment_dir}"
+	cp "${TEMPLATE_DIR}/offline-multinode-prepare.yaml" "${wf_dir}/pack.yaml"
   cat > "${wf_dir}/apply.yaml" <<'EOF'
 role: apply
 version: v1alpha1
@@ -158,7 +175,10 @@ EOF
 prepare_server_bundle() {
   write_prepare_workflows
   local out_tar="/tmp/deck/offline-pack-bundle.tar"
-  (cd /tmp/deck/offline-pack && sudo -n "${DECK_BIN}" pack --out "${out_tar}") > "${CASE_DIR}/01-prepare.log" 2>&1
+  (cd /tmp/deck/offline-pack && sudo -n "${DECK_BIN}" pack --out "${out_tar}" \
+    --var "kubernetesVersion=${KUBERNETES_VERSION}" \
+    --var "arch=${ARCH}" \
+    --var "backendRuntime=docker") > "${CASE_DIR}/01-prepare.log" 2>&1
   sudo -n rm -rf "${SERVER_ROOT}"
   mkdir -p "${SERVER_ROOT}"
   tar -xf "${out_tar}" -C "${SERVER_ROOT}" --strip-components=1
@@ -169,16 +189,14 @@ prepare_server_bundle() {
 }
 
 write_runtime_workflows() {
-  mkdir -p "${SERVER_ROOT}/files/workflows"
-  export OFFLINE_RELEASE="${OFFLINE_RELEASE_CONTROL_PLANE}" KUBERNETES_VERSION KUBEADM_ADVERTISE_ADDRESS SERVER_ROOT
-  export SERVER_URL_NO_SCHEME="${SERVER_URL#http://}"
-  render_template "${TEMPLATE_DIR}/offline-multinode-control-plane.yaml" "${SERVER_ROOT}/files/workflows/offline-pull-control-plane.yaml"
-
-  export OFFLINE_RELEASE="${OFFLINE_RELEASE_WORKER}"
-  render_template "${TEMPLATE_DIR}/offline-multinode-worker.yaml" "${SERVER_ROOT}/files/workflows/offline-pull-worker.yaml"
-
-  export OFFLINE_RELEASE="${OFFLINE_RELEASE_WORKER_2}"
-  render_template "${TEMPLATE_DIR}/offline-multinode-worker.yaml" "${SERVER_ROOT}/files/workflows/offline-pull-worker-2.yaml"
+	local workflow_dir="${SERVER_ROOT}/files/workflows"
+	local fragment_dir="${workflow_dir}/offline-multinode"
+	mkdir -p "${workflow_dir}"
+	ensure_advertise_address
+	render_apply_fragments "${fragment_dir}"
+	cp "${TEMPLATE_DIR}/offline-multinode-control-plane.yaml" "${workflow_dir}/offline-pull-control-plane.yaml"
+	cp "${TEMPLATE_DIR}/offline-multinode-worker.yaml" "${workflow_dir}/offline-pull-worker.yaml"
+	cp "${TEMPLATE_DIR}/offline-multinode-worker.yaml" "${workflow_dir}/offline-pull-worker-2.yaml"
 }
 
 start_server_background() {
@@ -208,15 +226,29 @@ wait_for_join_file() {
 }
 
 apply_control_plane_workflow() {
-  sudo -n "${DECK_BIN}" apply --file "${SERVER_URL}/files/workflows/offline-pull-control-plane.yaml" --phase install > "${CASE_DIR}/04-apply-control-plane.log" 2>&1
+  local server_no_scheme="${SERVER_URL#http://}"
+  server_no_scheme="${server_no_scheme#https://}"
+  sudo -n "${DECK_BIN}" apply --file "${SERVER_URL}/files/workflows/offline-pull-control-plane.yaml" --phase install \
+    --var "serverURL=${server_no_scheme}" \
+    --var "registryHost=${server_no_scheme}" \
+    --var "release=${OFFLINE_RELEASE_CONTROL_PLANE}" \
+    --var "kubernetesVersion=${KUBERNETES_VERSION}" > "${CASE_DIR}/04-apply-control-plane.log" 2>&1
 }
 
 apply_worker_workflow() {
   local workflow_url="${SERVER_URL}/files/workflows/offline-pull-worker.yaml"
+  local release="${OFFLINE_RELEASE_WORKER}"
+  local server_no_scheme="${SERVER_URL#http://}"
+  server_no_scheme="${server_no_scheme#https://}"
   if [[ "${ROLE}" == "worker-2" ]]; then
     workflow_url="${SERVER_URL}/files/workflows/offline-pull-worker-2.yaml"
+    release="${OFFLINE_RELEASE_WORKER_2}"
   fi
-  sudo -n "${DECK_BIN}" apply --file "${workflow_url}" --phase install > "${CASE_DIR}/05-apply-${ROLE}.log" 2>&1
+  sudo -n "${DECK_BIN}" apply --file "${workflow_url}" --phase install \
+    --var "serverURL=${server_no_scheme}" \
+    --var "registryHost=${server_no_scheme}" \
+    --var "release=${release}" \
+    --var "joinFile=/tmp/deck/join.txt" > "${CASE_DIR}/05-apply-${ROLE}.log" 2>&1
 }
 
 wait_for_three_ready_nodes() {

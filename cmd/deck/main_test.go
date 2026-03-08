@@ -40,7 +40,7 @@ func TestRunUsageShowsTopLevelAxes(t *testing.T) {
 			}
 
 			msg := err.Error()
-			for _, cmd := range []string{"pack", "apply", "serve", "bundle", "list", "validate", "diff", "init", "doctor", "health", "logs", "cache", "service"} {
+			for _, cmd := range []string{"pack", "apply", "serve", "bundle", "list", "validate", "diff", "init", "doctor", "health", "logs", "cache", "source", "service"} {
 				if !strings.Contains(msg, cmd) {
 					t.Fatalf("usage must include %q, got %q", cmd, msg)
 				}
@@ -114,6 +114,110 @@ func TestHealth(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "unexpected status") {
 			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("uses configured default server when --server omitted", func(t *testing.T) {
+		home := filepath.Join(t.TempDir(), "home")
+		if err := os.MkdirAll(home, 0o755); err != nil {
+			t.Fatalf("mkdir home: %v", err)
+		}
+		t.Setenv("HOME", home)
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/healthz" {
+				t.Fatalf("unexpected path: %s", r.URL.Path)
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		if _, err := runWithCapturedStdout([]string{"source", "set", "--server", srv.URL}); err != nil {
+			t.Fatalf("source set server failed: %v", err)
+		}
+
+		out, err := runWithCapturedStdout([]string{"health"})
+		if err != nil {
+			t.Fatalf("health without --server should use source config: %v", err)
+		}
+		expected := fmt.Sprintf("health: ok (%s)\n", srv.URL)
+		if out != expected {
+			t.Fatalf("unexpected output\nwant: %q\ngot : %q", expected, out)
+		}
+	})
+}
+
+func TestSource(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	t.Run("set server and show", func(t *testing.T) {
+		server := "http://127.0.0.1:18080"
+		out, err := runWithCapturedStdout([]string{"source", "set", "--server", server})
+		if err != nil {
+			t.Fatalf("source set server failed: %v", err)
+		}
+		if !strings.Contains(out, "mode=server") || !strings.Contains(out, server) {
+			t.Fatalf("unexpected set output: %q", out)
+		}
+
+		showOut, err := runWithCapturedStdout([]string{"source", "show"})
+		if err != nil {
+			t.Fatalf("source show failed: %v", err)
+		}
+		if !strings.Contains(showOut, "mode=server") || !strings.Contains(showOut, "server="+server) {
+			t.Fatalf("unexpected show output: %q", showOut)
+		}
+	})
+
+	t.Run("set local-root and list without --server", func(t *testing.T) {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "workflows"), 0o755); err != nil {
+			t.Fatalf("mkdir workflows: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "workflows", "apply.yaml"), []byte("role: apply\n"), 0o644); err != nil {
+			t.Fatalf("write apply.yaml: %v", err)
+		}
+
+		if _, err := runWithCapturedStdout([]string{"source", "set", "--local-root", root}); err != nil {
+			t.Fatalf("source set local-root failed: %v", err)
+		}
+
+		otherDir := t.TempDir()
+		originalCWD, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("getwd: %v", err)
+		}
+		if err := os.Chdir(otherDir); err != nil {
+			t.Fatalf("chdir other dir: %v", err)
+		}
+		t.Cleanup(func() {
+			_ = os.Chdir(originalCWD)
+		})
+
+		out, err := runWithCapturedStdout([]string{"list"})
+		if err != nil {
+			t.Fatalf("list without --server should use source local-root: %v", err)
+		}
+		if out != "workflows/apply.yaml\n" {
+			t.Fatalf("unexpected list output: %q", out)
+		}
+	})
+
+	t.Run("clear resets to default local mode", func(t *testing.T) {
+		if _, err := runWithCapturedStdout([]string{"source", "clear"}); err != nil {
+			t.Fatalf("source clear failed: %v", err)
+		}
+
+		showOut, err := runWithCapturedStdout([]string{"source", "show"})
+		if err != nil {
+			t.Fatalf("source show after clear failed: %v", err)
+		}
+		if !strings.Contains(showOut, "mode=local") {
+			t.Fatalf("unexpected show output after clear: %q", showOut)
 		}
 	})
 }
@@ -557,6 +661,33 @@ func TestRunWorkflowRunInstallLocalSuccess(t *testing.T) {
 	}
 }
 
+func TestRunApplyPositionalWorkflowPath(t *testing.T) {
+	wf := filepath.Join("..", "..", "testdata", "workflows", "install-true.yaml")
+	bundle := t.TempDir()
+	createValidBundleManifest(t, bundle)
+	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle workflows: %v", err)
+	}
+
+	out, err := runWithCapturedStdout([]string{"apply", wf, bundle})
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if out != "apply: ok\n" {
+		t.Fatalf("unexpected output: %q", out)
+	}
+}
+
+func TestRunApplyTwoPositionalsRequireWorkflowThenBundle(t *testing.T) {
+	_, err := runWithCapturedStdout([]string{"apply", "bundle-a", "bundle-b"})
+	if err == nil {
+		t.Fatalf("expected positional argument validation error")
+	}
+	if !strings.Contains(err.Error(), "requires [workflow] [bundle]") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestInit(t *testing.T) {
 	assertWorkflowSet := func(t *testing.T, outDir string, wantVars string) {
 		t.Helper()
@@ -577,29 +708,30 @@ func TestInit(t *testing.T) {
 		}
 	}
 
-	t.Run("template is required", func(t *testing.T) {
-		_, err := runWithCapturedStdout([]string{"init"})
-		if err == nil || !strings.Contains(err.Error(), "--template is required") {
-			t.Fatalf("expected template-required error, got %v", err)
-		}
-	})
-
-	t.Run("template accepts only single or multi", func(t *testing.T) {
-		_, err := runWithCapturedStdout([]string{"init", "--template", "multinode"})
-		if err == nil || !strings.Contains(err.Error(), "single or multi") {
-			t.Fatalf("expected template validation error, got %v", err)
-		}
-	})
-
-	t.Run("single template creates starter set under --out workflows", func(t *testing.T) {
+	t.Run("default template is single when omitted", func(t *testing.T) {
 		outputDir := t.TempDir()
-		if _, err := runWithCapturedStdout([]string{"init", "--template", "single", "--out", outputDir}); err != nil {
-			t.Fatalf("init single failed: %v", err)
+		if _, err := runWithCapturedStdout([]string{"init", "--out", outputDir}); err != nil {
+			t.Fatalf("init failed: %v", err)
 		}
 		assertWorkflowSet(t, outputDir, "{}\n")
 	})
 
-	t.Run("multi template creates starter set under default --out .", func(t *testing.T) {
+	t.Run("template flag is no longer supported", func(t *testing.T) {
+		_, err := runWithCapturedStdout([]string{"init", "--template", "multinode"})
+		if err == nil || !strings.Contains(err.Error(), "flag provided but not defined") {
+			t.Fatalf("expected unknown flag error, got %v", err)
+		}
+	})
+
+	t.Run("creates starter set under --out workflows", func(t *testing.T) {
+		outputDir := t.TempDir()
+		if _, err := runWithCapturedStdout([]string{"init", "--out", outputDir}); err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		assertWorkflowSet(t, outputDir, "{}\n")
+	})
+
+	t.Run("creates starter set under default --out .", func(t *testing.T) {
 		root := t.TempDir()
 		originalCWD, err := os.Getwd()
 		if err != nil {
@@ -612,10 +744,10 @@ func TestInit(t *testing.T) {
 			_ = os.Chdir(originalCWD)
 		})
 
-		if _, err := runWithCapturedStdout([]string{"init", "--template", "multi"}); err != nil {
-			t.Fatalf("init multi failed: %v", err)
+		if _, err := runWithCapturedStdout([]string{"init"}); err != nil {
+			t.Fatalf("init failed: %v", err)
 		}
-		assertWorkflowSet(t, root, "nodes: []\n")
+		assertWorkflowSet(t, root, "{}\n")
 	})
 
 	t.Run("fails when any target file already exists and does not overwrite", func(t *testing.T) {
@@ -629,7 +761,7 @@ func TestInit(t *testing.T) {
 			t.Fatalf("seed pack.yaml: %v", err)
 		}
 
-		_, err := runWithCapturedStdout([]string{"init", "--template", "single", "--out", outputDir})
+		_, err := runWithCapturedStdout([]string{"init", "--out", outputDir})
 		if err == nil {
 			t.Fatalf("expected overwrite refusal error")
 		}
@@ -657,7 +789,7 @@ func TestInit(t *testing.T) {
 			t.Fatalf("mkdir conflicting directory: %v", err)
 		}
 
-		_, err := runWithCapturedStdout([]string{"init", "--template", "single", "--out", outputDir})
+		_, err := runWithCapturedStdout([]string{"init", "--out", outputDir})
 		if err == nil {
 			t.Fatalf("expected overwrite refusal error")
 		}
@@ -736,6 +868,13 @@ phases:
 	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("kubernetesVersion: v1.30.1\n"), 0o644); err != nil {
 		t.Fatalf("write vars workflow: %v", err)
 	}
+	fragmentDir := filepath.Join(workflowsDir, "offline-multinode")
+	if err := os.MkdirAll(fragmentDir, 0o755); err != nil {
+		t.Fatalf("mkdir fragment dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fragmentDir, "apply-common.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write workflow fragment: %v", err)
+	}
 
 	originalCWD, err := os.Getwd()
 	if err != nil {
@@ -768,6 +907,7 @@ phases:
 		"bundle/workflows/pack.yaml",
 		"bundle/workflows/apply.yaml",
 		"bundle/workflows/vars.yaml",
+		"bundle/workflows/offline-multinode/apply-common.yaml",
 		"bundle/.deck/manifest.json",
 	} {
 		if !sliceContains(names, required) {
@@ -812,6 +952,78 @@ func TestRunPackDryRunDoesNotWrite(t *testing.T) {
 	}
 	if _, statErr := os.Stat(outTar); !os.IsNotExist(statErr) {
 		t.Fatalf("dry-run must not create tar, stat err=%v", statErr)
+	}
+}
+
+func TestRunPackVarFlagOverridesWorkflowVars(t *testing.T) {
+	root := t.TempDir()
+	workflowsDir := filepath.Join(root, "workflows")
+	if err := os.MkdirAll(workflowsDir, 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	seedDir := filepath.Join(root, "seed", "files")
+	if err := os.MkdirAll(seedDir, 0o755); err != nil {
+		t.Fatalf("mkdir seed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(seedDir, "source.bin"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed file: %v", err)
+	}
+
+	packPath := filepath.Join(workflowsDir, "pack.yaml")
+	packBody := fmt.Sprintf(`role: pack
+version: v1alpha1
+vars:
+  relPath: default.bin
+phases:
+  - name: prepare
+    steps:
+      - id: p1
+        kind: DownloadFile
+        spec:
+          source:
+            path: files/source.bin
+          fetch:
+            sources:
+              - type: local
+                path: %q
+          output:
+            path: files/{{ .vars.relPath  }}
+`, filepath.Join(root, "seed"))
+	if err := os.WriteFile(packPath, []byte(packBody), 0o644); err != nil {
+		t.Fatalf("write pack workflow: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("kubernetesVersion: v1.30.1\n"), 0o644); err != nil {
+		t.Fatalf("write vars workflow: %v", err)
+	}
+
+	originalCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(originalCWD)
+	})
+
+	outTar := filepath.Join(root, "bundle.tar")
+	if _, err := runWithCapturedStdout([]string{"pack", "--out", outTar, "--var", "relPath=override.bin"}); err != nil {
+		t.Fatalf("pack failed: %v", err)
+	}
+
+	names, err := tarEntryNamesFromFile(outTar)
+	if err != nil {
+		t.Fatalf("read tar entries: %v", err)
+	}
+	if !sliceContains(names, "bundle/files/override.bin") {
+		t.Fatalf("expected override output in tar entries: %#v", names)
+	}
+	if sliceContains(names, "bundle/files/default.bin") {
+		t.Fatalf("unexpected default output in tar entries: %#v", names)
 	}
 }
 
@@ -1741,6 +1953,70 @@ func TestList(t *testing.T) {
 		}
 		if !reflect.DeepEqual(got, items) {
 			t.Fatalf("unexpected items\nwant: %#v\ngot : %#v", items, got)
+		}
+	})
+
+	t.Run("without --server lists local workflows", func(t *testing.T) {
+		root := t.TempDir()
+		workflowsDir := filepath.Join(root, "workflows", "nested")
+		if err := os.MkdirAll(workflowsDir, 0o755); err != nil {
+			t.Fatalf("mkdir workflows: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "workflows", "apply.yaml"), []byte("role: apply\n"), 0o644); err != nil {
+			t.Fatalf("write apply.yaml: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(workflowsDir, "post.yml"), []byte("role: apply\n"), 0o644); err != nil {
+			t.Fatalf("write nested workflow: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "workflows", "README.md"), []byte("ignore"), 0o644); err != nil {
+			t.Fatalf("write README.md: %v", err)
+		}
+
+		originalCWD, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("getwd: %v", err)
+		}
+		if err := os.Chdir(root); err != nil {
+			t.Fatalf("chdir root: %v", err)
+		}
+		t.Cleanup(func() {
+			_ = os.Chdir(originalCWD)
+		})
+
+		out, err := runWithCapturedStdout([]string{"list"})
+		if err != nil {
+			t.Fatalf("expected success, got %v", err)
+		}
+		expected := "workflows/apply.yaml\nworkflows/nested/post.yml\n"
+		if out != expected {
+			t.Fatalf("unexpected output\nwant: %q\ngot : %q", expected, out)
+		}
+	})
+
+	t.Run("server 404 index returns empty list", func(t *testing.T) {
+		missing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.NotFound(w, r)
+		}))
+		defer missing.Close()
+
+		textOut, err := runWithCapturedStdout([]string{"list", "--server", missing.URL})
+		if err != nil {
+			t.Fatalf("expected success, got %v", err)
+		}
+		if textOut != "" {
+			t.Fatalf("expected empty text output, got %q", textOut)
+		}
+
+		jsonOut, err := runWithCapturedStdout([]string{"list", "--server", missing.URL, "-o", "json"})
+		if err != nil {
+			t.Fatalf("expected success, got %v", err)
+		}
+		var got []string
+		if err := json.Unmarshal([]byte(jsonOut), &got); err != nil {
+			t.Fatalf("decode json output: %v\nraw: %q", err, jsonOut)
+		}
+		if len(got) != 0 {
+			t.Fatalf("expected empty json list, got %#v", got)
 		}
 	})
 }

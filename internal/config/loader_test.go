@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -171,4 +172,303 @@ func TestStateKey(t *testing.T) {
 			t.Fatalf("expected state key to change when --var override changes")
 		}
 	})
+}
+
+func TestLoadWithImports_Local(t *testing.T) {
+	dir := t.TempDir()
+	rootPath := filepath.Join(dir, "apply.yaml")
+	fragmentDir := filepath.Join(dir, "fragments")
+	if err := os.MkdirAll(fragmentDir, 0o755); err != nil {
+		t.Fatalf("mkdir fragments: %v", err)
+	}
+
+	fragmentPath := filepath.Join(fragmentDir, "common.yaml")
+	fragment := []byte(`role: apply
+version: v1alpha1
+vars:
+  imageRepo: from-import
+  importedOnly: true
+steps:
+  - id: imported-step
+    kind: RunCommand
+    spec:
+      command: ["true"]
+`)
+	if err := os.WriteFile(fragmentPath, fragment, 0o644); err != nil {
+		t.Fatalf("write fragment: %v", err)
+	}
+
+	root := []byte(`role: apply
+version: v1alpha1
+imports:
+  - ./fragments/common.yaml
+vars:
+  imageRepo: from-root
+steps:
+  - id: root-step
+    kind: RunCommand
+    spec:
+      command: ["true"]
+`)
+	if err := os.WriteFile(rootPath, root, 0o644); err != nil {
+		t.Fatalf("write root workflow: %v", err)
+	}
+
+	wf, err := Load(rootPath)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if got := len(wf.Steps); got != 2 {
+		t.Fatalf("expected 2 steps, got %d", got)
+	}
+	if wf.Steps[0].ID != "imported-step" || wf.Steps[1].ID != "root-step" {
+		t.Fatalf("unexpected merged step order: %s, %s", wf.Steps[0].ID, wf.Steps[1].ID)
+	}
+	if got := wf.Vars["imageRepo"]; got != "from-root" {
+		t.Fatalf("expected root var override, got %v", got)
+	}
+	if got := wf.Vars["importedOnly"]; got != true {
+		t.Fatalf("expected imported var, got %v", got)
+	}
+}
+
+func TestLoadWithImports_Cycle(t *testing.T) {
+	dir := t.TempDir()
+	aPath := filepath.Join(dir, "a.yaml")
+	bPath := filepath.Join(dir, "b.yaml")
+
+	a := []byte(`role: apply
+version: v1alpha1
+imports:
+  - ./b.yaml
+steps:
+  - id: a-step
+    kind: RunCommand
+    spec:
+      command: ["true"]
+`)
+	b := []byte(`role: apply
+version: v1alpha1
+imports:
+  - ./a.yaml
+steps:
+  - id: b-step
+    kind: RunCommand
+    spec:
+      command: ["true"]
+`)
+	if err := os.WriteFile(aPath, a, 0o644); err != nil {
+		t.Fatalf("write a.yaml: %v", err)
+	}
+	if err := os.WriteFile(bPath, b, 0o644); err != nil {
+		t.Fatalf("write b.yaml: %v", err)
+	}
+
+	_, err := Load(aPath)
+	if err == nil {
+		t.Fatalf("expected import cycle error")
+	}
+	if !strings.Contains(err.Error(), "import cycle") {
+		t.Fatalf("expected import cycle error, got %v", err)
+	}
+}
+
+func TestLoadWithImports_RemoteRelative(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/wf/apply.yaml":
+			_, _ = w.Write([]byte(`role: apply
+version: v1alpha1
+imports:
+  - ./fragments/common.yaml
+steps:
+  - id: root-step
+    kind: RunCommand
+    spec:
+      command: ["true"]
+`))
+		case "/wf/fragments/common.yaml":
+			_, _ = w.Write([]byte(`role: apply
+version: v1alpha1
+steps:
+  - id: imported-step
+    kind: RunCommand
+    spec:
+      command: ["true"]
+`))
+		case "/wf/vars.yaml":
+			_, _ = w.Write([]byte("fromVarsFile: true\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	wf, err := Load(ts.URL + "/wf/apply.yaml")
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if got := len(wf.Steps); got != 2 {
+		t.Fatalf("expected 2 steps, got %d", got)
+	}
+	if wf.Steps[0].ID != "imported-step" || wf.Steps[1].ID != "root-step" {
+		t.Fatalf("unexpected merged step order: %s, %s", wf.Steps[0].ID, wf.Steps[1].ID)
+	}
+	if got := wf.Vars["fromVarsFile"]; got != true {
+		t.Fatalf("expected vars.yaml value, got %v", got)
+	}
+}
+
+func TestLoadWithImports_MergesPhasesByName(t *testing.T) {
+	dir := t.TempDir()
+	rootPath := filepath.Join(dir, "apply.yaml")
+	fragmentPath := filepath.Join(dir, "phase-fragment.yaml")
+
+	fragment := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: imported-step
+        kind: RunCommand
+        spec:
+          command: ["true"]
+`)
+	if err := os.WriteFile(fragmentPath, fragment, 0o644); err != nil {
+		t.Fatalf("write fragment: %v", err)
+	}
+
+	root := []byte(`role: apply
+version: v1alpha1
+imports:
+  - ./phase-fragment.yaml
+phases:
+  - name: install
+    steps:
+      - id: root-step
+        kind: RunCommand
+        spec:
+          command: ["true"]
+`)
+	if err := os.WriteFile(rootPath, root, 0o644); err != nil {
+		t.Fatalf("write root workflow: %v", err)
+	}
+
+	wf, err := Load(rootPath)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if got := len(wf.Phases); got != 1 {
+		t.Fatalf("expected 1 merged phase, got %d", got)
+	}
+	if got := len(wf.Phases[0].Steps); got != 2 {
+		t.Fatalf("expected 2 merged steps, got %d", got)
+	}
+	if wf.Phases[0].Steps[0].ID != "imported-step" || wf.Phases[0].Steps[1].ID != "root-step" {
+		t.Fatalf("unexpected merged step order: %s, %s", wf.Phases[0].Steps[0].ID, wf.Phases[0].Steps[1].ID)
+	}
+}
+
+func TestLoadWithPhaseImports_CombinesWhenAndSteps(t *testing.T) {
+	dir := t.TempDir()
+	rootPath := filepath.Join(dir, "apply.yaml")
+	fragmentPath := filepath.Join(dir, "phase-install.yaml")
+
+	fragment := []byte(`role: apply
+version: v1alpha1
+steps:
+  - id: imported-a
+    kind: RunCommand
+    when: vars.enableCommon == true
+    spec:
+      command: ["true"]
+  - id: imported-b
+    kind: RunCommand
+    spec:
+      command: ["true"]
+`)
+	if err := os.WriteFile(fragmentPath, fragment, 0o644); err != nil {
+		t.Fatalf("write fragment: %v", err)
+	}
+
+	root := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    imports:
+      - path: ./phase-install.yaml
+        when: vars.osFamily == "rhel"
+    steps:
+      - id: root-step
+        kind: RunCommand
+        spec:
+          command: ["true"]
+`)
+	if err := os.WriteFile(rootPath, root, 0o644); err != nil {
+		t.Fatalf("write root workflow: %v", err)
+	}
+
+	wf, err := LoadWithOptions(rootPath, LoadOptions{VarOverrides: map[string]any{"osFamily": "rhel", "enableCommon": true}})
+	if err != nil {
+		t.Fatalf("LoadWithOptions failed: %v", err)
+	}
+	if len(wf.Phases) != 1 {
+		t.Fatalf("expected 1 phase, got %d", len(wf.Phases))
+	}
+	steps := wf.Phases[0].Steps
+	if len(steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(steps))
+	}
+	if steps[0].ID != "imported-a" || steps[1].ID != "imported-b" || steps[2].ID != "root-step" {
+		t.Fatalf("unexpected step order: %s, %s, %s", steps[0].ID, steps[1].ID, steps[2].ID)
+	}
+	if steps[0].When != "(vars.osFamily == \"rhel\") && (vars.enableCommon == true)" {
+		t.Fatalf("unexpected combined when for imported-a: %s", steps[0].When)
+	}
+	if steps[1].When != "vars.osFamily == \"rhel\"" {
+		t.Fatalf("unexpected when for imported-b: %s", steps[1].When)
+	}
+}
+
+func TestLoadWithVarImports_Precedence(t *testing.T) {
+	dir := t.TempDir()
+	rootPath := filepath.Join(dir, "apply.yaml")
+	varsCommonPath := filepath.Join(dir, "vars-common.yaml")
+	varsEnvPath := filepath.Join(dir, "vars-env.yaml")
+
+	if err := os.WriteFile(varsCommonPath, []byte("clusterName: from-common\nregion: global\n"), 0o644); err != nil {
+		t.Fatalf("write vars-common: %v", err)
+	}
+	if err := os.WriteFile(varsEnvPath, []byte("region: apac\n"), 0o644); err != nil {
+		t.Fatalf("write vars-env: %v", err)
+	}
+
+	root := []byte(`role: apply
+version: v1alpha1
+varImports:
+  - ./vars-common.yaml
+  - ./vars-env.yaml
+vars:
+  region: kr
+steps:
+  - id: root-step
+    kind: RunCommand
+    spec:
+      command: ["true"]
+`)
+	if err := os.WriteFile(rootPath, root, 0o644); err != nil {
+		t.Fatalf("write root workflow: %v", err)
+	}
+
+	wf, err := LoadWithOptions(rootPath, LoadOptions{VarOverrides: map[string]any{"region": "cli"}})
+	if err != nil {
+		t.Fatalf("LoadWithOptions failed: %v", err)
+	}
+	if got := wf.Vars["clusterName"]; got != "from-common" {
+		t.Fatalf("expected clusterName from var import, got %v", got)
+	}
+	if got := wf.Vars["region"]; got != "cli" {
+		t.Fatalf("expected cli override precedence for region, got %v", got)
+	}
 }

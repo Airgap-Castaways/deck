@@ -1,9 +1,8 @@
+role: apply
 version: v1alpha1
 vars:
   serverURL: 192.168.56.1:8080
   release: ubuntu2204
-context:
-  stateFile: /tmp/deck/state-offline-repo-preinstall.json
 phases:
   - name: install
     steps:
@@ -24,7 +23,7 @@ phases:
           path: /tmp/deck-offline-apt.list
           mode: "0644"
           contentFromTemplate: |
-            deb [trusted=yes] http://{ .vars.serverURL }/packages/apt/{ .vars.release } ./
+            deb [trusted=yes] http://{{ .vars.serverURL }}/packages/apt/{{ .vars.release }} ./
       - id: write-yum-offline-repo-template
         apiVersion: deck/v1alpha1
         kind: WriteFile
@@ -34,7 +33,7 @@ phases:
           contentFromTemplate: |
             [offline-repo]
             name=Offline repo for kubespray
-            baseurl=http://{ .vars.serverURL }/packages/yum/{ .vars.release }
+            baseurl=http://{{ .vars.serverURL }}/packages/yum/{{ .vars.release }}
             enabled=1
             gpgcheck=0
             module_hotfixes=1

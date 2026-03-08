@@ -5,15 +5,16 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["role", "version"],
-  "oneOf": [
-    {
-      "required": ["phases"],
-      "not": { "required": ["steps"] }
-    },
-    {
-      "required": ["steps"],
-      "not": { "required": ["phases"] }
-    }
+  "not": {
+    "allOf": [
+      { "required": ["phases"] },
+      { "required": ["steps"] }
+    ]
+  },
+  "anyOf": [
+    { "required": ["phases"] },
+    { "required": ["steps"] },
+    { "required": ["imports"] }
   ],
   "properties": {
     "role": {
@@ -28,6 +29,24 @@
       "type": "object",
       "additionalProperties": true,
       "default": {}
+    },
+    "varImports": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "imports": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "phases": {
       "type": "array",
@@ -44,11 +63,34 @@
     "phase": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "steps"],
+      "required": ["name"],
+      "anyOf": [
+        { "required": ["steps"] },
+        { "required": ["imports"] }
+      ],
       "properties": {
         "name": {
           "type": "string",
           "minLength": 1
+        },
+        "imports": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "when": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         },
         "steps": {
           "type": "array",
