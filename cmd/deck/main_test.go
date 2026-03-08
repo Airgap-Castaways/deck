@@ -40,7 +40,7 @@ func TestRunUsageShowsTopLevelAxes(t *testing.T) {
 			}
 
 			msg := err.Error()
-			for _, cmd := range []string{"pack", "apply", "serve", "bundle", "list", "validate", "diff", "init", "doctor", "health", "logs", "cache", "service"} {
+			for _, cmd := range []string{"pack", "apply", "serve", "bundle", "list", "validate", "diff", "init", "doctor", "health", "logs", "cache", "source", "service"} {
 				if !strings.Contains(msg, cmd) {
 					t.Fatalf("usage must include %q, got %q", cmd, msg)
 				}
@@ -114,6 +114,110 @@ func TestHealth(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "unexpected status") {
 			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("uses configured default server when --server omitted", func(t *testing.T) {
+		home := filepath.Join(t.TempDir(), "home")
+		if err := os.MkdirAll(home, 0o755); err != nil {
+			t.Fatalf("mkdir home: %v", err)
+		}
+		t.Setenv("HOME", home)
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/healthz" {
+				t.Fatalf("unexpected path: %s", r.URL.Path)
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		if _, err := runWithCapturedStdout([]string{"source", "set", "--server", srv.URL}); err != nil {
+			t.Fatalf("source set server failed: %v", err)
+		}
+
+		out, err := runWithCapturedStdout([]string{"health"})
+		if err != nil {
+			t.Fatalf("health without --server should use source config: %v", err)
+		}
+		expected := fmt.Sprintf("health: ok (%s)\n", srv.URL)
+		if out != expected {
+			t.Fatalf("unexpected output\nwant: %q\ngot : %q", expected, out)
+		}
+	})
+}
+
+func TestSource(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	t.Run("set server and show", func(t *testing.T) {
+		server := "http://127.0.0.1:18080"
+		out, err := runWithCapturedStdout([]string{"source", "set", "--server", server})
+		if err != nil {
+			t.Fatalf("source set server failed: %v", err)
+		}
+		if !strings.Contains(out, "mode=server") || !strings.Contains(out, server) {
+			t.Fatalf("unexpected set output: %q", out)
+		}
+
+		showOut, err := runWithCapturedStdout([]string{"source", "show"})
+		if err != nil {
+			t.Fatalf("source show failed: %v", err)
+		}
+		if !strings.Contains(showOut, "mode=server") || !strings.Contains(showOut, "server="+server) {
+			t.Fatalf("unexpected show output: %q", showOut)
+		}
+	})
+
+	t.Run("set local-root and list without --server", func(t *testing.T) {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "workflows"), 0o755); err != nil {
+			t.Fatalf("mkdir workflows: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "workflows", "apply.yaml"), []byte("role: apply\n"), 0o644); err != nil {
+			t.Fatalf("write apply.yaml: %v", err)
+		}
+
+		if _, err := runWithCapturedStdout([]string{"source", "set", "--local-root", root}); err != nil {
+			t.Fatalf("source set local-root failed: %v", err)
+		}
+
+		otherDir := t.TempDir()
+		originalCWD, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("getwd: %v", err)
+		}
+		if err := os.Chdir(otherDir); err != nil {
+			t.Fatalf("chdir other dir: %v", err)
+		}
+		t.Cleanup(func() {
+			_ = os.Chdir(originalCWD)
+		})
+
+		out, err := runWithCapturedStdout([]string{"list"})
+		if err != nil {
+			t.Fatalf("list without --server should use source local-root: %v", err)
+		}
+		if out != "workflows/apply.yaml\n" {
+			t.Fatalf("unexpected list output: %q", out)
+		}
+	})
+
+	t.Run("clear resets to default local mode", func(t *testing.T) {
+		if _, err := runWithCapturedStdout([]string{"source", "clear"}); err != nil {
+			t.Fatalf("source clear failed: %v", err)
+		}
+
+		showOut, err := runWithCapturedStdout([]string{"source", "show"})
+		if err != nil {
+			t.Fatalf("source show after clear failed: %v", err)
+		}
+		if !strings.Contains(showOut, "mode=local") {
+			t.Fatalf("unexpected show output after clear: %q", showOut)
 		}
 	})
 }

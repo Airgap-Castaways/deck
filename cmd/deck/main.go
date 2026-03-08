@@ -159,6 +159,8 @@ func run(args []string) error {
 		return runLogs(args[1:])
 	case "cache":
 		return runCache(args[1:])
+	case "source":
+		return runSource(args[1:])
 	case "service":
 		return runService(args[1:])
 	default:
@@ -513,9 +515,22 @@ func runList(args []string) error {
 	}
 
 	resolvedServer := strings.TrimSpace(server)
+	localRoot := "."
+	if resolvedServer == "" {
+		sourceConfig, err := loadSourceConfig()
+		if err != nil {
+			return err
+		}
+		if sourceConfig.Mode == "server" && strings.TrimSpace(sourceConfig.Server) != "" {
+			resolvedServer = strings.TrimSpace(sourceConfig.Server)
+		} else if strings.TrimSpace(sourceConfig.LocalRoot) != "" {
+			localRoot = strings.TrimSpace(sourceConfig.LocalRoot)
+		}
+	}
+
 	items := []string{}
 	if resolvedServer == "" {
-		localItems, err := discoverLocalWorkflowList(".")
+		localItems, err := discoverLocalWorkflowList(localRoot)
 		if err != nil {
 			return err
 		}
@@ -724,6 +739,200 @@ func runCache(args []string) error {
 	default:
 		return fmt.Errorf("unknown cache command %q", args[0])
 	}
+}
+
+func runSource(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: deck source <set|show|clear> [flags]")
+	}
+	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+		return errors.New("usage: deck source <set|show|clear> [flags]")
+	}
+
+	switch args[0] {
+	case "set":
+		return runSourceSet(args[1:])
+	case "show":
+		return runSourceShow(args[1:])
+	case "clear":
+		return runSourceClear(args[1:])
+	default:
+		return fmt.Errorf("unknown source command %q", args[0])
+	}
+}
+
+func runSourceSet(args []string) error {
+	fs := flag.NewFlagSet("source set", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	server := fs.String("server", "", "default server URL (http:// or https://)")
+	localRoot := fs.String("local-root", "", "default local root that contains workflows/")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: deck source set (--server <url> | --local-root <path>)")
+	}
+
+	trimmedServer := strings.TrimSpace(*server)
+	trimmedLocalRoot := strings.TrimSpace(*localRoot)
+	hasServer := trimmedServer != ""
+	hasLocalRoot := trimmedLocalRoot != ""
+	if hasServer == hasLocalRoot {
+		return errors.New("source set requires exactly one of --server or --local-root")
+	}
+
+	config := sourceConfig{}
+	if hasServer {
+		parsed, err := url.Parse(trimmedServer)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || strings.TrimSpace(parsed.Host) == "" {
+			return errors.New("source set: --server must be a valid http(s) URL")
+		}
+		config.Mode = "server"
+		config.Server = trimmedServer
+		if err := saveSourceConfig(config); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stdout, "source set: mode=server server=%s\n", config.Server)
+		return nil
+	}
+
+	resolvedLocalRoot, err := filepath.Abs(trimmedLocalRoot)
+	if err != nil {
+		return fmt.Errorf("source set: resolve --local-root: %w", err)
+	}
+	info, err := os.Stat(resolvedLocalRoot)
+	if err != nil {
+		return fmt.Errorf("source set: stat --local-root: %w", err)
+	}
+	if !info.IsDir() {
+		return errors.New("source set: --local-root must be a directory")
+	}
+	config.Mode = "local"
+	config.LocalRoot = resolvedLocalRoot
+	if err := saveSourceConfig(config); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stdout, "source set: mode=local local-root=%s\n", config.LocalRoot)
+	return nil
+}
+
+func runSourceShow(args []string) error {
+	fs := flag.NewFlagSet("source show", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: deck source show")
+	}
+
+	config, err := loadSourceConfig()
+	if err != nil {
+		return err
+	}
+	if config.Mode == "server" && strings.TrimSpace(config.Server) != "" {
+		fmt.Fprintln(os.Stdout, "mode=server")
+		fmt.Fprintf(os.Stdout, "server=%s\n", config.Server)
+		return nil
+	}
+
+	resolvedLocalRoot := "."
+	if strings.TrimSpace(config.LocalRoot) != "" {
+		resolvedLocalRoot = strings.TrimSpace(config.LocalRoot)
+	}
+	fmt.Fprintln(os.Stdout, "mode=local")
+	fmt.Fprintf(os.Stdout, "local-root=%s\n", resolvedLocalRoot)
+	return nil
+}
+
+func runSourceClear(args []string) error {
+	fs := flag.NewFlagSet("source clear", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: deck source clear")
+	}
+
+	configPath, err := resolveSourceConfigPath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("source clear: %w", err)
+	}
+	fmt.Fprintln(os.Stdout, "source clear: ok")
+	return nil
+}
+
+type sourceConfig struct {
+	Mode      string `json:"mode"`
+	Server    string `json:"server,omitempty"`
+	LocalRoot string `json:"localRoot,omitempty"`
+}
+
+func loadSourceConfig() (sourceConfig, error) {
+	configPath, err := resolveSourceConfigPath()
+	if err != nil {
+		return sourceConfig{}, err
+	}
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return sourceConfig{Mode: "local", LocalRoot: "."}, nil
+		}
+		return sourceConfig{}, fmt.Errorf("read source config: %w", err)
+	}
+
+	config := sourceConfig{}
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return sourceConfig{}, fmt.Errorf("parse source config: %w", err)
+	}
+	config.Mode = strings.TrimSpace(strings.ToLower(config.Mode))
+	if config.Mode != "server" && config.Mode != "local" {
+		config.Mode = "local"
+	}
+	if config.Mode == "local" && strings.TrimSpace(config.LocalRoot) == "" {
+		config.LocalRoot = "."
+	}
+	return config, nil
+}
+
+func saveSourceConfig(config sourceConfig) error {
+	configPath, err := resolveSourceConfigPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		return fmt.Errorf("create source config directory: %w", err)
+	}
+
+	normalized := sourceConfig{
+		Mode:      strings.TrimSpace(strings.ToLower(config.Mode)),
+		Server:    strings.TrimSpace(config.Server),
+		LocalRoot: strings.TrimSpace(config.LocalRoot),
+	}
+	if normalized.Mode != "server" && normalized.Mode != "local" {
+		normalized.Mode = "local"
+	}
+
+	raw, err := json.MarshalIndent(normalized, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode source config: %w", err)
+	}
+	if err := os.WriteFile(configPath, raw, 0o644); err != nil {
+		return fmt.Errorf("write source config: %w", err)
+	}
+	return nil
+}
+
+func resolveSourceConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user home directory: %w", err)
+	}
+	return filepath.Join(home, ".config", "deck", "source.json"), nil
 }
 
 type cacheEntry struct {
@@ -1002,13 +1211,22 @@ func runServiceStop(args []string) error {
 func runHealth(args []string) error {
 	fs := flag.NewFlagSet("health", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	server := fs.String("server", "", "server base URL (required)")
+	server := fs.String("server", "", "server base URL (optional; defaults to deck source config)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	resolvedServer := strings.TrimSpace(*server)
 	if resolvedServer == "" {
-		return errors.New("--server is required")
+		sourceConfig, err := loadSourceConfig()
+		if err != nil {
+			return err
+		}
+		if sourceConfig.Mode == "server" && strings.TrimSpace(sourceConfig.Server) != "" {
+			resolvedServer = strings.TrimSpace(sourceConfig.Server)
+		}
+	}
+	if resolvedServer == "" {
+		return errors.New("--server is required (or set default: deck source set --server <url>)")
 	}
 
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -2945,5 +3163,5 @@ func runDiagnose(args []string) error {
 }
 
 func usageError() error {
-	return errors.New("usage: deck <command> [flags]\n\ncommands:\n  pack\n  apply\n  serve\n  bundle\n  list\n  validate\n  diff\n  init\n  doctor\n  health\n  logs\n  cache\n  service")
+	return errors.New("usage: deck <command> [flags]\n\ncommands:\n  pack\n  apply\n  serve\n  bundle\n  list\n  validate\n  diff\n  init\n  doctor\n  health\n  logs\n  cache\n  source\n  service")
 }
