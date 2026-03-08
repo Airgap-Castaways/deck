@@ -285,13 +285,7 @@ func runPack(args []string) error {
 	if err := os.MkdirAll(workflowOutDir, 0o755); err != nil {
 		return fmt.Errorf("create workflow output dir: %w", err)
 	}
-	if err := copyFile(packWorkflowPath, filepath.Join(workflowOutDir, filepath.Base(packWorkflowPath)), 0o644); err != nil {
-		return err
-	}
-	if err := copyFile(applyWorkflowPath, filepath.Join(workflowOutDir, "apply.yaml"), 0o644); err != nil {
-		return err
-	}
-	if err := copyFile(varsWorkflowPath, filepath.Join(workflowOutDir, "vars.yaml"), 0o644); err != nil {
+	if err := copySubtreeIfExists(workflowBaseDir, workflowOutDir); err != nil {
 		return err
 	}
 

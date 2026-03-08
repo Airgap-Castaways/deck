@@ -736,6 +736,13 @@ phases:
 	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("kubernetesVersion: v1.30.1\n"), 0o644); err != nil {
 		t.Fatalf("write vars workflow: %v", err)
 	}
+	fragmentDir := filepath.Join(workflowsDir, "offline-multinode")
+	if err := os.MkdirAll(fragmentDir, 0o755); err != nil {
+		t.Fatalf("mkdir fragment dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fragmentDir, "apply-common.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write workflow fragment: %v", err)
+	}
 
 	originalCWD, err := os.Getwd()
 	if err != nil {
@@ -768,6 +775,7 @@ phases:
 		"bundle/workflows/pack.yaml",
 		"bundle/workflows/apply.yaml",
 		"bundle/workflows/vars.yaml",
+		"bundle/workflows/offline-multinode/apply-common.yaml",
 		"bundle/.deck/manifest.json",
 	} {
 		if !sliceContains(names, required) {
