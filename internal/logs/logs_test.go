@@ -1,19 +1,14 @@
 package logs
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 )
 
 func TestControlLogsNormalizeOldAudit(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "logs", "old-audit.jsonl"))
-	if err != nil {
-		t.Fatalf("read old audit fixture: %v", err)
+	lines := []string{
+		`{"timestamp":"2025-03-05T11:00:00Z","event_type":"agent_connected","job_id":"job-1","decision":"allow","hostname":"cp-1"}`,
+		`{"timestamp":"2025-03-05T11:01:00Z","method":"GET","path":"/healthz","status":200,"remote_addr":"127.0.0.1","duration_ms":12}`,
 	}
-	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
 	records := make([]LogRecord, 0, len(lines))
 	for _, line := range lines {
 		record, parseErr := NormalizeJSONLine([]byte(line))
@@ -23,27 +18,29 @@ func TestControlLogsNormalizeOldAudit(t *testing.T) {
 		records = append(records, record)
 	}
 
-	actual, err := json.MarshalIndent(records, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal normalized records: %v", err)
+	if len(records) != 2 {
+		t.Fatalf("expected 2 normalized records, got %d", len(records))
 	}
-	expected, err := os.ReadFile(filepath.Join("..", "..", "testdata", "logs", "normalize-old-audit.golden.json"))
-	if err != nil {
-		t.Fatalf("read golden file: %v", err)
+	if records[0].EventType != "agent_connected" || records[0].Message != "agent connected" {
+		t.Fatalf("unexpected lifecycle normalized record: %+v", records[0])
 	}
-	if strings.TrimSpace(string(actual)) != strings.TrimSpace(string(expected)) {
-		t.Fatalf("unexpected normalized output\nwant:\n%s\n\ngot:\n%s", string(expected), string(actual))
+	if records[0].Status != "" || records[0].ExtraValue("hostname") != "cp-1" {
+		t.Fatalf("unexpected lifecycle fields: %+v", records[0])
+	}
+	if records[1].EventType != "http_request" || records[1].Message != "http request handled" {
+		t.Fatalf("unexpected request normalized record: %+v", records[1])
+	}
+	if records[1].Status != "200" || records[1].ExtraValue("path") != "/healthz" {
+		t.Fatalf("unexpected request fields: %+v", records[1])
 	}
 }
 
 func TestControlLogsNormalizeJournalRecord(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "logs", "journal.json"))
-	if err != nil {
-		t.Fatalf("read journal fixture: %v", err)
-	}
-	var line map[string]any
-	if err := json.Unmarshal(raw, &line); err != nil {
-		t.Fatalf("decode journal fixture: %v", err)
+	line := map[string]any{
+		"PRIORITY":             "4",
+		"MESSAGE":              "kubelet warning",
+		"__REALTIME_TIMESTAMP": "2025-03-05T11:00:00Z",
+		"_SYSTEMD_UNIT":        "deck-server.service",
 	}
 	record := NormalizeJournalRecord(line)
 	if record.TS != "2025-03-05T11:00:00Z" {

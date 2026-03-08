@@ -645,7 +645,7 @@ func TestRunWorkflowBundleInspectTar(t *testing.T) {
 }
 
 func TestRunWorkflowRunInstallLocalSuccess(t *testing.T) {
-	wf := filepath.Join("..", "..", "testdata", "workflows", "install-true.yaml")
+	wf := writeInstallTrueWorkflowFixture(t)
 	bundle := t.TempDir()
 	createValidBundleManifest(t, bundle)
 	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
@@ -662,7 +662,7 @@ func TestRunWorkflowRunInstallLocalSuccess(t *testing.T) {
 }
 
 func TestRunApplyPositionalWorkflowPath(t *testing.T) {
-	wf := filepath.Join("..", "..", "testdata", "workflows", "install-true.yaml")
+	wf := writeInstallTrueWorkflowFixture(t)
 	bundle := t.TempDir()
 	createValidBundleManifest(t, bundle)
 	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
@@ -816,7 +816,7 @@ func TestRunWorkflowRunDryRunPrintsPlan(t *testing.T) {
 		t.Fatalf("mkdir bundle workflows: %v", err)
 	}
 
-	wf := filepath.Join("..", "..", "testdata", "workflows", "install-true.yaml")
+	wf := writeInstallTrueWorkflowFixture(t)
 
 	out, err := runWithCapturedStdout([]string{"apply", "--file", wf, "--dry-run", bundle})
 	if err != nil {
@@ -1769,6 +1769,14 @@ func writeWorkflowYAML(t *testing.T, path string, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write workflow yaml: %v", err)
 	}
+}
+
+func writeInstallTrueWorkflowFixture(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "install-true.yaml")
+	content := "role: apply\nversion: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: run-true\n        kind: RunCommand\n        spec:\n          command: [\"true\"]\n"
+	writeWorkflowYAML(t, path, content)
+	return path
 }
 
 func createValidBundleManifest(t *testing.T, bundleRoot string) {

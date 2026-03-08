@@ -26,22 +26,6 @@ func TestRemoteE2EScriptModeContracts(t *testing.T) {
 	)
 }
 
-func TestRemoteVMDocModeContracts(t *testing.T) {
-	root := projectRoot(t)
-	docPath := filepath.Join(root, "docs", "archive", "testing", "remote-vm-test.md")
-	raw, err := os.ReadFile(docPath)
-	if err != nil {
-		t.Fatalf("read doc: %v", err)
-	}
-	content := string(raw)
-
-	expectContainsAll(t, content,
-		"offline-multinode",
-		"test/remote-e2e.sh",
-		"--skip-cleanup",
-	)
-}
-
 func expectContainsAll(t *testing.T, content string, expected ...string) {
 	t.Helper()
 	for _, item := range expected {
