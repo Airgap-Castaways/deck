@@ -466,3 +466,94 @@ steps:
 		t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 	}
 }
+
+func TestValidateToolSchemas(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "workflow.yaml")
+	content := []byte(`role: apply
+version: v1alpha1
+steps:
+  - id: svc
+    kind: Service
+    spec:
+      name: containerd
+      enabled: true
+      state: started
+  - id: ensure-dir
+    kind: EnsureDir
+    spec:
+      path: /etc/containerd/certs.d
+      mode: "0755"
+  - id: install-file
+    kind: InstallFile
+    spec:
+      path: /etc/modules-load.d/k8s.conf
+      content: |
+        overlay
+  - id: template-file
+    kind: TemplateFile
+    spec:
+      path: /etc/containerd/certs.d/registry.k8s.io/hosts.toml
+      template: |
+        server = "http://registry.local"
+  - id: repo-config
+    kind: RepoConfig
+    spec:
+      path: /etc/yum.repos.d/offline.repo
+      repositories:
+        - id: offline-base
+          baseurl: file:///srv/offline-repo
+          enabled: true
+          gpgcheck: false
+  - id: containerd-config
+    kind: ContainerdConfig
+    spec:
+      path: /etc/containerd/config.toml
+      configPath: /etc/containerd/certs.d
+      systemdCgroup: true
+  - id: swap
+    kind: Swap
+    spec:
+      disable: true
+      persist: true
+  - id: kernel-module
+    kind: KernelModule
+    spec:
+      name: br_netfilter
+      load: true
+      persist: true
+  - id: sysctl-apply
+    kind: SysctlApply
+    spec:
+      file: /etc/sysctl.d/99-kubernetes-cri.conf
+  - id: run-cmd
+    kind: RunCommand
+    spec:
+      command: ["true"]
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if err := File(path); err != nil {
+		t.Fatalf("expected no error for new/old kinds, got %v", err)
+	}
+
+	invalidPath := filepath.Join(dir, "invalid.yaml")
+	invalid := []byte(`role: apply
+version: v1alpha1
+steps:
+  - id: bad-service
+    kind: Service
+    spec: {}
+`)
+	if err := os.WriteFile(invalidPath, invalid, 0o644); err != nil {
+		t.Fatalf("write invalid file: %v", err)
+	}
+	err := File(invalidPath)
+	if err == nil {
+		t.Fatalf("expected schema error for missing service.name")
+	}
+	if !strings.HasPrefix(err.Error(), "E_SCHEMA_INVALID") {
+		t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+	}
+}

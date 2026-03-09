@@ -1,6 +1,8 @@
 # Quick Start
 
-This tutorial shows the smallest useful `deck` workflow: initialize a workspace, validate it, build a bundle, and run it locally.
+This tutorial shows the default `deck` path: initialize a workspace, validate it, build a bundle, carry it into the site, then run `diff`, `doctor`, and `apply` locally.
+
+If you later add site-assisted execution, treat that as an explicit extension of the same local workflow, not a different product mode.
 
 ## 1. Create a workspace
 
@@ -16,7 +18,9 @@ This creates:
 
 ## 2. Add or edit steps
 
-`deck init` starts with empty workflow files. Add the steps you need to the `pack` and `apply` workflows.
+`deck init` starts with empty workflow files. Add the preparation work to `pack.yaml` and the maintenance steps to `apply.yaml`.
+
+Start with typed step kinds when they fit the job. Keep shell commands for edge cases only.
 
 Minimal example:
 
@@ -24,11 +28,13 @@ Minimal example:
 role: apply
 version: v1alpha1
 steps:
-  - id: disable-swap
+  - id: write-motd
     apiVersion: deck/v1alpha1
-    kind: RunCommand
+    kind: InstallFile
     spec:
-      command: ["swapoff", "-a"]
+      path: /etc/motd
+      content: |
+        deck maintenance session in progress
 ```
 
 Use `vars.yaml` or inline `vars` to keep site-specific values out of the steps themselves.
@@ -53,24 +59,25 @@ deck pack --out ./bundle.tar
 
 The resulting bundle is designed to be self-contained for offline transport.
 
-## 5. Apply locally at the target site
+## 5. Run the local maintenance flow at the target site
 
 ```bash
-deck apply
+tar -xf ./bundle.tar
+cd ./bundle
+deck diff --file ./workflows/apply.yaml
+deck doctor --file ./workflows/apply.yaml --out ./reports/doctor.json
+deck apply --file ./workflows/apply.yaml
 ```
 
-`apply` executes the `apply` workflow locally. This is the core `deck` promise: no SSH, no PXE, no BMC, and no online control plane required.
+That is the base `deck` story: prepare outside the air gap, move the bundle in, inspect drift with `diff`, confirm local readiness with `doctor`, then run `apply` on the target machine.
 
-## 6. Optional: expose a bundle over HTTP
+## 6. Optional: add site-assisted execution
 
-If you want an internal repo-server style flow for packages, files, images, or workflow discovery:
+Use a site-assisted path only when you explicitly want a temporary site-local server, shared bundle source, or session visibility inside the air gap.
 
-```bash
-deck serve --root ./bundle --addr :8080
-deck source set --server http://127.0.0.1:8080
-deck list
-deck health
-```
+That choice is additive. Operators still run `deck diff`, `deck doctor`, and `deck apply` locally on the nodes that need the work.
+
+`RunCommand` is still supported, but keep it as a last resort when a clearer step kind does not fit yet.
 
 ## What to read next
 

@@ -1,6 +1,20 @@
 # Example Workflows
 
-The files in `docs/examples/` are runnable or validatable workflow examples for common offline operations.
+The files in `docs/examples/` are examples for the default `deck` model: prepare the bundle outside the site, then execute the workflow locally during the maintenance session.
+
+You can also adapt them for site-assisted use inside the air gap, but that is a deliberate extension of the same local execution path.
+
+## When to use these examples
+
+- Start from them when you want a concrete local workflow to review and adapt.
+- Use them to replace repetitive shell snippets with clearer typed steps where possible.
+- Carry them into a bundle and run them on the target host or node.
+
+## When not to use these examples
+
+- Don't treat them as remote orchestration playbooks.
+- Don't assume a shared server is required before they are useful.
+- Don't use `RunCommand` first if a more specific step kind can express the change.
 
 ## Files
 

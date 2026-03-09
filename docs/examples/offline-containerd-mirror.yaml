@@ -6,24 +6,17 @@ vars:
 phases:
   - name: install
     steps:
+      - id: prep-containerd-certs-dir
+        apiVersion: deck/v1alpha1
+        kind: EnsureDir
+        spec:
+          path: /etc/containerd/certs.d
       - id: prep-containerd-certsd-config
         apiVersion: deck/v1alpha1
-        kind: RunCommand
+        kind: ContainerdConfig
         spec:
-          command:
-            - bash
-            - -lc
-            - |
-              mkdir -p /etc/containerd/certs.d /etc/containerd
-              if [ ! -f /etc/containerd/config.toml ]; then
-                containerd config default > /etc/containerd/config.toml
-              fi
-              if grep -q 'config_path = ""' /etc/containerd/config.toml; then
-                sed -i 's|config_path = ""|config_path = "/etc/containerd/certs.d"|' /etc/containerd/config.toml
-              elif ! grep -q 'config_path = "/etc/containerd/certs.d"' /etc/containerd/config.toml; then
-                echo 'containerd registry config_path not configured' >&2
-                exit 1
-              fi
+          path: /etc/containerd/config.toml
+          configPath: /etc/containerd/certs.d
       - id: write-containerd-mirror-hosts
         apiVersion: deck/v1alpha1
         kind: RunCommand
@@ -44,11 +37,7 @@ phases:
               done
       - id: restart-containerd
         apiVersion: deck/v1alpha1
-        kind: RunCommand
+        kind: Service
         spec:
-          command: ["bash", "-lc", "systemctl restart containerd"]
-      - id: verify-containerd-active
-        apiVersion: deck/v1alpha1
-        kind: RunCommand
-        spec:
-          command: ["bash", "-lc", "systemctl is-active --quiet containerd"]
+          name: containerd
+          state: restarted

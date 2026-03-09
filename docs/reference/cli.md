@@ -1,29 +1,31 @@
 # CLI Reference
 
-This page describes the current top-level command surface exposed by `deck`.
+This page describes the current `deck` command surface, starting with the default local operator flow.
 
-## Core flow
+## Default local flow
 
 - `init`: create starter workflow files under `workflows/`
 - `validate`: validate a workflow file against the top-level workflow schema and the relevant step schema
-- `pack`: discover `workflows/pack.yaml`, gather artifacts, copy workflows, embed the `deck` binary, and write `bundle.tar`
+- `pack`: gather artifacts, copy workflows, embed the `deck` binary, and write `bundle.tar`
+- `diff`: inspect which apply steps would run or skip before you execute
+- `doctor`: generate a validation or preflight-style report
 - `apply`: execute the `apply` workflow locally
 
-## Offline source and repo flow
+## Optional site-local helpers
 
-- `serve`: expose a bundle root over HTTP
-- `source`: persist a default source mode (`server` or `local-root`)
-- `list`: list workflows from the current local root or configured server
-- `health`: call `/healthz` on the configured server
+- `serve`: expose a prepared bundle root over HTTP inside the air gap when you explicitly want a shared local source
+- `list`: inspect available workflows from a local bundle root or an explicitly chosen server
+- `health`: check `/healthz` on an explicitly chosen server
+- `logs`: read server audit logs when you are using `deck serve`
 
-## Diagnostics and lifecycle
+These commands support site-assisted workflows. They do not replace the default local execution path.
+
+## Other lifecycle commands
 
 - `bundle`: bundle lifecycle operations
-- `diff`: show which apply steps would run or skip
-- `doctor`: generate a validation or preflight-style report
-- `logs`: read server audit logs
 - `cache`: inspect or clean the artifact cache
-- `service`: generate or inspect service-related behavior for `deck serve`
+- `node`: inspect or manage the stable local `node_id`
+- `site`: manage local release/session/assignment lifecycle at the site store
 
 ## Common examples
 
@@ -31,15 +33,23 @@ This page describes the current top-level command surface exposed by `deck`.
 deck init --out ./demo
 deck validate --file ./demo/workflows/apply.yaml
 deck pack --out ./bundle.tar
-deck apply
+tar -xf ./bundle.tar
+cd ./bundle
+deck diff --file ./workflows/apply.yaml
+deck doctor --file ./workflows/apply.yaml --out ./reports/doctor.json
+deck apply --file ./workflows/apply.yaml
+```
+
+Optional site-local inspection example:
+
+```bash
 deck serve --root ./bundle --addr :8080
-deck source set --server http://127.0.0.1:8080
-deck list
-deck health
+deck list --server http://127.0.0.1:8080
+deck health --server http://127.0.0.1:8080
 ```
 
 ## Notes
 
 - `pack` expects a workflow directory containing `pack.yaml`, `apply.yaml`, and `vars.yaml`.
 - `apply` defaults to the `install` phase when phases are used.
-- `source` helps remove repeated `--server` flags in shared offline repo flows.
+- Prefer typed step kinds for common host changes. `RunCommand` remains available, but it is best kept for last-resort cases.
