@@ -2,22 +2,34 @@
 
 [Korean README](./README.ko.md) | [Documentation](./docs/README.md)
 
-`deck` is a single-binary infrastructure workflow tool for the worst possible air-gapped environments: no-proxy, no-SSH, no-PXE, no-BMC, and no internet assumptions.
+`deck` is a single-binary tool for manual-first maintenance sessions in extreme air-gapped environments: no SSH, no PXE, no BMC, and no internet assumptions.
 
-It exists to make infrastructure changes practical in places where online-first tools stop being convenient and start being dead weight.
+It helps operators prepare a self-contained bundle, carry it into the site, and run the work locally on the machine that needs the change.
 
 ## Visuals
 
 ![deck terminal demo](docs/assets/deck-cli.gif)
 
-## Principles
+## What deck is for
 
-- **Extreme Air-gap Focus**: `deck` is optimized for fully isolated environments. If a capability assumes online-first operations or remote orchestration, it belongs to tools like Ansible or Terraform instead.
-- **Hermetic & Self-contained**: `bundle.tar` is expected to contain the execution logic, required data, and the binary needed to operate at the offline site.
-- **Simple is the best**: complexity is removed, not hidden. The core user journey should be understandable as `pack -> apply`. Supporting commands must justify their existence.
-- **K8s friendly**: workflows are YAML-based so operators familiar with Kubernetes, Helm, and manifest-driven tooling can read and author them quickly.
-- Change infrastructure with local workflows and local bundles, even when the site cannot reach the internet.
-- Keep the operator flow small enough to trust: prepare artifacts, carry them in, apply them locally.
+- **Manual-first operation**: the default path is local execution by an operator at the target site.
+- **Extreme air-gap focus**: `deck` is built for places where connected control loops are not available or not trusted.
+- **Hermetic bundles**: `bundle.tar` carries workflows, artifacts, and the `deck` binary needed for offline work.
+- **YAML-driven workflows**: operators can read, review, and adapt workflows without adding a larger control system.
+- **Explicit site assistance**: if a site wants a temporary shared server or coordination point inside the air gap, that is additive and deliberate, not the base mode.
+
+## When to use deck
+
+- You need to prepare artifacts ahead of time, transfer them through an approved path, and execute locally at the site.
+- You want a small operator workflow such as `validate -> pack -> apply`.
+- You need repeatable maintenance steps for disconnected hosts, clusters, or appliances.
+- You may need optional site-local assistance later, but you still want the same local execution model on each node.
+
+## When not to use deck
+
+- You want a remote orchestration platform, long-lived control plane, or agent-based rollout system.
+- You expect always-on connectivity, live cloud APIs, or SSH-driven automation as the normal path.
+- You need a general replacement for Terraform, Pulumi, Ansible, or other broad infrastructure platforms.
 
 ## Install
 
@@ -45,9 +57,9 @@ deck --help
 deck init --out ./demo
 ```
 
-2. Edit `./demo/workflows/pack.yaml`, `./demo/workflows/apply.yaml`, and `./demo/workflows/vars.yaml`.
+2. Edit `./demo/workflows/pack.yaml`, `./demo/workflows/apply.yaml`, and `./demo/workflows/vars.yaml` for the maintenance session you want to run.
 
-3. Validate a workflow before packaging or applying it.
+3. Validate the workflow before packaging or applying it.
 
 ```bash
 deck validate --file ./demo/workflows/apply.yaml
@@ -65,37 +77,39 @@ deck pack --out ./bundle.tar
 deck apply
 ```
 
-6. Optionally expose a prepared bundle over HTTP for a local repo server workflow.
-
-```bash
-deck serve --root ./bundle --addr :8080
-deck source set --server http://127.0.0.1:8080
-deck list
-deck health
-```
+6. Add site-assisted execution only if you explicitly want a temporary shared bundle source or local coordination point inside the air gap. That path is secondary to the default local flow.
 
 For a guided walkthrough, start with `docs/tutorials/quick-start.md`.
 
 ## How deck works
 
-1. Author or generate YAML workflows.
+1. Author or adapt YAML workflows for the maintenance task.
 2. `pack` gathers packages, images, files, workflows, and the `deck` binary into a bundle.
 3. Transfer the bundle through an approved offline path.
-4. `apply` runs locally at the target site with no SSH or remote control dependency.
+4. `apply` runs locally at the target site with no SSH or remote execution dependency.
+5. Optional site-assisted workflows can add a temporary local server or shared visibility, but the operator still runs `deck` directly on each target.
 
 ## Workflow Model
 
 The workflow DSL is YAML-based and centered on step execution. A workflow declares a `role` (`pack` or `apply`) and then defines either top-level `steps` or named `phases`.
 
+Prefer typed primitives for common host changes. Keep `RunCommand` for cases where no supported step kind fits yet.
+
 ```yaml
 role: apply
 version: v1alpha1
 steps:
-  - id: disable-swap
+  - id: write-repo-config
     apiVersion: deck/v1alpha1
-    kind: RunCommand
+    kind: WriteFile
     spec:
-      command: ["swapoff", "-a"]
+      path: /etc/example.repo
+      content: |
+        [offline-base]
+        name=offline-base
+        baseurl=file:///srv/offline-repo
+        enabled=1
+        gpgcheck=0
 ```
 
 Common step features include:
@@ -116,10 +130,11 @@ By design, a prepared bundle can include:
 
 ## Command Surface
 
-- Core flow: `init`, `validate`, `pack`, `apply`
-- Offline repo flow: `serve`, `source`, `list`, `health`
-- Bundle lifecycle: `bundle`
-- Planning and diagnostics: `diff`, `doctor`, `logs`, `cache`, `service`
+- Core local flow: `init`, `validate`, `pack`, `apply`
+- Local planning and diagnostics: `diff`, `doctor`
+- Optional site-local helpers: `serve`, `list`, `health`, `logs`
+- Bundle lifecycle and cache management: `bundle`, `cache`
+- Compatibility and advanced steps still exist, but `RunCommand` should be a last resort in new workflows
 
 ## Documentation Map
 
@@ -137,8 +152,9 @@ By design, a prepared bundle can include:
 ## Scope and Non-goals
 
 - `deck` focuses on air-gapped preparation, packaging, offline installation, and deterministic local execution.
-- It does not aim to be a remote orchestration framework.
-- It does not optimize for cloud-first or always-connected workflows.
+- Site-assisted use is explicit and additive. It does not replace the local operator path.
+- `deck` is not a remote orchestration framework.
+- `deck` is not optimized for cloud-first or always-connected workflows.
 
 ## Contributing and Validation
 

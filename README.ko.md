@@ -65,13 +65,12 @@ deck pack --out ./bundle.tar
 deck apply
 ```
 
-6. 필요하면 준비된 번들을 로컬 repo server 형태로 HTTP로 노출할 수 있습니다.
+6. 필요하면 준비된 번들을 사이트 내부에서 읽기 전용으로 공유할 수 있습니다.
 
 ```bash
 deck serve --root ./bundle --addr :8080
-deck source set --server http://127.0.0.1:8080
-deck list
-deck health
+deck list --server http://127.0.0.1:8080
+deck health --server http://127.0.0.1:8080
 ```
 
 단계별 가이드는 `docs/tutorials/quick-start.md`부터 시작하시면 됩니다.
@@ -117,9 +116,9 @@ steps:
 ## Command Surface
 
 - 핵심 흐름: `init`, `validate`, `pack`, `apply`
-- 오프라인 repo 흐름: `serve`, `source`, `list`, `health`
+- 선택적 사이트 로컬 도우미: `serve`, `list`, `health`
 - 번들 수명주기: `bundle`
-- 계획 및 진단: `diff`, `doctor`, `logs`, `cache`, `service`
+- 계획 및 진단: `diff`, `doctor`, `logs`, `cache`, `node`, `site`
 
 ## Documentation Map
 
