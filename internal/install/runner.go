@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -54,6 +55,14 @@ const (
 	errCodeInstallSysctlPathMiss   = "E_INSTALL_SYSCTL_PATH_REQUIRED"
 	errCodeInstallSysctlValsMiss   = "E_INSTALL_SYSCTL_VALUES_REQUIRED"
 	errCodeInstallModulesMissing   = "E_INSTALL_MODPROBE_MODULES_REQUIRED"
+	errCodeInstallServiceNameMiss  = "E_INSTALL_SERVICE_NAME_REQUIRED"
+	errCodeInstallEnsureDirPathMis = "E_INSTALL_ENSUREDIR_PATH_REQUIRED"
+	errCodeInstallInstallFilePath  = "E_INSTALL_INSTALLFILE_PATH_REQUIRED"
+	errCodeInstallInstallFileInput = "E_INSTALL_INSTALLFILE_CONTENT_REQUIRED"
+	errCodeInstallRepoConfigPath   = "E_INSTALL_REPOCONFIG_PATH_REQUIRED"
+	errCodeInstallKernelModuleMiss = "E_INSTALL_KERNELMODULE_NAME_REQUIRED"
+	errCodeInstallTemplatePathMiss = "E_INSTALL_TEMPLATEFILE_PATH_REQUIRED"
+	errCodeInstallTemplateBodyMiss = "E_INSTALL_TEMPLATEFILE_TEMPLATE_REQUIRED"
 	errCodeInstallCommandMissing   = "E_INSTALL_RUNCOMMAND_REQUIRED"
 	errCodeInstallCommandTimeout   = "E_INSTALL_RUNCOMMAND_TIMEOUT"
 	errCodeInstallCommandFailed    = "E_INSTALL_RUNCOMMAND_FAILED"
@@ -237,6 +246,24 @@ func executeStep(kind string, spec map[string]any, bundleRoot string) error {
 		return runSysctl(spec)
 	case "Modprobe":
 		return runModprobe(spec)
+	case "Service":
+		return runService(spec)
+	case "EnsureDir":
+		return runEnsureDir(spec)
+	case "InstallFile":
+		return runInstallFile(spec)
+	case "TemplateFile":
+		return runTemplateFile(spec)
+	case "RepoConfig":
+		return runRepoConfig(spec)
+	case "ContainerdConfig":
+		return runContainerdConfig(spec)
+	case "Swap":
+		return runSwap(spec)
+	case "KernelModule":
+		return runKernelModule(spec)
+	case "SysctlApply":
+		return runSysctlApply(spec)
 	case "RunCommand":
 		return runCommand(spec)
 	case "VerifyImages":
@@ -777,6 +804,465 @@ func runModprobe(spec map[string]any) error {
 	return os.WriteFile(persistPath, []byte(strings.Join(mods, "\n")+"\n"), 0o644)
 }
 
+func runService(spec map[string]any) error {
+	name := stringValue(spec, "name")
+	if name == "" {
+		return fmt.Errorf("%s: Service requires name", errCodeInstallServiceNameMiss)
+	}
+
+	timeout := commandTimeoutWithDefault(spec, 30*time.Second)
+	if enabled, ok := spec["enabled"].(bool); ok {
+		isEnabled, err := isServiceEnabled(name, timeout)
+		if err != nil {
+			return err
+		}
+		if enabled != isEnabled {
+			if enabled {
+				if err := runTimedCommand("systemctl", []string{"enable", name}, timeout); err != nil {
+					return err
+				}
+			} else {
+				if err := runTimedCommand("systemctl", []string{"disable", name}, timeout); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	state := strings.ToLower(stringValue(spec, "state"))
+	switch state {
+	case "", "unchanged":
+		return nil
+	case "started":
+		active, err := isServiceActive(name, timeout)
+		if err != nil {
+			return err
+		}
+		if active {
+			return nil
+		}
+		return runTimedCommand("systemctl", []string{"start", name}, timeout)
+	case "stopped":
+		active, err := isServiceActive(name, timeout)
+		if err != nil {
+			return err
+		}
+		if !active {
+			return nil
+		}
+		return runTimedCommand("systemctl", []string{"stop", name}, timeout)
+	case "restarted":
+		return runTimedCommand("systemctl", []string{"restart", name}, timeout)
+	case "reloaded":
+		return runTimedCommand("systemctl", []string{"reload", name}, timeout)
+	default:
+		return fmt.Errorf("invalid service state %q", state)
+	}
+}
+
+func runEnsureDir(spec map[string]any) error {
+	path := stringValue(spec, "path")
+	if path == "" {
+		return fmt.Errorf("%s: EnsureDir requires path", errCodeInstallEnsureDirPathMis)
+	}
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return err
+	}
+	if modeRaw := stringValue(spec, "mode"); modeRaw != "" {
+		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
+		if err != nil {
+			return fmt.Errorf("invalid mode: %w", err)
+		}
+		if err := os.Chmod(path, os.FileMode(modeVal)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runInstallFile(spec map[string]any) error {
+	path := stringValue(spec, "path")
+	if path == "" {
+		return fmt.Errorf("%s: InstallFile requires path", errCodeInstallInstallFilePath)
+	}
+	content := stringValue(spec, "content")
+	if content == "" {
+		if from := stringValue(spec, "contentFromTemplate"); from != "" {
+			content = from
+		}
+	}
+	if content == "" {
+		return fmt.Errorf("%s: InstallFile requires content", errCodeInstallInstallFileInput)
+	}
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if err := writeFileIfChanged(path, []byte(content), 0o644); err != nil {
+		return err
+	}
+	if modeRaw := stringValue(spec, "mode"); modeRaw != "" {
+		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
+		if err != nil {
+			return fmt.Errorf("invalid mode: %w", err)
+		}
+		if err := os.Chmod(path, os.FileMode(modeVal)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runTemplateFile(spec map[string]any) error {
+	path := stringValue(spec, "path")
+	if path == "" {
+		return fmt.Errorf("%s: TemplateFile requires path", errCodeInstallTemplatePathMiss)
+	}
+	body := stringValue(spec, "template")
+	if body == "" {
+		return fmt.Errorf("%s: TemplateFile requires template", errCodeInstallTemplateBodyMiss)
+	}
+	return runInstallFile(map[string]any{
+		"path":    path,
+		"content": body,
+		"mode":    stringValue(spec, "mode"),
+	})
+}
+
+func runRepoConfig(spec map[string]any) error {
+	path := stringValue(spec, "path")
+	if path == "" {
+		return fmt.Errorf("%s: RepoConfig requires path", errCodeInstallRepoConfigPath)
+	}
+	repositories, ok := spec["repositories"].([]any)
+	if !ok || len(repositories) == 0 {
+		return fmt.Errorf("RepoConfig requires repositories")
+	}
+
+	lines := make([]string, 0, len(repositories)*6)
+	for _, raw := range repositories {
+		repo, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		id := stringValue(repo, "id")
+		if id == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("[%s]", id))
+		if name := stringValue(repo, "name"); name != "" {
+			lines = append(lines, fmt.Sprintf("name=%s", name))
+		}
+		if baseURL := stringValue(repo, "baseurl"); baseURL != "" {
+			lines = append(lines, fmt.Sprintf("baseurl=%s", baseURL))
+		}
+		if enabled, ok := repo["enabled"].(bool); ok {
+			if enabled {
+				lines = append(lines, "enabled=1")
+			} else {
+				lines = append(lines, "enabled=0")
+			}
+		}
+		if gpgcheck, ok := repo["gpgcheck"].(bool); ok {
+			if gpgcheck {
+				lines = append(lines, "gpgcheck=1")
+			} else {
+				lines = append(lines, "gpgcheck=0")
+			}
+		}
+		if gpgkey := stringValue(repo, "gpgkey"); gpgkey != "" {
+			lines = append(lines, fmt.Sprintf("gpgkey=%s", gpgkey))
+		}
+		lines = append(lines, "")
+	}
+	if len(lines) == 0 {
+		return fmt.Errorf("RepoConfig requires at least one repository with id")
+	}
+
+	content := strings.Join(lines, "\n")
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if err := writeFileIfChanged(path, []byte(content), 0o644); err != nil {
+		return err
+	}
+	if modeRaw := stringValue(spec, "mode"); modeRaw != "" {
+		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
+		if err != nil {
+			return fmt.Errorf("invalid mode: %w", err)
+		}
+		if err := os.Chmod(path, os.FileMode(modeVal)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runContainerdConfig(spec map[string]any) error {
+	path := stringValue(spec, "path")
+	if path == "" {
+		path = "/etc/containerd/config.toml"
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		if createDefault, ok := spec["createDefault"].(bool); ok && !createDefault {
+			content = []byte{}
+		} else {
+			generated, genErr := runCommandOutput([]string{"containerd", "config", "default"}, commandTimeoutWithDefault(spec, 30*time.Second))
+			if genErr != nil {
+				return genErr
+			}
+			content = []byte(generated)
+		}
+	}
+
+	updated := string(content)
+	if configPath := stringValue(spec, "configPath"); configPath != "" {
+		target := fmt.Sprintf("config_path = %q", configPath)
+		re := regexp.MustCompile(`(?m)^\s*config_path\s*=\s*"[^"]*"\s*$`)
+		if re.MatchString(updated) {
+			updated = re.ReplaceAllString(updated, target)
+		} else {
+			if !strings.HasSuffix(updated, "\n") && updated != "" {
+				updated += "\n"
+			}
+			updated += target + "\n"
+		}
+	}
+
+	if raw, ok := spec["systemdCgroup"].(bool); ok {
+		target := fmt.Sprintf("            SystemdCgroup = %t", raw)
+		re := regexp.MustCompile(`(?m)^\s*SystemdCgroup\s*=\s*(true|false)\s*$`)
+		if re.MatchString(updated) {
+			updated = re.ReplaceAllString(updated, target)
+		} else {
+			if !strings.HasSuffix(updated, "\n") && updated != "" {
+				updated += "\n"
+			}
+			updated += target + "\n"
+		}
+	}
+
+	if err := writeFileIfChanged(path, []byte(updated), 0o644); err != nil {
+		return err
+	}
+	return nil
+}
+
+func runSwap(spec map[string]any) error {
+	disable := true
+	if v, ok := spec["disable"].(bool); ok {
+		disable = v
+	}
+	persist := true
+	if v, ok := spec["persist"].(bool); ok {
+		persist = v
+	}
+
+	if disable {
+		active, err := swapActive()
+		if err != nil {
+			return err
+		}
+		if active {
+			if err := runTimedCommand("swapoff", []string{"-a"}, commandTimeoutWithDefault(spec, 30*time.Second)); err != nil {
+				return err
+			}
+		}
+	}
+
+	if persist {
+		fstabPath := stringValue(spec, "fstabPath")
+		if fstabPath == "" {
+			fstabPath = "/etc/fstab"
+		}
+		content, err := os.ReadFile(fstabPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		lines := strings.Split(string(content), "\n")
+		changed := false
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			parts := strings.Fields(trimmed)
+			if len(parts) > 2 && parts[2] == "swap" {
+				lines[i] = "# " + line
+				changed = true
+			}
+		}
+		if changed {
+			updated := strings.Join(lines, "\n")
+			if !strings.HasSuffix(updated, "\n") {
+				updated += "\n"
+			}
+			if err := os.WriteFile(fstabPath, []byte(updated), 0o644); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func runKernelModule(spec map[string]any) error {
+	name := stringValue(spec, "name")
+	if name == "" {
+		return fmt.Errorf("%s: KernelModule requires name", errCodeInstallKernelModuleMiss)
+	}
+
+	load := true
+	if v, ok := spec["load"].(bool); ok {
+		load = v
+	}
+	persist := true
+	if v, ok := spec["persist"].(bool); ok {
+		persist = v
+	}
+
+	if persist {
+		persistFile := stringValue(spec, "persistFile")
+		if persistFile == "" {
+			persistFile = "/etc/modules-load.d/k8s.conf"
+		}
+		if err := os.MkdirAll(filepath.Dir(persistFile), 0o755); err != nil {
+			return err
+		}
+		raw, err := os.ReadFile(persistFile)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		lines := strings.Split(string(raw), "\n")
+		present := false
+		for _, line := range lines {
+			if strings.TrimSpace(line) == name {
+				present = true
+				break
+			}
+		}
+		if !present {
+			content := strings.TrimRight(string(raw), "\n")
+			if content != "" {
+				content += "\n"
+			}
+			content += name + "\n"
+			if err := os.WriteFile(persistFile, []byte(content), 0o644); err != nil {
+				return err
+			}
+		}
+	}
+
+	if load {
+		loaded, err := kernelModuleLoaded(name)
+		if err != nil {
+			return err
+		}
+		if !loaded {
+			if err := runTimedCommand("modprobe", []string{name}, commandTimeoutWithDefault(spec, 30*time.Second)); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func runSysctlApply(spec map[string]any) error {
+	file := stringValue(spec, "file")
+	args := stringSlice(spec["command"])
+	if len(args) == 0 {
+		if file != "" {
+			args = []string{"sysctl", "-p", file}
+		} else {
+			args = []string{"sysctl", "--system"}
+		}
+	}
+	return runTimedCommand(args[0], args[1:], commandTimeoutWithDefault(spec, 30*time.Second))
+}
+
+func writeFileIfChanged(path string, content []byte, mode os.FileMode) error {
+	existing, err := os.ReadFile(path)
+	if err == nil && bytes.Equal(existing, content) {
+		return nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.WriteFile(path, content, mode)
+}
+
+func isServiceEnabled(name string, timeout time.Duration) (bool, error) {
+	err := runTimedCommand("systemctl", []string{"is-enabled", name}, timeout)
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return false, nil
+	}
+	return false, err
+}
+
+func isServiceActive(name string, timeout time.Duration) (bool, error) {
+	err := runTimedCommand("systemctl", []string{"is-active", "--quiet", name}, timeout)
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return false, nil
+	}
+	return false, err
+}
+
+func swapActive() (bool, error) {
+	raw, err := os.ReadFile("/proc/swaps")
+	if err != nil {
+		return false, err
+	}
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	return len(lines) > 1, nil
+}
+
+func kernelModuleLoaded(name string) (bool, error) {
+	raw, err := os.ReadFile("/proc/modules")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	target := strings.ReplaceAll(name, "-", "_")
+	for _, line := range strings.Split(string(raw), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		if fields[0] == name || fields[0] == target {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func runCommand(spec map[string]any) error {
 	cmdArgs := stringSlice(spec["command"])
 	if len(cmdArgs) == 0 {
@@ -1156,6 +1642,18 @@ func stepOutputs(kind string, rendered map[string]any) map[string]any {
 	case "CopyFile":
 		if dest := stringValue(rendered, "dest"); dest != "" {
 			outputs["dest"] = dest
+		}
+	case "EnsureDir", "InstallFile", "TemplateFile", "RepoConfig", "ContainerdConfig":
+		if path := stringValue(rendered, "path"); path != "" {
+			outputs["path"] = path
+		}
+	case "Service":
+		if name := stringValue(rendered, "name"); name != "" {
+			outputs["name"] = name
+		}
+	case "KernelModule":
+		if name := stringValue(rendered, "name"); name != "" {
+			outputs["name"] = name
 		}
 	case "KubeadmInit":
 		if joinFile := stringValue(rendered, "outputJoinFile"); joinFile != "" {

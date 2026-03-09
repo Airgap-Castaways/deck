@@ -1278,6 +1278,201 @@ func TestEditFileBackup_CreateFailureIncludesBackupPath(t *testing.T) {
 	}
 }
 
+func TestServiceStep(t *testing.T) {
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	logPath := filepath.Join(dir, "systemctl.log")
+	scriptPath := filepath.Join(binDir, "systemctl")
+	script := "#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"${1:-}\" == \"is-enabled\" ]]; then\n  exit 1\nfi\nif [[ \"${1:-}\" == \"is-active\" ]]; then\n  exit 1\nfi\nprintf '%s\\n' \"$*\" >> \"" + logPath + "\"\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write systemctl script: %v", err)
+	}
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
+
+	if err := runService(map[string]any{"name": "containerd", "enabled": true, "state": "started"}); err != nil {
+		t.Fatalf("runService failed: %v", err)
+	}
+
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	got := string(raw)
+	if !strings.Contains(got, "enable containerd") || !strings.Contains(got, "start containerd") {
+		t.Fatalf("expected enable/start invocations, got %q", got)
+	}
+}
+
+func TestEnsureDirStep(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "a", "b")
+	if err := runEnsureDir(map[string]any{"path": target, "mode": "0750"}); err != nil {
+		t.Fatalf("runEnsureDir failed: %v", err)
+	}
+	if err := runEnsureDir(map[string]any{"path": target, "mode": "0750"}); err != nil {
+		t.Fatalf("runEnsureDir second pass failed: %v", err)
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatalf("stat target: %v", err)
+	}
+	if info.Mode().Perm() != 0o750 {
+		t.Fatalf("unexpected mode: %o", info.Mode().Perm())
+	}
+}
+
+func TestInstallFileStep(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "installed.txt")
+	spec := map[string]any{"path": target, "content": "hello", "mode": "0640"}
+	if err := runInstallFile(spec); err != nil {
+		t.Fatalf("runInstallFile failed: %v", err)
+	}
+	before, err := os.Stat(target)
+	if err != nil {
+		t.Fatalf("stat before: %v", err)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if err := runInstallFile(spec); err != nil {
+		t.Fatalf("runInstallFile second pass failed: %v", err)
+	}
+	after, err := os.Stat(target)
+	if err != nil {
+		t.Fatalf("stat after: %v", err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Fatalf("expected idempotent write to keep mtime")
+	}
+}
+
+func TestTemplateFileStep(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "templated.txt")
+	if err := runTemplateFile(map[string]any{"path": target, "template": "line", "mode": "0644"}); err != nil {
+		t.Fatalf("runTemplateFile failed: %v", err)
+	}
+	raw, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read target: %v", err)
+	}
+	if string(raw) != "line\n" {
+		t.Fatalf("unexpected content: %q", string(raw))
+	}
+}
+
+func TestRepoConfigStep(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "repo", "offline.repo")
+	spec := map[string]any{
+		"path": target,
+		"repositories": []any{map[string]any{
+			"id":       "offline-base",
+			"name":     "offline-base",
+			"baseurl":  "file:///srv/repo",
+			"enabled":  true,
+			"gpgcheck": false,
+		}},
+	}
+	if err := runRepoConfig(spec); err != nil {
+		t.Fatalf("runRepoConfig failed: %v", err)
+	}
+	raw, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !strings.Contains(string(raw), "[offline-base]") || !strings.Contains(string(raw), "baseurl=file:///srv/repo") {
+		t.Fatalf("unexpected repo config: %q", string(raw))
+	}
+}
+
+func TestContainerdConfigStep(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "config.toml")
+	initial := "config_path = \"\"\n            SystemdCgroup = false\n"
+	if err := os.WriteFile(target, []byte(initial), 0o644); err != nil {
+		t.Fatalf("write initial config: %v", err)
+	}
+	spec := map[string]any{"path": target, "configPath": "/etc/containerd/certs.d", "systemdCgroup": true}
+	if err := runContainerdConfig(spec); err != nil {
+		t.Fatalf("runContainerdConfig failed: %v", err)
+	}
+	raw, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	got := string(raw)
+	if !strings.Contains(got, "config_path = \"/etc/containerd/certs.d\"") || !strings.Contains(got, "SystemdCgroup = true") {
+		t.Fatalf("unexpected config content: %q", got)
+	}
+}
+
+func TestSwapStep(t *testing.T) {
+	dir := t.TempDir()
+	fstab := filepath.Join(dir, "fstab")
+	content := "UUID=abc / ext4 defaults 0 1\n/swapfile none swap sw 0 0\n"
+	if err := os.WriteFile(fstab, []byte(content), 0o644); err != nil {
+		t.Fatalf("write fstab: %v", err)
+	}
+	if err := runSwap(map[string]any{"disable": false, "persist": true, "fstabPath": fstab}); err != nil {
+		t.Fatalf("runSwap failed: %v", err)
+	}
+	raw, err := os.ReadFile(fstab)
+	if err != nil {
+		t.Fatalf("read fstab: %v", err)
+	}
+	if !strings.Contains(string(raw), "# /swapfile none swap sw 0 0") {
+		t.Fatalf("expected swap line to be commented: %q", string(raw))
+	}
+}
+
+func TestKernelModuleStep(t *testing.T) {
+	dir := t.TempDir()
+	persistPath := filepath.Join(dir, "modules-load.d", "k8s.conf")
+	spec := map[string]any{"name": "overlay", "load": false, "persist": true, "persistFile": persistPath}
+	if err := runKernelModule(spec); err != nil {
+		t.Fatalf("runKernelModule failed: %v", err)
+	}
+	if err := runKernelModule(spec); err != nil {
+		t.Fatalf("runKernelModule second pass failed: %v", err)
+	}
+	raw, err := os.ReadFile(persistPath)
+	if err != nil {
+		t.Fatalf("read persist file: %v", err)
+	}
+	if strings.Count(string(raw), "overlay") != 1 {
+		t.Fatalf("expected single module line, got %q", string(raw))
+	}
+}
+
+func TestSysctlApplyStep(t *testing.T) {
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	logPath := filepath.Join(dir, "sysctl.log")
+	scriptPath := filepath.Join(binDir, "sysctl")
+	script := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + logPath + "\"\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write sysctl script: %v", err)
+	}
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
+
+	if err := runSysctlApply(map[string]any{"file": "/etc/sysctl.d/99-kubernetes-cri.conf"}); err != nil {
+		t.Fatalf("runSysctlApply failed: %v", err)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	if strings.TrimSpace(string(raw)) != "-p /etc/sysctl.d/99-kubernetes-cri.conf" {
+		t.Fatalf("unexpected sysctl args: %q", string(raw))
+	}
+}
+
 func listEditFileBackups(path string) ([]string, error) {
 	dir := filepath.Dir(path)
 	prefix := filepath.Base(path) + ".bak-"

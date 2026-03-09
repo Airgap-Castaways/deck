@@ -7,82 +7,39 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 )
 
-func TestBundleMergeHTTP(t *testing.T) {
-	type storedFile struct {
-		body []byte
-		etag string
-	}
-
-	files := map[string]storedFile{}
-	putCount := map[string]int{}
-	headCount := map[string]int{}
-
-	setFile := func(rel string, body []byte) {
-		sum := sha256.Sum256(body)
-		files[rel] = storedFile{body: append([]byte{}, body...), etag: "\"sha256:" + hex.EncodeToString(sum[:]) + "\""}
-	}
-
-	setFile("packages/pkg-a.txt", []byte("same-package"))
-	setFile("images/img-a.tar", []byte("old-image"))
-	setFile("files/deck", []byte("deck-binary"))
-	setFile("workflows/apply.yaml", []byte("old-apply"))
-	setFile("workflows/index.json", []byte("[\"workflows/existing.yaml\"]\n"))
-
-	var mu sync.Mutex
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rel := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		switch r.Method {
-		case http.MethodHead:
-			headCount[rel]++
-			stored, ok := files[rel]
-			if !ok {
-				w.WriteHeader(http.StatusNotFound)
-				return
-			}
-			w.Header().Set("ETag", stored.etag)
-			w.WriteHeader(http.StatusOK)
-		case http.MethodGet:
-			stored, ok := files[rel]
-			if !ok {
-				w.WriteHeader(http.StatusNotFound)
-				return
-			}
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(stored.body)
-		case http.MethodPut:
-			putCount[rel]++
-			body, err := io.ReadAll(r.Body)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			setFile(rel, body)
-			w.WriteHeader(http.StatusCreated)
-		default:
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	}))
-	defer server.Close()
-
+func TestBundleMergeRejectsHTTP(t *testing.T) {
 	archivePath := filepath.Join(t.TempDir(), "bundle.tar")
 	writeMergeBundleTarFixture(t, archivePath)
 
-	report, err := MergeArchive(archivePath, server.URL+"/", false)
+	_, err := MergeArchive(archivePath, "http://127.0.0.1:8080", false)
+	if err == nil {
+		t.Fatal("expected HTTP merge destination to be rejected")
+	}
+	if !strings.Contains(err.Error(), "http merge destinations are not supported") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBundleMergeLocal(t *testing.T) {
+	archivePath := filepath.Join(t.TempDir(), "bundle.tar")
+	writeMergeBundleTarFixture(t, archivePath)
+
+	dest := t.TempDir()
+	mustWriteFile(t, filepath.Join(dest, "packages", "pkg-a.txt"), []byte("same-package"))
+	mustWriteFile(t, filepath.Join(dest, "images", "img-a.tar"), []byte("old-image"))
+	mustWriteFile(t, filepath.Join(dest, "files", "deck"), []byte("deck-binary"))
+	mustWriteFile(t, filepath.Join(dest, "workflows", "apply.yaml"), []byte("old-apply"))
+	mustWriteFile(t, filepath.Join(dest, "workflows", "index.json"), []byte("[\"workflows/existing.yaml\"]\n"))
+
+	report, err := MergeArchive(archivePath, dest, false)
 	if err != nil {
 		t.Fatalf("merge archive: %v", err)
 	}
@@ -90,47 +47,56 @@ func TestBundleMergeHTTP(t *testing.T) {
 		t.Fatalf("expected non dry-run report")
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
-
-	if putCount["packages/pkg-a.txt"] != 0 {
-		t.Fatalf("expected packages/pkg-a.txt skip, put=%d", putCount["packages/pkg-a.txt"])
+	resolvedDest, err := filepath.Abs(dest)
+	if err != nil {
+		t.Fatalf("resolve destination: %v", err)
 	}
-	if putCount["images/img-a.tar"] != 1 {
-		t.Fatalf("expected images/img-a.tar overwrite, put=%d", putCount["images/img-a.tar"])
-	}
-	if putCount["files/new.conf"] != 1 {
-		t.Fatalf("expected files/new.conf upload, put=%d", putCount["files/new.conf"])
-	}
-	if putCount["files/deck"] != 0 {
-		t.Fatalf("expected files/deck skip on hash match, put=%d", putCount["files/deck"])
-	}
-	if putCount["workflows/apply.yaml"] != 1 {
-		t.Fatalf("expected workflows/apply.yaml always overwrite, put=%d", putCount["workflows/apply.yaml"])
-	}
-	if putCount["workflows/worker.yaml"] != 1 {
-		t.Fatalf("expected workflows/worker.yaml upload, put=%d", putCount["workflows/worker.yaml"])
-	}
-	if putCount["workflows/index.json"] != 1 {
-		t.Fatalf("expected workflows/index.json write, put=%d", putCount["workflows/index.json"])
+	if report.Destination != resolvedDest {
+		t.Fatalf("unexpected destination: got=%q want=%q", report.Destination, resolvedDest)
 	}
 
-	if headCount["packages/pkg-a.txt"] == 0 || headCount["images/img-a.tar"] == 0 || headCount["files/new.conf"] == 0 {
-		t.Fatalf("expected HEAD checks for manifest entries, got %#v", headCount)
+	actions := map[string]MergeAction{}
+	for _, action := range report.Actions {
+		actions[action.Path] = action
+	}
+	if actions["packages/pkg-a.txt"].Action != "skip" {
+		t.Fatalf("expected packages/pkg-a.txt skip action, got %q", actions["packages/pkg-a.txt"].Action)
+	}
+	if actions["images/img-a.tar"].Action != "overwrite" {
+		t.Fatalf("expected images/img-a.tar overwrite action, got %q", actions["images/img-a.tar"].Action)
+	}
+	if actions["files/new.conf"].Action != "upload" {
+		t.Fatalf("expected files/new.conf upload action, got %q", actions["files/new.conf"].Action)
+	}
+	if actions["files/deck"].Action != "skip" {
+		t.Fatalf("expected files/deck skip action, got %q", actions["files/deck"].Action)
+	}
+	if actions["workflows/apply.yaml"].Action != "overwrite" {
+		t.Fatalf("expected workflows/apply.yaml overwrite action, got %q", actions["workflows/apply.yaml"].Action)
+	}
+	if actions["workflows/worker.yaml"].Action != "overwrite" {
+		t.Fatalf("expected workflows/worker.yaml overwrite action, got %q", actions["workflows/worker.yaml"].Action)
+	}
+	if actions["workflows/index.json"].Action != "overwrite" {
+		t.Fatalf("expected workflows/index.json overwrite action, got %q", actions["workflows/index.json"].Action)
 	}
 
-	if string(files["images/img-a.tar"].body) != "new-image" {
-		t.Fatalf("expected image to be overwritten")
+	if got := mustReadFileString(t, filepath.Join(dest, "images", "img-a.tar")); got != "new-image" {
+		t.Fatalf("expected image overwrite, got %q", got)
 	}
-	if string(files["files/new.conf"].body) != "new-config" {
-		t.Fatalf("expected new file to be uploaded")
+	if got := mustReadFileString(t, filepath.Join(dest, "files", "new.conf")); got != "new-config" {
+		t.Fatalf("expected new config upload, got %q", got)
 	}
-	if string(files["workflows/apply.yaml"].body) != "new-apply" {
-		t.Fatalf("expected workflow apply overwrite")
+	if got := mustReadFileString(t, filepath.Join(dest, "workflows", "apply.yaml")); got != "new-apply" {
+		t.Fatalf("expected workflow overwrite, got %q", got)
 	}
 
+	indexRaw, err := os.ReadFile(filepath.Join(dest, "workflows", "index.json"))
+	if err != nil {
+		t.Fatalf("read workflow index: %v", err)
+	}
 	var workflowIndex []string
-	if err := json.Unmarshal(files["workflows/index.json"].body, &workflowIndex); err != nil {
+	if err := json.Unmarshal(indexRaw, &workflowIndex); err != nil {
 		t.Fatalf("parse workflow index: %v", err)
 	}
 	sort.Strings(workflowIndex)
@@ -191,4 +157,23 @@ func writeMergeBundleTarFixture(t *testing.T, archivePath string) {
 			t.Fatalf("write tar body %s: %v", name, err)
 		}
 	}
+}
+
+func mustWriteFile(t *testing.T, filePath string, data []byte) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(filePath), err)
+	}
+	if err := os.WriteFile(filePath, data, 0o644); err != nil {
+		t.Fatalf("write %s: %v", filePath, err)
+	}
+}
+
+func mustReadFileString(t *testing.T, filePath string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", filePath, err)
+	}
+	return string(raw)
 }
