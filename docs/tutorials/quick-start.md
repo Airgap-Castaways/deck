@@ -1,6 +1,6 @@
 # Quick Start
 
-This tutorial shows the default `deck` path: initialize a workspace, validate it, build a bundle, carry it into the site, then run `diff`, `doctor`, and `apply` locally.
+This tutorial shows the default `deck` path: initialize a workspace, validate it, build a bundle, carry it into the site, and run it locally.
 
 If you later add site-assisted execution, treat that as an explicit extension of the same local workflow, not a different product mode.
 
@@ -30,7 +30,7 @@ version: v1alpha1
 steps:
   - id: write-motd
     apiVersion: deck/v1alpha1
-    kind: InstallFile
+    kind: WriteFile
     spec:
       path: /etc/motd
       content: |
@@ -59,17 +59,13 @@ deck pack --out ./bundle.tar
 
 The resulting bundle is designed to be self-contained for offline transport.
 
-## 5. Run the local maintenance flow at the target site
+## 5. Apply locally at the target site
 
 ```bash
-tar -xf ./bundle.tar
-cd ./bundle
-deck diff --file ./workflows/apply.yaml
-deck doctor --file ./workflows/apply.yaml --out ./reports/doctor.json
-deck apply --file ./workflows/apply.yaml
+deck apply
 ```
 
-That is the base `deck` story: prepare outside the air gap, move the bundle in, inspect drift with `diff`, confirm local readiness with `doctor`, then run `apply` on the target machine.
+`apply` executes the `apply` workflow locally. That is the base `deck` story: prepare outside the air gap, move the bundle in, then run the maintenance session on the target machine.
 
 ## 6. Optional: add site-assisted execution
 
