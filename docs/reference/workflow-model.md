@@ -20,11 +20,12 @@ The schema allows either top-level `steps`, named `phases`, or imported workflow
 role: apply
 version: v1alpha1
 steps:
-  - id: disable-swap
+  - id: prepare-state-dir
     apiVersion: deck/v1alpha1
-    kind: RunCommand
+    kind: EnsureDir
     spec:
-      command: ["swapoff", "-a"]
+      path: /var/lib/deck
+      mode: "0755"
 ```
 
 ## Step shape
@@ -56,6 +57,15 @@ Optional execution controls:
 - `CopyFile`
 - `Sysctl`
 - `Modprobe`
+- `Service`
+- `EnsureDir`
+- `InstallFile`
+- `TemplateFile`
+- `RepoConfig`
+- `ContainerdConfig`
+- `Swap`
+- `KernelModule`
+- `SysctlApply`
 - `RunCommand`
 - `VerifyImages`
 - `KubeadmInit`
