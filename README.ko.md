@@ -2,22 +2,34 @@
 
 [English README](./README.md) | [문서 홈](./docs/README.md)
 
-`deck`은 no-proxy, no-SSH, no-PXE, no-BMC, 그리고 인터넷 연결 자체를 전제할 수 없는 최악의 air-gapped 환경을 위한 단일 바이너리 인프라 워크플로 도구입니다.
+`deck`은 no SSH, no PXE, no BMC, 그리고 인터넷 연결 자체를 전제할 수 없는 극단적인 air-gapped 환경에서 manual-first maintenance session을 수행하기 위한 단일 바이너리 도구입니다.
 
-온라인 중심 도구가 더 이상 편리하지 않고 오히려 짐이 되는 환경에서도 인프라 변경을 실용적으로 수행할 수 있게 만드는 것이 목적입니다.
+운영자는 self-contained bundle을 준비해 사이트로 반입하고, 변경이 필요한 대상 장비에서 작업을 로컬로 직접 실행할 수 있습니다.
 
 ## Visuals
 
 ![deck terminal demo](docs/assets/deck-cli.gif)
 
-## Principles
+## deck이 적합한 문제
 
-- **Extreme Air-gap Focus**: `deck`은 완전히 격리된 환경에 최적화됩니다. 온라인 전제 기능이나 원격 오케스트레이션이 필요하다면 그 영역은 Ansible이나 Terraform 같은 도구에 맡기는 편이 적합합니다.
-- **Hermetic & Self-contained**: `bundle.tar`는 오프라인 사이트에서 필요한 실행 로직, 데이터, 바이너리를 모두 포함하는 자급자족형 패키지여야 합니다.
-- **Simple is the best**: 복잡도는 숨기지 않고 제거합니다. 핵심 사용자 흐름은 `pack -> apply`로 이해되어야 하며, 보조 명령은 존재 이유를 증명해야 합니다.
-- **K8s friendly**: 워크플로는 YAML 기반이며, Kubernetes나 Helm, manifest 중심 도구에 익숙한 운영자도 빠르게 적응할 수 있도록 구성됩니다.
-- 인터넷에 닿지 않는 사이트에서도 로컬 워크플로와 로컬 번들만으로 인프라를 변경할 수 있습니다.
-- 운영 흐름을 작고 명확하게 유지합니다. 아티팩트를 준비하고, 반입하고, 현장에서 로컬로 적용합니다.
+- **수동 우선 운영**: 기본 경로는 대상 사이트에서 운영자가 직접 로컬 실행하는 방식입니다.
+- **극단적 air-gap 환경 집중**: 연결된 제어 루프를 사용할 수 없거나 신뢰할 수 없는 환경을 전제로 합니다.
+- **자가 포함 번들**: `bundle.tar`는 오프라인 작업에 필요한 워크플로, 아티팩트, `deck` 바이너리를 함께 담습니다.
+- **YAML 기반 워크플로**: 더 큰 제어 시스템 없이도 운영자가 읽고, 검토하고, 조정할 수 있습니다.
+- **명시적 site assistance**: 사이트 내부에서 임시 공유 서버나 조정 지점을 두고 싶다면 추가적으로 사용할 수 있지만, 그것이 기본 모드는 아닙니다.
+
+## deck을 써야 할 때
+
+- 아티팩트를 사전에 준비해서 승인된 경로로 반입한 뒤, 현장에서 로컬 실행해야 할 때
+- `validate -> pack -> apply`처럼 작고 명확한 운영 흐름이 필요할 때
+- 연결이 끊긴 호스트, 클러스터, 어플라이언스에 반복 가능한 유지보수 절차가 필요할 때
+- 나중에 선택적으로 site-local assistance를 추가할 수는 있어도, 각 노드의 실행 모델은 계속 로컬 실행으로 유지하고 싶을 때
+
+## deck을 쓰지 말아야 할 때
+
+- 원격 오케스트레이션 플랫폼, 장기 실행 control plane, agent 기반 rollout 시스템이 필요할 때
+- 항상 연결된 환경, 실시간 cloud API, SSH 기반 자동화가 기본 전제일 때
+- Terraform, Pulumi, Ansible 같은 범용 인프라 플랫폼을 대체하려고 할 때
 
 ## Install
 
@@ -45,7 +57,7 @@ deck --help
 deck init --out ./demo
 ```
 
-2. `./demo/workflows/pack.yaml`, `./demo/workflows/apply.yaml`, `./demo/workflows/vars.yaml`을 환경에 맞게 수정합니다.
+2. `./demo/workflows/pack.yaml`, `./demo/workflows/apply.yaml`, `./demo/workflows/vars.yaml`을 유지보수 세션에 맞게 수정합니다.
 
 3. 패키징이나 적용 전에 워크플로를 검증합니다.
 
@@ -59,42 +71,45 @@ deck validate --file ./demo/workflows/apply.yaml
 deck pack --out ./bundle.tar
 ```
 
-5. 번들을 오프라인 사이트로 반입하고 현지에서 로컬 실행합니다.
+5. 번들을 오프라인 사이트로 반입한 뒤, 현장에서 로컬로 실행합니다.
 
 ```bash
 deck apply
 ```
 
-6. 필요하면 준비된 번들을 사이트 내부에서 읽기 전용으로 공유할 수 있습니다.
-
-```bash
-deck serve --root ./bundle --addr :8080
-deck list --server http://127.0.0.1:8080
-deck health --server http://127.0.0.1:8080
-```
+6. site-assisted execution은 사이트 내부에서 임시 공유 번들 소스나 로컬 coordination point가 정말 필요할 때만 추가합니다. 이 경로는 기본 로컬 흐름에 대한 보조적 선택지입니다.
 
 단계별 가이드는 `docs/tutorials/quick-start.md`부터 시작하시면 됩니다.
 
-## How deck works
+## deck이 동작하는 방식
 
-1. YAML 워크플로를 작성하거나 생성합니다.
+1. 유지보수 작업에 맞는 YAML 워크플로를 작성하거나 조정합니다.
 2. `pack`이 패키지, 이미지, 파일, 워크플로, `deck` 바이너리를 번들에 모읍니다.
-3. 승인된 오프라인 반입 경로로 번들을 전달합니다.
-4. `apply`가 SSH나 원격 제어 없이 현장에서 로컬로 실행됩니다.
+3. 승인된 오프라인 반입 경로를 통해 번들을 전달합니다.
+4. `apply`는 SSH나 원격 실행 의존성 없이 대상 사이트에서 로컬로 실행됩니다.
+5. 선택적인 site-assisted workflow는 임시 로컬 서버나 공유 가시성을 추가할 수 있지만, 운영자는 여전히 각 대상에서 `deck`을 직접 실행합니다.
 
 ## Workflow Model
 
 워크플로 DSL은 YAML 기반이며 step 실행을 중심으로 구성됩니다. 워크플로는 `role`(`pack` 또는 `apply`)을 선언하고, top-level `steps` 또는 이름 있는 `phases`를 사용합니다.
 
+일반적인 호스트 변경에는 typed primitive를 우선 사용하세요. 적절한 step kind가 없을 때만 `RunCommand`를 마지막 수단으로 남겨두는 것이 좋습니다.
+
 ```yaml
 role: apply
 version: v1alpha1
 steps:
-  - id: disable-swap
+  - id: write-repo-config
     apiVersion: deck/v1alpha1
-    kind: RunCommand
+    kind: WriteFile
     spec:
-      command: ["swapoff", "-a"]
+      path: /etc/example.repo
+      content: |
+        [offline-base]
+        name=offline-base
+        baseurl=file:///srv/offline-repo
+        enabled=1
+        gpgcheck=0
 ```
 
 공통 step 기능:
@@ -102,7 +117,7 @@ steps:
 - `when` 조건 실행
 - `retry`, `timeout` 제어
 - step 출력값을 다음 step에 전달하는 `register`
-- 워크플로 및 각 step kind에 대한 JSON Schema 검증
+- 워크플로 및 각 지원 step kind에 대한 JSON Schema 검증
 
 ## Bundle Contract
 
@@ -115,10 +130,11 @@ steps:
 
 ## Command Surface
 
-- 핵심 흐름: `init`, `validate`, `pack`, `apply`
-- 선택적 사이트 로컬 도우미: `serve`, `list`, `health`
-- 번들 수명주기: `bundle`
-- 계획 및 진단: `diff`, `doctor`, `logs`, `cache`, `node`, `site`
+- 핵심 로컬 흐름: `init`, `validate`, `pack`, `apply`
+- 로컬 계획 및 진단: `diff`, `doctor`
+- 선택적 site-local helper: `serve`, `list`, `health`, `logs`
+- 번들 수명주기 및 캐시 관리: `bundle`, `cache`
+- 호환성과 고급 step은 계속 지원되지만, 새 워크플로에서는 `RunCommand`를 마지막 수단으로 두는 것이 좋습니다.
 
 ## Documentation Map
 
@@ -136,8 +152,9 @@ steps:
 ## Scope and Non-goals
 
 - `deck`은 air-gapped 준비, 패키징, 오프라인 설치, 결정적 로컬 실행에 집중합니다.
-- 원격 오케스트레이션 프레임워크를 목표로 하지 않습니다.
-- 항상 연결된 클라우드 중심 환경을 최적화 대상으로 삼지 않습니다.
+- site-assisted 사용은 명시적이고 부가적인 선택지입니다. 로컬 운영자 경로를 대체하지 않습니다.
+- `deck`은 원격 오케스트레이션 프레임워크가 아닙니다.
+- 항상 연결된 cloud-first 워크플로를 최적화 대상으로 삼지 않습니다.
 
 ## Contributing and Validation
 
