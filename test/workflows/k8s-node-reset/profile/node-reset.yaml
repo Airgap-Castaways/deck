@@ -1,0 +1,21 @@
+role: apply
+version: v1alpha1
+varImports:
+  - ../../_shared/k8s/vars/common.yaml
+  - ../vars/node-reset.yaml
+phases:
+  - name: install
+    imports:
+      - path: ../../_shared/k8s/apply/common/prereq.yaml
+      - path: ../apply/node-reset.yaml
+    steps:
+      - id: reset-summary
+        apiVersion: deck/v1alpha1
+        kind: RunCommand
+        spec:
+          command:
+            - bash
+            - -lc
+            - |
+              set -euo pipefail
+              [[ -f "{{ .vars.resetStatePath }}" ]]

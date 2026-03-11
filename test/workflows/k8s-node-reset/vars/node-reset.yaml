@@ -1,0 +1,3 @@
+allowDestructive: "false"
+resetReason: worker-rerun-readiness
+resetStatePath: /tmp/deck/reports/reset-state.txt
