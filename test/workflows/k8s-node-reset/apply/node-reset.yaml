@@ -1,0 +1,98 @@
+role: apply
+version: v1alpha1
+steps:
+  - id: reset-node
+    apiVersion: deck/v1alpha1
+    kind: RunCommand
+    when: vars.allowDestructive == "true"
+    spec:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          systemctl stop kubelet || true
+          kubeadm reset -f
+          rm -rf /etc/cni/net.d /var/lib/kubelet/pki /var/lib/kubelet/plugins /var/lib/kubelet/plugins_registry
+          rm -rf /etc/kubernetes/manifests
+          rm -f /etc/kubernetes/kubelet.conf /etc/kubernetes/bootstrap-kubelet.conf /etc/kubernetes/admin.conf /etc/kubernetes/controller-manager.conf /etc/kubernetes/scheduler.conf
+          crictl --runtime-endpoint unix:///run/containerd/containerd.sock rm -f $(crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps -a --name kube-apiserver -q) >/dev/null 2>&1 || true
+          crictl --runtime-endpoint unix:///run/containerd/containerd.sock rm -f $(crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps -a --name kube-controller-manager -q) >/dev/null 2>&1 || true
+          crictl --runtime-endpoint unix:///run/containerd/containerd.sock rm -f $(crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps -a --name kube-scheduler -q) >/dev/null 2>&1 || true
+          crictl --runtime-endpoint unix:///run/containerd/containerd.sock rm -f $(crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps -a --name etcd -q) >/dev/null 2>&1 || true
+          systemctl restart containerd
+  - id: reset-runtime-ready
+    apiVersion: deck/v1alpha1
+    kind: RunCommand
+    spec:
+      timeout: 5m
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if systemctl is-active --quiet containerd; then
+              break
+            fi
+            sleep 2
+          done
+          systemctl is-active --quiet containerd
+          for i in $(seq 1 60); do
+            if crictl --runtime-endpoint unix:///run/containerd/containerd.sock info >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          crictl --runtime-endpoint unix:///run/containerd/containerd.sock info >/dev/null 2>&1
+          for i in $(seq 1 30); do
+            if ls /etc/kubernetes/manifests/*.yaml >/dev/null 2>&1; then
+              sleep 2
+              continue
+            fi
+            break
+          done
+          if ls /etc/kubernetes/manifests/*.yaml >/dev/null 2>&1; then
+            echo "stale static pod manifests still present" >&2
+            ls -l /etc/kubernetes/manifests || true
+            exit 1
+          fi
+          systemctl stop kubelet || true
+  - id: reset-state-report
+    apiVersion: deck/v1alpha1
+    kind: RunCommand
+    spec:
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          mkdir -p "$(dirname "{{ .vars.resetStatePath }}")"
+          {
+            echo "resetReason={{ .vars.resetReason }}"
+            echo "kubeadmReset=ok"
+            if ls /etc/kubernetes/manifests/*.yaml >/dev/null 2>&1; then
+              echo "manifests=present"
+              ls -l /etc/kubernetes/manifests
+              exit 1
+            fi
+            echo "manifests=absent"
+            if crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps -a --name kube-apiserver -q | grep . >/dev/null 2>&1; then
+              echo "staleControlPlaneContainers=present"
+              crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps -a | grep kube- || true
+              exit 1
+            fi
+            echo "staleControlPlaneContainers=absent"
+            systemctl is-active --quiet containerd
+            echo "containerd=active"
+            if [[ -f /var/lib/kubelet/config.yaml ]]; then
+              echo "kubeletConfig=present"
+            else
+              echo "kubeletConfig=absent"
+            fi
+            if systemctl is-active --quiet kubelet; then
+              echo "kubeletService=active"
+            else
+              echo "kubeletService=inactive"
+            fi
+          } > "{{ .vars.resetStatePath }}"
