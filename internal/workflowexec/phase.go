@@ -1,0 +1,15 @@
+package workflowexec
+
+import "github.com/taedi90/deck/internal/config"
+
+func FindPhase(wf *config.Workflow, name string) (config.Phase, bool) {
+	if wf == nil {
+		return config.Phase{}, false
+	}
+	for _, phase := range wf.Phases {
+		if phase.Name == name {
+			return phase, true
+		}
+	}
+	return config.Phase{}, false
+}

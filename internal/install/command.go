@@ -8,15 +8,26 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
-func runCommand(spec map[string]any) error {
-	cmdArgs := stringSlice(spec["command"])
+type runCommandSpec struct {
+	Command []string `json:"command"`
+	Timeout string   `json:"timeout"`
+}
+
+func runCommand(ctx context.Context, spec map[string]any) error {
+	decoded, err := workflowexec.DecodeSpec[runCommandSpec](spec)
+	if err != nil {
+		return fmt.Errorf("decode RunCommand spec: %w", err)
+	}
+	cmdArgs := decoded.Command
 	if len(cmdArgs) == 0 {
 		return fmt.Errorf("%s: RunCommand requires command", errCodeInstallCommandMissing)
 	}
 
-	err := runTimedCommand(cmdArgs[0], cmdArgs[1:], commandTimeout(spec))
+	err = runTimedCommandWithContext(ctx, cmdArgs[0], cmdArgs[1:], commandTimeout(spec))
 	if err == nil {
 		return nil
 	}
@@ -46,7 +57,14 @@ func commandTimeoutWithDefault(spec map[string]any, def time.Duration) time.Dura
 }
 
 func runTimedCommand(name string, args []string, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	return runTimedCommandWithContext(context.Background(), name, args, timeout)
+}
+
+func runTimedCommandWithContext(parent context.Context, name string, args []string, timeout time.Duration) error {
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -60,11 +78,18 @@ func runTimedCommand(name string, args []string, timeout time.Duration) error {
 }
 
 func runCommandOutput(cmdArgs []string, timeout time.Duration) (string, error) {
+	return runCommandOutputWithContext(context.Background(), cmdArgs, timeout)
+}
+
+func runCommandOutputWithContext(parent context.Context, cmdArgs []string, timeout time.Duration) (string, error) {
 	if len(cmdArgs) == 0 {
 		return "", fmt.Errorf("empty command")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)

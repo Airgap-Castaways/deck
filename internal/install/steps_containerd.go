@@ -1,6 +1,7 @@
 package install
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,7 +27,7 @@ func runContainerdConfig(spec map[string]any) error {
 		if createDefault, ok := spec["createDefault"].(bool); ok && !createDefault {
 			content = []byte{}
 		} else {
-			generated, genErr := runCommandOutput([]string{"containerd", "config", "default"}, commandTimeoutWithDefault(spec, 30*time.Second))
+			generated, genErr := runCommandOutputWithContext(context.Background(), []string{"containerd", "config", "default"}, commandTimeoutWithDefault(spec, 30*time.Second))
 			if genErr != nil {
 				return genErr
 			}

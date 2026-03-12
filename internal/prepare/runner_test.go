@@ -75,7 +75,7 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 		},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -129,7 +129,7 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 
 func TestRun_NoPreparePhase(t *testing.T) {
 	wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "install"}}}
-	if err := Run(wf, RunOptions{BundleRoot: t.TempDir()}); err == nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: t.TempDir()}); err == nil {
 		t.Fatalf("expected error when prepare phase is missing")
 	}
 }
@@ -171,7 +171,7 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -233,7 +233,7 @@ func TestRun_DownloadK8sPackagesContainerBackend(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -275,7 +275,7 @@ func TestRun_DownloadPackagesContainerRuntimeMissing(t *testing.T) {
 		}},
 	}
 
-	err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: &noRuntimeRunner{}})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &noRuntimeRunner{}})
 	if err == nil {
 		t.Fatalf("expected runtime detection error")
 	}
@@ -308,7 +308,7 @@ func TestRun_DownloadPackagesContainerNoArtifacts(t *testing.T) {
 		}},
 	}
 
-	err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: &noArtifactsRunner{}})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &noArtifactsRunner{}})
 	if err == nil {
 		t.Fatalf("expected no artifacts error")
 	}
@@ -357,7 +357,7 @@ func TestRun_DownloadFileFallbackLocalThenBundle(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundleOut}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundleOut}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -394,7 +394,7 @@ func TestRun_DownloadFileFallbackSourceMissing(t *testing.T) {
 		}},
 	}
 
-	err := Run(wf, RunOptions{BundleRoot: bundleOut})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundleOut})
 	if err == nil {
 		t.Fatalf("expected source not found error")
 	}
@@ -444,7 +444,7 @@ func TestRun_DownloadFileFallbackRepoThenOnline(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundleOut}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundleOut}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -488,7 +488,7 @@ func TestRun_DownloadFileOfflinePolicyBlocksOnlineFallback(t *testing.T) {
 		}},
 	}
 
-	err := Run(wf, RunOptions{BundleRoot: bundleOut})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundleOut})
 	if err == nil {
 		t.Fatalf("expected offline policy block error")
 	}
@@ -521,7 +521,7 @@ func TestRun_DownloadFileOfflinePolicyBlocksDirectURL(t *testing.T) {
 		}},
 	}
 
-	err := Run(wf, RunOptions{BundleRoot: bundleOut})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundleOut})
 	if err == nil {
 		t.Fatalf("expected offline policy block error")
 	}
@@ -583,7 +583,7 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -622,7 +622,7 @@ func TestRun_RetrySemantics(t *testing.T) {
 			}},
 		}
 
-		if err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: runner}); err != nil {
+		if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: runner}); err != nil {
 			t.Fatalf("expected retry success, got %v", err)
 		}
 		if runner.calls != 2 {
@@ -650,7 +650,7 @@ func TestRun_RetrySemantics(t *testing.T) {
 			}},
 		}
 
-		err := Run(wf, RunOptions{BundleRoot: bundle})
+		err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle})
 		if err == nil {
 			t.Fatalf("expected failure after retry exhaustion")
 		}
@@ -676,7 +676,7 @@ func TestRun_WhenInvalidExpression(t *testing.T) {
 		}},
 	}
 
-	err := Run(wf, RunOptions{BundleRoot: bundle})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle})
 	if err == nil {
 		t.Fatalf("expected condition eval error")
 	}
@@ -779,7 +779,7 @@ func TestRun_CheckHostStep(t *testing.T) {
 			goarchFn = oldGOARCH
 		}()
 
-		if err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}}); err != nil {
+		if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}}); err != nil {
 			t.Fatalf("expected checkhost pass, got %v", err)
 		}
 	})
@@ -823,7 +823,7 @@ func TestRun_CheckHostStep(t *testing.T) {
 			goarchFn = oldGOARCH
 		}()
 
-		err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: &noRuntimeRunner{}})
+		err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &noRuntimeRunner{}})
 		if err == nil {
 			t.Fatalf("expected checkhost failure")
 		}
@@ -866,7 +866,7 @@ func TestRun_DownloadPackagesRepoModeAptFlatGeneratesMetadata(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -911,7 +911,7 @@ func TestRun_DownloadPackagesRepoModeYumGeneratesRepodata(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -953,7 +953,7 @@ func TestRun_DownloadK8sPackagesRepoModeAptFlatGeneratesMetadata(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -1005,7 +1005,7 @@ func TestRun_DownloadK8sPackagesRepoModeYumGeneratesRepodata(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 

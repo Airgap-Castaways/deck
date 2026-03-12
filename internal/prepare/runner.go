@@ -25,11 +25,13 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/taedi90/deck/internal/config"
 	"github.com/taedi90/deck/internal/fetch"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 type RunOptions struct {
-	BundleRoot    string
-	CommandRunner CommandRunner
+	BundleRoot      string
+	CommandRunner   CommandRunner
+	ForceRedownload bool
 }
 
 type CommandRunner interface {
@@ -71,7 +73,6 @@ const (
 	errCodePrepareConditionEval      = "E_CONDITION_EVAL"
 	errCodePrepareRegisterMissing    = "E_REGISTER_OUTPUT_NOT_FOUND"
 	errCodePrepareCheckHostFailed    = "E_PREPARE_CHECKHOST_FAILED"
-	envPrepareForceRedownload        = "DECK_PREPARE_FORCE_REDOWNLOAD"
 	packageCacheMetaFile             = ".deck-cache-packages.json"
 )
 
@@ -89,9 +90,12 @@ var (
 	tarballWriteToFileFn  = tarball.WriteToFile
 )
 
-func Run(wf *config.Workflow, opts RunOptions) error {
+func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	if wf == nil {
 		return fmt.Errorf("workflow is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	bundleRoot := strings.TrimSpace(opts.BundleRoot)
@@ -164,12 +168,12 @@ func Run(wf *config.Workflow, opts RunOptions) error {
 			execErr   error
 		)
 		for i := 0; i < attempts; i++ {
-			rendered, renderErr := renderSpec(step.Spec, wf, runtimeVars)
+			rendered, renderErr := renderSpecWithContext(step.Spec, wf, runtimeVars, ctxData)
 			if renderErr != nil {
 				execErr = fmt.Errorf("render spec template: %w", renderErr)
 				break
 			}
-			stepFiles, outputs, execErr = runPrepareStep(runner, bundleRoot, step.Kind, rendered)
+			stepFiles, outputs, execErr = runPrepareStep(ctx, runner, bundleRoot, step.Kind, rendered, opts)
 			if host, ok := outputs["host"]; ok {
 				runtimeVars["host"] = host
 			}
@@ -207,28 +211,28 @@ func Run(wf *config.Workflow, opts RunOptions) error {
 	return nil
 }
 
-func runPrepareStep(runner CommandRunner, bundleRoot, kind string, rendered map[string]any) ([]string, map[string]any, error) {
+func runPrepareStep(ctx context.Context, runner CommandRunner, bundleRoot, kind string, rendered map[string]any, opts RunOptions) ([]string, map[string]any, error) {
 	switch kind {
 	case "DownloadFile":
-		f, err := runDownloadFile(bundleRoot, rendered)
+		f, err := runDownloadFile(ctx, bundleRoot, rendered, opts)
 		if err != nil {
 			return nil, nil, err
 		}
 		return []string{f}, map[string]any{"path": f, "artifacts": []string{f}}, nil
 	case "DownloadPackages":
-		files, err := runDownloadPackages(runner, bundleRoot, rendered, "packages")
+		files, err := runDownloadPackages(ctx, runner, bundleRoot, rendered, "packages", opts)
 		if err != nil {
 			return nil, nil, err
 		}
 		return files, map[string]any{"artifacts": files}, nil
 	case "DownloadK8sPackages":
-		files, err := runDownloadK8sPackages(runner, bundleRoot, rendered)
+		files, err := runDownloadK8sPackages(ctx, runner, bundleRoot, rendered, opts)
 		if err != nil {
 			return nil, nil, err
 		}
 		return files, map[string]any{"artifacts": files}, nil
 	case "DownloadImages":
-		files, err := runDownloadImages(runner, bundleRoot, rendered)
+		files, err := runDownloadImages(ctx, runner, bundleRoot, rendered, opts)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -343,138 +347,19 @@ func runCheckHost(runner CommandRunner, spec map[string]any) (map[string]any, er
 }
 
 func applyRegister(step config.Step, outputs map[string]any, runtimeVars map[string]any) error {
-	if len(step.Register) == 0 {
-		return nil
-	}
-	for runtimeKey, outputKey := range step.Register {
-		if isReservedRuntimeVar(runtimeKey) {
-			return fmt.Errorf("E_RUNTIME_VAR_RESERVED: %s", runtimeKey)
-		}
-		v, ok := outputs[outputKey]
-		if !ok {
-			return fmt.Errorf("%s: step %s kind %s has no output key %s", errCodePrepareRegisterMissing, step.ID, step.Kind, outputKey)
-		}
-		runtimeVars[runtimeKey] = v
-	}
-	return nil
+	return workflowexec.ApplyRegister(step, outputs, runtimeVars, errCodePrepareRegisterMissing)
 }
 
 func isReservedRuntimeVar(runtimeKey string) bool {
-	trimmed := strings.TrimSpace(runtimeKey)
-	return trimmed == "host" || strings.HasPrefix(trimmed, "host.")
+	return workflowexec.IsReservedRuntimeVar(runtimeKey)
 }
 
 func detectHostFacts() map[string]any {
-	osName := strings.TrimSpace(goosFn())
-	arch := normalizeHostArch(strings.TrimSpace(goarchFn()))
-	osRelease := parseOSReleaseVars(readFileFn)
-	osID := strings.ToLower(strings.TrimSpace(osRelease["ID"]))
-	osVersion := strings.TrimSpace(osRelease["VERSION"])
-	osVersionID := strings.TrimSpace(osRelease["VERSION_ID"])
-	osLike := strings.ToLower(strings.TrimSpace(osRelease["ID_LIKE"]))
-	osFamily := inferOSFamily(osID, osLike)
-	kernelRelease := strings.TrimSpace(readKernelRelease(readFileFn))
-
-	return map[string]any{
-		"os": map[string]any{
-			"name":      osName,
-			"id":        osID,
-			"family":    osFamily,
-			"version":   osVersion,
-			"versionId": osVersionID,
-			"release":   osVersionID,
-			"idLike":    osLike,
-		},
-		"arch": arch,
-		"kernel": map[string]any{
-			"release": kernelRelease,
-		},
-	}
-}
-
-func normalizeHostArch(v string) string {
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "x86_64":
-		return "amd64"
-	case "aarch64":
-		return "arm64"
-	default:
-		return strings.ToLower(strings.TrimSpace(v))
-	}
-}
-
-func parseOSReleaseVars(readFile func(string) ([]byte, error)) map[string]string {
-	raw, err := readFile("/etc/os-release")
-	if err != nil {
-		return map[string]string{}
-	}
-	out := map[string]string{}
-	for _, line := range strings.Split(string(raw), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-		value = strings.Trim(value, `"'`)
-		if key != "" {
-			out[key] = value
-		}
-	}
-	return out
-}
-
-func inferOSFamily(id string, idLike string) string {
-	candidate := strings.ToLower(strings.TrimSpace(id + " " + idLike))
-	if candidate == "" {
-		return ""
-	}
-	for _, token := range strings.Fields(candidate) {
-		switch token {
-		case "debian", "ubuntu":
-			return "debian"
-		case "rhel", "centos", "rocky", "almalinux", "fedora", "ol", "amzn":
-			return "rhel"
-		}
-	}
-	return ""
-}
-
-func readKernelRelease(readFile func(string) ([]byte, error)) string {
-	raw, err := readFile("/proc/sys/kernel/osrelease")
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(raw))
+	return workflowexec.DetectHostFacts(goosFn(), goarchFn(), readFileFn)
 }
 
 func evaluateWhen(expr string, vars map[string]any, runtime map[string]any, ctx map[string]any) (bool, error) {
-	trimmed := strings.TrimSpace(expr)
-	if trimmed == "" {
-		return true, nil
-	}
-
-	tokens, err := tokenizeCondition(trimmed)
-	if err != nil {
-		return false, fmt.Errorf("%s: %w", errCodePrepareConditionEval, err)
-	}
-	p := &condParser{tokens: tokens, vars: vars, runtime: runtime, ctx: ctx}
-	value, err := p.parseExpr()
-	if err != nil {
-		return false, fmt.Errorf("%s: %w", errCodePrepareConditionEval, err)
-	}
-	if p.hasNext() {
-		return false, fmt.Errorf("%s: unexpected token %q", errCodePrepareConditionEval, p.peek().value)
-	}
-	b, ok := value.(bool)
-	if !ok {
-		return false, fmt.Errorf("%s: condition must evaluate to boolean", errCodePrepareConditionEval)
-	}
-	return b, nil
+	return workflowexec.EvaluateWhen(expr, vars, runtime, ctx, errCodePrepareConditionEval)
 }
 
 func EvaluateWhen(expr string, vars map[string]any, runtime map[string]any, ctx map[string]any) (bool, error) {
@@ -786,15 +671,10 @@ func isIdentPart(ch byte) bool {
 }
 
 func findPhase(wf *config.Workflow, name string) (config.Phase, bool) {
-	for _, p := range wf.Phases {
-		if p.Name == name {
-			return p, true
-		}
-	}
-	return config.Phase{}, false
+	return workflowexec.FindPhase(wf, name)
 }
 
-func runDownloadFile(bundleRoot string, spec map[string]any) (string, error) {
+func runDownloadFile(ctx context.Context, bundleRoot string, spec map[string]any, opts RunOptions) (string, error) {
 	source := mapValue(spec, "source")
 	output := mapValue(spec, "output")
 	fetchCfg := mapValue(spec, "fetch")
@@ -815,7 +695,7 @@ func runDownloadFile(bundleRoot string, spec map[string]any) (string, error) {
 		return "", fmt.Errorf("create output directory: %w", err)
 	}
 
-	reuse, err := canReuseDownloadFile(bundleRoot, spec, target)
+	reuse, err := canReuseDownloadFile(bundleRoot, spec, target, opts)
 	if err != nil {
 		return "", err
 	}
@@ -848,7 +728,7 @@ func runDownloadFile(bundleRoot string, spec map[string]any) (string, error) {
 			if err := f.Truncate(0); err != nil {
 				return "", fmt.Errorf("truncate output file: %w", err)
 			}
-			if err := downloadURLToFile(f, url); err != nil {
+			if err := downloadURLToFile(ctx, f, url); err != nil {
 				return "", err
 			}
 		}
@@ -856,7 +736,7 @@ func runDownloadFile(bundleRoot string, spec map[string]any) (string, error) {
 		if offlineOnly {
 			return "", fmt.Errorf("%s: source.url blocked by offline policy", errCodePrepareOfflinePolicyBlock)
 		}
-		if err := downloadURLToFile(f, url); err != nil {
+		if err := downloadURLToFile(ctx, f, url); err != nil {
 			return "", err
 		}
 	}
@@ -880,8 +760,15 @@ func runDownloadFile(bundleRoot string, spec map[string]any) (string, error) {
 	return outPath, nil
 }
 
-func downloadURLToFile(target *os.File, url string) error {
-	resp, err := http.Get(url) //nolint:gosec
+func downloadURLToFile(ctx context.Context, target *os.File, url string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("download %s: %w", url, err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("download %s: %w", url, err)
 	}
@@ -942,7 +829,7 @@ func verifyFileSHA256(path, expected string) error {
 	return nil
 }
 
-func runDownloadPackages(runner CommandRunner, bundleRoot string, spec map[string]any, defaultDir string) ([]string, error) {
+func runDownloadPackages(ctx context.Context, runner CommandRunner, bundleRoot string, spec map[string]any, defaultDir string, opts RunOptions) ([]string, error) {
 	output := mapValue(spec, "output")
 	dir := stringValue(output, "dir")
 	if dir == "" {
@@ -985,13 +872,13 @@ func runDownloadPackages(runner CommandRunner, bundleRoot string, spec map[strin
 				return nil, fmt.Errorf("DownloadPackages repo.type must be apt-flat or yum")
 			}
 
-			if files, reused, err := tryReusePackageArtifacts(bundleRoot, repoRoot, packages); err != nil {
+			if files, reused, err := tryReusePackageArtifacts(bundleRoot, repoRoot, packages, opts); err != nil {
 				return nil, err
 			} else if reused {
 				return files, nil
 			}
 
-			files, err := runContainerPackageRepoBuild(runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, spec, packages)
+			files, err := runContainerPackageRepoBuild(ctx, runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, spec, packages, opts)
 			if err != nil {
 				return nil, err
 			}
@@ -1001,13 +888,13 @@ func runDownloadPackages(runner CommandRunner, bundleRoot string, spec map[strin
 			return files, nil
 		}
 
-		if files, reused, err := tryReusePackageArtifacts(bundleRoot, dir, packages); err != nil {
+		if files, reused, err := tryReusePackageArtifacts(bundleRoot, dir, packages, opts); err != nil {
 			return nil, err
 		} else if reused {
 			return files, nil
 		}
 
-		files, err := runContainerPackageDownloadAll(runner, bundleRoot, dir, spec, packages)
+		files, err := runContainerPackageDownloadAll(ctx, runner, bundleRoot, dir, spec, packages, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -1020,7 +907,7 @@ func runDownloadPackages(runner CommandRunner, bundleRoot string, spec map[strin
 	return writePackagePlaceholders(bundleRoot, dir, packages), nil
 }
 
-func runDownloadK8sPackages(runner CommandRunner, bundleRoot string, spec map[string]any) ([]string, error) {
+func runDownloadK8sPackages(ctx context.Context, runner CommandRunner, bundleRoot string, spec map[string]any, opts RunOptions) ([]string, error) {
 	output := mapValue(spec, "output")
 	dir := stringValue(output, "dir")
 	if dir == "" {
@@ -1076,7 +963,7 @@ func runDownloadK8sPackages(runner CommandRunner, bundleRoot string, spec map[st
 				return nil, fmt.Errorf("DownloadK8sPackages repo.type must be apt-flat or yum")
 			}
 
-			files, err := runContainerK8sPackageRepoBuild(runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, version, pkgs, spec)
+			files, err := runContainerK8sPackageRepoBuild(ctx, runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, version, pkgs, spec, opts)
 			if err != nil {
 				return nil, err
 			}
@@ -1094,9 +981,9 @@ func runDownloadK8sPackages(runner CommandRunner, bundleRoot string, spec map[st
 		}
 
 		versionLine := strings.TrimSpace(version)
-		files, err := runContainerPackageDownloadWithScript(runner, bundleRoot, dir, spec, pkgs, func(family, pkg string) string {
+		files, err := runContainerPackageDownloadWithScript(ctx, runner, bundleRoot, dir, spec, pkgs, func(family, pkg string) string {
 			return buildK8sPackageDownloadScript(family, pkg, versionLine)
-		})
+		}, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -1122,6 +1009,7 @@ func runDownloadK8sPackages(runner CommandRunner, bundleRoot string, spec map[st
 }
 
 func runContainerPackageRepoBuild(
+	ctx context.Context,
 	runner CommandRunner,
 	bundleRoot string,
 	repoRoot string,
@@ -1131,6 +1019,7 @@ func runContainerPackageRepoBuild(
 	pkgsDir string,
 	spec map[string]any,
 	packages []string,
+	opts RunOptions,
 ) ([]string, error) {
 	backend := mapValue(spec, "backend")
 	runtimeSel, err := detectRuntime(runner, stringValue(backend, "runtime"))
@@ -1143,7 +1032,7 @@ func runContainerPackageRepoBuild(
 	}
 
 	outAbs := filepath.Join(bundleRoot, filepath.FromSlash(repoRoot))
-	if forceRedownloadEnabled() {
+	if opts.ForceRedownload {
 		if err := os.RemoveAll(outAbs); err != nil {
 			return nil, err
 		}
@@ -1154,7 +1043,7 @@ func runContainerPackageRepoBuild(
 
 	cmdScript := buildPackageRepoBuildScript(family, packages, repoType, generate, pkgsDir)
 	args := []string{"run", "--rm", "-v", outAbs + ":/out", image, "bash", "-lc", cmdScript}
-	if err := runner.Run(context.Background(), runtimeSel, args...); err != nil {
+	if err := runner.Run(ctx, runtimeSel, args...); err != nil {
 		return nil, fmt.Errorf("container package repo build failed: %w", err)
 	}
 
@@ -1166,7 +1055,7 @@ func runContainerPackageRepoBuild(
 	return files, nil
 }
 
-func runContainerPackageDownloadAll(runner CommandRunner, bundleRoot, dir string, spec map[string]any, packages []string) ([]string, error) {
+func runContainerPackageDownloadAll(ctx context.Context, runner CommandRunner, bundleRoot, dir string, spec map[string]any, packages []string, opts RunOptions) ([]string, error) {
 	backend := mapValue(spec, "backend")
 	runtimeSel, err := detectRuntime(runner, stringValue(backend, "runtime"))
 	if err != nil {
@@ -1185,7 +1074,7 @@ func runContainerPackageDownloadAll(runner CommandRunner, bundleRoot, dir string
 	}
 
 	outAbs := filepath.Join(bundleRoot, filepath.FromSlash(dir))
-	if forceRedownloadEnabled() {
+	if opts.ForceRedownload {
 		if err := os.RemoveAll(outAbs); err != nil {
 			return nil, err
 		}
@@ -1196,7 +1085,7 @@ func runContainerPackageDownloadAll(runner CommandRunner, bundleRoot, dir string
 
 	cmdScript := buildPackageDownloadAllScript(family, packages)
 	args := []string{"run", "--rm", "-v", outAbs + ":/out", image, "bash", "-lc", cmdScript}
-	if err := runner.Run(context.Background(), runtimeSel, args...); err != nil {
+	if err := runner.Run(ctx, runtimeSel, args...); err != nil {
 		return nil, fmt.Errorf("container package download failed: %w", err)
 	}
 
@@ -1277,6 +1166,7 @@ func buildPackageRepoBuildScript(family string, packages []string, repoType stri
 }
 
 func runContainerK8sPackageRepoBuild(
+	ctx context.Context,
 	runner CommandRunner,
 	bundleRoot string,
 	repoRoot string,
@@ -1287,6 +1177,7 @@ func runContainerK8sPackageRepoBuild(
 	kubernetesVersion string,
 	packages []string,
 	spec map[string]any,
+	opts RunOptions,
 ) ([]string, error) {
 	backend := mapValue(spec, "backend")
 	runtimeSel, err := detectRuntime(runner, stringValue(backend, "runtime"))
@@ -1299,6 +1190,11 @@ func runContainerK8sPackageRepoBuild(
 	}
 
 	outAbs := filepath.Join(bundleRoot, filepath.FromSlash(repoRoot))
+	if opts.ForceRedownload {
+		if err := os.RemoveAll(outAbs); err != nil {
+			return nil, err
+		}
+	}
 	if err := os.MkdirAll(outAbs, 0o755); err != nil {
 		return nil, err
 	}
@@ -1306,7 +1202,7 @@ func runContainerK8sPackageRepoBuild(
 
 	cmdScript := buildK8sPackageRepoBuildScript(family, packages, kubernetesVersion, repoType, generate, pkgsDir)
 	args := []string{"run", "--rm", "-v", outAbs + ":/out", image, "bash", "-lc", cmdScript}
-	if err := runner.Run(context.Background(), runtimeSel, args...); err != nil {
+	if err := runner.Run(ctx, runtimeSel, args...); err != nil {
 		return nil, fmt.Errorf("container k8s package repo build failed: %w", err)
 	}
 
@@ -1375,7 +1271,7 @@ func buildK8sPackageRepoBuildScript(family string, packages []string, kubernetes
 	)
 }
 
-func runContainerPackageDownloadWithScript(runner CommandRunner, bundleRoot, dir string, spec map[string]any, packages []string, scriptBuilder func(family, pkg string) string) ([]string, error) {
+func runContainerPackageDownloadWithScript(ctx context.Context, runner CommandRunner, bundleRoot, dir string, spec map[string]any, packages []string, scriptBuilder func(family, pkg string) string, opts RunOptions) ([]string, error) {
 	backend := mapValue(spec, "backend")
 	runtimeSel, err := detectRuntime(runner, stringValue(backend, "runtime"))
 	if err != nil {
@@ -1394,7 +1290,7 @@ func runContainerPackageDownloadWithScript(runner CommandRunner, bundleRoot, dir
 	}
 
 	outAbs := filepath.Join(bundleRoot, filepath.FromSlash(dir))
-	if forceRedownloadEnabled() {
+	if opts.ForceRedownload {
 		if err := os.RemoveAll(outAbs); err != nil {
 			return nil, err
 		}
@@ -1406,7 +1302,7 @@ func runContainerPackageDownloadWithScript(runner CommandRunner, bundleRoot, dir
 	for _, pkg := range packages {
 		cmdScript := scriptBuilder(family, pkg)
 		args := []string{"run", "--rm", "-v", outAbs + ":/out", image, "bash", "-lc", cmdScript}
-		if err := runner.Run(context.Background(), runtimeSel, args...); err != nil {
+		if err := runner.Run(ctx, runtimeSel, args...); err != nil {
 			return nil, fmt.Errorf("container package download failed for %s: %w", pkg, err)
 		}
 	}
@@ -1456,7 +1352,7 @@ func writePackagePlaceholders(bundleRoot, dir string, packages []string) []strin
 	return files
 }
 
-func runDownloadImages(runner CommandRunner, bundleRoot string, spec map[string]any) ([]string, error) {
+func runDownloadImages(ctx context.Context, runner CommandRunner, bundleRoot string, spec map[string]any, opts RunOptions) ([]string, error) {
 	_ = runner
 	output := mapValue(spec, "output")
 	dir := stringValue(output, "dir")
@@ -1479,7 +1375,7 @@ func runDownloadImages(runner CommandRunner, bundleRoot string, spec map[string]
 		return nil, fmt.Errorf("%s: unsupported image engine: %s", errCodePrepareEngineUnsupported, engine)
 	}
 
-	return runGoContainerRegistryDownloads(bundleRoot, dir, images)
+	return runGoContainerRegistryDownloads(ctx, bundleRoot, dir, images, opts)
 }
 
 func inferDownloadFileName(sourcePath, sourceURL string) string {
@@ -1502,7 +1398,7 @@ func inferDownloadFileName(sourcePath, sourceURL string) string {
 	return "downloaded.bin"
 }
 
-func runGoContainerRegistryDownloads(bundleRoot, dir string, images []string) ([]string, error) {
+func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string, images []string, opts RunOptions) ([]string, error) {
 	files := make([]string, 0, len(images))
 	for _, img := range images {
 		rel := filepath.ToSlash(filepath.Join(dir, sanitizeImageName(img)+".tar"))
@@ -1510,7 +1406,7 @@ func runGoContainerRegistryDownloads(bundleRoot, dir string, images []string) ([
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return nil, err
 		}
-		if !forceRedownloadEnabled() {
+		if !opts.ForceRedownload {
 			if info, err := os.Stat(target); err == nil {
 				if info.Size() > 0 {
 					files = append(files, rel)
@@ -1531,6 +1427,7 @@ func runGoContainerRegistryDownloads(bundleRoot, dir string, images []string) ([
 		imageObj, err := remoteImageFetchFn(
 			ref,
 			remote.WithAuthFromKeychain(authn.DefaultKeychain),
+			remote.WithContext(ctx),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("pull image %s: %w", img, err)
@@ -1551,11 +1448,6 @@ func runGoContainerRegistryDownloads(bundleRoot, dir string, images []string) ([
 	return files, nil
 }
 
-func forceRedownloadEnabled() bool {
-	v := strings.TrimSpace(os.Getenv(envPrepareForceRedownload))
-	return v == "1" || strings.EqualFold(v, "true")
-}
-
 func fileSHA256(path string) (string, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -1565,8 +1457,8 @@ func fileSHA256(path string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func canReuseDownloadFile(bundleRoot string, spec map[string]any, target string) (bool, error) {
-	if forceRedownloadEnabled() {
+func canReuseDownloadFile(bundleRoot string, spec map[string]any, target string, opts RunOptions) (bool, error) {
+	if opts.ForceRedownload {
 		return false, nil
 	}
 	info, err := os.Stat(target)
@@ -1646,8 +1538,8 @@ func packageMetaFileAbs(bundleRoot, rootRel string) string {
 	return filepath.Join(bundleRoot, filepath.FromSlash(rootRel), packageCacheMetaFile)
 }
 
-func tryReusePackageArtifacts(bundleRoot, rootRel string, packages []string) ([]string, bool, error) {
-	if forceRedownloadEnabled() {
+func tryReusePackageArtifacts(bundleRoot, rootRel string, packages []string, opts RunOptions) ([]string, bool, error) {
+	if opts.ForceRedownload {
 		return nil, false, nil
 	}
 	metaPath := packageMetaFileAbs(bundleRoot, rootRel)
@@ -1856,19 +1748,11 @@ func isManifestTrackedPath(rel string) bool {
 }
 
 func renderSpec(spec map[string]any, wf *config.Workflow, runtimeVars map[string]any) (map[string]any, error) {
-	if spec == nil {
-		return map[string]any{}, nil
-	}
-	vars := map[string]any{}
-	if wf != nil && wf.Vars != nil {
-		vars = wf.Vars
-	}
-	ctx := map[string]any{
-		"vars":    vars,
-		"context": map[string]any{"bundleRoot": "", "stateFile": ""},
-		"runtime": runtimeVars,
-	}
-	return renderMap(spec, ctx)
+	return renderSpecWithContext(spec, wf, runtimeVars, map[string]any{"bundleRoot": "", "stateFile": ""})
+}
+
+func renderSpecWithContext(spec map[string]any, wf *config.Workflow, runtimeVars map[string]any, ctxData map[string]any) (map[string]any, error) {
+	return workflowexec.RenderSpec(spec, wf, runtimeVars, ctxData)
 }
 
 func renderMap(input map[string]any, ctx map[string]any) (map[string]any, error) {

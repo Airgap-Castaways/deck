@@ -1,6 +1,7 @@
 package install
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -67,7 +68,7 @@ func TestRun_InstallTools(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -135,7 +136,7 @@ func TestRun_DefaultStatePathUsesHomeStateKey(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -174,7 +175,7 @@ func TestRun_ManifestIntegrityVerified(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
 		t.Fatalf("expected install success, got %v", err)
 	}
 }
@@ -205,7 +206,7 @@ func TestRun_ManifestIntegrityMismatch(t *testing.T) {
 		}},
 	}
 
-	err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
 	if err == nil {
 		t.Fatalf("expected manifest integrity error")
 	}
@@ -247,7 +248,7 @@ func TestRun_ResumeFromFailedStep(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err == nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err == nil {
 		t.Fatalf("expected failure on s2")
 	}
 
@@ -267,7 +268,7 @@ func TestRun_ResumeFromFailedStep(t *testing.T) {
 	}
 
 	wf.Phases[0].Steps[1].Spec = map[string]any{"command": []any{"true"}}
-	if err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
 		t.Fatalf("resume run failed: %v", err)
 	}
 
@@ -317,7 +318,7 @@ func TestRun_UnsupportedInstallKindFails(t *testing.T) {
 		}},
 	}
 
-	err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
 	if err == nil {
 		t.Fatalf("expected unsupported kind error")
 	}
@@ -353,7 +354,7 @@ func TestRun_RunCommandErrorCodes(t *testing.T) {
 			}},
 		}
 
-		err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
+		err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
 		if err == nil {
 			t.Fatalf("expected run command failure")
 		}
@@ -392,7 +393,7 @@ func TestRun_RunCommandErrorCodes(t *testing.T) {
 			}},
 		}
 
-		err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
+		err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
 		if err == nil {
 			t.Fatalf("expected run command timeout")
 		}
@@ -432,7 +433,7 @@ func TestRun_KubeadmJoinMissingFileErrorCode(t *testing.T) {
 		}},
 	}
 
-	err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
 	if err == nil {
 		t.Fatalf("expected kubeadm join missing file error")
 	}
@@ -481,7 +482,7 @@ func TestRun_VerifyImages(t *testing.T) {
 			}},
 		}
 
-		if err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+		if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
 			t.Fatalf("verify images should succeed: %v", err)
 		}
 	})
@@ -525,7 +526,7 @@ func TestRun_VerifyImages(t *testing.T) {
 			}},
 		}
 
-		err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
+		err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
 		if err == nil {
 			t.Fatalf("expected missing image error")
 		}
@@ -578,7 +579,7 @@ func TestRun_KubeadmRealMode(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
 		t.Fatalf("real kubeadm mode run failed: %v", err)
 	}
 
@@ -626,7 +627,7 @@ func TestRun_KubeadmJoinRealModeRejectsInvalidCommand(t *testing.T) {
 		}},
 	}
 
-	err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
 	if err == nil {
 		t.Fatalf("expected invalid join command error")
 	}
@@ -670,7 +671,7 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -736,7 +737,7 @@ func TestRun_RetrySemantics(t *testing.T) {
 			}},
 		}
 
-		if err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+		if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
 			t.Fatalf("expected retry success, got %v", err)
 		}
 	})
@@ -774,7 +775,7 @@ func TestRun_RetrySemantics(t *testing.T) {
 			}},
 		}
 
-		err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
+		err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
 		if err == nil {
 			t.Fatalf("expected failure after retry exhaustion")
 		}
@@ -821,7 +822,7 @@ func TestRun_WhenInvalidExpression(t *testing.T) {
 		}},
 	}
 
-	err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
 	if err == nil {
 		t.Fatalf("expected condition evaluation failure")
 	}
@@ -912,7 +913,7 @@ func TestRun_InstallPackagesExecutesPackageManager(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
 		t.Fatalf("expected install packages success, got %v", err)
 	}
 
@@ -959,7 +960,7 @@ func TestRun_InstallPackagesSourcePathValidation(t *testing.T) {
 		}},
 	}
 
-	err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
 	if err == nil {
 		t.Fatalf("expected source validation error")
 	}
@@ -1028,7 +1029,7 @@ func TestRun_InstallPackagesInstallsFromLocalRepo(t *testing.T) {
 		}},
 	}
 
-	if err := Run(wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
 		t.Fatalf("expected local repo install success, got %v", err)
 	}
 

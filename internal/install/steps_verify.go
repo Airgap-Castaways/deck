@@ -1,12 +1,13 @@
 package install
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 )
 
-func runVerifyImages(spec map[string]any) error {
+func runVerifyImages(ctx context.Context, spec map[string]any) error {
 	required := stringSlice(spec["images"])
 	if len(required) == 0 {
 		return fmt.Errorf("%s: VerifyImages requires images", errCodeInstallImagesMissing)
@@ -25,7 +26,7 @@ func runVerifyImages(spec map[string]any) error {
 		}
 	}
 
-	output, err := runCommandOutput(cmdArgs, timeout)
+	output, err := runCommandOutputWithContext(ctx, cmdArgs, timeout)
 	if err != nil {
 		return fmt.Errorf("%s: %w", errCodeInstallImagesCmdFailed, err)
 	}

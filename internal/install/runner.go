@@ -2,6 +2,7 @@ package install
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/taedi90/deck/internal/bundle"
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 type RunOptions struct {
@@ -70,9 +72,12 @@ const (
 	errCodeRegisterOutputMissing   = "E_REGISTER_OUTPUT_NOT_FOUND"
 )
 
-func Run(wf *config.Workflow, opts RunOptions) error {
+func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	if wf == nil {
 		return fmt.Errorf("workflow is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	installPhase, found := findPhase(wf, "install")
@@ -148,7 +153,7 @@ func Run(wf *config.Workflow, opts RunOptions) error {
 			attempts = 1
 		}
 		for i := 0; i < attempts; i++ {
-			rendered, renderErr := renderSpec(step.Spec, wf, runtimeVars)
+			rendered, renderErr := renderSpecWithContext(step.Spec, wf, runtimeVars, ctxData)
 			if renderErr != nil {
 				execErr = fmt.Errorf("render spec template: %w", renderErr)
 				break
@@ -158,7 +163,7 @@ func Run(wf *config.Workflow, opts RunOptions) error {
 					rendered["timeout"] = strings.TrimSpace(step.Timeout)
 				}
 			}
-			execErr = executeStep(step.Kind, rendered, bundleRoot)
+			execErr = executeStep(ctx, step.Kind, rendered, bundleRoot)
 			if execErr == nil {
 				if err := applyRegister(step, rendered, runtimeVars); err != nil {
 					execErr = err
@@ -202,12 +207,7 @@ func Run(wf *config.Workflow, opts RunOptions) error {
 }
 
 func findPhase(wf *config.Workflow, name string) (config.Phase, bool) {
-	for _, p := range wf.Phases {
-		if p.Name == name {
-			return p, true
-		}
-	}
-	return config.Phase{}, false
+	return workflowexec.FindPhase(wf, name)
 }
 
 func verifyBundleManifest(bundleRoot string) error {
@@ -293,19 +293,11 @@ func defaultStatePath(wf *config.Workflow) (string, error) {
 }
 
 func renderSpec(spec map[string]any, wf *config.Workflow, runtimeVars map[string]any) (map[string]any, error) {
-	if spec == nil {
-		return map[string]any{}, nil
-	}
-	vars := map[string]any{}
-	if wf != nil && wf.Vars != nil {
-		vars = wf.Vars
-	}
-	ctx := map[string]any{
-		"vars":    vars,
-		"context": map[string]any{"bundleRoot": "", "stateFile": ""},
-		"runtime": runtimeVars,
-	}
-	return renderMap(spec, ctx)
+	return renderSpecWithContext(spec, wf, runtimeVars, map[string]any{"bundleRoot": "", "stateFile": ""})
+}
+
+func renderSpecWithContext(spec map[string]any, wf *config.Workflow, runtimeVars map[string]any, ctxData map[string]any) (map[string]any, error) {
+	return workflowexec.RenderSpec(spec, wf, runtimeVars, ctxData)
 }
 
 func renderMap(input map[string]any, ctx map[string]any) (map[string]any, error) {

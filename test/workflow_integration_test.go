@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,7 +17,7 @@ func TestWorkflowIntegrationBootstrap(t *testing.T) {
 	root := projectRoot(t)
 	workflowPath := filepath.Join(root, "test", "workflows", "k8s-control-plane-bootstrap", "profile", "control-plane.yaml")
 
-	wf, err := config.LoadWithOptions(workflowPath, config.LoadOptions{VarOverrides: map[string]any{"clusterName": "bootstrap-cli"}})
+	wf, err := config.LoadWithOptions(context.Background(), workflowPath, config.LoadOptions{VarOverrides: map[string]any{"clusterName": "bootstrap-cli"}})
 	if err != nil {
 		t.Fatalf("load bootstrap workflow: %v", err)
 	}
@@ -57,7 +58,7 @@ func TestWorkflowIntegrationWorkerJoin(t *testing.T) {
 	root := projectRoot(t)
 	workflowPath := filepath.Join(root, "test", "workflows", "k8s-worker-join", "profile", "worker.yaml")
 
-	wf, err := config.LoadWithOptions(workflowPath, config.LoadOptions{VarOverrides: map[string]any{"joinFile": "/tmp/join-cli.txt"}})
+	wf, err := config.LoadWithOptions(context.Background(), workflowPath, config.LoadOptions{VarOverrides: map[string]any{"joinFile": "/tmp/join-cli.txt"}})
 	if err != nil {
 		t.Fatalf("load worker join workflow: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestWorkflowIntegrationNodeReset(t *testing.T) {
 	root := projectRoot(t)
 	workflowPath := filepath.Join(root, "test", "workflows", "k8s-node-reset", "profile", "node-reset.yaml")
 
-	wf, err := config.Load(workflowPath)
+	wf, err := config.Load(context.Background(), workflowPath)
 	if err != nil {
 		t.Fatalf("load node-reset workflow: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestWorkflowIntegrationRejectsBrokenImports(t *testing.T) {
 	if err := os.WriteFile(workflowPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write broken workflow: %v", err)
 	}
-	_, err := config.Load(workflowPath)
+	_, err := config.Load(context.Background(), workflowPath)
 	if err == nil {
 		t.Fatal("expected broken import to fail load")
 	}

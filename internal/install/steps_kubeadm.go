@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func runKubeadmInit(spec map[string]any) error {
+func runKubeadmInit(ctx context.Context, spec map[string]any) error {
 	mode := stringValue(spec, "mode")
 	if mode == "" {
 		mode = "stub"
@@ -22,7 +22,7 @@ func runKubeadmInit(spec map[string]any) error {
 	if mode != "real" {
 		return fmt.Errorf("%s: unsupported mode %q", errCodeInstallInitModeInvalid, mode)
 	}
-	return runKubeadmInitReal(spec)
+	return runKubeadmInitReal(ctx, spec)
 }
 
 func runKubeadmInitStub(spec map[string]any) error {
@@ -37,7 +37,7 @@ func runKubeadmInitStub(spec map[string]any) error {
 	return os.WriteFile(joinFile, []byte(content), 0o644)
 }
 
-func runKubeadmJoin(spec map[string]any) error {
+func runKubeadmJoin(ctx context.Context, spec map[string]any) error {
 	mode := stringValue(spec, "mode")
 	if mode == "" {
 		mode = "stub"
@@ -48,7 +48,7 @@ func runKubeadmJoin(spec map[string]any) error {
 	if mode != "real" {
 		return fmt.Errorf("%s: unsupported mode %q", errCodeInstallJoinModeInvalid, mode)
 	}
-	return runKubeadmJoinReal(spec)
+	return runKubeadmJoinReal(ctx, spec)
 }
 
 func runKubeadmJoinStub(spec map[string]any) error {
@@ -62,7 +62,7 @@ func runKubeadmJoinStub(spec map[string]any) error {
 	return nil
 }
 
-func runKubeadmInitReal(spec map[string]any) error {
+func runKubeadmInitReal(parent context.Context, spec map[string]any) error {
 	joinFile := stringValue(spec, "outputJoinFile")
 	if joinFile == "" {
 		return fmt.Errorf("%s: KubeadmInit requires outputJoinFile", errCodeInstallInitJoinMissing)
@@ -88,7 +88,7 @@ func runKubeadmInitReal(spec map[string]any) error {
 		args = append(args, extra...)
 	}
 
-	if err := runTimedCommand("kubeadm", args, commandTimeoutWithDefault(spec, 10*time.Minute)); err != nil {
+	if err := runTimedCommandWithContext(parent, "kubeadm", args, commandTimeoutWithDefault(spec, 10*time.Minute)); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return fmt.Errorf("%s: kubeadm init timed out: %w", errCodeInstallInitFailed, err)
 		}
@@ -96,7 +96,10 @@ func runKubeadmInitReal(spec map[string]any) error {
 	}
 
 	joinArgs := []string{"token", "create", "--print-join-command"}
-	ctx, cancel := context.WithTimeout(context.Background(), commandTimeoutWithDefault(spec, 10*time.Minute))
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, commandTimeoutWithDefault(spec, 10*time.Minute))
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "kubeadm", joinArgs...)
 	joinOut, err := cmd.Output()
@@ -117,7 +120,7 @@ func runKubeadmInitReal(spec map[string]any) error {
 	return os.WriteFile(joinFile, []byte(joinCmd+"\n"), 0o644)
 }
 
-func runKubeadmJoinReal(spec map[string]any) error {
+func runKubeadmJoinReal(ctx context.Context, spec map[string]any) error {
 	joinFile := stringValue(spec, "joinFile")
 	if joinFile == "" {
 		return fmt.Errorf("%s: KubeadmJoin requires joinFile", errCodeInstallJoinPathMissing)
@@ -138,7 +141,7 @@ func runKubeadmJoinReal(spec map[string]any) error {
 		args = append(args, extra...)
 	}
 
-	if err := runTimedCommand(args[0], args[1:], commandTimeoutWithDefault(spec, 5*time.Minute)); err != nil {
+	if err := runTimedCommandWithContext(ctx, args[0], args[1:], commandTimeoutWithDefault(spec, 5*time.Minute)); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return fmt.Errorf("%s: kubeadm join timed out: %w", errCodeInstallJoinFailed, err)
 		}

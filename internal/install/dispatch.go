@@ -1,8 +1,11 @@
 package install
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
-func executeStep(kind string, spec map[string]any, bundleRoot string) error {
+func executeStep(ctx context.Context, kind string, spec map[string]any, bundleRoot string) error {
 	switch kind {
 	case "DownloadFile":
 		_, err := runDownloadFile(bundleRoot, spec)
@@ -38,13 +41,13 @@ func executeStep(kind string, spec map[string]any, bundleRoot string) error {
 	case "SysctlApply":
 		return runSysctlApply(spec)
 	case "RunCommand":
-		return runCommand(spec)
+		return runCommand(ctx, spec)
 	case "VerifyImages":
-		return runVerifyImages(spec)
+		return runVerifyImages(ctx, spec)
 	case "KubeadmInit":
-		return runKubeadmInit(spec)
+		return runKubeadmInit(ctx, spec)
 	case "KubeadmJoin":
-		return runKubeadmJoin(spec)
+		return runKubeadmJoin(ctx, spec)
 	default:
 		return fmt.Errorf("%s: unsupported step kind %s", errCodeInstallKindUnsupported, kind)
 	}
