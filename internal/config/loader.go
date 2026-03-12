@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -24,22 +25,25 @@ type LoadOptions struct {
 
 var workflowHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
-func Load(source string) (*Workflow, error) {
-	return LoadWithOptions(source, LoadOptions{})
+func Load(ctx context.Context, source string) (*Workflow, error) {
+	return LoadWithOptions(ctx, source, LoadOptions{})
 }
 
-func LoadWithOptions(source string, opts LoadOptions) (*Workflow, error) {
+func LoadWithOptions(ctx context.Context, source string, opts LoadOptions) (*Workflow, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	source = strings.TrimSpace(source)
 	if source == "" {
 		return nil, fmt.Errorf("workflow path is empty")
 	}
 
-	workflowBytes, origin, err := loadWorkflowSource(source)
+	workflowBytes, origin, err := loadWorkflowSource(ctx, source)
 	if err != nil {
 		return nil, err
 	}
 
-	resolved, resolvedWorkflowBytes, err := loadWorkflowWithImports(workflowBytes, origin, map[string]bool{})
+	resolved, resolvedWorkflowBytes, err := loadWorkflowWithImports(ctx, workflowBytes, origin, map[string]bool{})
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +52,7 @@ func LoadWithOptions(source string, opts LoadOptions) (*Workflow, error) {
 	}
 
 	effectiveVars := map[string]any{}
-	baseVars, err := loadBaseVars(origin)
+	baseVars, err := loadBaseVars(ctx, origin)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +66,7 @@ func LoadWithOptions(source string, opts LoadOptions) (*Workflow, error) {
 	return resolved, nil
 }
 
-func loadWorkflowWithImports(workflowBytes []byte, origin workflowOrigin, visiting map[string]bool) (*Workflow, []byte, error) {
+func loadWorkflowWithImports(ctx context.Context, workflowBytes []byte, origin workflowOrigin, visiting map[string]bool) (*Workflow, []byte, error) {
 	originKey := workflowOriginKey(origin)
 	if visiting[originKey] {
 		return nil, nil, fmt.Errorf("workflow import cycle detected at %s", originKey)
@@ -78,7 +82,7 @@ func loadWorkflowWithImports(workflowBytes []byte, origin workflowOrigin, visiti
 		return nil, nil, fmt.Errorf("workflow cannot set both phases and steps")
 	}
 
-	workflowImportVars, err := loadWorkflowVarImports(origin, wf.VarImports)
+	workflowImportVars, err := loadWorkflowVarImports(ctx, origin, wf.VarImports)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -91,17 +95,17 @@ func loadWorkflowWithImports(workflowBytes []byte, origin workflowOrigin, visiti
 	wf.Vars = baseWorkflowVars
 	wf.VarImports = nil
 
-	if err := expandPhaseImports(&wf, origin, visiting); err != nil {
+	if err := expandPhaseImports(ctx, &wf, origin, visiting); err != nil {
 		return nil, nil, err
 	}
 
 	aggregated := &Workflow{}
 	for _, importRef := range wf.Imports {
-		importBytes, importOrigin, err := loadImportSource(origin, importRef)
+		importBytes, importOrigin, err := loadImportSource(ctx, origin, importRef)
 		if err != nil {
 			return nil, nil, err
 		}
-		importedWorkflow, _, err := loadWorkflowWithImports(importBytes, importOrigin, visiting)
+		importedWorkflow, _, err := loadWorkflowWithImports(ctx, importBytes, importOrigin, visiting)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -122,7 +126,7 @@ func loadWorkflowWithImports(workflowBytes []byte, origin workflowOrigin, visiti
 	return aggregated, resolvedBytes, nil
 }
 
-func expandPhaseImports(wf *Workflow, origin workflowOrigin, visiting map[string]bool) error {
+func expandPhaseImports(ctx context.Context, wf *Workflow, origin workflowOrigin, visiting map[string]bool) error {
 	if wf == nil {
 		return nil
 	}
@@ -137,11 +141,11 @@ func expandPhaseImports(wf *Workflow, origin workflowOrigin, visiting map[string
 			if pathRef == "" {
 				return fmt.Errorf("phase import path is empty in phase %q", phase.Name)
 			}
-			importBytes, importOrigin, err := loadImportSource(origin, pathRef)
+			importBytes, importOrigin, err := loadImportSource(ctx, origin, pathRef)
 			if err != nil {
 				return err
 			}
-			importedWorkflow, _, err := loadWorkflowWithImports(importBytes, importOrigin, visiting)
+			importedWorkflow, _, err := loadWorkflowWithImports(ctx, importBytes, importOrigin, visiting)
 			if err != nil {
 				return err
 			}
@@ -272,14 +276,14 @@ func workflowOriginKey(origin workflowOrigin) string {
 	return "unknown"
 }
 
-func loadImportSource(origin workflowOrigin, importRef string) ([]byte, workflowOrigin, error) {
+func loadImportSource(ctx context.Context, origin workflowOrigin, importRef string) ([]byte, workflowOrigin, error) {
 	ref := strings.TrimSpace(importRef)
 	if ref == "" {
 		return nil, workflowOrigin{}, fmt.Errorf("workflow import path is empty")
 	}
 
 	if u, ok := parseHTTPURL(ref); ok {
-		b, err := getRequiredHTTP(u.String())
+		b, err := getRequiredHTTP(ctx, u.String())
 		if err != nil {
 			return nil, workflowOrigin{}, err
 		}
@@ -304,7 +308,7 @@ func loadImportSource(origin workflowOrigin, importRef string) ([]byte, workflow
 		if err != nil {
 			return nil, workflowOrigin{}, err
 		}
-		b, err := getRequiredHTTP(importURL.String())
+		b, err := getRequiredHTTP(ctx, importURL.String())
 		if err != nil {
 			return nil, workflowOrigin{}, err
 		}
@@ -414,9 +418,9 @@ type workflowOrigin struct {
 	remoteURL *url.URL
 }
 
-func loadWorkflowSource(source string) ([]byte, workflowOrigin, error) {
+func loadWorkflowSource(ctx context.Context, source string) ([]byte, workflowOrigin, error) {
 	if u, ok := parseHTTPURL(source); ok {
-		b, err := getRequiredHTTP(u.String())
+		b, err := getRequiredHTTP(ctx, u.String())
 		if err != nil {
 			return nil, workflowOrigin{}, err
 		}
@@ -434,7 +438,7 @@ func loadWorkflowSource(source string) ([]byte, workflowOrigin, error) {
 	return b, workflowOrigin{localPath: abs}, nil
 }
 
-func loadBaseVars(origin workflowOrigin) (map[string]any, error) {
+func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, error) {
 	if origin.localPath != "" {
 		varsPath := filepath.Join(filepath.Dir(origin.localPath), "vars.yaml")
 		b, err := os.ReadFile(varsPath)
@@ -449,7 +453,7 @@ func loadBaseVars(origin workflowOrigin) (map[string]any, error) {
 
 	if origin.remoteURL != nil {
 		varsURL := siblingURL(origin.remoteURL, "vars.yaml")
-		b, ok, err := getOptionalHTTP(varsURL.String())
+		b, ok, err := getOptionalHTTP(ctx, varsURL.String())
 		if err != nil {
 			return nil, err
 		}
@@ -462,14 +466,14 @@ func loadBaseVars(origin workflowOrigin) (map[string]any, error) {
 	return map[string]any{}, nil
 }
 
-func loadWorkflowVarImports(origin workflowOrigin, refs []string) (map[string]any, error) {
+func loadWorkflowVarImports(ctx context.Context, origin workflowOrigin, refs []string) (map[string]any, error) {
 	merged := map[string]any{}
 	for _, ref := range refs {
 		trimmed := strings.TrimSpace(ref)
 		if trimmed == "" {
 			return nil, fmt.Errorf("var import path is empty")
 		}
-		b, _, err := loadImportSource(origin, trimmed)
+		b, _, err := loadImportSource(ctx, origin, trimmed)
 		if err != nil {
 			return nil, err
 		}
@@ -525,8 +529,12 @@ func siblingURL(u *url.URL, fileName string) *url.URL {
 	return &v
 }
 
-func getRequiredHTTP(rawURL string) ([]byte, error) {
-	resp, err := workflowHTTPClient.Get(rawURL)
+func getRequiredHTTP(ctx context.Context, rawURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get workflow url: %w", err)
+	}
+	resp, err := workflowHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get workflow url: %w", err)
 	}
@@ -543,8 +551,12 @@ func getRequiredHTTP(rawURL string) ([]byte, error) {
 	return b, nil
 }
 
-func getOptionalHTTP(rawURL string) ([]byte, bool, error) {
-	resp, err := workflowHTTPClient.Get(rawURL)
+func getOptionalHTTP(ctx context.Context, rawURL string) ([]byte, bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, false, fmt.Errorf("get vars url: %w", err)
+	}
+	resp, err := workflowHTTPClient.Do(req)
 	if err != nil {
 		return nil, false, fmt.Errorf("get vars url: %w", err)
 	}

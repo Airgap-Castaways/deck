@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -1113,7 +1114,7 @@ phases:
 		t.Fatalf("unexpected downloaded content: %q", string(raw))
 	}
 
-	wf, err := config.Load(workflowPath)
+	wf, err := config.Load(context.Background(), workflowPath)
 	if err != nil {
 		t.Fatalf("load workflow: %v", err)
 	}
@@ -1192,7 +1193,7 @@ phases:
 			t.Fatalf("remote apply(1) failed: %v", err)
 		}
 
-		wf1, err := config.Load(workflowURL)
+		wf1, err := config.Load(context.Background(), workflowURL)
 		if err != nil {
 			t.Fatalf("load remote workflow(1): %v", err)
 		}
@@ -1212,7 +1213,7 @@ phases:
 			t.Fatalf("remote apply(2) failed: %v", err)
 		}
 
-		wf2, err := config.Load(workflowURL)
+		wf2, err := config.Load(context.Background(), workflowURL)
 		if err != nil {
 			t.Fatalf("load remote workflow(2): %v", err)
 		}
@@ -1323,7 +1324,7 @@ func TestDiff(t *testing.T) {
 		t.Fatalf("expected RUN in diff output, got %q", before)
 	}
 
-	wf, err := config.Load(wfPath)
+	wf, err := config.Load(context.Background(), wfPath)
 	if err != nil {
 		t.Fatalf("load workflow: %v", err)
 	}
@@ -1331,7 +1332,7 @@ func TestDiff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build execution workflow: %v", err)
 	}
-	if err := install.Run(execWf, install.RunOptions{BundleRoot: ""}); err != nil {
+	if err := install.Run(context.Background(), execWf, install.RunOptions{BundleRoot: ""}); err != nil {
 		t.Fatalf("install run: %v", err)
 	}
 

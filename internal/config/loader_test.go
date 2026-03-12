@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,7 +21,7 @@ func TestVarsPrecedence(t *testing.T) {
 		t.Fatalf("write workflow: %v", err)
 	}
 
-	wf, err := LoadWithOptions(workflowPath, LoadOptions{VarOverrides: map[string]any{
+	wf, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{VarOverrides: map[string]any{
 		"imageRepo": "from-cli",
 		"cliOnly":   "present",
 	}})
@@ -56,7 +57,7 @@ func TestVarsURLFetch(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		wf, err := Load(ts.URL + "/workflows/apply.yaml")
+		wf, err := Load(context.Background(), ts.URL+"/workflows/apply.yaml")
 		if err != nil {
 			t.Fatalf("Load failed: %v", err)
 		}
@@ -82,7 +83,7 @@ func TestVarsURLFetch(t *testing.T) {
 		}))
 		defer ts.Close()
 
-		wf, err := Load(ts.URL + "/workflows/apply.yaml")
+		wf, err := Load(context.Background(), ts.URL+"/workflows/apply.yaml")
 		if err != nil {
 			t.Fatalf("Load failed: %v", err)
 		}
@@ -114,7 +115,7 @@ steps:
 		t.Fatalf("write workflow: %v", err)
 	}
 
-	_, err := Load(workflowPath)
+	_, err := Load(context.Background(), workflowPath)
 	if err == nil {
 		t.Fatalf("expected error when both phases and steps are set")
 	}
@@ -132,17 +133,17 @@ func TestStateKey(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "vars.yaml"), []byte("name: alpha\n"), 0o644); err != nil {
 			t.Fatalf("write vars.yaml(1): %v", err)
 		}
-		wf1, err := LoadWithOptions(workflowPath, LoadOptions{})
+		wf1, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{})
 		if err != nil {
-			t.Fatalf("LoadWithOptions(1) failed: %v", err)
+			t.Fatalf("LoadWithOptions(context.Background(), 1) failed: %v", err)
 		}
 
 		if err := os.WriteFile(filepath.Join(dir, "vars.yaml"), []byte("name: beta\n"), 0o644); err != nil {
 			t.Fatalf("write vars.yaml(2): %v", err)
 		}
-		wf2, err := LoadWithOptions(workflowPath, LoadOptions{})
+		wf2, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{})
 		if err != nil {
-			t.Fatalf("LoadWithOptions(2) failed: %v", err)
+			t.Fatalf("LoadWithOptions(context.Background(), 2) failed: %v", err)
 		}
 
 		if wf1.StateKey == wf2.StateKey {
@@ -158,14 +159,14 @@ func TestStateKey(t *testing.T) {
 			t.Fatalf("write workflow: %v", err)
 		}
 
-		wf1, err := LoadWithOptions(workflowPath, LoadOptions{VarOverrides: map[string]any{"mode": "override-a"}})
+		wf1, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{VarOverrides: map[string]any{"mode": "override-a"}})
 		if err != nil {
-			t.Fatalf("LoadWithOptions(override-a) failed: %v", err)
+			t.Fatalf("LoadWithOptions(context.Background(), override-a) failed: %v", err)
 		}
 
-		wf2, err := LoadWithOptions(workflowPath, LoadOptions{VarOverrides: map[string]any{"mode": "override-b"}})
+		wf2, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{VarOverrides: map[string]any{"mode": "override-b"}})
 		if err != nil {
-			t.Fatalf("LoadWithOptions(override-b) failed: %v", err)
+			t.Fatalf("LoadWithOptions(context.Background(), override-b) failed: %v", err)
 		}
 
 		if wf1.StateKey == wf2.StateKey {
@@ -233,7 +234,7 @@ steps:
 		t.Fatalf("write root workflow: %v", err)
 	}
 
-	wf, err := Load(rootPath)
+	wf, err := Load(context.Background(), rootPath)
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -284,7 +285,7 @@ steps:
 		t.Fatalf("write b.yaml: %v", err)
 	}
 
-	_, err := Load(aPath)
+	_, err := Load(context.Background(), aPath)
 	if err == nil {
 		t.Fatalf("expected import cycle error")
 	}
@@ -324,7 +325,7 @@ steps:
 	}))
 	defer ts.Close()
 
-	wf, err := Load(ts.URL + "/wf/apply.yaml")
+	wf, err := Load(context.Background(), ts.URL+"/wf/apply.yaml")
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -374,7 +375,7 @@ phases:
 		t.Fatalf("write root workflow: %v", err)
 	}
 
-	wf, err := Load(rootPath)
+	wf, err := Load(context.Background(), rootPath)
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -428,7 +429,7 @@ phases:
 		t.Fatalf("write root workflow: %v", err)
 	}
 
-	wf, err := LoadWithOptions(rootPath, LoadOptions{VarOverrides: map[string]any{"osFamily": "rhel", "enableCommon": true}})
+	wf, err := LoadWithOptions(context.Background(), rootPath, LoadOptions{VarOverrides: map[string]any{"osFamily": "rhel", "enableCommon": true}})
 	if err != nil {
 		t.Fatalf("LoadWithOptions failed: %v", err)
 	}
@@ -480,7 +481,7 @@ steps:
 		t.Fatalf("write root workflow: %v", err)
 	}
 
-	wf, err := LoadWithOptions(rootPath, LoadOptions{VarOverrides: map[string]any{"region": "cli"}})
+	wf, err := LoadWithOptions(context.Background(), rootPath, LoadOptions{VarOverrides: map[string]any{"region": "cli"}})
 	if err != nil {
 		t.Fatalf("LoadWithOptions failed: %v", err)
 	}

@@ -1,6 +1,7 @@
 package prepare
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,7 +46,7 @@ func TestPackCacheInvalidation(t *testing.T) {
 	}
 
 	bundleRoot := t.TempDir()
-	if err := Run(wf, RunOptions{BundleRoot: bundleRoot}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundleRoot}); err != nil {
 		t.Fatalf("first Run failed: %v", err)
 	}
 
@@ -105,7 +106,7 @@ func TestRun_PackCacheRoleGate(t *testing.T) {
 			}},
 		}
 
-		if err := Run(wf, RunOptions{BundleRoot: t.TempDir()}); err != nil {
+		if err := Run(context.Background(), wf, RunOptions{BundleRoot: t.TempDir()}); err != nil {
 			t.Fatalf("Run failed: %v", err)
 		}
 
@@ -137,7 +138,7 @@ func TestRun_PackCacheRoleGate(t *testing.T) {
 			}},
 		}
 
-		if err := Run(wf, RunOptions{BundleRoot: t.TempDir()}); err != nil {
+		if err := Run(context.Background(), wf, RunOptions{BundleRoot: t.TempDir()}); err != nil {
 			t.Fatalf("Run failed: %v", err)
 		}
 
