@@ -6,20 +6,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newListCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List available deck files from a local bundle or server",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeList(cmdFlagValue(cmd, "server"), cmdFlagValue(cmd, "output"))
-		},
-	}
-	cmd.Flags().SetInterspersed(false)
-	cmd.Flags().String("server", "", "server URL for index (optional; defaults to local workflows/)")
-	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
-	return cmd
-}
-
 func newValidateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "validate",
