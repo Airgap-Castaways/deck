@@ -60,8 +60,14 @@ func TestRunUsageShowsTopLevelAxes(t *testing.T) {
 			if strings.Index(msg, "Core Commands\n") > strings.Index(msg, "Additional Commands\n") {
 				t.Fatalf("core commands section must appear before additional commands: %q", msg)
 			}
-			if strings.Index(msg, "init") > strings.Index(msg, "apply") {
-				t.Fatalf("core commands must keep registration order: %q", msg)
+			coreCommands := []string{"init", "validate", "pack", "plan", "apply"}
+			for i := 0; i < len(coreCommands)-1; i++ {
+				if strings.Index(msg, coreCommands[i]) > strings.Index(msg, coreCommands[i+1]) {
+					t.Fatalf("core commands must keep registration order: %q appeared after %q in %q", coreCommands[i], coreCommands[i+1], msg)
+				}
+			}
+			if strings.Index(msg, "doctor") > strings.Index(msg, "site") {
+				t.Fatalf("additional commands must keep registration order: %q", msg)
 			}
 			for _, legacy := range []string{"strategy", "control"} {
 				if strings.Contains(msg, legacy) {
