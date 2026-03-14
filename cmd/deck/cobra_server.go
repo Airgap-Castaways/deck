@@ -193,15 +193,6 @@ func executeServerShow() error {
 	if err != nil {
 		return err
 	}
-	if resolved == "" {
-		if err := stdoutPrintln("server="); err != nil {
-			return err
-		}
-		if err := stdoutPrintf("api-token-set=%t\n", strings.TrimSpace(apiToken) != ""); err != nil {
-			return err
-		}
-		return stdoutPrintln("source=none")
-	}
 	if err := stdoutPrintf("server=%s\n", resolved); err != nil {
 		return err
 	}
@@ -212,6 +203,9 @@ func executeServerShow() error {
 		if err := stdoutPrintf("api-token-source=%s\n", apiTokenSource); err != nil {
 			return err
 		}
+	}
+	if resolved == "" {
+		source = "none"
 	}
 	if err := stdoutPrintf("source=%s\n", source); err != nil {
 		return err
