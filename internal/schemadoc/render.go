@@ -734,16 +734,19 @@ func resolveSchemaNode(root, node map[string]any) map[string]any {
 }
 
 func enumString(raw any) string { return strings.Join(toStrings(raw), ", ") }
+
 func valueString(v any) string {
 	if v == nil {
 		return ""
 	}
 	return strings.TrimSpace(fmt.Sprint(v))
 }
+
 func stringValue(v any) string {
 	s, _ := v.(string)
 	return s
 }
+
 func toStrings(v any) []string {
 	items, ok := v.([]any)
 	if !ok {
@@ -757,6 +760,7 @@ func toStrings(v any) []string {
 	}
 	return out
 }
+
 func mapValue(root any, path ...string) any {
 	current, _ := root.(map[string]any)
 	for _, key := range path {
@@ -775,12 +779,14 @@ func mapValue(root any, path ...string) any {
 	}
 	return current
 }
+
 func joinPath(prefix, key string) string {
 	if prefix == "" {
 		return key
 	}
 	return prefix + "." + key
 }
+
 func prefixDotJoin(prefix string, items []string) string {
 	out := make([]string, 0, len(items))
 	for _, item := range items {
@@ -788,9 +794,11 @@ func prefixDotJoin(prefix string, items []string) string {
 	}
 	return strings.Join(out, ", ")
 }
+
 func prefixSpec(item string) string {
 	return "spec." + item
 }
+
 func wrapPaths(items []string) []string {
 	out := make([]string, 0, len(items))
 	for _, item := range items {
@@ -798,12 +806,14 @@ func wrapPaths(items []string) []string {
 	}
 	return out
 }
+
 func prefixPath(prefix, item string) string {
 	if prefix == "" {
 		return fmt.Sprintf("`%s`", item)
 	}
 	return fmt.Sprintf("`%s.%s`", prefix, item)
 }
+
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if strings.TrimSpace(v) != "" {
@@ -812,6 +822,7 @@ func firstNonEmpty(values ...string) string {
 	}
 	return ""
 }
+
 func dedupeStrings(items []string) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -824,9 +835,11 @@ func dedupeStrings(items []string) []string {
 	}
 	return out
 }
+
 func toAnySliceFromUnknown(v any) []any { items, _ := v.([]any); return items }
-func slug(kind string) string           { return strings.ToLower(strings.ReplaceAll(kind, " ", "-")) }
-func escapePipe(s string) string        { return strings.ReplaceAll(s, "|", "\\|") }
+
+func escapePipe(s string) string { return strings.ReplaceAll(s, "|", "\\|") }
+
 func (in PageInput) firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if strings.TrimSpace(v) != "" {

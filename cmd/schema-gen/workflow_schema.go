@@ -62,6 +62,7 @@ func generateToolDefinitionSchema() map[string]any {
 
 	return root
 }
+
 func phaseSchema() map[string]any {
 	reflector := jsonschema.Reflector{DoNotReference: true, ExpandedStruct: true}
 	phase := schemaToMap(reflector.Reflect(&schemamodel.WorkflowPhase{}))

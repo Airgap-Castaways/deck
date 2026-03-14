@@ -1,8 +1,10 @@
 package main
 
-import jsonschema "github.com/invopop/jsonschema"
+import (
+	jsonschema "github.com/invopop/jsonschema"
 
-import "github.com/taedi90/deck/internal/schemamodel"
+	"github.com/taedi90/deck/internal/schemamodel"
+)
 
 func generateFileToolSchema() map[string]any {
 	reflector := jsonschema.Reflector{DoNotReference: true, ExpandedStruct: true}
