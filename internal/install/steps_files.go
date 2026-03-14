@@ -3,6 +3,7 @@ package install
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -74,7 +75,19 @@ func runCopyFile(spec map[string]any) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(dest, content, 0o644)
+	if err := os.WriteFile(dest, content, 0o644); err != nil {
+		return err
+	}
+	if modeRaw := stringValue(spec, "mode"); modeRaw != "" {
+		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
+		if err != nil {
+			return fmt.Errorf("invalid mode: %w", err)
+		}
+		if err := os.Chmod(dest, os.FileMode(modeVal)); err != nil {
+			return err
+		}
+	}
+	return applyFileOwnership(dest, stringValue(spec, "owner"), stringValue(spec, "group"))
 }
 
 func runEnsureDir(spec map[string]any) error {
@@ -94,7 +107,53 @@ func runEnsureDir(spec map[string]any) error {
 			return err
 		}
 	}
-	return nil
+	return applyFileOwnership(path, stringValue(spec, "owner"), stringValue(spec, "group"))
+}
+
+func applyFileOwnership(path, ownerName, groupName string) error {
+	if ownerName == "" && groupName == "" {
+		return nil
+	}
+	uid, gid, err := resolveOwnership(ownerName, groupName)
+	if err != nil {
+		return err
+	}
+	return os.Chown(path, uid, gid)
+}
+
+func resolveOwnership(ownerName, groupName string) (int, int, error) {
+	uid := -1
+	gid := -1
+	if ownerName != "" {
+		u, err := user.Lookup(ownerName)
+		if err != nil {
+			return -1, -1, err
+		}
+		parsed, err := strconv.Atoi(u.Uid)
+		if err != nil {
+			return -1, -1, err
+		}
+		uid = parsed
+		if groupName == "" {
+			parsedGID, err := strconv.Atoi(u.Gid)
+			if err != nil {
+				return -1, -1, err
+			}
+			gid = parsedGID
+		}
+	}
+	if groupName != "" {
+		g, err := user.LookupGroup(groupName)
+		if err != nil {
+			return -1, -1, err
+		}
+		parsed, err := strconv.Atoi(g.Gid)
+		if err != nil {
+			return -1, -1, err
+		}
+		gid = parsed
+	}
+	return uid, gid, nil
 }
 
 func runSymlink(spec map[string]any) error {

@@ -243,7 +243,7 @@ func mergeArchiveToLocal(bundleData stagedBundle, root string, dryRun bool) (Mer
 	if err != nil {
 		return MergeReport{}, err
 	}
-	mergedIndex := mergeScenarioIndex(existingIndex, workflowPaths)
+	mergedIndex := NormalizeScenarioIndex(existingIndex, workflowPaths)
 	indexAction := "overwrite"
 	if !exists {
 		indexAction = "upload"
@@ -331,17 +331,17 @@ func writeLocalWorkflowIndex(indexPath string, items []string) error {
 	return nil
 }
 
-func mergeScenarioIndex(existing, incoming []string) []string {
+func NormalizeScenarioIndex(existing, incoming []string) []string {
 	set := map[string]struct{}{}
 	for _, item := range existing {
-		cleaned := normalizeScenarioIndexItem(item)
+		cleaned := NormalizeScenarioIndexItem(item)
 		if cleaned == "" {
 			continue
 		}
 		set[cleaned] = struct{}{}
 	}
 	for _, item := range incoming {
-		cleaned := normalizeScenarioIndexItem(item)
+		cleaned := NormalizeScenarioIndexItem(item)
 		if cleaned == "" {
 			continue
 		}
@@ -356,7 +356,7 @@ func mergeScenarioIndex(existing, incoming []string) []string {
 	return merged
 }
 
-func normalizeScenarioIndexItem(raw string) string {
+func NormalizeScenarioIndexItem(raw string) string {
 	cleaned := path.Clean(strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/")))
 	if cleaned == "" || cleaned == "." {
 		return ""

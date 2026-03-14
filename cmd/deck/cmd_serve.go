@@ -10,14 +10,13 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/taedi90/deck/internal/bundle"
 	ctrllogs "github.com/taedi90/deck/internal/logs"
 	"github.com/taedi90/deck/internal/server"
 )
@@ -169,62 +168,7 @@ func fetchScenarioIndexFromServer(server string) ([]string, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 		return nil, fmt.Errorf("server scenarios: decode response: %w", err)
 	}
-	return normalizeScenarioIndex(items), nil
-}
-
-func normalizeScenarioIndex(items []string) []string {
-	set := map[string]struct{}{}
-	for _, item := range items {
-		normalized := normalizeScenarioIndexItem(item)
-		if normalized == "" {
-			continue
-		}
-		set[normalized] = struct{}{}
-	}
-	out := make([]string, 0, len(set))
-	for item := range set {
-		out = append(out, item)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func normalizeScenarioIndexItem(raw string) string {
-	cleaned := path.Clean(strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/")))
-	if cleaned == "" || cleaned == "." {
-		return ""
-	}
-	cleaned = strings.TrimPrefix(cleaned, "/")
-	hadScenariosPrefix := false
-	if strings.HasPrefix(cleaned, "workflows/") {
-		cleaned = strings.TrimPrefix(cleaned, "workflows/")
-		if !strings.HasPrefix(cleaned, "scenarios/") {
-			return ""
-		}
-	}
-	if strings.HasPrefix(cleaned, "scenarios/") {
-		cleaned = strings.TrimPrefix(cleaned, "scenarios/")
-		hadScenariosPrefix = true
-	}
-	if strings.HasPrefix(cleaned, "components/") || strings.Contains(cleaned, "/components/") || cleaned == "index.json" {
-		return ""
-	}
-	if strings.HasSuffix(cleaned, ".yaml") {
-		if !hadScenariosPrefix {
-			return ""
-		}
-		cleaned = strings.TrimSuffix(cleaned, ".yaml")
-	}
-	if strings.HasSuffix(cleaned, ".yml") {
-		if !hadScenariosPrefix {
-			return ""
-		}
-		cleaned = strings.TrimSuffix(cleaned, ".yml")
-	}
-	if cleaned == "" {
-		return ""
-	}
-	return cleaned
+	return bundle.NormalizeScenarioIndex(nil, items), nil
 }
 
 func executeHealth(server string) error {
