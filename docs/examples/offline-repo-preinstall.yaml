@@ -10,8 +10,9 @@ phases:
       - id: write-apt-offline-config
         when: vars.osFamily == "debian"
         apiVersion: deck/v1alpha1
-        kind: WriteFile
+        kind: File
         spec:
+          action: install
           path: /etc/apt/apt.conf.d/99offline
           mode: "0644"
           contentFromTemplate: |
@@ -21,19 +22,31 @@ phases:
       - id: apply-offline-repo-config-apt
         when: vars.osFamily == "debian"
         apiVersion: deck/v1alpha1
-        kind: RepoConfig
+        kind: Repository
         spec:
+          action: configure
           format: apt
           replaceExisting: true
           repositories:
             - id: offline-repo
               baseurl: http://{{ .vars.serverURL }}/packages/apt/{{ .vars.release }}
               trusted: true
+      - id: refresh-offline-repo-cache-apt
+        when: vars.osFamily == "debian"
+        apiVersion: deck/v1alpha1
+        kind: PackageCache
+        spec:
+          manager: apt
+          clean: true
+          update: true
+          restrictToRepos:
+            - /etc/apt/sources.list.d/deck-offline.list
       - id: apply-offline-repo-config-yum
         when: vars.osFamily == "rhel"
         apiVersion: deck/v1alpha1
-        kind: RepoConfig
+        kind: Repository
         spec:
+          action: configure
           format: yum
           replaceExisting: true
           repositories:
@@ -43,6 +56,15 @@ phases:
               enabled: true
               gpgcheck: false
               module_hotfixes: true
+      - id: refresh-offline-repo-cache-yum
+        when: vars.osFamily == "rhel"
+        apiVersion: deck/v1alpha1
+        kind: PackageCache
+        spec:
+          manager: dnf
+          clean: true
+          update: true
+          restrictToRepos: [offline-repo]
       - id: disable-firewalld-and-ufw
         apiVersion: deck/v1alpha1
         kind: Service

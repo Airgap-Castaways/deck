@@ -8,19 +8,7 @@ import (
 func stepOutputs(kind string, rendered map[string]any) map[string]any {
 	outputs := map[string]any{}
 	switch kind {
-	case "DownloadFile":
-		if path := stringValue(mapValue(rendered, "output"), "path"); path != "" {
-			outputs["path"] = path
-		}
-	case "WriteFile":
-		if path := stringValue(rendered, "path"); path != "" {
-			outputs["path"] = path
-		}
-	case "CopyFile":
-		if dest := stringValue(rendered, "dest"); dest != "" {
-			outputs["dest"] = dest
-		}
-	case "EnsureDir", "Symlink", "InstallFile", "TemplateFile", "SystemdUnit", "RepoConfig", "ContainerdConfig":
+	case "Directory", "Symlink", "SystemdUnit", "Containerd":
 		if path := stringValue(rendered, "path"); path != "" {
 			outputs["path"] = path
 		}
@@ -32,7 +20,52 @@ func stepOutputs(kind string, rendered map[string]any) map[string]any {
 		if name := stringValue(rendered, "name"); name != "" {
 			outputs["name"] = name
 		}
-	case "KubeadmInit":
+		if names := stringSlice(rendered["names"]); len(names) > 0 {
+			outputs["names"] = names
+		}
+	case "File":
+		switch fileAction(rendered) {
+		case "download":
+			if path := stringValue(mapValue(rendered, "output"), "path"); path != "" {
+				outputs["path"] = path
+				outputs["artifacts"] = []string{path}
+			}
+		case "install", "edit":
+			if path := stringValue(rendered, "path"); path != "" {
+				outputs["path"] = path
+			}
+		case "copy":
+			if dest := stringValue(rendered, "dest"); dest != "" {
+				outputs["dest"] = dest
+			}
+		}
+	case "Repository":
+		if repositoryAction(rendered) == "configure" {
+			if path := stringValue(rendered, "path"); path != "" {
+				outputs["path"] = path
+			}
+		}
+	case "Kubeadm":
+		if kubeadmAction(rendered) == "init" {
+			if joinFile := stringValue(rendered, "outputJoinFile"); joinFile != "" {
+				outputs["joinFile"] = joinFile
+			}
+		}
+	case "Packages":
+		if packagesAction(rendered) == "download" {
+			if artifacts := rendered["artifacts"]; artifacts != nil {
+				outputs["artifacts"] = artifacts
+			}
+		}
+	case "Image":
+		if imageAction(rendered) == "download" {
+			if artifacts := rendered["artifacts"]; artifacts != nil {
+				outputs["artifacts"] = artifacts
+			}
+		}
+	case "Artifacts", "Wait", "PackageCache", "Sysctl", "Swap", "Command", "Inspection":
+		// no register outputs
+	default:
 		if joinFile := stringValue(rendered, "outputJoinFile"); joinFile != "" {
 			outputs["joinFile"] = joinFile
 		}

@@ -579,7 +579,7 @@ func newApplyCommand() *cobra.Command {
 	cmd.Flags().String("session", "", "site session id for assisted mode")
 	cmd.Flags().String("api-token", "", "bearer token for assisted site APIs (defaults to saved token)")
 	cmd.Flags().String("phase", "install", "phase name to execute")
-	cmd.Flags().Bool("prefetch", false, "execute DownloadFile steps before other steps")
+	cmd.Flags().Bool("prefetch", false, "execute File download steps before other steps")
 	cmd.Flags().Bool("dry-run", false, "print apply plan without executing steps")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	return cmd
@@ -760,7 +760,7 @@ func buildApplyPrefetchWorkflow(wf *config.Workflow) *config.Workflow {
 	prefetchSteps := make([]config.Step, 0)
 	for _, phase := range wf.Phases {
 		for _, step := range phase.Steps {
-			if step.Kind == "DownloadFile" {
+			if step.Kind == "File" && prefetchFileAction(step.Spec) == "download" {
 				prefetchSteps = append(prefetchSteps, step)
 			}
 		}
@@ -778,6 +778,18 @@ func buildApplyPrefetchWorkflow(wf *config.Workflow) *config.Workflow {
 		StateKey:       wf.StateKey,
 		WorkflowSHA256: wf.WorkflowSHA256,
 	}
+}
+
+func prefetchFileAction(spec map[string]any) string {
+	if spec != nil {
+		if action, ok := spec["action"].(string); ok && action != "" {
+			return action
+		}
+		if spec["source"] != nil || spec["output"] != nil {
+			return "download"
+		}
+	}
+	return "install"
 }
 
 func buildApplyExecutionWorkflow(wf *config.Workflow, phaseName string) (*config.Workflow, error) {
@@ -1022,7 +1034,7 @@ func discoverApplyWorkflow(bundleRoot string) (string, error) {
 		if loadErr != nil {
 			return "", loadErr
 		}
-		if strings.TrimSpace(wf.Role) == "pack" {
+		if strings.TrimSpace(wf.Role) == "prepare" {
 			return "", fmt.Errorf("apply workflow role must be apply: %s", preferred)
 		}
 		if strings.TrimSpace(wf.Role) != "apply" {
@@ -1066,14 +1078,44 @@ func discoverApplyWorkflow(bundleRoot string) (string, error) {
 	return matches[0], nil
 }
 
-func executeValidate(file string) error {
-	if file == "" {
-		return errors.New("--file (or -f) is required")
+func executeValidate(file string, scenario string) error {
+	resolved, err := resolveValidateTarget(strings.TrimSpace(file), strings.TrimSpace(scenario))
+	if err != nil {
+		return err
 	}
 
-	if err := validate.File(file); err != nil {
+	if err := validate.File(resolved); err != nil {
 		return err
 	}
 
 	return stdoutPrintln("validate: ok")
+}
+
+func resolveValidateTarget(file string, scenario string) (string, error) {
+	if file != "" {
+		return file, nil
+	}
+	if scenario == "" {
+		return "", errors.New("--file (or -f) is required or provide a scenario name")
+	}
+	if candidate, ok := resolveScenarioPath(scenario); ok {
+		return candidate, nil
+	}
+	return "", fmt.Errorf("scenario not found under workflows/scenarios: %s", scenario)
+}
+
+func resolveScenarioPath(name string) (string, bool) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" || strings.Contains(trimmed, "..") || strings.Contains(trimmed, "\\") {
+		return "", false
+	}
+	workflowDir := filepath.Join(".", "workflows", "scenarios")
+	for _, suffix := range []string{".yaml", ".yml"} {
+		candidate := filepath.Join(workflowDir, trimmed+suffix)
+		info, err := os.Stat(candidate)
+		if err == nil && !info.IsDir() {
+			return candidate, true
+		}
+	}
+	return "", false
 }

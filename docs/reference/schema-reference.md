@@ -6,62 +6,62 @@
 
 - `../schemas/deck-workflow.schema.json`: top-level workflow schema
 - `../schemas/deck-tooldefinition.schema.json`: tool definition schema
-- `../schemas/tools/*.schema.json`: per-step-kind schemas
+- `../schemas/tools/*.schema.json`: typed step schemas
 
 ## Workflow schema highlights
 
 The workflow schema currently enforces:
 
 - required `role` and `version`
-- `role` must be `pack` or `apply`
+- `role` must be `prepare` or `apply`
 - either `steps`, `phases`, or `imports` must be present
 - a step must include `id`, `kind`, and `spec`
 - optional `when`, `retry`, `timeout`, and `register`
 
-## Supported step schemas
+Schema roots also carry lightweight documentation metadata such as `description` and `x-deck-visibility` so tooling can distinguish public, advanced, and legacy/internal surfaces.
 
-- `check-host.schema.json`
-- `containerd-config.schema.json`
-- `copy-file.schema.json`
-- `download-packages.schema.json`
-- `download-k8s-packages.schema.json`
-- `download-images.schema.json`
-- `download-file.schema.json`
-- `ensure-dir.schema.json`
-- `install-artifacts.schema.json`
-- `install-file.schema.json`
-- `install-packages.schema.json`
-- `edit-file.schema.json`
-- `kernel-module.schema.json`
-- `modprobe.schema.json`
-- `kubeadm-init.schema.json`
-- `kubeadm-join.schema.json`
-- `kubeadm-reset.schema.json`
-- `package-cache.schema.json`
-- `repo-config.schema.json`
-- `run-command.schema.json`
-- `service.schema.json`
-- `swap.schema.json`
-- `symlink.schema.json`
-- `systemd-unit.schema.json`
-- `sysctl.schema.json`
-- `sysctl-apply.schema.json`
-- `template-file.schema.json`
-- `wait-path.schema.json`
-- `verify-images.schema.json`
-- `write-file.schema.json`
+## Schema groups
+
+### Prepare authoring
+
+- `../schemas/deck-workflow.schema.json` contains the user-facing `artifacts` model for `role: prepare`
+- new prepare workflows should prefer `artifacts.files`, `artifacts.images`, and `artifacts.packages`
+
+### Typed steps
+
+- `../schemas/tools/inspection.schema.json`
+- `../schemas/tools/containerd.schema.json`
+- `../schemas/tools/directory.schema.json`
+- `../schemas/tools/artifacts.schema.json`
+- `../schemas/tools/file.schema.json`
+- `../schemas/tools/image.schema.json`
+- `../schemas/tools/packages.schema.json`
+- `../schemas/tools/kernel-module.schema.json`
+- `../schemas/tools/kubeadm.schema.json`
+- `../schemas/tools/package-cache.schema.json`
+- `../schemas/tools/repository.schema.json`
+- `../schemas/tools/service.schema.json`
+- `../schemas/tools/swap.schema.json`
+- `../schemas/tools/symlink.schema.json`
+- `../schemas/tools/systemd-unit.schema.json`
+- `../schemas/tools/sysctl.schema.json`
+- `../schemas/tools/wait.schema.json`
+- `../schemas/tools/command.schema.json`
+
+Legacy/internal prepare fetch schemas were removed. Prepare artifact planning now lowers into `File`, `Image`, and `Packages` with `action: download`.
 
 ## Typed step reference notes
 
-### `RepoConfig`
+### `Repository`
 
 Supports both apt and yum repository definitions, plus file placement and refresh controls such as `path`, `mode`, `replaceExisting`, `disableExisting`, `backupPaths`, `cleanupPaths`, and `refreshCache`.
 
 ```yaml
 - id: configure-offline-repo
   apiVersion: deck/v1alpha1
-  kind: RepoConfig
+  kind: Repository
   spec:
+    action: configure
     format: apt
     replaceExisting: true
     refreshCache:
@@ -75,7 +75,7 @@ Supports both apt and yum repository definitions, plus file placement and refres
 
 ### `PackageCache`
 
-Refreshes local package metadata with `manager`, `clean`, and `update`. Set at least one of `clean` or `update`.
+Refreshes local package metadata with `manager`, `clean`, and `update`. Set at least one of `clean` or `update`. Use `restrictToRepos` and `excludeRepos` to control which repos the package manager sees during refresh.
 
 ```yaml
 - id: refresh-apt-package-cache
@@ -85,16 +85,18 @@ Refreshes local package metadata with `manager`, `clean`, and `update`. Set at l
     manager: apt
     clean: true
     update: true
+    restrictToRepos:
+      - /etc/apt/sources.list.d/offline.list
 ```
 
-### `ContainerdConfig`
+### `Containerd`
 
 Supports `path`, `configPath`, `systemdCgroup`, `createDefault`, and per-registry `registryHosts` entries with `registry`, `server`, `host`, `capabilities`, and `skipVerify`.
 
 ```yaml
 - id: configure-containerd
   apiVersion: deck/v1alpha1
-  kind: ContainerdConfig
+  kind: Containerd
   spec:
     path: /etc/containerd/config.toml
     configPath: /etc/containerd/certs.d
@@ -150,21 +152,29 @@ Writes a unit file at `path` from either `content` or `contentFromTemplate`. It 
       state: started
 ```
 
-### `InstallArtifacts`
+### `Artifacts`
 
-Installs or extracts per-architecture artifacts. Each entry requires `source.amd64` and `source.arm64`, optional `skipIfPresent`, and exactly one of `install` or `extract`. The step also supports shared `fetch` defaults. This exists for operator clarity instead of overloading `DownloadFile`, because the target workflows express artifact-install intent, not plain fetch/copy intent.
+Installs or extracts per-architecture artifacts. Each entry requires `source.amd64` and `source.arm64`, optional `skipIfPresent`, and exactly one of `install` or `extract`. Sources can use direct `url` or `path`, or a logical `bundle` reference. Shared `fetch` defaults still apply for explicit transport sources.
 
 ```yaml
 - id: install-k8s-binaries
   apiVersion: deck/v1alpha1
-  kind: InstallArtifacts
+  kind: Artifacts
   spec:
+    fetch:
+      sources:
+        - type: online
+          url: http://{{ .vars.serverURL }}
     artifacts:
       - source:
           amd64:
-            url: http://{{ .vars.serverURL }}/files/bin/linux/amd64/kubelet
+            bundle:
+              root: files
+              path: bin/linux/amd64/kubelet
           arm64:
-            url: http://{{ .vars.serverURL }}/files/bin/linux/arm64/kubelet
+            bundle:
+              root: files
+              path: bin/linux/arm64/kubelet
         skipIfPresent:
           path: /usr/bin/kubelet
           executable: true
@@ -173,15 +183,16 @@ Installs or extracts per-architecture artifacts. Each entry requires `source.amd
           mode: "0755"
 ```
 
-### `KubeadmInit`
+### `Kubeadm`
 
-Runs `kubeadm init` with either `configFile` or `configTemplate`, plus bootstrap-oriented fields such as `pullImages`, `outputJoinFile`, `kubernetesVersion`, `advertiseAddress`, `podNetworkCIDR`, `criSocket`, `ignorePreflightErrors`, `extraArgs`, `timeout`, and `skipIfAdminConfExists`.
+Runs action-specific kubeadm operations. The example below shows `action: init` with either `configFile` or `configTemplate`, plus bootstrap-oriented fields such as `pullImages`, `outputJoinFile`, `kubernetesVersion`, `advertiseAddress`, `podNetworkCIDR`, `criSocket`, `ignorePreflightErrors`, `extraArgs`, `timeout`, and `skipIfAdminConfExists`.
 
 ```yaml
 - id: bootstrap-init
   apiVersion: deck/v1alpha1
-  kind: KubeadmInit
+  kind: Kubeadm
   spec:
+    action: init
     mode: real
     timeout: 20m
     configTemplate: default
@@ -193,15 +204,16 @@ Runs `kubeadm init` with either `configFile` or `configTemplate`, plus bootstrap
     criSocket: unix:///run/containerd/containerd.sock
 ```
 
-### `KubeadmReset`
+### `Kubeadm`
 
 Wraps `kubeadm reset` and related cleanup with `force`, `ignoreErrors`, `stopKubelet`, `criSocket`, `removePaths`, `removeFiles`, `cleanupContainers`, `restartRuntimeService`, and `timeout`.
 
 ```yaml
 - id: bootstrap-reset-preflight
   apiVersion: deck/v1alpha1
-  kind: KubeadmReset
+  kind: Kubeadm
   spec:
+    action: reset
     force: true
     ignoreErrors: true
     criSocket: unix:///run/containerd/containerd.sock
@@ -216,21 +228,37 @@ Wraps `kubeadm reset` and related cleanup with `force`, `ignoreErrors`, `stopKub
     restartRuntimeService: containerd
 ```
 
-### `WaitPath`
+### `Wait`
 
-Waits for a path to become `exists` or `absent`. The step also supports `type`, `nonEmpty`, `pollInterval`, and `timeout`. Use `nonEmpty` only with `state: exists`.
+Waits for action-specific conditions such as file existence, service activity, command success, and TCP port state. The step supports polling fields such as `interval`, `initialDelay`, and `timeout`.
 
 ```yaml
 - id: wait-admin-conf
   apiVersion: deck/v1alpha1
-  kind: WaitPath
+  kind: Wait
   spec:
+    action: fileExists
     path: /etc/kubernetes/admin.conf
-    state: exists
     type: file
     nonEmpty: true
-    pollInterval: 2s
+    interval: 2s
     timeout: 5m
+```
+
+### `Image`
+
+Checks image-related state through action-specific modes. The first public action is `present`. You can optionally override the image listing command when the local runtime is not exposed through the default `ctr -n k8s.io images list -q` command.
+
+```yaml
+- id: verify-control-plane-images
+  apiVersion: deck/v1alpha1
+  kind: Image
+  spec:
+    action: present
+    images:
+      - registry.k8s.io/kube-apiserver:v1.30.1
+      - registry.k8s.io/kube-controller-manager:v1.30.1
+    command: ["ctr", "-n", "k8s.io", "images", "list", "-q"]
 ```
 
 ### `Symlink`

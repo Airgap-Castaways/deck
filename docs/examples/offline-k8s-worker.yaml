@@ -27,23 +27,19 @@ phases:
           load: true
           persist: true
           persistFile: /etc/modules-load.d/k8s.conf
-      - id: prep-sysctl-file
+      - id: prep-sysctl
         apiVersion: deck/v1alpha1
-        kind: InstallFile
+        kind: Sysctl
         spec:
-          path: /etc/sysctl.d/99-kubernetes-cri.conf
-          content: |
-            net.bridge.bridge-nf-call-iptables = 1
-            net.bridge.bridge-nf-call-ip6tables = 1
-            net.ipv4.ip_forward = 1
-      - id: prep-sysctl-apply
-        apiVersion: deck/v1alpha1
-        kind: SysctlApply
-        spec:
-          file: /etc/sysctl.d/99-kubernetes-cri.conf
+          writeFile: /etc/sysctl.d/99-kubernetes-cri.conf
+          apply: true
+          values:
+            net.bridge.bridge-nf-call-iptables: 1
+            net.bridge.bridge-nf-call-ip6tables: 1
+            net.ipv4.ip_forward: 1
       - id: prep-containerd-config
         apiVersion: deck/v1alpha1
-        kind: ContainerdConfig
+        kind: Containerd
         spec:
           path: /etc/containerd/config.toml
           systemdCgroup: true
@@ -63,8 +59,9 @@ phases:
           state: started
       - id: kubeadm-join
         apiVersion: deck/v1alpha1
-        kind: KubeadmJoin
+        kind: Kubeadm
         spec:
+          action: join
           mode: real
           joinFile: /tmp/deck/join-real.txt
           extraArgs: ["--cri-socket", "unix:///run/containerd/containerd.sock", "--ignore-preflight-errors=Swap"]
