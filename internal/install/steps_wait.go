@@ -67,7 +67,7 @@ func runWait(parent context.Context, spec map[string]any) error {
 					detail = fmt.Sprintf("%s (%s)", action, p)
 				}
 			}
-			return fmt.Errorf("%s: timed out after %s for %s", errCodeInstallWaitPathTimeout, commandTimeout(spec), detail)
+			return fmt.Errorf("%s: timed out after %s for %s", errCodeInstallWaitTimeout, commandTimeout(spec), detail)
 		case <-time.After(interval):
 		}
 	}

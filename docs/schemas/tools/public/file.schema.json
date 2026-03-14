@@ -49,13 +49,12 @@
     "spec": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "action"
-      ],
+      "required": [],
       "properties": {
         "action": {
           "type": "string",
           "enum": [
+            "download",
             "install",
             "copy",
             "edit"
@@ -112,9 +111,105 @@
         "group": {
           "type": "string",
           "minLength": 1
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "required": [
+                "url"
+              ]
+            },
+            {
+              "required": [
+                "path"
+              ]
+            },
+            {
+              "required": [
+                "bundle"
+              ]
+            }
+          ],
+          "properties": {
+            "url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{64}$"
+            },
+            "bundle": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "root",
+                "path"
+              ],
+              "properties": {
+                "root": {
+                  "type": "string",
+                  "enum": [
+                    "files",
+                    "images",
+                    "packages"
+                  ]
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "fetch": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "output": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "chmod": {
+              "type": "string",
+              "pattern": "^[0-7]{4}$"
+            }
+          }
         }
       },
       "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "download"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "required": [
+              "source",
+              "output"
+            ]
+          }
+        },
         {
           "if": {
             "properties": {

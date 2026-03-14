@@ -8,25 +8,25 @@ import (
 )
 
 func runPrepareStep(ctx context.Context, runner CommandRunner, bundleRoot, kind string, rendered map[string]any, opts RunOptions) ([]string, map[string]any, error) {
-	if !workflowexec.StepAllowedForRole("prepare", kind) {
+	if !workflowexec.StepAllowedForRole("prepare", kind, rendered) {
 		return nil, nil, fmt.Errorf("%s: unsupported step kind %s", errCodePrepareKindUnsupported, kind)
 	}
 
 	switch kind {
-	case "FileFetch":
-		f, err := runDownloadFile(ctx, bundleRoot, rendered, opts)
+	case "File":
+		f, err := runFileDownload(ctx, bundleRoot, rendered, opts)
 		if err != nil {
 			return nil, nil, err
 		}
 		return []string{f}, map[string]any{"path": f, "artifacts": []string{f}}, nil
-	case "PackageFetch":
-		files, err := runDownloadPackages(ctx, runner, bundleRoot, rendered, "packages", opts)
+	case "Packages":
+		files, err := runPackagesDownload(ctx, runner, bundleRoot, rendered, "packages", opts)
 		if err != nil {
 			return nil, nil, err
 		}
 		return files, map[string]any{"artifacts": files}, nil
-	case "ImageFetch":
-		files, err := runDownloadImages(ctx, runner, bundleRoot, rendered, opts)
+	case "Image":
+		files, err := runImageDownload(ctx, runner, bundleRoot, rendered, opts)
 		if err != nil {
 			return nil, nil, err
 		}

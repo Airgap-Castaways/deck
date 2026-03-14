@@ -73,7 +73,7 @@ type installArtifactExtractSpec struct {
 	Mode        string   `json:"mode"`
 }
 
-func runInstallArtifacts(ctx context.Context, spec map[string]any, bundleRoot string) error {
+func runArtifactsApply(ctx context.Context, spec map[string]any, bundleRoot string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -83,7 +83,7 @@ func runInstallArtifacts(ctx context.Context, spec map[string]any, bundleRoot st
 		return fmt.Errorf("decode InstallArtifacts spec: %w", err)
 	}
 	if len(decoded.Artifacts) == 0 {
-		return fmt.Errorf("%s: InstallArtifacts requires at least one artifact", errCodeInstallArtifactsMissing)
+		return fmt.Errorf("%s: Artifacts requires at least one artifact", errCodeInstallArtifactsMissing)
 	}
 
 	arch, err := installArtifactsHostArch()
@@ -122,7 +122,7 @@ func runInstallArtifacts(ctx context.Context, spec map[string]any, bundleRoot st
 				"path": "artifact.bin",
 			},
 		}
-		relativePath, err := runDownloadFile(ctx, tmpDir, downloadSpec)
+		relativePath, err := runFileDownload(ctx, tmpDir, downloadSpec)
 		if err != nil {
 			_ = os.RemoveAll(tmpDir)
 			return fmt.Errorf("artifact[%d]: %w", i, err)

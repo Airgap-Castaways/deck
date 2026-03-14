@@ -17,7 +17,7 @@ import (
 	"github.com/taedi90/deck/internal/fetch"
 )
 
-func runDownloadFile(ctx context.Context, bundleRoot string, spec map[string]any) (string, error) {
+func runFileDownload(ctx context.Context, bundleRoot string, spec map[string]any) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -48,7 +48,7 @@ func runDownloadFile(ctx context.Context, bundleRoot string, spec map[string]any
 		outPath = filepath.ToSlash(filepath.Join("files", inferDownloadFileName(sourcePath, url)))
 	}
 	if strings.TrimSpace(sourcePath) == "" && strings.TrimSpace(url) == "" {
-		return "", fmt.Errorf("DownloadFile requires source.path or source.url")
+		return "", fmt.Errorf("file action download requires source.path or source.url")
 	}
 
 	target := filepath.Join(bundleRoot, outPath)

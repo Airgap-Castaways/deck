@@ -19,8 +19,9 @@ phases:
     steps:
       - id: prepare-images
         apiVersion: deck/v1alpha1
-        kind: ImageFetch
+        kind: Image
         spec:
+          action: download
           images: [registry.k8s.io/kube-apiserver:v1.30.1]
           backend:
             engine: go-containerregistry
@@ -50,6 +51,7 @@ phases:
         apiVersion: deck/v1alpha1
         kind: Packages
         spec:
+          action: install
           packages: [containerd]
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
@@ -202,6 +204,7 @@ phases:
         apiVersion: deck/v1alpha1
         kind: Packages
         spec:
+          action: install
           packages: [curl]
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
@@ -308,8 +311,9 @@ phases:
     steps:
       - id: dup-id
         apiVersion: deck/v1alpha1
-        kind: FileFetch
+        kind: File
         spec:
+          action: download
           source:
             url: https://example.local/a
           output:
@@ -341,7 +345,7 @@ phases:
     steps:
       - id: s1
         apiVersion: deck/v1alpha1
-        kind: FileFetch
+        kind: File
         register:
           token: outputA
         spec:
@@ -351,7 +355,7 @@ phases:
             path: files/a
       - id: s2
         apiVersion: deck/v1alpha1
-        kind: FileFetch
+        kind: File
         register:
           token: outputB
         spec:
@@ -769,7 +773,7 @@ phases:
     steps:
       - id: d1
         apiVersion: deck/v1alpha1
-        kind: FileFetch
+        kind: File
         register:
           fetched: path
         spec:

@@ -26,18 +26,13 @@ The files are not all equal from a user-authoring point of view.
 
 ## Advanced steps
 
-- `advanced/file-fetch.schema.json`
 - `advanced/command.schema.json`
 
 These remain user-visible, but they are not the preferred starting point when a higher-level typed step or declarative prepare model already exists.
 
 ## Legacy/internal prepare steps
 
-- `legacy-prepare/image-fetch.schema.json`
-- `legacy-prepare/package-fetch.schema.json`
-
-These schemas are still used for validation of legacy or internal prepare planning paths.
-New `role: prepare` workflows should prefer top-level `artifacts` instead.
+Legacy/internal prepare fetch schemas have been removed. Prepare artifact planning now lowers to noun families with `action: download`.
 
 ## Metadata
 

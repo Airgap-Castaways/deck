@@ -26,7 +26,7 @@ func runCommand(ctx context.Context, spec map[string]any) error {
 	}
 	cmdArgs := decoded.Command
 	if len(cmdArgs) == 0 {
-		return fmt.Errorf("%s: RunCommand requires command", errCodeInstallCommandMissing)
+		return fmt.Errorf("%s: RunCommand requires command", errCodeInstallCommandArgumentsRequired)
 	}
 
 	err = runTimedCommandWithContext(ctx, cmdArgs[0], cmdArgs[1:], commandTimeout(spec))
@@ -34,11 +34,11 @@ func runCommand(ctx context.Context, spec map[string]any) error {
 		return nil
 	}
 	if errors.Is(err, errStepCommandTimeout) {
-		return fmt.Errorf("%s: command timed out after %s", errCodeInstallCommandTimeout, commandTimeout(spec))
+		return fmt.Errorf("%s: command timed out after %s", errCodeInstallCommandExecutionTimeout, commandTimeout(spec))
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return fmt.Errorf("%s: command exited non-zero: %w", errCodeInstallCommandFailed, err)
+		return fmt.Errorf("%s: command exited non-zero: %w", errCodeInstallCommandExecutionFailed, err)
 	}
 	return err
 }

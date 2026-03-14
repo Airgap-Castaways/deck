@@ -517,7 +517,7 @@ func TestDoctor(t *testing.T) {
 	defer srv.Close()
 
 	wfPath := filepath.Join(t.TempDir(), "apply.yaml")
-	writeWorkflowYAML(t, wfPath, fmt.Sprintf("role: apply\nversion: v1alpha1\nvars:\n  localRepo: %q\n  httpRepo: %q\nphases:\n  - name: install\n    steps:\n      - id: check-sources\n        apiVersion: deck/v1alpha1\n        kind: FileFetch\n        spec:\n          source:\n            path: dummy.txt\n          fetch:\n            sources:\n              - type: local\n                path: \"{{ .vars.localRepo }}\"\n              - type: repo\n                url: \"{{ .vars.httpRepo }}\"\n          output:\n            path: files/dummy.txt\n", localRepo, srv.URL+"/packages"))
+	writeWorkflowYAML(t, wfPath, fmt.Sprintf("role: apply\nversion: v1alpha1\nvars:\n  localRepo: %q\n  httpRepo: %q\nphases:\n  - name: install\n    steps:\n      - id: check-sources\n        apiVersion: deck/v1alpha1\n        kind: File\n        spec:\n          source:\n            path: dummy.txt\n          fetch:\n            sources:\n              - type: local\n                path: \"{{ .vars.localRepo }}\"\n              - type: repo\n                url: \"{{ .vars.httpRepo }}\"\n          output:\n            path: files/dummy.txt\n", localRepo, srv.URL+"/packages"))
 
 	t.Run("ok", func(t *testing.T) {
 		reportPath := filepath.Join(t.TempDir(), "doctor.json")
@@ -1219,8 +1219,9 @@ phases:
   - name: prepare
     steps:
       - id: p1
-        kind: FileFetch
+        kind: File
         spec:
+          action: download
           source:
             path: files/source.bin
           fetch:
@@ -1347,8 +1348,9 @@ phases:
   - name: prepare
     steps:
       - id: p1
-        kind: FileFetch
+        kind: File
         spec:
+          action: download
           source:
             path: files/source.bin
           fetch:
@@ -1561,8 +1563,9 @@ phases:
             - -c
             - 'test -f %s'
       - id: download-file
-        kind: FileFetch
+        kind: File
         spec:
+          action: download
           source:
             url: '%s'
           output:
@@ -1767,7 +1770,7 @@ phases:
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case "/workflows/apply.yaml":
-				_, _ = w.Write([]byte("role: prepare\nversion: v1alpha1\nsteps:\n  - id: prepare-step\n    kind: FileFetch\n    spec:\n      source:\n        path: /tmp/source.bin\n      output:\n        path: files/source.bin\n"))
+				_, _ = w.Write([]byte("role: prepare\nversion: v1alpha1\nsteps:\n  - id: prepare-step\n    kind: File\n    spec:\n      source:\n        path: /tmp/source.bin\n      output:\n        path: files/source.bin\n"))
 			case "/workflows/vars.yaml":
 				http.NotFound(w, r)
 			default:
@@ -1951,7 +1954,7 @@ func TestAssistedDoctorUsesLocalEngine(t *testing.T) {
 
 	localRepo := t.TempDir()
 	reportPath := filepath.Join(t.TempDir(), "doctor-assist.json")
-	workflowBody := "role: apply\nversion: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: doctor-check\n        kind: FileFetch\n        spec:\n          source:\n            path: files/dummy.txt\n          fetch:\n            sources:\n              - type: local\n                path: \"{{ .vars.localRepo }}\"\n          output:\n            path: files/dummy.txt\n"
+	workflowBody := "role: apply\nversion: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: doctor-check\n        kind: File\n        spec:\n          source:\n            path: files/dummy.txt\n          fetch:\n            sources:\n              - type: local\n                path: \"{{ .vars.localRepo }}\"\n          output:\n            path: files/dummy.txt\n"
 	varsBody := fmt.Sprintf("localRepo: %q\n", localRepo)
 	manifestBody := "{\n  \"entries\": []\n}\n"
 	uploaded := false
@@ -2472,8 +2475,9 @@ phases:
   - name: prepare
     steps:
       - id: seed-file
-        kind: FileFetch
+        kind: File
         spec:
+          action: download
           source:
             path: files/source.bin
           fetch:

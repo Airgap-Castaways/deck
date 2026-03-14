@@ -89,8 +89,63 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "download",
+            "install"
+          ]
+        },
+        "distro": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "repo": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "backend": {
+          "type": "object",
+          "additionalProperties": true
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "download"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "required": [
+              "packages"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "install"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "required": [
+              "packages"
+            ]
+          }
+        }
+      ]
     }
   }
 }

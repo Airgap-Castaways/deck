@@ -44,7 +44,7 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 				Steps: []config.Step{
 					{
 						ID:   "download-file",
-						Kind: "FileFetch",
+						Kind: "File",
 						Spec: map[string]any{
 							"source": map[string]any{"url": server.URL + "/artifact"},
 							"output": map[string]any{"path": "files/artifact.bin"},
@@ -52,14 +52,14 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 					},
 					{
 						ID:   "download-os-packages",
-						Kind: "PackageFetch",
+						Kind: "Packages",
 						Spec: map[string]any{
 							"packages": []any{"containerd", "iptables"},
 						},
 					},
 					{
 						ID:   "download-images",
-						Kind: "ImageFetch",
+						Kind: "Image",
 						Spec: map[string]any{
 							"images": []any{"registry.k8s.io/kube-apiserver:{{ .vars.kubernetesVersion }}"},
 						},
@@ -218,7 +218,7 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "pkg",
-					Kind: "PackageFetch",
+					Kind: "Packages",
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
@@ -230,7 +230,7 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 				},
 				{
 					ID:   "img",
-					Kind: "ImageFetch",
+					Kind: "Image",
 					Spec: map[string]any{
 						"images": []any{"registry.k8s.io/kube-apiserver:v1.30.1"},
 						"backend": map[string]any{
@@ -258,13 +258,13 @@ func stubImageDownload(t *testing.T) {
 	t.Helper()
 
 	oldParse := parseImageReferenceFn
-	oldFetch := remoteImageFetchFn
+	oldFetch := remoteImageFn
 	oldWrite := tarballWriteToFileFn
 
 	parseImageReferenceFn = func(v string) (name.Reference, error) {
 		return name.ParseReference(v, name.WeakValidation)
 	}
-	remoteImageFetchFn = func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
+	remoteImageFn = func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
 		return empty.Image, nil
 	}
 	tarballWriteToFileFn = func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
@@ -273,12 +273,12 @@ func stubImageDownload(t *testing.T) {
 
 	t.Cleanup(func() {
 		parseImageReferenceFn = oldParse
-		remoteImageFetchFn = oldFetch
+		remoteImageFn = oldFetch
 		tarballWriteToFileFn = oldWrite
 	})
 }
 
-func TestRun_PackageFetchContainerRuntimeMissing(t *testing.T) {
+func TestRun_PackagesContainerRuntimeMissing(t *testing.T) {
 	bundle := t.TempDir()
 
 	wf := &config.Workflow{
@@ -288,7 +288,7 @@ func TestRun_PackageFetchContainerRuntimeMissing(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "pkg",
-					Kind: "PackageFetch",
+					Kind: "Packages",
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
@@ -311,7 +311,7 @@ func TestRun_PackageFetchContainerRuntimeMissing(t *testing.T) {
 	}
 }
 
-func TestRun_PackageFetchContainerNoArtifacts(t *testing.T) {
+func TestRun_PackagesContainerNoArtifacts(t *testing.T) {
 	bundle := t.TempDir()
 
 	wf := &config.Workflow{
@@ -321,7 +321,7 @@ func TestRun_PackageFetchContainerNoArtifacts(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "pkg",
-					Kind: "PackageFetch",
+					Kind: "Packages",
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
@@ -344,7 +344,7 @@ func TestRun_PackageFetchContainerNoArtifacts(t *testing.T) {
 	}
 }
 
-func TestRun_FileFetchFallbackLocalThenBundle(t *testing.T) {
+func TestRun_FileFallbackLocalThenBundle(t *testing.T) {
 	bundleOut := t.TempDir()
 	localCache := t.TempDir()
 	bundleCache := t.TempDir()
@@ -365,7 +365,7 @@ func TestRun_FileFetchFallbackLocalThenBundle(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "download-file",
-				Kind: "FileFetch",
+				Kind: "File",
 				Spec: map[string]any{
 					"source": map[string]any{
 						"path":   relSource,
@@ -397,7 +397,7 @@ func TestRun_FileFetchFallbackLocalThenBundle(t *testing.T) {
 	}
 }
 
-func TestRun_FileFetchFallbackSourceMissing(t *testing.T) {
+func TestRun_FileFallbackSourceMissing(t *testing.T) {
 	bundleOut := t.TempDir()
 
 	wf := &config.Workflow{
@@ -406,7 +406,7 @@ func TestRun_FileFetchFallbackSourceMissing(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "download-file",
-				Kind: "FileFetch",
+				Kind: "File",
 				Spec: map[string]any{
 					"source": map[string]any{
 						"path": "files/missing.bin",
@@ -456,7 +456,7 @@ func TestResolveSourceBytes_PreservesContextCancellation(t *testing.T) {
 	}
 }
 
-func TestRun_FileFetchFallbackRepoThenOnline(t *testing.T) {
+func TestRun_FileFallbackRepoThenOnline(t *testing.T) {
 	bundleOut := t.TempDir()
 
 	repo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -479,7 +479,7 @@ func TestRun_FileFetchFallbackRepoThenOnline(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "download-file",
-				Kind: "FileFetch",
+				Kind: "File",
 				Spec: map[string]any{
 					"source": map[string]any{
 						"path": "files/remote.bin",
@@ -510,7 +510,7 @@ func TestRun_FileFetchFallbackRepoThenOnline(t *testing.T) {
 	}
 }
 
-func TestRun_FileFetchOfflinePolicyBlocksOnlineFallback(t *testing.T) {
+func TestRun_FileOfflinePolicyBlocksOnlineFallback(t *testing.T) {
 	bundleOut := t.TempDir()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -524,7 +524,7 @@ func TestRun_FileFetchOfflinePolicyBlocksOnlineFallback(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "download-file",
-				Kind: "FileFetch",
+				Kind: "File",
 				Spec: map[string]any{
 					"source": map[string]any{
 						"path": "files/not-found.bin",
@@ -550,7 +550,7 @@ func TestRun_FileFetchOfflinePolicyBlocksOnlineFallback(t *testing.T) {
 	}
 }
 
-func TestRun_FileFetchOfflinePolicyBlocksDirectURL(t *testing.T) {
+func TestRun_FileOfflinePolicyBlocksDirectURL(t *testing.T) {
 	bundleOut := t.TempDir()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -564,7 +564,7 @@ func TestRun_FileFetchOfflinePolicyBlocksDirectURL(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "download-file",
-				Kind: "FileFetch",
+				Kind: "File",
 				Spec: map[string]any{
 					"source": map[string]any{"url": server.URL + "/files/a.bin"},
 					"fetch":  map[string]any{"offlineOnly": true},
@@ -604,7 +604,7 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "download-a",
-					Kind: "FileFetch",
+					Kind: "File",
 					Spec: map[string]any{
 						"source": map[string]any{"path": sourceRel},
 						"fetch":  map[string]any{"sources": []any{map[string]any{"type": "local", "path": localCache}}},
@@ -614,7 +614,7 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 				},
 				{
 					ID:   "download-b",
-					Kind: "FileFetch",
+					Kind: "File",
 					When: "vars.role == \"control-plane\"",
 					Spec: map[string]any{
 						"source": map[string]any{"path": "{{ .runtime.downloaded }}"},
@@ -624,7 +624,7 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 				},
 				{
 					ID:   "skip-worker-only",
-					Kind: "FileFetch",
+					Kind: "File",
 					When: "vars.role == \"worker\"",
 					Spec: map[string]any{
 						"source": map[string]any{"path": sourceRel},
@@ -661,7 +661,7 @@ func TestRun_RetrySemantics(t *testing.T) {
 				Name: "prepare",
 				Steps: []config.Step{{
 					ID:    "retry-packages",
-					Kind:  "PackageFetch",
+					Kind:  "Packages",
 					Retry: 1,
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
@@ -692,7 +692,7 @@ func TestRun_RetrySemantics(t *testing.T) {
 				Name: "prepare",
 				Steps: []config.Step{{
 					ID:    "retry-fail",
-					Kind:  "FileFetch",
+					Kind:  "File",
 					Retry: 1,
 					Spec: map[string]any{
 						"source": map[string]any{"path": "files/missing.bin"},
@@ -722,7 +722,7 @@ func TestRun_WhenInvalidExpression(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "bad-when",
-				Kind: "PackageFetch",
+				Kind: "Packages",
 				When: "vars.role = \"worker\"",
 				Spec: map[string]any{"packages": []any{"containerd"}},
 			}},
@@ -796,7 +796,7 @@ func TestRun_InspectionStep(t *testing.T) {
 					},
 					{
 						ID:   "runtime-branch",
-						Kind: "PackageFetch",
+						Kind: "Packages",
 						When: "runtime.hostPassed == true and vars.want == \"ok\" and runtime.host.os.family == \"debian\" and runtime.host.arch == \"arm64\"",
 						Spec: map[string]any{
 							"packages": []any{"containerd"},
@@ -880,8 +880,8 @@ func TestRun_InspectionStep(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected checkhost failure")
 		}
-		if !strings.Contains(err.Error(), "E_PREPARE_CHECKHOST_FAILED") {
-			t.Fatalf("expected E_PREPARE_CHECKHOST_FAILED, got %v", err)
+		if !strings.Contains(err.Error(), "E_PREPARE_INSPECTION_CHECK_FAILED") {
+			t.Fatalf("expected E_PREPARE_INSPECTION_CHECK_FAILED, got %v", err)
 		}
 		if !strings.Contains(err.Error(), "os:") || !strings.Contains(err.Error(), "arch:") || !strings.Contains(err.Error(), "binaries:") {
 			t.Fatalf("expected aggregated failures, got %v", err)
@@ -889,7 +889,7 @@ func TestRun_InspectionStep(t *testing.T) {
 	})
 }
 
-func TestRun_PackageFetchRepoModeAptFlatGeneratesMetadata(t *testing.T) {
+func TestRun_PackagesRepoModeAptFlatGeneratesMetadata(t *testing.T) {
 	bundle := t.TempDir()
 	r := &fakeRunner{}
 
@@ -899,7 +899,7 @@ func TestRun_PackageFetchRepoModeAptFlatGeneratesMetadata(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "pkgs",
-				Kind: "PackageFetch",
+				Kind: "Packages",
 				Spec: map[string]any{
 					"packages": []any{"containerd"},
 					"distro": map[string]any{
@@ -934,7 +934,7 @@ func TestRun_PackageFetchRepoModeAptFlatGeneratesMetadata(t *testing.T) {
 	}
 }
 
-func TestRun_PackageFetchRepoModeYumGeneratesRepodata(t *testing.T) {
+func TestRun_PackagesRepoModeYumGeneratesRepodata(t *testing.T) {
 	bundle := t.TempDir()
 	r := &fakeRunner{}
 
@@ -944,7 +944,7 @@ func TestRun_PackageFetchRepoModeYumGeneratesRepodata(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "pkgs",
-				Kind: "PackageFetch",
+				Kind: "Packages",
 				Spec: map[string]any{
 					"packages": []any{"containerd"},
 					"distro": map[string]any{

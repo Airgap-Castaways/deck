@@ -365,8 +365,8 @@ func TestRun_CommandErrorCodes(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected run command failure")
 		}
-		if !strings.Contains(err.Error(), "E_INSTALL_RUNCOMMAND_FAILED") {
-			t.Fatalf("expected E_INSTALL_RUNCOMMAND_FAILED, got %v", err)
+		if !strings.Contains(err.Error(), "E_INSTALL_COMMAND_EXECUTION_FAILED") {
+			t.Fatalf("expected E_INSTALL_COMMAND_EXECUTION_FAILED, got %v", err)
 		}
 	})
 
@@ -404,8 +404,8 @@ func TestRun_CommandErrorCodes(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected run command timeout")
 		}
-		if !strings.Contains(err.Error(), "E_INSTALL_RUNCOMMAND_TIMEOUT") {
-			t.Fatalf("expected E_INSTALL_RUNCOMMAND_TIMEOUT, got %v", err)
+		if !strings.Contains(err.Error(), "E_INSTALL_COMMAND_EXECUTION_TIMEOUT") {
+			t.Fatalf("expected E_INSTALL_COMMAND_EXECUTION_TIMEOUT, got %v", err)
 		}
 	})
 
@@ -453,7 +453,7 @@ func TestRun_CommandErrorCodes(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected verify images timeout")
 		}
-		if !strings.Contains(err.Error(), errCodeInstallImagesCmdFailed) {
+		if !strings.Contains(err.Error(), errCodeInstallImageCheckCommandFailed) {
 			t.Fatalf("expected verify images error code, got %v", err)
 		}
 		if !strings.Contains(err.Error(), "image verification timed out") {
@@ -938,8 +938,8 @@ func TestRun_Image(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected missing image error")
 		}
-		if !strings.Contains(err.Error(), "E_INSTALL_VERIFY_IMAGES_NOT_FOUND") {
-			t.Fatalf("expected E_INSTALL_VERIFY_IMAGES_NOT_FOUND, got %v", err)
+		if !strings.Contains(err.Error(), "E_INSTALL_IMAGE_PRESENCE_FAILED") {
+			t.Fatalf("expected E_INSTALL_IMAGE_PRESENCE_FAILED, got %v", err)
 		}
 	})
 }
@@ -1443,7 +1443,7 @@ func TestRun_CommandParentCancelNotRelabeledAsTimeout(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected canceled context error")
 	}
-	if strings.Contains(err.Error(), errCodeInstallCommandTimeout) {
+	if strings.Contains(err.Error(), errCodeInstallCommandExecutionTimeout) {
 		t.Fatalf("expected parent cancellation to not be mapped to timeout, got %v", err)
 	}
 	if !strings.Contains(err.Error(), context.Canceled.Error()) {
@@ -1451,7 +1451,7 @@ func TestRun_CommandParentCancelNotRelabeledAsTimeout(t *testing.T) {
 	}
 }
 
-func TestRun_FileFetchRespectsParentContext(t *testing.T) {
+func TestRun_FileRespectsParentContext(t *testing.T) {
 	dir := t.TempDir()
 	bundle := filepath.Join(dir, "bundle")
 	statePath := filepath.Join(dir, "state", "state.json")
@@ -1481,7 +1481,7 @@ func TestRun_FileFetchRespectsParentContext(t *testing.T) {
 			Name: "install",
 			Steps: []config.Step{{
 				ID:   "download",
-				Kind: "FileFetch",
+				Kind: "File",
 				Spec: map[string]any{"source": map[string]any{"url": srv.URL + "/files/payload.txt"}, "output": map[string]any{"path": "files/payload.txt"}},
 			}},
 		}},
@@ -1933,7 +1933,7 @@ func TestRun_PackagesTimeoutUsesTimeoutClassification(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected install packages timeout")
 	}
-	if !strings.Contains(err.Error(), errCodeInstallPkgFailed) {
+	if !strings.Contains(err.Error(), errCodeInstallPackageInstallFailed) {
 		t.Fatalf("expected package install error code, got %v", err)
 	}
 	if !strings.Contains(err.Error(), "timed out") {
@@ -2008,11 +2008,11 @@ func TestEditFileBackup_DefaultEnabled(t *testing.T) {
 		"path":  path,
 		"edits": []any{map[string]any{"match": "mode=old", "with": "mode=new"}},
 	}
-	if err := runEditFile(spec); err != nil {
-		t.Fatalf("runEditFile failed: %v", err)
+	if err := runFileEdit(spec); err != nil {
+		t.Fatalf("runFileEdit failed: %v", err)
 	}
 
-	backups, err := listEditFileBackups(path)
+	backups, err := listFileBackups(path)
 	if err != nil {
 		t.Fatalf("list backups: %v", err)
 	}
@@ -2041,11 +2041,11 @@ func TestEditFileBackup_OptOutDisabled(t *testing.T) {
 		"backup": false,
 		"edits":  []any{map[string]any{"match": "mode=old", "with": "mode=new"}},
 	}
-	if err := runEditFile(spec); err != nil {
-		t.Fatalf("runEditFile failed: %v", err)
+	if err := runFileEdit(spec); err != nil {
+		t.Fatalf("runFileEdit failed: %v", err)
 	}
 
-	backups, err := listEditFileBackups(path)
+	backups, err := listFileBackups(path)
 	if err != nil {
 		t.Fatalf("list backups: %v", err)
 	}
@@ -2086,11 +2086,11 @@ func TestEditFileBackup_RetentionKeepsLatestTen(t *testing.T) {
 		"path":  path,
 		"edits": []any{map[string]any{"match": "mode=old", "with": "mode=new"}},
 	}
-	if err := runEditFile(spec); err != nil {
-		t.Fatalf("runEditFile failed: %v", err)
+	if err := runFileEdit(spec); err != nil {
+		t.Fatalf("runFileEdit failed: %v", err)
 	}
 
-	backups, err := listEditFileBackups(path)
+	backups, err := listFileBackups(path)
 	if err != nil {
 		t.Fatalf("list backups: %v", err)
 	}
@@ -2113,11 +2113,11 @@ func TestEditFileBackup_NameFormatAndCollisionSuffix(t *testing.T) {
 	collisionPattern := regexp.MustCompile(`^target\.conf\.bak-\d{8}T\d{6}Z-[0-9a-f]{8}$`)
 
 	for i := 0; i < 20; i++ {
-		first, err := createEditFileBackup(path, []byte("old"))
+		first, err := createFileBackup(path, []byte("old"))
 		if err != nil {
 			t.Fatalf("create first backup: %v", err)
 		}
-		second, err := createEditFileBackup(path, []byte("old"))
+		second, err := createFileBackup(path, []byte("old"))
 		if err != nil {
 			t.Fatalf("create second backup: %v", err)
 		}
@@ -2164,7 +2164,7 @@ func TestEditFileBackup_CreateFailureIncludesBackupPath(t *testing.T) {
 		_ = os.Chmod(readOnlyDir, 0o755)
 	})
 
-	err := runEditFile(map[string]any{
+	err := runFileEdit(map[string]any{
 		"path":  path,
 		"edits": []any{map[string]any{"match": "mode=old", "with": "mode=new"}},
 	})
@@ -2327,16 +2327,16 @@ func TestInstallFileStep(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "installed.txt")
 	spec := map[string]any{"path": target, "content": "hello", "mode": "0640"}
-	if err := runInstallFile(spec); err != nil {
-		t.Fatalf("runInstallFile failed: %v", err)
+	if err := runFileInstall(spec); err != nil {
+		t.Fatalf("runFileInstall failed: %v", err)
 	}
 	before, err := os.Stat(target)
 	if err != nil {
 		t.Fatalf("stat before: %v", err)
 	}
 	time.Sleep(20 * time.Millisecond)
-	if err := runInstallFile(spec); err != nil {
-		t.Fatalf("runInstallFile second pass failed: %v", err)
+	if err := runFileInstall(spec); err != nil {
+		t.Fatalf("runFileInstall second pass failed: %v", err)
 	}
 	after, err := os.Stat(target)
 	if err != nil {
@@ -2569,7 +2569,7 @@ func TestArtifactsStep_InstallsFromBundleReference(t *testing.T) {
 	}
 }
 
-func TestFileFetchStep_DownloadsFromBundleReference(t *testing.T) {
+func TestFileStep_DownloadsFromBundleReference(t *testing.T) {
 	bundle := t.TempDir()
 	source := filepath.Join(bundle, "files", "cluster", "join.txt")
 	if err := os.MkdirAll(filepath.Dir(source), 0o755); err != nil {
@@ -2579,11 +2579,12 @@ func TestFileFetchStep_DownloadsFromBundleReference(t *testing.T) {
 		t.Fatalf("write source: %v", err)
 	}
 	spec := map[string]any{
+		"action": "download",
 		"source": map[string]any{"bundle": map[string]any{"root": "files", "path": "cluster/join.txt"}},
 		"output": map[string]any{"path": "downloaded/join.txt"},
 	}
-	if _, err := runFileFetch(context.Background(), bundle, spec); err != nil {
-		t.Fatalf("runFileFetch failed: %v", err)
+	if _, err := runFileDownload(context.Background(), bundle, spec); err != nil {
+		t.Fatalf("runFileDownload failed: %v", err)
 	}
 	raw, err := os.ReadFile(filepath.Join(bundle, "downloaded", "join.txt"))
 	if err != nil {
@@ -2597,8 +2598,8 @@ func TestFileFetchStep_DownloadsFromBundleReference(t *testing.T) {
 func TestInstallFileContentFromTemplate(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "templated.txt")
-	if err := runInstallFile(map[string]any{"path": target, "contentFromTemplate": "line", "mode": "0644"}); err != nil {
-		t.Fatalf("runInstallFile failed: %v", err)
+	if err := runFileInstall(map[string]any{"path": target, "contentFromTemplate": "line", "mode": "0644"}); err != nil {
+		t.Fatalf("runFileInstall failed: %v", err)
 	}
 	raw, err := os.ReadFile(target)
 	if err != nil {
@@ -3589,7 +3590,7 @@ func writeTarGzArchiveForTest(path string, files map[string]string) error {
 	return nil
 }
 
-func listEditFileBackups(path string) ([]string, error) {
+func listFileBackups(path string) ([]string, error) {
 	dir := filepath.Dir(path)
 	prefix := filepath.Base(path) + ".bak-"
 	entries, err := os.ReadDir(dir)

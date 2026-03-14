@@ -7,37 +7,42 @@ import (
 
 func runFile(spec map[string]any) error {
 	switch fileAction(spec) {
+	case "download":
+		return fmt.Errorf("file action download is not supported in apply dispatch without context")
 	case "install":
-		return runInstallFile(spec)
+		return runFileInstall(spec)
 	case "copy":
-		return runCopyFile(spec)
+		return runFileCopy(spec)
 	case "edit":
-		return runEditFile(spec)
+		return runFileEdit(spec)
 	default:
 		return fmt.Errorf("unsupported File action %q", stringValue(spec, "action"))
 	}
 }
 
 func runArtifacts(ctx context.Context, spec map[string]any, bundleRoot string) error {
-	return runInstallArtifacts(ctx, spec, bundleRoot)
+	return runArtifactsApply(ctx, spec, bundleRoot)
 }
 
 func runPackages(ctx context.Context, spec map[string]any) error {
-	return runInstallPackages(ctx, spec)
-}
-
-func runFileFetch(ctx context.Context, bundleRoot string, spec map[string]any) (string, error) {
-	return runDownloadFile(ctx, bundleRoot, spec)
+	switch packagesAction(spec) {
+	case "download":
+		return fmt.Errorf("packages action download is not supported in apply dispatch")
+	case "install":
+		return runPackagesApply(ctx, spec)
+	default:
+		return fmt.Errorf("unsupported Packages action %q", stringValue(spec, "action"))
+	}
 }
 
 func runContainerd(ctx context.Context, spec map[string]any) error {
-	return runContainerdConfig(ctx, spec)
+	return runContainerdConfigure(ctx, spec)
 }
 
 func runRepository(spec map[string]any) error {
 	switch repositoryAction(spec) {
 	case "configure":
-		return runRepoConfig(spec)
+		return runRepositoryConfigure(spec)
 	default:
 		return fmt.Errorf("unsupported Repository action %q", stringValue(spec, "action"))
 	}
@@ -45,8 +50,10 @@ func runRepository(spec map[string]any) error {
 
 func runImage(ctx context.Context, spec map[string]any) error {
 	switch imageAction(spec) {
+	case "download":
+		return fmt.Errorf("image action download is not supported in apply dispatch")
 	case "present":
-		return runVerifyImages(ctx, spec)
+		return runImagePresent(ctx, spec)
 	default:
 		return fmt.Errorf("unsupported Image action %q", stringValue(spec, "action"))
 	}
@@ -69,11 +76,24 @@ func fileAction(spec map[string]any) string {
 	if action := stringValue(spec, "action"); action != "" {
 		return action
 	}
+	if spec != nil && (spec["source"] != nil || spec["output"] != nil) {
+		return "download"
+	}
 	if _, ok := spec["edits"]; ok {
 		return "edit"
 	}
 	if spec["src"] != nil || spec["dest"] != nil {
 		return "copy"
+	}
+	return "install"
+}
+
+func packagesAction(spec map[string]any) string {
+	if action := stringValue(spec, "action"); action != "" {
+		return action
+	}
+	if spec != nil && (spec["backend"] != nil || spec["distro"] != nil || spec["repo"] != nil) {
+		return "download"
 	}
 	return "install"
 }
@@ -88,6 +108,9 @@ func repositoryAction(spec map[string]any) string {
 func imageAction(spec map[string]any) string {
 	if action := stringValue(spec, "action"); action != "" {
 		return action
+	}
+	if spec != nil && (spec["backend"] != nil || spec["output"] != nil) {
+		return "download"
 	}
 	return "present"
 }

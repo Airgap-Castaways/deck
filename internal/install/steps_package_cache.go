@@ -20,7 +20,7 @@ func runPackageCache(spec map[string]any) error {
 	clean := boolValue(spec, "clean")
 	update := boolValue(spec, "update")
 	if !clean && !update {
-		return fmt.Errorf("%s: PackageCache requires clean and/or update", errCodeInstallPackageCacheMgr)
+		return fmt.Errorf("%s: PackageCache requires clean and/or update", errCodeInstallPackageCacheManagerInvalid)
 	}
 	policy := packageRepoPolicyFromSpec(spec)
 
@@ -51,7 +51,7 @@ func resolvePackageCacheManager(spec map[string]any) (string, error) {
 		}
 		return repoConfigFormatToPackageManager(autoFormat), nil
 	default:
-		return "", fmt.Errorf("%s: PackageCache manager must be one of auto, apt, dnf", errCodeInstallPackageCacheMgr)
+		return "", fmt.Errorf("%s: PackageCache manager must be one of auto, apt, dnf", errCodeInstallPackageCacheManagerInvalid)
 	}
 }
 
@@ -114,7 +114,7 @@ func runPackageCacheCommands(
 			}
 		}
 	default:
-		return fmt.Errorf("%s: unsupported package cache manager %q", errCodeInstallPackageCacheMgr, manager)
+		return fmt.Errorf("%s: unsupported package cache manager %q", errCodeInstallPackageCacheManagerInvalid, manager)
 	}
 
 	return nil

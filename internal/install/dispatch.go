@@ -8,19 +8,20 @@ import (
 )
 
 func executeStep(ctx context.Context, kind string, spec map[string]any, bundleRoot string) error {
-	if !workflowexec.StepAllowedForRole("apply", kind) {
+	if !workflowexec.StepAllowedForRole("apply", kind, spec) {
 		return fmt.Errorf("%s: unsupported step kind %s", errCodeInstallKindUnsupported, kind)
 	}
 
 	switch kind {
-	case "FileFetch":
-		_, err := runDownloadFile(ctx, bundleRoot, spec)
-		return err
 	case "Artifacts":
-		return runInstallArtifacts(ctx, spec, bundleRoot)
+		return runArtifactsApply(ctx, spec, bundleRoot)
 	case "Packages":
-		return runInstallPackages(ctx, spec)
+		return runPackages(ctx, spec)
 	case "File":
+		if fileAction(spec) == "download" {
+			_, err := runFileDownload(ctx, bundleRoot, spec)
+			return err
+		}
 		return runFile(spec)
 	case "Sysctl":
 		return runSysctl(spec)
@@ -37,7 +38,7 @@ func executeStep(ctx context.Context, kind string, spec map[string]any, bundleRo
 	case "PackageCache":
 		return runPackageCache(spec)
 	case "Containerd":
-		return runContainerdConfig(ctx, spec)
+		return runContainerdConfigure(ctx, spec)
 	case "Swap":
 		return runSwap(spec)
 	case "KernelModule":

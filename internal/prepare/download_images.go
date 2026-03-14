@@ -15,11 +15,11 @@ import (
 
 var (
 	parseImageReferenceFn = func(v string) (name.Reference, error) { return name.ParseReference(v, name.WeakValidation) }
-	remoteImageFetchFn    = remote.Image
+	remoteImageFn         = remote.Image
 	tarballWriteToFileFn  = tarball.WriteToFile
 )
 
-func runDownloadImages(ctx context.Context, runner CommandRunner, bundleRoot string, spec map[string]any, opts RunOptions) ([]string, error) {
+func runImageDownload(ctx context.Context, runner CommandRunner, bundleRoot string, spec map[string]any, opts RunOptions) ([]string, error) {
 	_ = runner
 	output := mapValue(spec, "output")
 	dir := stringValue(output, "dir")
@@ -29,7 +29,7 @@ func runDownloadImages(ctx context.Context, runner CommandRunner, bundleRoot str
 
 	images := stringSlice(spec["images"])
 	if len(images) == 0 {
-		return nil, fmt.Errorf("DownloadImages requires images")
+		return nil, fmt.Errorf("image action download requires images")
 	}
 
 	backend := mapValue(spec, "backend")
@@ -71,7 +71,7 @@ func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string
 			return nil, fmt.Errorf("parse image reference %s: %w", img, err)
 		}
 
-		imageObj, err := remoteImageFetchFn(
+		imageObj, err := remoteImageFn(
 			ref,
 			remote.WithAuthFromKeychain(authn.DefaultKeychain),
 			remote.WithContext(ctx),

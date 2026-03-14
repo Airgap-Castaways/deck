@@ -3,8 +3,9 @@ version: v1alpha1
 steps:
   - id: fetch-join-file
     apiVersion: deck/v1alpha1
-    kind: FileFetch
+    kind: File
     spec:
+      action: download
       source:
         bundle:
           root: files

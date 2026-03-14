@@ -16,14 +16,14 @@ var installPackagesRunTimedCommandWithContext = runTimedCommandWithContext
 
 var installPackagesLookPath = exec.LookPath
 
-func runInstallPackages(ctx context.Context, spec map[string]any) error {
+func runPackagesApply(ctx context.Context, spec map[string]any) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
 	pkgs := stringSlice(spec["packages"])
 	if len(pkgs) == 0 {
-		return fmt.Errorf("%s: InstallPackages requires packages", errCodeInstallPackagesRequired)
+		return fmt.Errorf("%s: InstallPackages requires packages", errCodeInstallPackageListRequired)
 	}
 	policy := packageRepoPolicyFromSpec(spec)
 
@@ -32,11 +32,11 @@ func runInstallPackages(ctx context.Context, spec map[string]any) error {
 	if src, ok := spec["source"].(map[string]any); ok {
 		typeVal := stringValue(src, "type")
 		if typeVal != "" && typeVal != "local-repo" {
-			return fmt.Errorf("%s: unsupported source type %q", errCodeInstallPkgSourceInvalid, typeVal)
+			return fmt.Errorf("%s: unsupported source type %q", errCodeInstallPackageSourceInvalid, typeVal)
 		}
 		if path := stringValue(src, "path"); path != "" {
 			if info, err := os.Stat(path); err != nil || !info.IsDir() {
-				return fmt.Errorf("%s: source path must be an existing directory: %s", errCodeInstallPkgSourceInvalid, path)
+				return fmt.Errorf("%s: source path must be an existing directory: %s", errCodeInstallPackageSourceInvalid, path)
 			}
 			sourcePath = path
 		}
@@ -49,37 +49,37 @@ func runInstallPackages(ctx context.Context, spec map[string]any) error {
 		installer = "dnf"
 	}
 	if installer == "" {
-		return fmt.Errorf("%s: apt-get or dnf not found", errCodeInstallPkgMgrMissing)
+		return fmt.Errorf("%s: apt-get or dnf not found", errCodeInstallPackageManagerNotFound)
 	}
 
 	if sourcePath != "" {
 		if installer == "apt-get" {
 			artifacts, err := collectPackageArtifacts(sourcePath, ".deb")
 			if err != nil {
-				return fmt.Errorf("%s: %w", errCodeInstallPkgSourceInvalid, err)
+				return fmt.Errorf("%s: %w", errCodeInstallPackageSourceInvalid, err)
 			}
 			args := []string{"install", "-y"}
 			args = append(args, artifacts...)
 			if err := installPackagesRunTimedCommandWithContext(ctx, "apt-get", args, commandTimeoutWithDefault(spec, 10*time.Minute)); err != nil {
 				if errors.Is(err, errStepCommandTimeout) || errors.Is(err, context.DeadlineExceeded) {
-					return fmt.Errorf("%s: package installation timed out: %w", errCodeInstallPkgFailed, err)
+					return fmt.Errorf("%s: package installation timed out: %w", errCodeInstallPackageInstallFailed, err)
 				}
-				return fmt.Errorf("%s: package installation failed: %w", errCodeInstallPkgFailed, err)
+				return fmt.Errorf("%s: package installation failed: %w", errCodeInstallPackageInstallFailed, err)
 			}
 			return nil
 		}
 
 		artifacts, err := collectPackageArtifacts(sourcePath, ".rpm")
 		if err != nil {
-			return fmt.Errorf("%s: %w", errCodeInstallPkgSourceInvalid, err)
+			return fmt.Errorf("%s: %w", errCodeInstallPackageSourceInvalid, err)
 		}
 		args := []string{"install", "-y"}
 		args = append(args, artifacts...)
 		if err := installPackagesRunTimedCommandWithContext(ctx, "dnf", args, commandTimeoutWithDefault(spec, 10*time.Minute)); err != nil {
 			if errors.Is(err, errStepCommandTimeout) || errors.Is(err, context.DeadlineExceeded) {
-				return fmt.Errorf("%s: package installation timed out: %w", errCodeInstallPkgFailed, err)
+				return fmt.Errorf("%s: package installation timed out: %w", errCodeInstallPackageInstallFailed, err)
 			}
-			return fmt.Errorf("%s: package installation failed: %w", errCodeInstallPkgFailed, err)
+			return fmt.Errorf("%s: package installation failed: %w", errCodeInstallPackageInstallFailed, err)
 		}
 		return nil
 	}
@@ -104,9 +104,9 @@ func runInstallPackages(ctx context.Context, spec map[string]any) error {
 	args = append(args, pkgs...)
 	if err := installPackagesRunTimedCommandWithContext(ctx, installer, args, commandTimeoutWithDefault(spec, 10*time.Minute)); err != nil {
 		if errors.Is(err, errStepCommandTimeout) || errors.Is(err, context.DeadlineExceeded) {
-			return fmt.Errorf("%s: package installation timed out: %w", errCodeInstallPkgFailed, err)
+			return fmt.Errorf("%s: package installation timed out: %w", errCodeInstallPackageInstallFailed, err)
 		}
-		return fmt.Errorf("%s: package installation failed: %w", errCodeInstallPkgFailed, err)
+		return fmt.Errorf("%s: package installation failed: %w", errCodeInstallPackageInstallFailed, err)
 	}
 	return nil
 }

@@ -8,10 +8,10 @@ import (
 	"time"
 )
 
-func runVerifyImages(ctx context.Context, spec map[string]any) error {
+func runImagePresent(ctx context.Context, spec map[string]any) error {
 	required := stringSlice(spec["images"])
 	if len(required) == 0 {
-		return fmt.Errorf("%s: VerifyImages requires images", errCodeInstallImagesMissing)
+		return fmt.Errorf("%s: Image action present requires images", errCodeInstallImageListRequired)
 	}
 
 	cmdArgs := stringSlice(spec["command"])
@@ -30,9 +30,9 @@ func runVerifyImages(ctx context.Context, spec map[string]any) error {
 	output, err := runCommandOutputWithContext(ctx, cmdArgs, timeout)
 	if err != nil {
 		if errors.Is(err, errStepCommandTimeout) || errors.Is(err, context.DeadlineExceeded) {
-			return fmt.Errorf("%s: image verification timed out: %w", errCodeInstallImagesCmdFailed, err)
+			return fmt.Errorf("%s: image verification timed out: %w", errCodeInstallImageCheckCommandFailed, err)
 		}
-		return fmt.Errorf("%s: %w", errCodeInstallImagesCmdFailed, err)
+		return fmt.Errorf("%s: %w", errCodeInstallImageCheckCommandFailed, err)
 	}
 
 	available := map[string]bool{}
@@ -52,7 +52,7 @@ func runVerifyImages(ctx context.Context, spec map[string]any) error {
 	}
 
 	if len(missing) > 0 {
-		return fmt.Errorf("%s: missing images: %s", errCodeInstallImagesNotFound, strings.Join(missing, ", "))
+		return fmt.Errorf("%s: missing images: %s", errCodeInstallImagePresenceFailed, strings.Join(missing, ", "))
 	}
 
 	return nil

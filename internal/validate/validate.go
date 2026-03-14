@@ -281,7 +281,7 @@ func validatePrepareSemantics(wf *config.Workflow) error {
 func validateRoleKinds(wf *config.Workflow) error {
 	role := strings.TrimSpace(wf.Role)
 	for _, step := range workflowSteps(wf) {
-		if workflowexec.StepAllowedForRole(role, step.Kind) {
+		if workflowexec.StepAllowedForRole(role, step.Kind, step.Spec) {
 			continue
 		}
 		return fmt.Errorf("E_KIND_ROLE_MISMATCH: step %s (%s) is not supported for role %s", step.ID, step.Kind, role)

@@ -14,12 +14,12 @@ func runSysctl(spec map[string]any) error {
 		path = stringValue(spec, "dest")
 	}
 	if path == "" {
-		return fmt.Errorf("%s: Sysctl requires writeFile or dest", errCodeInstallSysctlPathMiss)
+		return fmt.Errorf("%s: Sysctl requires writeFile or dest", errCodeInstallSysctlFileRequired)
 	}
 
 	values, ok := spec["values"].(map[string]any)
 	if !ok || len(values) == 0 {
-		return fmt.Errorf("%s: Sysctl requires values", errCodeInstallSysctlValsMiss)
+		return fmt.Errorf("%s: Sysctl requires values", errCodeInstallSysctlValuesRequired)
 	}
 
 	lines := make([]string, 0, len(values))
@@ -43,10 +43,10 @@ func runService(spec map[string]any) error {
 	name := stringValue(spec, "name")
 	names := stringSlice(spec["names"])
 	if name == "" && len(names) == 0 {
-		return fmt.Errorf("%s: Service requires name or names", errCodeInstallServiceNameMiss)
+		return fmt.Errorf("%s: Service requires name or names", errCodeInstallServiceNameRequired)
 	}
 	if name != "" && len(names) > 0 {
-		return fmt.Errorf("%s: Service accepts either name or names", errCodeInstallServiceNameMiss)
+		return fmt.Errorf("%s: Service accepts either name or names", errCodeInstallServiceNameRequired)
 	}
 	if name != "" {
 		names = []string{name}
@@ -281,13 +281,13 @@ func kernelModuleNames(spec map[string]any) ([]string, error) {
 	name := strings.TrimSpace(stringValue(spec, "name"))
 	names := stringSlice(spec["names"])
 	if name != "" && len(names) > 0 {
-		return nil, fmt.Errorf("%s: KernelModule accepts either name or names", errCodeInstallKernelModuleMiss)
+		return nil, fmt.Errorf("%s: KernelModule accepts either name or names", errCodeInstallKernelModuleNameRequired)
 	}
 	if name != "" {
 		return []string{name}, nil
 	}
 	if len(names) == 0 {
-		return nil, fmt.Errorf("%s: KernelModule requires name or names", errCodeInstallKernelModuleMiss)
+		return nil, fmt.Errorf("%s: KernelModule requires name or names", errCodeInstallKernelModuleNameRequired)
 	}
 	return names, nil
 }

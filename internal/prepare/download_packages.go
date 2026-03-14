@@ -15,7 +15,7 @@ type packageCacheMeta struct {
 	Files    []string `json:"files"`
 }
 
-func runDownloadPackages(ctx context.Context, runner CommandRunner, bundleRoot string, spec map[string]any, defaultDir string, opts RunOptions) ([]string, error) {
+func runPackagesDownload(ctx context.Context, runner CommandRunner, bundleRoot string, spec map[string]any, defaultDir string, opts RunOptions) ([]string, error) {
 	output := mapValue(spec, "output")
 	dir := stringValue(output, "dir")
 	if dir == "" {
@@ -24,7 +24,7 @@ func runDownloadPackages(ctx context.Context, runner CommandRunner, bundleRoot s
 
 	packages := stringSlice(spec["packages"])
 	if len(packages) == 0 {
-		return nil, fmt.Errorf("DownloadPackages requires packages")
+		return nil, fmt.Errorf("packages action download requires packages")
 	}
 
 	backend := mapValue(spec, "backend")
@@ -38,7 +38,7 @@ func runDownloadPackages(ctx context.Context, runner CommandRunner, bundleRoot s
 			}
 			release := strings.TrimSpace(stringValue(distro, "release"))
 			if release == "" {
-				return nil, fmt.Errorf("DownloadPackages repo mode requires distro.release")
+				return nil, fmt.Errorf("packages action download repo mode requires distro.release")
 			}
 
 			repoType := strings.TrimSpace(stringValue(repo, "type"))
@@ -55,7 +55,7 @@ func runDownloadPackages(ctx context.Context, runner CommandRunner, bundleRoot s
 			case "yum":
 				repoRoot = filepath.ToSlash(filepath.Join("packages", "yum", release))
 			default:
-				return nil, fmt.Errorf("DownloadPackages repo.type must be apt-flat or yum")
+				return nil, fmt.Errorf("packages action download repo.type must be apt-flat or yum")
 			}
 
 			if files, reused, err := tryReusePackageArtifacts(bundleRoot, repoRoot, packages, opts); err != nil {

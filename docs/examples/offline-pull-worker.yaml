@@ -59,6 +59,7 @@ phases:
         apiVersion: deck/v1alpha1
         kind: Packages
         spec:
+          action: install
           packages: [containerd, kubelet, kubeadm, kubectl]
       - id: configure-containerd-runtime
         apiVersion: deck/v1alpha1

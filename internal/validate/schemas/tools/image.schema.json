@@ -50,13 +50,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "action",
         "images"
       ],
       "properties": {
         "action": {
           "type": "string",
           "enum": [
+            "download",
             "present"
           ]
         },
@@ -77,8 +77,52 @@
           "items": {
             "type": "string"
           }
+        },
+        "backend": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "output": {
+          "type": "object",
+          "additionalProperties": true
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "download"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "required": [
+              "images"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "present"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "required": [
+              "images"
+            ]
+          }
+        }
+      ]
     }
   }
 }

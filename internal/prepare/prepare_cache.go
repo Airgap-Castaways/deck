@@ -177,11 +177,11 @@ func collectPrepareCacheArtifacts(steps []config.Step, effectiveVars map[string]
 
 func stepArtifactType(kind string) (string, bool) {
 	switch kind {
-	case "PackageFetch":
+	case "Packages":
 		return "package", true
-	case "ImageFetch":
+	case "Image":
 		return "image", true
-	case "FileFetch":
+	case "File":
 		return "file", true
 	default:
 		return "", false

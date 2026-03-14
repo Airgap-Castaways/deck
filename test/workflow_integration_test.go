@@ -72,7 +72,7 @@ func TestWorkflowIntegrationWorkerJoin(t *testing.T) {
 	requireDryRunOutput(t, out,
 		"PHASE=install",
 		"prep-disable-swap Swap PLAN",
-		"fetch-join-file FileFetch PLAN",
+		"fetch-join-file File PLAN",
 		"join-worker Kubeadm PLAN",
 	)
 }
@@ -161,8 +161,9 @@ phases:
     steps:
       - id: fetch-join-file
         apiVersion: deck/v1alpha1
-        kind: FileFetch
+        kind: File
         spec:
+          action: download
           source:
             url: http://127.0.0.1:9/join.txt
           output:
@@ -174,7 +175,7 @@ phases:
           command: ["bash", "-lc", "test -s /tmp/deck/join.txt"]
 `)
 	err := runWorkflowApplyExpectError(t, root, workflowPath)
-	if !strings.Contains(err, "fetch-join-file") && !strings.Contains(err, "FileFetch") {
+	if !strings.Contains(err, "fetch-join-file") && !strings.Contains(err, "File") {
 		t.Fatalf("expected join fetch failure, got %s", err)
 	}
 }

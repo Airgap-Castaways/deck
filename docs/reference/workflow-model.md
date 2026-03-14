@@ -100,9 +100,6 @@ They make the workflow easier to scan, easier to validate, and easier to evolve 
 Supported step kinds include:
 
 - `Inspection`
-- `PackageFetch`
-- `ImageFetch`
-- `FileFetch`
 - `Artifacts`
 - `Packages`
 - `Sysctl`

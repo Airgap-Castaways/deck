@@ -51,15 +51,11 @@ Schema roots also carry lightweight documentation metadata such as `description`
 
 ### Advanced steps
 
-- `../schemas/tools/advanced/file-fetch.schema.json`
 - `../schemas/tools/advanced/command.schema.json`
 
 ### Legacy/internal prepare steps
 
-- `../schemas/tools/legacy-prepare/image-fetch.schema.json`
-- `../schemas/tools/legacy-prepare/package-fetch.schema.json`
-
-These schemas still exist because the engine validates internal or older prepare flows against them, but new prepare workflows should not start from those step kinds.
+Legacy/internal prepare fetch schemas were removed. Prepare artifact planning now lowers into `File`, `Image`, and `Packages` with `action: download`.
 
 ## Typed step reference notes
 
