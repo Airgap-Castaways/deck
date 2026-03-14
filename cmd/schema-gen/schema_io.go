@@ -119,9 +119,6 @@ func loadToolSchemas(dir string) ([]toolSchemaDoc, error) {
 			SpecFields:  sortedKeys(specProps),
 			Required:    nestedRequired(doc.Properties, "spec"),
 		}
-		if tool.Kind == "" {
-			tool.Kind = strings.TrimSuffix(strings.TrimSuffix(entry.Name(), ".json"), ".schema")
-		}
 		tools = append(tools, tool)
 	}
 	sort.Slice(tools, func(i, j int) bool { return tools[i].Kind < tools[j].Kind })
