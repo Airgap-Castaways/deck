@@ -380,10 +380,10 @@ func TestHealthUsesSavedDefaultServer(t *testing.T) {
 	}
 }
 
-func TestServerWorkflowsUsesSavedDefaultServer(t *testing.T) {
+func TestServerScenariosUsesSavedDefaultServer(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "server.json")
 	t.Setenv("DECK_SERVER_CONFIG_PATH", configPath)
-	items := []string{"workflows/prepare.yaml", "workflows/apply.yaml"}
+	items := []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/components/bootstrap.yaml", "workflows/scenarios/node-reset.yaml"}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/workflows/index.json" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -397,19 +397,19 @@ func TestServerWorkflowsUsesSavedDefaultServer(t *testing.T) {
 		t.Fatalf("server set failed: %v", err)
 	}
 
-	out, err := runWithCapturedStdout([]string{"server", "workflows"})
+	out, err := runWithCapturedStdout([]string{"server", "scenarios"})
 	if err != nil {
-		t.Fatalf("server workflows with saved default failed: %v", err)
+		t.Fatalf("server scenarios with saved default failed: %v", err)
 	}
-	expected := strings.Join(items, "\n") + "\n"
+	expected := "control-plane-bootstrap\nnode-reset\n"
 	if out != expected {
 		t.Fatalf("unexpected output\nwant: %q\ngot : %q", expected, out)
 	}
 }
 
-func TestServerWorkflowsWithoutSavedServerReportsClearGuidance(t *testing.T) {
+func TestServerScenariosWithoutSavedServerReportsClearGuidance(t *testing.T) {
 	t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "server.json"))
-	_, err := runWithCapturedStdout([]string{"server", "workflows"})
+	_, err := runWithCapturedStdout([]string{"server", "scenarios"})
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -484,7 +484,7 @@ func TestMigratedLeafHelpContracts(t *testing.T) {
 		args []string
 		want string
 	}{
-		{args: []string{"help", "server", "workflows"}, want: "deck server workflows [flags]"},
+		{args: []string{"help", "server", "scenarios"}, want: "deck server scenarios [flags]"},
 		{args: []string{"help", "validate"}, want: "deck validate [flags]"},
 		{args: []string{"help", "server", "health"}, want: "deck server health [flags]"},
 	}
@@ -767,7 +767,7 @@ func TestRunWorkflowValidateAndLegacyValidateMigration(t *testing.T) {
 
 func TestServerWorkflowsIgnoresLegacyPositionalArgShape(t *testing.T) {
 	t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "server.json"))
-	_, err := runWithCapturedStdout([]string{"server", "workflows", "extra"})
+	_, err := runWithCapturedStdout([]string{"server", "scenarios", "extra"})
 	if err == nil {
 		t.Fatalf("expected missing server error")
 	}
@@ -778,7 +778,7 @@ func TestServerWorkflowsIgnoresLegacyPositionalArgShape(t *testing.T) {
 
 func TestServerWorkflowsExtraPositionalStopsFlagParsingLikeLegacy(t *testing.T) {
 	t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "server.json"))
-	_, err := runWithCapturedStdout([]string{"server", "workflows", "extra", "--output", "invalid"})
+	_, err := runWithCapturedStdout([]string{"server", "scenarios", "extra", "--output", "invalid"})
 	if err == nil {
 		t.Fatalf("expected missing server error")
 	}
@@ -2895,8 +2895,8 @@ func writeSiteReleaseBundleTarFixture(t *testing.T, archivePath string) {
 	}
 }
 
-func TestServerWorkflows(t *testing.T) {
-	items := []string{"workflows/prepare.yaml", "workflows/apply.yaml"}
+func TestServerScenarios(t *testing.T) {
+	items := []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/components/bootstrap.yaml", "node-reset"}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -2910,18 +2910,18 @@ func TestServerWorkflows(t *testing.T) {
 	defer srv.Close()
 
 	t.Run("text", func(t *testing.T) {
-		out, err := runWithCapturedStdout([]string{"server", "workflows", "--server", srv.URL})
+		out, err := runWithCapturedStdout([]string{"server", "scenarios", "--server", srv.URL})
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
-		expected := strings.Join(items, "\n") + "\n"
+		expected := "control-plane-bootstrap\nnode-reset\n"
 		if out != expected {
 			t.Fatalf("unexpected output\nwant: %q\ngot : %q", expected, out)
 		}
 	})
 
 	t.Run("json", func(t *testing.T) {
-		out, err := runWithCapturedStdout([]string{"server", "workflows", "--server", srv.URL, "-o", "json"})
+		out, err := runWithCapturedStdout([]string{"server", "scenarios", "--server", srv.URL, "-o", "json"})
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
@@ -2929,14 +2929,15 @@ func TestServerWorkflows(t *testing.T) {
 		if err := json.Unmarshal([]byte(out), &got); err != nil {
 			t.Fatalf("decode json output: %v\nraw: %q", err, out)
 		}
-		if !reflect.DeepEqual(got, items) {
-			t.Fatalf("unexpected items\nwant: %#v\ngot : %#v", items, got)
+		want := []string{"control-plane-bootstrap", "node-reset"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("unexpected items\nwant: %#v\ngot : %#v", want, got)
 		}
 	})
 
 	t.Run("without server returns guidance error", func(t *testing.T) {
 		t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "server.json"))
-		_, err := runWithCapturedStdout([]string{"server", "workflows"})
+		_, err := runWithCapturedStdout([]string{"server", "scenarios"})
 		if err == nil {
 			t.Fatalf("expected error, got success")
 		}
@@ -2951,7 +2952,7 @@ func TestServerWorkflows(t *testing.T) {
 		}))
 		defer missing.Close()
 
-		textOut, err := runWithCapturedStdout([]string{"server", "workflows", "--server", missing.URL})
+		textOut, err := runWithCapturedStdout([]string{"server", "scenarios", "--server", missing.URL})
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
@@ -2959,7 +2960,7 @@ func TestServerWorkflows(t *testing.T) {
 			t.Fatalf("expected empty text output, got %q", textOut)
 		}
 
-		jsonOut, err := runWithCapturedStdout([]string{"server", "workflows", "--server", missing.URL, "-o", "json"})
+		jsonOut, err := runWithCapturedStdout([]string{"server", "scenarios", "--server", missing.URL, "-o", "json"})
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}

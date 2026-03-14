@@ -35,15 +35,6 @@
       "description": "Declarative prepare artifact inventory. Prefer this over legacy prepare download steps in new role: prepare workflows.",
       "$ref": "#/$defs/artifacts"
     },
-    "varImports": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": {
-        "type": "string",
-        "minLength": 1
-      }
-    },
     "imports": {
       "type": "array",
       "minItems": 1,

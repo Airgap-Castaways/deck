@@ -150,6 +150,9 @@ func runPrepareWithOptions(opts prepareOptions) error {
 	if err := copySubtreeIfExists(workflowBaseDir, workflowOutDir); err != nil {
 		return err
 	}
+	if err := writeScenarioIndex(filepath.Join(workflowOutDir, "index.json"), filepath.Join(workflowOutDir, "scenarios")); err != nil {
+		return err
+	}
 
 	execPath, err := os.Executable()
 	if err != nil {
@@ -284,6 +287,59 @@ func writeBytes(path string, data []byte, mode os.FileMode) error {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
+}
+
+func writeScenarioIndex(indexPath, scenariosRoot string) error {
+	items, err := collectScenarioIndex(scenariosRoot)
+	if err != nil {
+		return err
+	}
+	raw, err := json.MarshalIndent(items, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode scenario index: %w", err)
+	}
+	raw = append(raw, '\n')
+	return writeBytes(indexPath, raw, 0o644)
+}
+
+func collectScenarioIndex(scenariosRoot string) ([]string, error) {
+	info, err := os.Stat(scenariosRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("read scenarios root: %w", err)
+	}
+	if !info.IsDir() {
+		return []string{}, nil
+	}
+	items := make([]string, 0)
+	err = filepath.WalkDir(scenariosRoot, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		name := strings.ToLower(d.Name())
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			return nil
+		}
+		rel, err := filepath.Rel(scenariosRoot, path)
+		if err != nil {
+			return err
+		}
+		item := filepath.ToSlash(rel)
+		item = strings.TrimSuffix(item, ".yaml")
+		item = strings.TrimSuffix(item, ".yml")
+		items = append(items, item)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("collect scenario index: %w", err)
+	}
+	sort.Strings(items)
+	return items, nil
 }
 
 type packManifest struct {

@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -113,7 +115,7 @@ func executeServe(root string, addr string, apiToken string, reportMax int, audi
 	}
 }
 
-func executeList(server string, output string) error {
+func executeListScenarios(server string, output string) error {
 	if output != "text" && output != "json" {
 		return errors.New("--output must be text or json")
 	}
@@ -122,7 +124,7 @@ func executeList(server string, output string) error {
 	if err != nil {
 		return err
 	}
-	items, err := fetchWorkflowIndexFromServer(resolvedServer)
+	items, err := fetchScenarioIndexFromServer(resolvedServer)
 	if err != nil {
 		return err
 	}
@@ -130,7 +132,7 @@ func executeList(server string, output string) error {
 	if output == "json" {
 		enc := json.NewEncoder(os.Stdout)
 		if err := enc.Encode(items); err != nil {
-			return fmt.Errorf("server workflows: encode output: %w", err)
+			return fmt.Errorf("server scenarios: encode output: %w", err)
 		}
 		return nil
 	}
@@ -144,30 +146,85 @@ func executeList(server string, output string) error {
 	return w.Flush()
 }
 
-func fetchWorkflowIndexFromServer(server string) ([]string, error) {
+func fetchScenarioIndexFromServer(server string) ([]string, error) {
 	trimmed := strings.TrimRight(server, "/")
 	indexURL := trimmed + "/workflows/index.json"
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, indexURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("server workflows: build request: %w", err)
+		return nil, fmt.Errorf("server scenarios: build request: %w", err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("server workflows: request failed: %w", err)
+		return nil, fmt.Errorf("server scenarios: request failed: %w", err)
 	}
 	defer closeSilently(resp.Body)
 	if resp.StatusCode == http.StatusNotFound {
 		return []string{}, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server workflows: unexpected status %d", resp.StatusCode)
+		return nil, fmt.Errorf("server scenarios: unexpected status %d", resp.StatusCode)
 	}
 
 	var items []string
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-		return nil, fmt.Errorf("server workflows: decode response: %w", err)
+		return nil, fmt.Errorf("server scenarios: decode response: %w", err)
 	}
-	return items, nil
+	return normalizeScenarioIndex(items), nil
+}
+
+func normalizeScenarioIndex(items []string) []string {
+	set := map[string]struct{}{}
+	for _, item := range items {
+		normalized := normalizeScenarioIndexItem(item)
+		if normalized == "" {
+			continue
+		}
+		set[normalized] = struct{}{}
+	}
+	out := make([]string, 0, len(set))
+	for item := range set {
+		out = append(out, item)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func normalizeScenarioIndexItem(raw string) string {
+	cleaned := path.Clean(strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/")))
+	if cleaned == "" || cleaned == "." {
+		return ""
+	}
+	cleaned = strings.TrimPrefix(cleaned, "/")
+	hadScenariosPrefix := false
+	if strings.HasPrefix(cleaned, "workflows/") {
+		cleaned = strings.TrimPrefix(cleaned, "workflows/")
+		if !strings.HasPrefix(cleaned, "scenarios/") {
+			return ""
+		}
+	}
+	if strings.HasPrefix(cleaned, "scenarios/") {
+		cleaned = strings.TrimPrefix(cleaned, "scenarios/")
+		hadScenariosPrefix = true
+	}
+	if strings.HasPrefix(cleaned, "components/") || strings.Contains(cleaned, "/components/") || cleaned == "index.json" {
+		return ""
+	}
+	if strings.HasSuffix(cleaned, ".yaml") {
+		if !hadScenariosPrefix {
+			return ""
+		}
+		cleaned = strings.TrimSuffix(cleaned, ".yaml")
+	}
+	if strings.HasSuffix(cleaned, ".yml") {
+		if !hadScenariosPrefix {
+			return ""
+		}
+		cleaned = strings.TrimSuffix(cleaned, ".yml")
+	}
+	if cleaned == "" {
+		return ""
+	}
+	return cleaned
 }
 
 func executeHealth(server string) error {

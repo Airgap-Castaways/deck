@@ -16,7 +16,6 @@ The goal is not to invent a giant DSL. The goal is to give air-gapped operationa
 - `role`: required, either `prepare` or `apply`
 - `version`: currently `v1alpha1`
 - `vars`: optional variable map
-- `varImports`: optional external variable imports
 - `imports`: optional workflow imports
 - `artifacts`: declarative prepare artifact inventory for `role: prepare`
 - `steps`: top-level step list
@@ -28,6 +27,8 @@ The schema allows one execution mode at a time:
 - top-level `steps`
 - named `phases`
 - imported workflow fragments that resolve to one of those modes
+
+Workflow imports and phase imports resolve from `workflows/components/`. Write component-relative paths such as `k8s/prereq.yaml`, not `../components/k8s/prereq.yaml`.
 
 ## Minimal workflow
 

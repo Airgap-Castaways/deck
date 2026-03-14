@@ -19,7 +19,7 @@ It supports a simple operator flow: author the workflow, validate it, build the 
 - `server set`: save a default server URL and optional API token for commands that accept `--server` and `--api-token`
 - `server up`: expose a prepared bundle root over HTTP inside the air gap when a shared local source is useful
 - `server down`: stop a daemonized local server started with `deck server up -d`
-- `server workflows`: inspect available workflows from a saved or explicitly chosen server
+- `server scenarios`: inspect available scenarios from a saved or explicitly chosen server
 - `server health`: check `/healthz` on an explicit or saved server
 - `server logs`: read local server audit logs from file or journal
 
@@ -64,7 +64,7 @@ Optional site-local inspection example:
 ```bash
 deck server set http://127.0.0.1:8080 --api-token deck-site-v1
 deck server up --root ./bundle --addr :8080
-deck server workflows --server http://127.0.0.1:8080
+deck server scenarios --server http://127.0.0.1:8080
 deck server health
 deck apply --session session-1
 ```
@@ -72,6 +72,8 @@ deck apply --session session-1
 ## Notes
 
 - `prepare` expects a workflow directory containing `prepare.yaml`, `apply.yaml`, and `vars.yaml`.
+- scenario entrypoints live under `workflows/scenarios/`
+- workflow imports resolve from `workflows/components/` using component-relative paths
 - `apply` defaults to the `install` phase when phases are used.
 - Help text is shown on stdout only when you request it with `--help` or `help`.
 - Command and flag errors are written to stderr without automatic usage output.

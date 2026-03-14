@@ -25,7 +25,7 @@ func newServerCommand() *cobra.Command {
 		newServerSetCommand(),
 		newServerShowCommand(),
 		newServerUnsetCommand(),
-		newServerWorkflowsCommand(),
+		newServerScenariosCommand(),
 		newServerUpCommand(),
 		newServerDownCommand(),
 		newServerHealthCommand(),
@@ -107,12 +107,12 @@ func newServerUpCommand() *cobra.Command {
 	return cmd
 }
 
-func newServerWorkflowsCommand() *cobra.Command {
+func newServerScenariosCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "workflows",
-		Short: "List available workflows from a server",
+		Use:   "scenarios",
+		Short: "List available scenarios from a server",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeList(cmdFlagValue(cmd, "server"), cmdFlagValue(cmd, "output"))
+			return executeListScenarios(cmdFlagValue(cmd, "server"), cmdFlagValue(cmd, "output"))
 		},
 	}
 	cmd.Flags().SetInterspersed(false)

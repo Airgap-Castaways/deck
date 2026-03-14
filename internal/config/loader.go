@@ -82,18 +82,9 @@ func loadWorkflowWithImports(ctx context.Context, workflowBytes []byte, origin w
 		return nil, nil, fmt.Errorf("workflow cannot set both phases and steps")
 	}
 
-	workflowImportVars, err := loadWorkflowVarImports(ctx, origin, wf.VarImports)
-	if err != nil {
-		return nil, nil, err
-	}
 	if wf.Vars == nil {
 		wf.Vars = map[string]any{}
 	}
-	baseWorkflowVars := map[string]any{}
-	mergeVars(baseWorkflowVars, workflowImportVars)
-	mergeVars(baseWorkflowVars, wf.Vars)
-	wf.Vars = baseWorkflowVars
-	wf.VarImports = nil
 
 	if err := expandPhaseImports(ctx, &wf, origin, visiting); err != nil {
 		return nil, nil, err
@@ -101,7 +92,7 @@ func loadWorkflowWithImports(ctx context.Context, workflowBytes []byte, origin w
 
 	aggregated := &Workflow{}
 	for _, importRef := range wf.Imports {
-		importBytes, importOrigin, err := loadImportSource(ctx, origin, importRef)
+		importBytes, importOrigin, err := loadComponentImportSource(ctx, origin, importRef)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -141,7 +132,7 @@ func expandPhaseImports(ctx context.Context, wf *Workflow, origin workflowOrigin
 			if pathRef == "" {
 				return fmt.Errorf("phase import path is empty in phase %q", phase.Name)
 			}
-			importBytes, importOrigin, err := loadImportSource(ctx, origin, pathRef)
+			importBytes, importOrigin, err := loadComponentImportSource(ctx, origin, pathRef)
 			if err != nil {
 				return err
 			}
@@ -294,26 +285,22 @@ func workflowOriginKey(origin workflowOrigin) string {
 	return "unknown"
 }
 
-func loadImportSource(ctx context.Context, origin workflowOrigin, importRef string) ([]byte, workflowOrigin, error) {
+func loadComponentImportSource(ctx context.Context, origin workflowOrigin, importRef string) ([]byte, workflowOrigin, error) {
 	ref := strings.TrimSpace(importRef)
 	if ref == "" {
 		return nil, workflowOrigin{}, fmt.Errorf("workflow import path is empty")
 	}
-
-	if u, ok := parseHTTPURL(ref); ok {
-		b, err := getRequiredHTTP(ctx, u.String())
-		if err != nil {
-			return nil, workflowOrigin{}, err
-		}
-		return b, workflowOrigin{remoteURL: u}, nil
+	ref, err := normalizeComponentImportRef(ref)
+	if err != nil {
+		return nil, workflowOrigin{}, err
 	}
 
 	if origin.localPath != "" {
-		joined := filepath.Clean(filepath.Join(filepath.Dir(origin.localPath), ref))
-		abs, err := filepath.Abs(joined)
+		componentsRoot, err := localComponentsRoot(origin.localPath)
 		if err != nil {
-			return nil, workflowOrigin{}, fmt.Errorf("resolve import path: %w", err)
+			return nil, workflowOrigin{}, err
 		}
+		abs := filepath.Join(componentsRoot, filepath.FromSlash(ref))
 		b, err := os.ReadFile(abs)
 		if err != nil {
 			return nil, workflowOrigin{}, fmt.Errorf("read workflow file: %w", err)
@@ -322,33 +309,20 @@ func loadImportSource(ctx context.Context, origin workflowOrigin, importRef stri
 	}
 
 	if origin.remoteURL != nil {
-		importURL, err := resolveImportURL(origin.remoteURL, ref)
+		componentsRoot, err := remoteComponentsRoot(origin.remoteURL)
 		if err != nil {
 			return nil, workflowOrigin{}, err
 		}
+		importURL := *componentsRoot
+		importURL.Path = path.Join(importURL.Path, ref)
 		b, err := getRequiredHTTP(ctx, importURL.String())
 		if err != nil {
 			return nil, workflowOrigin{}, err
 		}
-		return b, workflowOrigin{remoteURL: importURL}, nil
+		return b, workflowOrigin{remoteURL: &importURL}, nil
 	}
 
 	return nil, workflowOrigin{}, fmt.Errorf("cannot resolve workflow import %q", ref)
-}
-
-func resolveImportURL(base *url.URL, ref string) (*url.URL, error) {
-	rel, err := url.Parse(ref)
-	if err != nil {
-		return nil, fmt.Errorf("parse import url: %w", err)
-	}
-	if rel.Scheme != "" && rel.Scheme != "http" && rel.Scheme != "https" {
-		return nil, fmt.Errorf("unsupported import url scheme: %s", rel.Scheme)
-	}
-	resolved := base.ResolveReference(rel)
-	if strings.TrimSpace(resolved.Host) == "" {
-		return nil, fmt.Errorf("invalid import url: %s", resolved.String())
-	}
-	return resolved, nil
 }
 
 func canonicalWorkflowBytes(wf *Workflow) ([]byte, error) {
@@ -478,7 +452,13 @@ func loadWorkflowSource(ctx context.Context, source string) ([]byte, workflowOri
 
 func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, error) {
 	if origin.localPath != "" {
-		varsPath := filepath.Join(filepath.Dir(origin.localPath), "vars.yaml")
+		workflowRoot, err := localWorkflowRoot(origin.localPath)
+		varsPath := ""
+		if err == nil {
+			varsPath = filepath.Join(workflowRoot, "vars.yaml")
+		} else {
+			varsPath = filepath.Join(filepath.Dir(origin.localPath), "vars.yaml")
+		}
 		b, err := os.ReadFile(varsPath)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -490,7 +470,14 @@ func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, e
 	}
 
 	if origin.remoteURL != nil {
-		varsURL := siblingURL(origin.remoteURL, "vars.yaml")
+		workflowRoot, err := remoteWorkflowRoot(origin.remoteURL)
+		varsURL := url.URL{}
+		if err == nil {
+			varsURL = *workflowRoot
+			varsURL.Path = path.Join(varsURL.Path, "vars.yaml")
+		} else {
+			varsURL = *siblingURL(origin.remoteURL, "vars.yaml")
+		}
 		b, ok, err := getOptionalHTTP(ctx, varsURL.String())
 		if err != nil {
 			return nil, err
@@ -504,24 +491,71 @@ func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, e
 	return map[string]any{}, nil
 }
 
-func loadWorkflowVarImports(ctx context.Context, origin workflowOrigin, refs []string) (map[string]any, error) {
-	merged := map[string]any{}
-	for _, ref := range refs {
-		trimmed := strings.TrimSpace(ref)
-		if trimmed == "" {
-			return nil, fmt.Errorf("var import path is empty")
-		}
-		b, _, err := loadImportSource(ctx, origin, trimmed)
-		if err != nil {
-			return nil, err
-		}
-		vars, err := parseVarsYAML(b)
-		if err != nil {
-			return nil, fmt.Errorf("parse var import %q: %w", trimmed, err)
-		}
-		mergeVars(merged, vars)
+func normalizeComponentImportRef(ref string) (string, error) {
+	ref = strings.TrimSpace(strings.ReplaceAll(ref, "\\", "/"))
+	if ref == "" {
+		return "", fmt.Errorf("workflow import path is empty")
 	}
-	return merged, nil
+	if strings.HasPrefix(ref, "/") {
+		return "", fmt.Errorf("workflow import path must be components-relative: %s", ref)
+	}
+	if strings.Contains(ref, "://") {
+		return "", fmt.Errorf("workflow import path must not be a URL: %s", ref)
+	}
+	cleaned := path.Clean(ref)
+	if cleaned == "." || cleaned == "" || strings.HasPrefix(cleaned, "../") || cleaned == ".." {
+		return "", fmt.Errorf("workflow import path must stay under components root: %s", ref)
+	}
+	return cleaned, nil
+}
+
+func localComponentsRoot(localPath string) (string, error) {
+	workflowRoot, err := localWorkflowRoot(localPath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(workflowRoot, "components"), nil
+}
+
+func localWorkflowRoot(localPath string) (string, error) {
+	current := filepath.Dir(localPath)
+	for {
+		if filepath.Base(current) == "workflows" {
+			return current, nil
+		}
+		next := filepath.Dir(current)
+		if next == current {
+			return "", fmt.Errorf("workflow import requires file under workflows/: %s", localPath)
+		}
+		current = next
+	}
+}
+
+func remoteComponentsRoot(u *url.URL) (*url.URL, error) {
+	workflowRoot, err := remoteWorkflowRoot(u)
+	if err != nil {
+		return nil, err
+	}
+	v := *workflowRoot
+	v.Path = path.Join(v.Path, "components")
+	v.RawQuery = ""
+	v.Fragment = ""
+	return &v, nil
+}
+
+func remoteWorkflowRoot(u *url.URL) (*url.URL, error) {
+	cleanPath := path.Clean(u.Path)
+	marker := "/workflows/"
+	idx := strings.LastIndex(cleanPath, marker)
+	if idx < 0 {
+		return nil, fmt.Errorf("workflow import requires URL under /workflows/: %s", u.String())
+	}
+	rootPath := cleanPath[:idx+len("/workflows")]
+	v := *u
+	v.Path = rootPath
+	v.RawQuery = ""
+	v.Fragment = ""
+	return &v, nil
 }
 
 func parseVarsYAML(content []byte) (map[string]any, error) {

@@ -1,20 +1,18 @@
 role: apply
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 vars:
   clusterName: bootstrap-root
   enableBootstrap: "true"
 phases:
   - name: install
     imports:
-      - path: ../components/k8s/prereq.yaml
-      - path: ../components/repo/offline-repo-debian.yaml
-      - path: ../components/k8s/runtime-deps-debian.yaml
-      - path: ../components/k8s/k8s-binaries.yaml
-      - path: ../components/k8s/containerd-kubelet.yaml
-      - path: ../components/bootstrap.yaml
-      - path: ../components/k8s/cni.yaml
+      - path: k8s/prereq.yaml
+      - path: repo/offline-repo-debian.yaml
+      - path: k8s/runtime-deps-debian.yaml
+      - path: k8s/k8s-binaries.yaml
+      - path: k8s/containerd-kubelet.yaml
+      - path: bootstrap.yaml
+      - path: k8s/cni.yaml
     steps:
       - id: bootstrap-report
         apiVersion: deck/v1alpha1

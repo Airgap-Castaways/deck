@@ -1021,17 +1021,15 @@ steps:
 	}
 }
 
-func TestSchema_AcceptsVarImportsAndPhaseImports(t *testing.T) {
+func TestSchema_AcceptsComponentPhaseImports(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "workflow.yaml")
 	content := []byte(`role: apply
 version: v1alpha1
-varImports:
-  - ./vars/common.yaml
 phases:
   - name: install
     imports:
-      - path: ./fragments/install-common.yaml
+      - path: k8s/prereq.yaml
         when: vars.osFamily == "rhel"
 `)
 	if err := os.WriteFile(path, content, 0o644); err != nil {
