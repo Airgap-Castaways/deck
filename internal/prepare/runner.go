@@ -83,33 +83,33 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	if err != nil {
 		return err
 	}
-	packCacheEnabled := strings.TrimSpace(wf.Role) == "prepare"
-	packCacheStatePath := ""
-	packCachePlan := PackCachePlan{}
-	if packCacheEnabled {
+	prepareCacheEnabled := strings.TrimSpace(wf.Role) == "prepare"
+	prepareCacheStatePath := ""
+	prepareCachePlan := PrepareCachePlan{}
+	if prepareCacheEnabled {
 		workflowSHA := strings.TrimSpace(wf.WorkflowSHA256)
 		if workflowSHA == "" {
 			fallbackBytes, err := json.Marshal(wf)
 			if err != nil {
-				return fmt.Errorf("encode workflow for pack cache: %w", err)
+				return fmt.Errorf("encode workflow for prepare cache: %w", err)
 			}
 			workflowSHA = computeWorkflowSHA256(fallbackBytes)
 		}
 		var err error
-		packCacheStatePath, err = defaultPackCacheStatePath(workflowSHA)
+		prepareCacheStatePath, err = defaultPrepareCacheStatePath(workflowSHA)
 		if err != nil {
-			return fmt.Errorf("resolve pack cache state path: %w", err)
+			return fmt.Errorf("resolve prepare cache state path: %w", err)
 		}
-		prevPackCacheState, err := loadPackCacheState(packCacheStatePath)
+		prevPrepareCacheState, err := loadPrepareCacheState(prepareCacheStatePath)
 		if err != nil {
 			return err
 		}
 		workflowBytesForPlan, err := json.Marshal(wf)
 		if err != nil {
-			return fmt.Errorf("encode workflow for pack cache plan: %w", err)
+			return fmt.Errorf("encode workflow for prepare cache plan: %w", err)
 		}
-		packCachePlan = ComputePackCachePlan(prevPackCacheState, workflowBytesForPlan, wf.Vars, prepareSteps)
-		packCachePlan.WorkflowSHA256 = workflowSHA
+		prepareCachePlan = ComputePrepareCachePlan(prevPrepareCacheState, workflowBytesForPlan, wf.Vars, prepareSteps)
+		prepareCachePlan.WorkflowSHA256 = workflowSHA
 	}
 	ctxData := map[string]any{"bundleRoot": bundleRoot, "stateFile": ""}
 
@@ -167,8 +167,8 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	if err := writeManifest(manifestPath, dedupeEntries(filterManifestEntries(entries))); err != nil {
 		return err
 	}
-	if packCacheEnabled {
-		if err := savePackCacheState(packCacheStatePath, packCacheStateFromPlan(packCachePlan)); err != nil {
+	if prepareCacheEnabled {
+		if err := savePrepareCacheState(prepareCacheStatePath, prepareCacheStateFromPlan(prepareCachePlan)); err != nil {
 			return err
 		}
 	}

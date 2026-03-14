@@ -1729,7 +1729,7 @@ phases:
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case "/workflows/apply.yaml":
-				_, _ = w.Write([]byte("role: prepare\nversion: v1alpha1\nsteps:\n  - id: pack-step\n    kind: DownloadFile\n    spec:\n      source:\n        path: /tmp/source.bin\n      output:\n        path: files/source.bin\n"))
+				_, _ = w.Write([]byte("role: prepare\nversion: v1alpha1\nsteps:\n  - id: prepare-step\n    kind: DownloadFile\n    spec:\n      source:\n        path: /tmp/source.bin\n      output:\n        path: files/source.bin\n"))
 			case "/workflows/vars.yaml":
 				http.NotFound(w, r)
 			default:
@@ -2404,7 +2404,7 @@ func TestCLIContractBundleInspectAllowsPositionalBeforeFlagViaBinary(t *testing.
 }
 
 func TestBundledApplyWorksFromBundleDir(t *testing.T) {
-	binaryPath := filepath.Join(t.TempDir(), "deck-pack-bin")
+	binaryPath := filepath.Join(t.TempDir(), "deck-prepare-bin")
 	buildCmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/deck")
 	buildCmd.Dir = filepath.Join("..", "..")
 	if raw, err := buildCmd.CombinedOutput(); err != nil {

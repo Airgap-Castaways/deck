@@ -9,7 +9,7 @@ import (
 	"github.com/taedi90/deck/internal/config"
 )
 
-func TestPackCacheInvalidation(t *testing.T) {
+func TestPrepareCacheInvalidation(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -54,9 +54,9 @@ func TestPackCacheInvalidation(t *testing.T) {
 	if _, err := os.Stat(statePath); err != nil {
 		t.Fatalf("expected prepare cache state file: %v", err)
 	}
-	prevState, err := loadPackCacheState(statePath)
+	prevState, err := loadPrepareCacheState(statePath)
 	if err != nil {
-		t.Fatalf("loadPackCacheState failed: %v", err)
+		t.Fatalf("loadPrepareCacheState failed: %v", err)
 	}
 
 	if len(prevState.Artifacts) != 2 {
@@ -64,7 +64,7 @@ func TestPackCacheInvalidation(t *testing.T) {
 	}
 
 	wf.Vars["pkgB"] = "gamma"
-	plan := ComputePackCachePlan(prevState, workflowBytes, wf.Vars, wf.Phases[0].Steps)
+	plan := ComputePrepareCachePlan(prevState, workflowBytes, wf.Vars, wf.Phases[0].Steps)
 
 	if len(plan.Artifacts) != 2 {
 		t.Fatalf("expected two plan artifacts, got %d", len(plan.Artifacts))
@@ -75,15 +75,15 @@ func TestPackCacheInvalidation(t *testing.T) {
 		actions[artifact.StepID] = artifact.Action
 	}
 
-	if actions["artifact-a"] != packCacheActionReuse {
-		t.Fatalf("artifact-a action = %s, want %s", actions["artifact-a"], packCacheActionReuse)
+	if actions["artifact-a"] != prepareCacheActionReuse {
+		t.Fatalf("artifact-a action = %s, want %s", actions["artifact-a"], prepareCacheActionReuse)
 	}
-	if actions["artifact-b"] != packCacheActionFetch {
-		t.Fatalf("artifact-b action = %s, want %s", actions["artifact-b"], packCacheActionFetch)
+	if actions["artifact-b"] != prepareCacheActionFetch {
+		t.Fatalf("artifact-b action = %s, want %s", actions["artifact-b"], prepareCacheActionFetch)
 	}
 }
 
-func TestRun_PackCacheRoleGate(t *testing.T) {
+func TestRun_PrepareCacheRoleGate(t *testing.T) {
 	t.Run("apply role does not write prepare cache state", func(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
