@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://deck.local/schemas/tools/public/package-cache.schema.json",
+  "$id": "https://deck.local/schemas/tools/package-cache.schema.json",
   "title": "PackageCacheStep",
   "description": "Refreshes package metadata and can restrict or exclude repos during refresh.",
   "x-deck-visibility": "public",

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://deck.local/schemas/tools/public/symlink.schema.json",
-  "title": "SymlinkStep",
-  "description": "Creates or replaces a symbolic link on the local node.",
+  "$id": "https://deck.local/schemas/tools/swap.schema.json",
+  "title": "SwapStep",
+  "description": "Enables or disables swap and its persistence settings.",
   "x-deck-visibility": "public",
   "type": "object",
   "additionalProperties": false,
@@ -20,7 +20,7 @@
       "const": "deck/v1alpha1"
     },
     "kind": {
-      "const": "Symlink"
+      "const": "Swap"
     },
     "metadata": {
       "type": "object",
@@ -49,30 +49,17 @@
     "spec": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "path",
-        "target"
-      ],
       "properties": {
-        "path": {
-          "type": "string",
-          "minLength": 1
-        },
-        "target": {
-          "type": "string",
-          "minLength": 1
-        },
-        "force": {
+        "disable": {
           "type": "boolean",
-          "default": false
+          "default": true
         },
-        "createParent": {
+        "persist": {
           "type": "boolean",
-          "default": false
+          "default": true
         },
-        "requireTarget": {
-          "type": "boolean",
-          "default": false
+        "fstabPath": {
+          "type": "string"
         }
       }
     }

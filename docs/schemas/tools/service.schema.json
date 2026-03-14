@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://deck.local/schemas/tools/public/kernel-module.schema.json",
-  "title": "KernelModuleStep",
-  "description": "Loads and persists required kernel modules on the local node.",
+  "$id": "https://deck.local/schemas/tools/service.schema.json",
+  "title": "ServiceStep",
+  "description": "Starts, stops, enables, or disables local services.",
   "x-deck-visibility": "public",
   "type": "object",
   "additionalProperties": false,
@@ -20,7 +20,7 @@
       "const": "deck/v1alpha1"
     },
     "kind": {
-      "const": "KernelModule"
+      "const": "Service"
     },
     "metadata": {
       "type": "object",
@@ -84,16 +84,27 @@
             "minLength": 1
           }
         },
-        "load": {
-          "type": "boolean",
-          "default": true
+        "daemonReload": {
+          "type": "boolean"
         },
-        "persist": {
-          "type": "boolean",
-          "default": true
+        "ifExists": {
+          "type": "boolean"
         },
-        "persistFile": {
-          "type": "string"
+        "ignoreMissing": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "unchanged",
+            "started",
+            "stopped",
+            "restarted",
+            "reloaded"
+          ]
         }
       }
     }

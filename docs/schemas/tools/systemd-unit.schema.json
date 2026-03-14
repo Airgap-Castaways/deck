@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://deck.local/schemas/tools/public/systemd-unit.schema.json",
+  "$id": "https://deck.local/schemas/tools/systemd-unit.schema.json",
   "title": "SystemdUnitStep",
   "description": "Writes a systemd unit file and optionally manages the related service.",
   "x-deck-visibility": "public",

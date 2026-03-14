@@ -6,9 +6,7 @@
 
 - `../schemas/deck-workflow.schema.json`: top-level workflow schema
 - `../schemas/deck-tooldefinition.schema.json`: tool definition schema
-- `../schemas/tools/public/*.schema.json`: public apply step schemas
-- `../schemas/tools/advanced/*.schema.json`: advanced step schemas
-- `../schemas/tools/legacy-prepare/*.schema.json`: legacy/internal prepare step schemas
+- `../schemas/tools/*.schema.json`: typed step schemas
 
 ## Workflow schema highlights
 
@@ -29,31 +27,26 @@ Schema roots also carry lightweight documentation metadata such as `description`
 - `../schemas/deck-workflow.schema.json` contains the user-facing `artifacts` model for `role: prepare`
 - new prepare workflows should prefer `artifacts.files`, `artifacts.images`, and `artifacts.packages`
 
-### Public apply steps
+### Typed steps
 
-- `../schemas/tools/public/inspection.schema.json`
-- `../schemas/tools/public/containerd.schema.json`
-- `../schemas/tools/public/directory.schema.json`
-- `../schemas/tools/public/artifacts.schema.json`
-- `../schemas/tools/public/file.schema.json`
-- `../schemas/tools/public/image.schema.json`
-- `../schemas/tools/public/packages.schema.json`
-- `../schemas/tools/public/kernel-module.schema.json`
-- `../schemas/tools/public/kubeadm.schema.json`
-- `../schemas/tools/public/package-cache.schema.json`
-- `../schemas/tools/public/repository.schema.json`
-- `../schemas/tools/public/service.schema.json`
-- `../schemas/tools/public/swap.schema.json`
-- `../schemas/tools/public/symlink.schema.json`
-- `../schemas/tools/public/systemd-unit.schema.json`
-- `../schemas/tools/public/sysctl.schema.json`
-- `../schemas/tools/public/wait.schema.json`
-
-### Advanced steps
-
-- `../schemas/tools/advanced/command.schema.json`
-
-### Legacy/internal prepare steps
+- `../schemas/tools/inspection.schema.json`
+- `../schemas/tools/containerd.schema.json`
+- `../schemas/tools/directory.schema.json`
+- `../schemas/tools/artifacts.schema.json`
+- `../schemas/tools/file.schema.json`
+- `../schemas/tools/image.schema.json`
+- `../schemas/tools/packages.schema.json`
+- `../schemas/tools/kernel-module.schema.json`
+- `../schemas/tools/kubeadm.schema.json`
+- `../schemas/tools/package-cache.schema.json`
+- `../schemas/tools/repository.schema.json`
+- `../schemas/tools/service.schema.json`
+- `../schemas/tools/swap.schema.json`
+- `../schemas/tools/symlink.schema.json`
+- `../schemas/tools/systemd-unit.schema.json`
+- `../schemas/tools/sysctl.schema.json`
+- `../schemas/tools/wait.schema.json`
+- `../schemas/tools/command.schema.json`
 
 Legacy/internal prepare fetch schemas were removed. Prepare artifact planning now lowers into `File`, `Image`, and `Packages` with `action: download`.
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://deck.local/schemas/tools/public/swap.schema.json",
-  "title": "SwapStep",
-  "description": "Enables or disables swap and its persistence settings.",
+  "$id": "https://deck.local/schemas/tools/sysctl.schema.json",
+  "title": "SysctlStep",
+  "description": "Writes and optionally applies sysctl values on the local node.",
   "x-deck-visibility": "public",
   "type": "object",
   "additionalProperties": false,
@@ -20,7 +20,7 @@
       "const": "deck/v1alpha1"
     },
     "kind": {
-      "const": "Swap"
+      "const": "Sysctl"
     },
     "metadata": {
       "type": "object",
@@ -49,17 +49,37 @@
     "spec": {
       "type": "object",
       "additionalProperties": false,
+      "required": [
+        "values",
+        "writeFile"
+      ],
       "properties": {
-        "disable": {
-          "type": "boolean",
-          "default": true
+        "values": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
         },
-        "persist": {
-          "type": "boolean",
-          "default": true
-        },
-        "fstabPath": {
+        "writeFile": {
           "type": "string"
+        },
+        "apply": {
+          "type": "boolean",
+          "default": false
         }
       }
     }

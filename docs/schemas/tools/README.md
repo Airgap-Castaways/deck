@@ -4,33 +4,26 @@ This directory contains JSON Schemas for typed workflow steps.
 
 The files are not all equal from a user-authoring point of view.
 
-## Public apply steps
+## Current schemas
 
-- `public/inspection.schema.json`
-- `public/containerd.schema.json`
-- `public/directory.schema.json`
-- `public/artifacts.schema.json`
-- `public/packages.schema.json`
-- `public/file.schema.json`
-- `public/image.schema.json`
-- `public/kernel-module.schema.json`
-- `public/kubeadm.schema.json`
-- `public/package-cache.schema.json`
-- `public/repository.schema.json`
-- `public/service.schema.json`
-- `public/swap.schema.json`
-- `public/symlink.schema.json`
-- `public/systemd-unit.schema.json`
-- `public/sysctl.schema.json`
-- `public/wait.schema.json`
-
-## Advanced steps
-
-- `advanced/command.schema.json`
-
-These remain user-visible, but they are not the preferred starting point when a higher-level typed step or declarative prepare model already exists.
-
-## Legacy/internal prepare steps
+- `inspection.schema.json`
+- `artifacts.schema.json`
+- `packages.schema.json`
+- `directory.schema.json`
+- `symlink.schema.json`
+- `systemd-unit.schema.json`
+- `containerd.schema.json`
+- `repository.schema.json`
+- `package-cache.schema.json`
+- `swap.schema.json`
+- `kernel-module.schema.json`
+- `service.schema.json`
+- `sysctl.schema.json`
+- `file.schema.json`
+- `image.schema.json`
+- `wait.schema.json`
+- `kubeadm.schema.json`
+- `command.schema.json`
 
 Legacy/internal prepare fetch schemas have been removed. Prepare artifact planning now lowers to noun families with `action: download`.
 

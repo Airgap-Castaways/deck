@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://deck.local/schemas/tools/public/sysctl.schema.json",
-  "title": "SysctlStep",
-  "description": "Writes and optionally applies sysctl values on the local node.",
+  "$id": "https://deck.local/schemas/tools/kernel-module.schema.json",
+  "title": "KernelModuleStep",
+  "description": "Loads and persists required kernel modules on the local node.",
   "x-deck-visibility": "public",
   "type": "object",
   "additionalProperties": false,
@@ -20,7 +20,7 @@
       "const": "deck/v1alpha1"
     },
     "kind": {
-      "const": "Sysctl"
+      "const": "KernelModule"
     },
     "metadata": {
       "type": "object",
@@ -49,37 +49,51 @@
     "spec": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "values",
-        "writeFile"
-      ],
-      "properties": {
-        "values": {
-          "type": "object",
-          "minProperties": 1,
-          "additionalProperties": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "number"
-              },
-              {
-                "type": "integer"
-              },
-              {
-                "type": "boolean"
-              }
+      "oneOf": [
+        {
+          "required": [
+            "name"
+          ],
+          "not": {
+            "required": [
+              "names"
             ]
           }
         },
-        "writeFile": {
-          "type": "string"
+        {
+          "required": [
+            "names"
+          ],
+          "not": {
+            "required": [
+              "name"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
         },
-        "apply": {
+        "names": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "load": {
           "type": "boolean",
-          "default": false
+          "default": true
+        },
+        "persist": {
+          "type": "boolean",
+          "default": true
+        },
+        "persistFile": {
+          "type": "string"
         }
       }
     }
