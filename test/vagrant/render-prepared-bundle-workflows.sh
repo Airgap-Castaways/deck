@@ -24,6 +24,8 @@ mkdir -p "${TARGET_DIR}"
 
 if [[ -d "${CANONICAL_ROOT}" ]]; then
   cp -a "${CANONICAL_ROOT}/." "${TARGET_DIR}/"
+  mkdir -p "${TARGET_DIR}/components/scenarios"
+  cp -a "${CANONICAL_ROOT}/scenarios/." "${TARGET_DIR}/components/scenarios/"
 fi
 
 if [[ "${SCENARIO_ID}" == "offline-multinode" ]] && [[ -d "${COMPAT_ROOT}" ]]; then
@@ -31,8 +33,8 @@ if [[ "${SCENARIO_ID}" == "offline-multinode" ]] && [[ -d "${COMPAT_ROOT}" ]]; t
   cp -a "${COMPAT_ROOT}/." "${TARGET_DIR}/offline-multinode/"
 fi
 
-cat > "${TARGET_DIR}/pack.yaml" <<EOF
-role: pack
+cat > "${TARGET_DIR}/prepare.yaml" <<EOF
+role: prepare
 version: v1alpha1
 imports:
   - scenarios/prepare.yaml

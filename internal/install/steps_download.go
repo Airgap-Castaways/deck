@@ -145,6 +145,10 @@ func downloadURLToFile(ctx context.Context, target *os.File, url string, timeout
 }
 
 func resolveSourceBytes(ctx context.Context, spec map[string]any, sourcePath string) ([]byte, error) {
+	if raw, err := os.ReadFile(sourcePath); err == nil {
+		return raw, nil
+	}
+
 	fetchCfg := mapValue(spec, "fetch")
 	sourcesRaw, ok := fetchCfg["sources"].([]any)
 	offlineOnly := boolValue(fetchCfg, "offlineOnly")

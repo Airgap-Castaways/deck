@@ -466,7 +466,7 @@ prepare_shared_bundle_cache() {
   rm -rf "${PREPARED_BUNDLE_WORK_ABS}" "${PREPARED_BUNDLE_STAGE_ABS}"
   mkdir -p "${PREPARED_BUNDLE_WORKFLOW_DIR}" "${PREPARED_BUNDLE_FRAGMENT_DIR}"
   deck_vagrant_prepare_workflow_bundle
-  (cd "${PREPARED_BUNDLE_PACK_ROOT}" && "${host_bin}" pack --out "${PREPARED_BUNDLE_TAR}" \
+  (cd "${PREPARED_BUNDLE_PACK_ROOT}" && "${host_bin}" prepare --out "${PREPARED_BUNDLE_TAR}" \
     --var "kubernetesVersion=v1.30.1" \
     --var "arch=${arch}" \
     --var "backendRuntime=${backend_runtime}")

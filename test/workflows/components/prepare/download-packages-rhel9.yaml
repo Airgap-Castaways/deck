@@ -10,9 +10,6 @@ artifacts:
       repo:
         type: yum
         generate: true
-        modules:
-          - name: container-tools
-            stream: "4.0"
       backend:
         mode: container
         runtime: "{{ .vars.backendRuntime }}"

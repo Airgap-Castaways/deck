@@ -212,7 +212,7 @@ start_server_background() {
   fi
   echo "[deck] starting server ${SERVER_BIND_ADDR}"
   rm -f "${SERVER_PID_FILE}"
-  sudo -n bash -c "nohup \"${DECK_BIN}\" serve --root \"${SERVER_ROOT}\" --addr \"${SERVER_BIND_ADDR}\" > \"${CASE_DIR}/02-server.log\" 2>&1 < /dev/null & echo \$! > \"${SERVER_PID_FILE}\""
+  sudo -n bash -c "nohup \"${DECK_BIN}\" server up --root \"${SERVER_ROOT}\" --addr \"${SERVER_BIND_ADDR}\" > \"${CASE_DIR}/02-server.log\" 2>&1 < /dev/null & echo \$! > \"${SERVER_PID_FILE}\""
   SERVER_PID="$(cat "${SERVER_PID_FILE}")"
   if ! sudo -n kill -0 "${SERVER_PID}" >/dev/null 2>&1; then
     echo "[deck] server failed to stay running after start"
