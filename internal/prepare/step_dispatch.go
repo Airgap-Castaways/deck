@@ -1,8 +1,17 @@
 package prepare
 
-import "context"
+import (
+	"context"
+	"fmt"
+
+	"github.com/taedi90/deck/internal/workflowexec"
+)
 
 func runPrepareStep(ctx context.Context, runner CommandRunner, bundleRoot, kind string, rendered map[string]any, opts RunOptions) ([]string, map[string]any, error) {
+	if !workflowexec.StepAllowedForRole("pack", kind) {
+		return nil, nil, fmt.Errorf("%s: unsupported step kind %s", errCodePrepareKindUnsupported, kind)
+	}
+
 	switch kind {
 	case "DownloadFile":
 		f, err := runDownloadFile(ctx, bundleRoot, rendered, opts)
@@ -12,12 +21,6 @@ func runPrepareStep(ctx context.Context, runner CommandRunner, bundleRoot, kind 
 		return []string{f}, map[string]any{"path": f, "artifacts": []string{f}}, nil
 	case "DownloadPackages":
 		files, err := runDownloadPackages(ctx, runner, bundleRoot, rendered, "packages", opts)
-		if err != nil {
-			return nil, nil, err
-		}
-		return files, map[string]any{"artifacts": files}, nil
-	case "DownloadK8sPackages":
-		files, err := runDownloadK8sPackages(ctx, runner, bundleRoot, rendered, opts)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -35,6 +38,6 @@ func runPrepareStep(ctx context.Context, runner CommandRunner, bundleRoot, kind 
 		}
 		return nil, outputs, nil
 	default:
-		return nil, map[string]any{}, nil
+		return nil, nil, fmt.Errorf("%s: unsupported step kind %s", errCodePrepareKindUnsupported, kind)
 	}
 }

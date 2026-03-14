@@ -12,7 +12,7 @@ func TestFile(t *testing.T) {
 	t.Run("valid yaml", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "cluster.yaml")
-		content := []byte(`role: apply
+		content := []byte(`role: pack
 version: v1alpha1
 phases:
   - name: prepare
@@ -278,7 +278,7 @@ phases:
 	t.Run("schema invalid kind", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: apply
+		content := []byte(`role: pack
 version: v1alpha1
 phases:
   - name: prepare
@@ -300,7 +300,7 @@ phases:
 	t.Run("duplicate step id", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: apply
+		content := []byte(`role: pack
 version: v1alpha1
 phases:
   - name: prepare
@@ -333,7 +333,7 @@ phases:
 	t.Run("runtime register redefinition", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: apply
+		content := []byte(`role: pack
 version: v1alpha1
 phases:
   - name: prepare
@@ -730,7 +730,7 @@ phases:
     steps:
       - id: w1
         apiVersion: deck/v1alpha1
-        kind: WriteFile
+        kind: InstallFile
         register:
           x: notARealOutput
         spec:
@@ -753,7 +753,7 @@ phases:
 	t.Run("register output key valid for kind", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: apply
+		content := []byte(`role: pack
 version: v1alpha1
 phases:
   - name: prepare
@@ -778,10 +778,38 @@ phases:
 		}
 	})
 
+	t.Run("kind rejected for role", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: pack
+version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: install-file
+        apiVersion: deck/v1alpha1
+        kind: InstallFile
+        spec:
+          path: /tmp/a.txt
+          content: hello
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected role/kind validation error")
+		}
+		if got := err.Error(); !strings.HasPrefix(got, "E_KIND_ROLE_MISMATCH") {
+			t.Fatalf("expected E_KIND_ROLE_MISMATCH, got %v", err)
+		}
+	})
+
 	t.Run("register output key valid for checkhost", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: apply
+		content := []byte(`role: pack
 version: v1alpha1
 phases:
   - name: prepare
@@ -832,7 +860,7 @@ phases:
 	t.Run("reserved runtime host key is rejected", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: apply
+		content := []byte(`role: pack
 version: v1alpha1
 phases:
   - name: prepare
@@ -1010,11 +1038,11 @@ steps:
       path: /etc/modules-load.d/k8s.conf
       content: |
         overlay
-  - id: template-file
-    kind: TemplateFile
+  - id: hosts-file
+    kind: InstallFile
     spec:
       path: /etc/containerd/certs.d/registry.k8s.io/hosts.toml
-      template: |
+      contentFromTemplate: |
         server = "http://registry.local"
   - id: repo-config
     kind: RepoConfig
@@ -1048,10 +1076,13 @@ steps:
       name: br_netfilter
       load: true
       persist: true
-  - id: sysctl-apply
-    kind: SysctlApply
+  - id: sysctl
+    kind: Sysctl
     spec:
-      file: /etc/sysctl.d/99-kubernetes-cri.conf
+      writeFile: /etc/sysctl.d/99-kubernetes-cri.conf
+      apply: true
+      values:
+        net.ipv4.ip_forward: 1
   - id: run-cmd
     kind: RunCommand
     spec:

@@ -24,7 +24,6 @@ The workflow schema currently enforces:
 - `containerd-config.schema.json`
 - `copy-file.schema.json`
 - `download-packages.schema.json`
-- `download-k8s-packages.schema.json`
 - `download-images.schema.json`
 - `download-file.schema.json`
 - `ensure-dir.schema.json`
@@ -33,7 +32,6 @@ The workflow schema currently enforces:
 - `install-packages.schema.json`
 - `edit-file.schema.json`
 - `kernel-module.schema.json`
-- `modprobe.schema.json`
 - `kubeadm-init.schema.json`
 - `kubeadm-join.schema.json`
 - `kubeadm-reset.schema.json`
@@ -45,11 +43,8 @@ The workflow schema currently enforces:
 - `symlink.schema.json`
 - `systemd-unit.schema.json`
 - `sysctl.schema.json`
-- `sysctl-apply.schema.json`
-- `template-file.schema.json`
 - `wait-path.schema.json`
 - `verify-images.schema.json`
-- `write-file.schema.json`
 
 ## Typed step reference notes
 

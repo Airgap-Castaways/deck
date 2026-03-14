@@ -59,7 +59,7 @@ version: v1alpha1
 steps:
   - id: write-repo-config
     apiVersion: deck/v1alpha1
-    kind: WriteFile
+    kind: InstallFile
     spec:
       path: /etc/example.repo
       content: |

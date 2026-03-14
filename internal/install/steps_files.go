@@ -18,31 +18,6 @@ var (
 
 var yumEnabledTruePattern = regexp.MustCompile(`(?i)^\s*enabled\s*=\s*(1|yes|true)\s*$`)
 
-func runWriteFile(spec map[string]any) error {
-	path := stringValue(spec, "path")
-	if path == "" {
-		return fmt.Errorf("%s: WriteFile requires path", errCodeInstallWritePathMissing)
-	}
-
-	content := stringValue(spec, "content")
-	if content == "" {
-		if tmpl := stringValue(spec, "contentFromTemplate"); tmpl != "" {
-			content = tmpl
-			if !strings.HasSuffix(content, "\n") {
-				content += "\n"
-			}
-		}
-	}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		return err
-	}
-	return nil
-}
-
 func runEditFile(spec map[string]any) error {
 	path := stringValue(spec, "path")
 	if path == "" {
@@ -209,22 +184,6 @@ func runInstallFile(spec map[string]any) error {
 		}
 	}
 	return nil
-}
-
-func runTemplateFile(spec map[string]any) error {
-	path := stringValue(spec, "path")
-	if path == "" {
-		return fmt.Errorf("%s: TemplateFile requires path", errCodeInstallTemplatePathMiss)
-	}
-	body := stringValue(spec, "template")
-	if body == "" {
-		return fmt.Errorf("%s: TemplateFile requires template", errCodeInstallTemplateBodyMiss)
-	}
-	return runInstallFile(map[string]any{
-		"path":    path,
-		"content": body,
-		"mode":    stringValue(spec, "mode"),
-	})
 }
 
 func runRepoConfig(spec map[string]any) error {

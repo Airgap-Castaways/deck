@@ -11,16 +11,13 @@ func stepOutputs(kind string, rendered map[string]any) map[string]any {
 	case "DownloadFile":
 		if path := stringValue(mapValue(rendered, "output"), "path"); path != "" {
 			outputs["path"] = path
-		}
-	case "WriteFile":
-		if path := stringValue(rendered, "path"); path != "" {
-			outputs["path"] = path
+			outputs["artifacts"] = []string{path}
 		}
 	case "CopyFile":
 		if dest := stringValue(rendered, "dest"); dest != "" {
 			outputs["dest"] = dest
 		}
-	case "EnsureDir", "Symlink", "InstallFile", "TemplateFile", "SystemdUnit", "RepoConfig", "ContainerdConfig":
+	case "EnsureDir", "Symlink", "InstallFile", "SystemdUnit", "RepoConfig", "ContainerdConfig":
 		if path := stringValue(rendered, "path"); path != "" {
 			outputs["path"] = path
 		}
@@ -31,6 +28,9 @@ func stepOutputs(kind string, rendered map[string]any) map[string]any {
 	case "KernelModule":
 		if name := stringValue(rendered, "name"); name != "" {
 			outputs["name"] = name
+		}
+		if names := stringSlice(rendered["names"]); len(names) > 0 {
+			outputs["names"] = names
 		}
 	case "KubeadmInit":
 		if joinFile := stringValue(rendered, "outputJoinFile"); joinFile != "" {

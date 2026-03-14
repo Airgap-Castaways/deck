@@ -5,7 +5,7 @@ phases:
     steps:
       - id: create-smoke-marker
         apiVersion: deck/v1alpha1
-        kind: WriteFile
+        kind: InstallFile
         spec:
           path: /tmp/deck/examples/vagrant-smoke.txt
           mode: "0644"

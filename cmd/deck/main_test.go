@@ -1729,7 +1729,7 @@ phases:
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case "/workflows/apply.yaml":
-				_, _ = w.Write([]byte("role: pack\nversion: v1alpha1\nsteps:\n  - id: pack-step\n    kind: RunCommand\n    spec:\n      command: [\"true\"]\n"))
+				_, _ = w.Write([]byte("role: pack\nversion: v1alpha1\nsteps:\n  - id: pack-step\n    kind: DownloadFile\n    spec:\n      source:\n        path: /tmp/source.bin\n      output:\n        path: files/source.bin\n"))
 			case "/workflows/vars.yaml":
 				http.NotFound(w, r)
 			default:

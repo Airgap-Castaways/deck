@@ -10,7 +10,7 @@ phases:
       - id: write-apt-offline-config
         when: vars.osFamily == "debian"
         apiVersion: deck/v1alpha1
-        kind: WriteFile
+        kind: InstallFile
         spec:
           path: /etc/apt/apt.conf.d/99offline
           mode: "0644"

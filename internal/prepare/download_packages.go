@@ -93,104 +93,6 @@ func runDownloadPackages(ctx context.Context, runner CommandRunner, bundleRoot s
 	return writePackagePlaceholders(bundleRoot, dir, packages), nil
 }
 
-func runDownloadK8sPackages(ctx context.Context, runner CommandRunner, bundleRoot string, spec map[string]any, opts RunOptions) ([]string, error) {
-	output := mapValue(spec, "output")
-	dir := stringValue(output, "dir")
-	if dir == "" {
-		dir = "packages"
-	}
-
-	version := strings.TrimPrefix(stringValue(spec, "kubernetesVersion"), "v")
-	if version == "" {
-		version = "0.0.0"
-	}
-	components := stringSlice(spec["components"])
-	if len(components) == 0 {
-		return nil, fmt.Errorf("DownloadK8sPackages requires components")
-	}
-
-	pkgs := append([]string{}, components...)
-
-	distro := mapValue(spec, "distro")
-	family := stringValue(distro, "family")
-	if family == "" {
-		family = "debian"
-	}
-	if family == "debian" {
-		pkgs = append(pkgs, "cri-tools", "kubernetes-cni")
-	}
-
-	backend := mapValue(spec, "backend")
-	if stringValue(backend, "mode") == "container" && stringValue(backend, "image") != "" {
-		repo := mapValue(spec, "repo")
-		if len(repo) > 0 {
-			release := strings.TrimSpace(stringValue(distro, "release"))
-			if release == "" {
-				return nil, fmt.Errorf("DownloadK8sPackages repo mode requires distro.release")
-			}
-
-			repoType := strings.TrimSpace(stringValue(repo, "type"))
-			generate := boolValue(repo, "generate")
-			pkgsDir := strings.TrimSpace(stringValue(repo, "pkgsDir"))
-			if pkgsDir == "" {
-				pkgsDir = "pkgs"
-			}
-
-			var repoRoot string
-			switch repoType {
-			case "apt-flat":
-				repoRoot = filepath.ToSlash(filepath.Join("packages", "apt-k8s", release))
-			case "yum":
-				repoRoot = filepath.ToSlash(filepath.Join("packages", "yum-k8s", release))
-			default:
-				return nil, fmt.Errorf("DownloadK8sPackages repo.type must be apt-flat or yum")
-			}
-
-			files, err := runContainerK8sPackageRepoBuild(ctx, runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, version, pkgs, spec, opts)
-			if err != nil {
-				return nil, err
-			}
-
-			metaRel := filepath.ToSlash(filepath.Join(repoRoot, "kubernetes-version.txt"))
-			metaAbs := filepath.Join(bundleRoot, filepath.FromSlash(metaRel))
-			if err := os.MkdirAll(filepath.Dir(metaAbs), 0o755); err != nil {
-				return nil, err
-			}
-			if err := os.WriteFile(metaAbs, []byte(version+"\n"), 0o644); err != nil {
-				return nil, err
-			}
-
-			return append(files, metaRel), nil
-		}
-
-		versionLine := strings.TrimSpace(version)
-		files, err := runContainerPackageDownloadWithScript(ctx, runner, bundleRoot, dir, spec, pkgs, func(family, pkg string) string {
-			return buildK8sPackageDownloadScript(family, pkg, versionLine)
-		}, opts)
-		if err != nil {
-			return nil, err
-		}
-		metaRel := filepath.ToSlash(filepath.Join(dir, "kubernetes-version.txt"))
-		metaAbs := filepath.Join(bundleRoot, metaRel)
-		if err := os.MkdirAll(filepath.Dir(metaAbs), 0o755); err != nil {
-			return nil, err
-		}
-		if err := os.WriteFile(metaAbs, []byte(version+"\n"), 0o644); err != nil {
-			return nil, err
-		}
-		return append(files, metaRel), nil
-	}
-
-	placeholderPkgs := make([]string, 0, len(pkgs))
-	for _, p := range pkgs {
-		placeholderPkgs = append(placeholderPkgs, fmt.Sprintf("%s-v%s", p, version))
-	}
-	files := writePackagePlaceholders(bundleRoot, dir, placeholderPkgs)
-	metaRel := filepath.ToSlash(filepath.Join(dir, "kubernetes-version.txt"))
-	_ = os.WriteFile(filepath.Join(bundleRoot, metaRel), []byte(version+"\n"), 0o644)
-	return append(files, metaRel), nil
-}
-
 func runContainerPackageRepoBuild(
 	ctx context.Context,
 	runner CommandRunner,
@@ -496,17 +398,6 @@ func runContainerPackageDownloadWithScript(ctx context.Context, runner CommandRu
 		return nil, fmt.Errorf("%s: no package artifacts generated in %s", errCodePrepareArtifactsEmpty, dir)
 	}
 	return files, nil
-}
-
-func buildK8sPackageDownloadScript(family, pkg, version string) string {
-	safePkg := shellEscape(pkg)
-	channel := kubernetesStableChannel(version)
-	if family == "rhel" {
-		repoURL := shellEscape(fmt.Sprintf("https://pkgs.k8s.io/core:/stable:/%s/rpm/", channel))
-		return fmt.Sprintf("set -euo pipefail; cat > /etc/yum.repos.d/kubernetes.repo <<'EOF'\n[kubernetes]\nname=Kubernetes\nbaseurl=%s\nenabled=1\ngpgcheck=0\nrepo_gpgcheck=0\nEOF\n(dnf -y install 'dnf-command(download)' >/dev/null 2>&1 || yum -y install yum-utils >/dev/null 2>&1 || true); (dnf -y download --destdir /out %s || yumdownloader --destdir /out %s)", repoURL, safePkg, safePkg)
-	}
-	repoURL := shellEscape(fmt.Sprintf("https://pkgs.k8s.io/core:/stable:/%s/deb/", channel))
-	return fmt.Sprintf("set -euo pipefail; export DEBIAN_FRONTEND=noninteractive; mkdir -p /tmp/deck-pkg-download; cd /tmp/deck-pkg-download; apt-get update -y >/dev/null; apt-get install -y ca-certificates curl gpg >/dev/null; install -d -m 0755 /etc/apt/keyrings; curl -fsSL %sRelease.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg; echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] %s /' > /etc/apt/sources.list.d/kubernetes.list; apt-get update -y >/dev/null; (apt-get download %s || true); cp -a ./*.deb /out/ 2>/dev/null || true", repoURL, repoURL, safePkg)
 }
 
 func kubernetesStableChannel(version string) string {

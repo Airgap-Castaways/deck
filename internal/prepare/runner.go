@@ -51,6 +51,7 @@ const (
 	errCodePrepareConditionEval      = "E_CONDITION_EVAL"
 	errCodePrepareRegisterMissing    = "E_REGISTER_OUTPUT_NOT_FOUND"
 	errCodePrepareCheckHostFailed    = "E_PREPARE_CHECKHOST_FAILED"
+	errCodePrepareKindUnsupported    = "E_PREPARE_KIND_UNSUPPORTED"
 	packageCacheMetaFile             = ".deck-cache-packages.json"
 )
 

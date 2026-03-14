@@ -21,12 +21,26 @@
     "spec": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "load": { "type": "boolean", "default": true },
-        "persist": { "type": "boolean", "default": true },
-        "persistFile": { "type": "string" }
+	      "oneOf": [
+	        {
+	          "required": ["name"],
+	          "not": { "required": ["names"] }
+	        },
+	        {
+	          "required": ["names"],
+	          "not": { "required": ["name"] }
+	        }
+	      ],
+	      "properties": {
+	        "name": { "type": "string", "minLength": 1 },
+	        "names": {
+	          "type": "array",
+	          "minItems": 1,
+	          "items": { "type": "string", "minLength": 1 }
+	        },
+	        "load": { "type": "boolean", "default": true },
+	        "persist": { "type": "boolean", "default": true },
+	        "persistFile": { "type": "string" }
       }
     }
   }

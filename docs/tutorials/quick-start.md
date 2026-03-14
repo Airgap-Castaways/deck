@@ -36,7 +36,7 @@ version: v1alpha1
 steps:
   - id: write-motd
     apiVersion: deck/v1alpha1
-    kind: WriteFile
+    kind: InstallFile
     spec:
       path: /etc/motd
       content: |

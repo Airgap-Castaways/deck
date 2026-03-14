@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 var (
@@ -21,59 +22,6 @@ var (
 
 //go:embed schemas/deck-workflow.schema.json schemas/tools/*.schema.json
 var schemaFS embed.FS
-
-var toolSchemaByKind = map[string]string{
-	"CheckHost":           "check-host.schema.json",
-	"DownloadPackages":    "download-packages.schema.json",
-	"DownloadK8sPackages": "download-k8s-packages.schema.json",
-	"DownloadImages":      "download-images.schema.json",
-	"DownloadFile":        "download-file.schema.json",
-	"InstallArtifacts":    "install-artifacts.schema.json",
-	"InstallPackages":     "install-packages.schema.json",
-	"WriteFile":           "write-file.schema.json",
-	"EditFile":            "edit-file.schema.json",
-	"CopyFile":            "copy-file.schema.json",
-	"Sysctl":              "sysctl.schema.json",
-	"Modprobe":            "modprobe.schema.json",
-	"Service":             "service.schema.json",
-	"EnsureDir":           "ensure-dir.schema.json",
-	"Symlink":             "symlink.schema.json",
-	"InstallFile":         "install-file.schema.json",
-	"TemplateFile":        "template-file.schema.json",
-	"SystemdUnit":         "systemd-unit.schema.json",
-	"RepoConfig":          "repo-config.schema.json",
-	"PackageCache":        "package-cache.schema.json",
-	"ContainerdConfig":    "containerd-config.schema.json",
-	"Swap":                "swap.schema.json",
-	"KernelModule":        "kernel-module.schema.json",
-	"SysctlApply":         "sysctl-apply.schema.json",
-	"RunCommand":          "run-command.schema.json",
-	"WaitPath":            "wait-path.schema.json",
-	"VerifyImages":        "verify-images.schema.json",
-	"KubeadmInit":         "kubeadm-init.schema.json",
-	"KubeadmJoin":         "kubeadm-join.schema.json",
-	"KubeadmReset":        "kubeadm-reset.schema.json",
-}
-
-var registerOutputContract = map[string][]string{
-	"CheckHost":           {"passed", "failedChecks"},
-	"DownloadFile":        {"path", "artifacts"},
-	"DownloadPackages":    {"artifacts"},
-	"DownloadK8sPackages": {"artifacts"},
-	"DownloadImages":      {"artifacts"},
-	"WriteFile":           {"path"},
-	"CopyFile":            {"dest"},
-	"Service":             {"name"},
-	"EnsureDir":           {"path"},
-	"Symlink":             {"path"},
-	"InstallFile":         {"path"},
-	"TemplateFile":        {"path"},
-	"SystemdUnit":         {"path"},
-	"RepoConfig":          {"path"},
-	"ContainerdConfig":    {"path"},
-	"KernelModule":        {"name"},
-	"KubeadmInit":         {"joinFile"},
-}
 
 // File validates workflow structure and semantic rules.
 func File(path string) error {
@@ -133,7 +81,7 @@ func Bytes(name string, content []byte) error {
 
 func validateToolSchemas(wf *config.Workflow) error {
 	for _, step := range workflowSteps(wf) {
-		schemaFile, ok := toolSchemaByKind[step.Kind]
+		schemaFile, ok := workflowexec.StepSchemaFile(step.Kind)
 		if !ok {
 			continue
 		}
@@ -214,6 +162,10 @@ func validateSchema(name string, content []byte) error {
 }
 
 func validateSemantics(wf *config.Workflow) error {
+	if err := validateRoleKinds(wf); err != nil {
+		return err
+	}
+
 	seenStepID := map[string]bool{}
 	assignedRuntime := map[string]string{}
 
@@ -249,22 +201,24 @@ func validateSemantics(wf *config.Workflow) error {
 	return nil
 }
 
+func validateRoleKinds(wf *config.Workflow) error {
+	role := strings.TrimSpace(wf.Role)
+	for _, step := range workflowSteps(wf) {
+		if workflowexec.StepAllowedForRole(role, step.Kind) {
+			continue
+		}
+		return fmt.Errorf("E_KIND_ROLE_MISMATCH: step %s (%s) is not supported for role %s", step.ID, step.Kind, role)
+	}
+	return nil
+}
+
 func isReservedRuntimeVar(runtimeVar string) bool {
 	trimmed := strings.TrimSpace(runtimeVar)
 	return trimmed == "host" || strings.HasPrefix(trimmed, "host.")
 }
 
 func isValidOutputKey(kind, outputKey string) bool {
-	allowed, ok := registerOutputContract[kind]
-	if !ok {
-		return false
-	}
-	for _, v := range allowed {
-		if v == outputKey {
-			return true
-		}
-	}
-	return false
+	return workflowexec.StepHasOutput(kind, outputKey)
 }
 
 func workflowSteps(wf *config.Workflow) []config.Step {

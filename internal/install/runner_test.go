@@ -63,11 +63,11 @@ func TestRun_InstallTools(t *testing.T) {
 			Name: "install",
 			Steps: []config.Step{
 				{ID: "install-packages", Kind: "InstallPackages", Spec: map[string]any{"packages": []any{"containerd"}}},
-				{ID: "write-file", Kind: "WriteFile", Spec: map[string]any{"path": fileA, "content": "hello world"}},
+				{ID: "install-file", Kind: "InstallFile", Spec: map[string]any{"path": fileA, "content": "hello world"}},
 				{ID: "edit-file", Kind: "EditFile", Spec: map[string]any{"path": fileA, "edits": []any{map[string]any{"op": "replace", "match": "world", "with": "deck"}}}},
 				{ID: "copy-file", Kind: "CopyFile", Spec: map[string]any{"src": fileA, "dest": fileB}},
 				{ID: "sysctl", Kind: "Sysctl", Spec: map[string]any{"writeFile": sysctlPath, "values": map[string]any{"net.ipv4.ip_forward": "1"}}},
-				{ID: "modprobe", Kind: "Modprobe", Spec: map[string]any{"modules": []any{"overlay", "br_netfilter"}, "persistFile": modprobePath}},
+				{ID: "kernel-modules", Kind: "KernelModule", Spec: map[string]any{"names": []any{"overlay", "br_netfilter"}, "load": false, "persist": true, "persistFile": modprobePath}},
 				{ID: "run-cmd", Kind: "RunCommand", Spec: map[string]any{"command": []any{"true"}}},
 				{ID: "kubeadm-init", Kind: "KubeadmInit", Spec: map[string]any{"outputJoinFile": joinPath}},
 				{ID: "kubeadm-join", Kind: "KubeadmJoin", Spec: map[string]any{"joinFile": joinPath}},
@@ -83,7 +83,7 @@ func TestRun_InstallTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fileA: %v", err)
 	}
-	if string(contentA) != "hello deck" {
+	if string(contentA) != "hello deck\n" {
 		t.Fatalf("unexpected edited content: %q", string(contentA))
 	}
 
@@ -248,9 +248,9 @@ func TestRun_ResumeFromFailedStep(t *testing.T) {
 		Phases: []config.Phase{{
 			Name: "install",
 			Steps: []config.Step{
-				{ID: "s1", Kind: "WriteFile", Spec: map[string]any{"path": first, "content": "ok"}},
+				{ID: "s1", Kind: "InstallFile", Spec: map[string]any{"path": first, "content": "ok"}},
 				{ID: "s2", Kind: "RunCommand", Spec: map[string]any{"command": []any{"false"}}},
-				{ID: "s3", Kind: "WriteFile", Spec: map[string]any{"path": second, "content": "done"}},
+				{ID: "s3", Kind: "InstallFile", Spec: map[string]any{"path": second, "content": "done"}},
 			},
 		}},
 	}
@@ -1237,8 +1237,8 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 			Name: "install",
 			Steps: []config.Step{
 				{ID: "init", Kind: "KubeadmInit", Spec: map[string]any{"outputJoinFile": joinPath}, Register: map[string]string{"workerJoinFile": "joinFile"}},
-				{ID: "use-register", Kind: "WriteFile", When: "vars.role == \"control-plane\"", Spec: map[string]any{"path": registeredOutputPath, "content": "{{ .runtime.workerJoinFile }}"}},
-				{ID: "skip-worker", Kind: "WriteFile", When: "vars.role == \"worker\"", Spec: map[string]any{"path": skippedOutputPath, "content": "worker"}},
+				{ID: "use-register", Kind: "InstallFile", When: "vars.role == \"control-plane\"", Spec: map[string]any{"path": registeredOutputPath, "content": "{{ .runtime.workerJoinFile }}"}},
+				{ID: "skip-worker", Kind: "InstallFile", When: "vars.role == \"worker\"", Spec: map[string]any{"path": skippedOutputPath, "content": "worker"}},
 			},
 		}},
 	}
@@ -2532,11 +2532,11 @@ func TestInstallArtifactsStep_SkipIfPresentExecutable(t *testing.T) {
 	}
 }
 
-func TestTemplateFileStep(t *testing.T) {
+func TestInstallFileContentFromTemplate(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "templated.txt")
-	if err := runTemplateFile(map[string]any{"path": target, "template": "line", "mode": "0644"}); err != nil {
-		t.Fatalf("runTemplateFile failed: %v", err)
+	if err := runInstallFile(map[string]any{"path": target, "contentFromTemplate": "line", "mode": "0644"}); err != nil {
+		t.Fatalf("runInstallFile failed: %v", err)
 	}
 	raw, err := os.ReadFile(target)
 	if err != nil {
@@ -3192,7 +3192,26 @@ func TestKernelModuleStep(t *testing.T) {
 	}
 }
 
-func TestSysctlApplyStep(t *testing.T) {
+func TestKernelModuleStep_MultipleNames(t *testing.T) {
+	dir := t.TempDir()
+	persistPath := filepath.Join(dir, "modules-load.d", "k8s.conf")
+	spec := map[string]any{"names": []any{"overlay", "br_netfilter"}, "load": false, "persist": true, "persistFile": persistPath}
+	if err := runKernelModule(spec); err != nil {
+		t.Fatalf("runKernelModule failed: %v", err)
+	}
+	if err := runKernelModule(spec); err != nil {
+		t.Fatalf("runKernelModule second pass failed: %v", err)
+	}
+	raw, err := os.ReadFile(persistPath)
+	if err != nil {
+		t.Fatalf("read persist file: %v", err)
+	}
+	if strings.Count(string(raw), "overlay") != 1 || strings.Count(string(raw), "br_netfilter") != 1 {
+		t.Fatalf("expected both module lines once, got %q", string(raw))
+	}
+}
+
+func TestSysctlStepWithApply(t *testing.T) {
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
@@ -3206,14 +3225,21 @@ func TestSysctlApplyStep(t *testing.T) {
 	}
 	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
 
-	if err := runSysctlApply(map[string]any{"file": "/etc/sysctl.d/99-kubernetes-cri.conf"}); err != nil {
-		t.Fatalf("runSysctlApply failed: %v", err)
+	path := filepath.Join(dir, "99-kubernetes-cri.conf")
+	if err := runSysctl(map[string]any{
+		"writeFile": path,
+		"apply":     true,
+		"values": map[string]any{
+			"net.ipv4.ip_forward": 1,
+		},
+	}); err != nil {
+		t.Fatalf("runSysctl failed: %v", err)
 	}
 	raw, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read log: %v", err)
 	}
-	if strings.TrimSpace(string(raw)) != "-p /etc/sysctl.d/99-kubernetes-cri.conf" {
+	if strings.TrimSpace(string(raw)) != "-p "+path {
 		t.Fatalf("unexpected sysctl args: %q", string(raw))
 	}
 }
