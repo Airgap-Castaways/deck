@@ -4,7 +4,6 @@ phases:
   - name: install
     steps:
       - id: apply-offline-repo-config-debian
-        apiVersion: deck/v1alpha1
         kind: Repository
         spec:
           action: configure
@@ -17,7 +16,6 @@ phases:
               baseurl: http://{{ .vars.serverURL  }}/packages/apt/{{ .vars.release  }}
               suite: ./
       - id: refresh-apt-package-cache
-        apiVersion: deck/v1alpha1
         kind: PackageCache
         spec:
           manager: apt

@@ -971,13 +971,11 @@ steps:
 	}
 }
 
-func TestSchema_AcceptsVarImportsAndPhaseImports(t *testing.T) {
+func TestSchema_AcceptsPhaseImports(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "workflow.yaml")
 	content := []byte(`role: apply
 version: v1alpha1
-varImports:
-  - ./vars/common.yaml
 phases:
   - name: install
     imports:

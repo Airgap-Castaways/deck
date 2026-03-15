@@ -270,8 +270,32 @@ func resolveLocalWorkflowImport(originPath string, importRef string) (string, er
 	if strings.Contains(ref, "://") {
 		return "", fmt.Errorf("remote imports are not supported during workspace lint: %s", ref)
 	}
+	cleaned := filepath.ToSlash(strings.TrimSpace(ref))
+	cleaned = strings.TrimPrefix(cleaned, "../components/")
+	cleaned = strings.TrimPrefix(cleaned, "components/")
+	if !strings.HasPrefix(cleaned, "../") && !strings.HasPrefix(cleaned, "./") {
+		workflowRoot, err := localWorkflowRoot(originPath)
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(workflowRoot, "components", filepath.FromSlash(cleaned)), nil
+	}
 	joined := filepath.Clean(filepath.Join(filepath.Dir(originPath), ref))
 	return filepath.Abs(joined)
+}
+
+func localWorkflowRoot(localPath string) (string, error) {
+	current := filepath.Dir(localPath)
+	for {
+		if filepath.Base(current) == "workflows" {
+			return current, nil
+		}
+		next := filepath.Dir(current)
+		if next == current {
+			return "", fmt.Errorf("workflow import requires file under workflows/: %s", localPath)
+		}
+		current = next
+	}
 }
 
 func cloneAnyMap(input map[string]any) map[string]any {

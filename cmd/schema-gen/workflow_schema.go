@@ -34,7 +34,6 @@ func generateWorkflowSchema() map[string]any {
 	setMap(props, "role", map[string]any{"type": "string", "enum": []any{"prepare", "apply"}})
 	setMap(props, "version", map[string]any{"type": "string", "const": "v1alpha1"})
 	mergeMap(props, "vars", map[string]any{"type": "object", "additionalProperties": true, "default": map[string]any{}})
-	mergeMap(props, "varImports", map[string]any{"type": "array", "minItems": 1, "uniqueItems": true, "items": map[string]any{"type": "string", "minLength": 1}})
 	mergeMap(props, "imports", map[string]any{"type": "array", "minItems": 1, "uniqueItems": true, "items": map[string]any{"type": "string", "minLength": 1}})
 	mergeMap(props, "artifacts", map[string]any{"description": "Declarative prepare artifact inventory. Prefer this over legacy prepare download steps in new role: prepare workflows."})
 	setMap(props, "steps", map[string]any{"type": "array", "minItems": 1, "items": stepBaseSchema()})

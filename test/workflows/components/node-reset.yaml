@@ -2,7 +2,6 @@ role: apply
 version: v1alpha1
 steps:
   - id: reset-node
-    apiVersion: deck/v1alpha1
     kind: Kubeadm
     when: vars.allowDestructive == "true"
     spec:
@@ -28,7 +27,6 @@ steps:
         - etcd
       restartRuntimeService: containerd
   - id: reset-runtime-ready
-    apiVersion: deck/v1alpha1
     kind: Command
     spec:
       timeout: 5m
@@ -65,7 +63,6 @@ steps:
           fi
           systemctl stop kubelet || true
   - id: reset-state-report
-    apiVersion: deck/v1alpha1
     kind: Command
     spec:
       command:

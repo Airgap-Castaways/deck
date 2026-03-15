@@ -83,8 +83,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 		ctx = context.Background()
 	}
 
-	installPhase, found := workflowexec.FindPhase(wf, "install")
-	if !found {
+	if len(wf.Phases) == 0 {
 		return fmt.Errorf("install phase not found")
 	}
 
@@ -108,8 +107,6 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	if err != nil {
 		return err
 	}
-	st.Phase = "install"
-
 	completed := make(map[string]bool, len(st.CompletedSteps))
 	for _, id := range st.CompletedSteps {
 		completed[id] = true
@@ -126,85 +123,89 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	}
 
 	ctxData := map[string]any{"bundleRoot": bundleRoot, "stateFile": statePath}
-	for _, step := range installPhase.Steps {
-		if completed[step.ID] {
-			continue
-		}
+	for _, phase := range wf.Phases {
+		st.Phase = phase.Name
+		for _, step := range phase.Steps {
+			if completed[step.ID] {
+				continue
+			}
 
-		ok, err := evaluateWhen(step.When, wf.Vars, runtimeVars, ctxData)
-		if err != nil {
-			st.FailedStep = step.ID
-			st.Error = err.Error()
-			st.RuntimeVars = runtimeVars
-			st.SkippedSteps = sortedStepIDs(skipped)
-			_ = SaveState(statePath, st)
-			return fmt.Errorf("step %s (%s): %w", step.ID, step.Kind, err)
-		}
-		if !ok {
-			skipped[step.ID] = true
+			ok, err := evaluateWhen(step.When, wf.Vars, runtimeVars, ctxData)
+			if err != nil {
+				st.FailedStep = step.ID
+				st.Error = err.Error()
+				st.RuntimeVars = runtimeVars
+				st.SkippedSteps = sortedStepIDs(skipped)
+				_ = SaveState(statePath, st)
+				return fmt.Errorf("step %s (%s): %w", step.ID, step.Kind, err)
+			}
+			if !ok {
+				skipped[step.ID] = true
+				st.RuntimeVars = runtimeVars
+				st.SkippedSteps = sortedStepIDs(skipped)
+				if err := SaveState(statePath, st); err != nil {
+					return err
+				}
+				continue
+			}
+
+			var execErr error
+			attempts := step.Retry + 1
+			if attempts < 1 {
+				attempts = 1
+			}
+			for i := 0; i < attempts; i++ {
+				if err := ctx.Err(); err != nil {
+					execErr = err
+					break
+				}
+				rendered, renderErr := workflowexec.RenderSpec(step.Spec, wf, runtimeVars, ctxData)
+				if renderErr != nil {
+					execErr = fmt.Errorf("render spec template: %w", renderErr)
+					break
+				}
+				if strings.TrimSpace(step.Timeout) != "" {
+					if _, exists := rendered["timeout"]; !exists {
+						rendered["timeout"] = strings.TrimSpace(step.Timeout)
+					}
+				}
+				execErr = executeStep(ctx, step.Kind, rendered, bundleRoot)
+				if execErr == nil {
+					if err := applyRegister(step, rendered, runtimeVars); err != nil {
+						execErr = err
+					}
+				}
+				if execErr == nil {
+					break
+				}
+				if ctx.Err() != nil {
+					break
+				}
+			}
+
+			if execErr != nil {
+				st.FailedStep = step.ID
+				st.Error = execErr.Error()
+				st.RuntimeVars = runtimeVars
+				st.SkippedSteps = sortedStepIDs(skipped)
+				_ = SaveState(statePath, st)
+				return fmt.Errorf("step %s (%s): %w", step.ID, step.Kind, execErr)
+			}
+
+			st.CompletedSteps = append(st.CompletedSteps, step.ID)
+			completed[step.ID] = true
+			delete(skipped, step.ID)
+			st.FailedStep = ""
+			st.Error = ""
 			st.RuntimeVars = runtimeVars
 			st.SkippedSteps = sortedStepIDs(skipped)
 			if err := SaveState(statePath, st); err != nil {
 				return err
 			}
-			continue
-		}
-
-		var execErr error
-		attempts := step.Retry + 1
-		if attempts < 1 {
-			attempts = 1
-		}
-		for i := 0; i < attempts; i++ {
-			if err := ctx.Err(); err != nil {
-				execErr = err
-				break
-			}
-			rendered, renderErr := workflowexec.RenderSpec(step.Spec, wf, runtimeVars, ctxData)
-			if renderErr != nil {
-				execErr = fmt.Errorf("render spec template: %w", renderErr)
-				break
-			}
-			if strings.TrimSpace(step.Timeout) != "" {
-				if _, exists := rendered["timeout"]; !exists {
-					rendered["timeout"] = strings.TrimSpace(step.Timeout)
-				}
-			}
-			execErr = executeStep(ctx, step.Kind, rendered, bundleRoot)
-			if execErr == nil {
-				if err := applyRegister(step, rendered, runtimeVars); err != nil {
-					execErr = err
-				}
-			}
-			if execErr == nil {
-				break
-			}
-			if ctx.Err() != nil {
-				break
-			}
-		}
-
-		if execErr != nil {
-			st.FailedStep = step.ID
-			st.Error = execErr.Error()
-			st.RuntimeVars = runtimeVars
-			st.SkippedSteps = sortedStepIDs(skipped)
-			_ = SaveState(statePath, st)
-			return fmt.Errorf("step %s (%s): %w", step.ID, step.Kind, execErr)
-		}
-
-		st.CompletedSteps = append(st.CompletedSteps, step.ID)
-		completed[step.ID] = true
-		delete(skipped, step.ID)
-		st.FailedStep = ""
-		st.Error = ""
-		st.RuntimeVars = runtimeVars
-		st.SkippedSteps = sortedStepIDs(skipped)
-		if err := SaveState(statePath, st); err != nil {
-			return err
 		}
 	}
 
+	st.Phase = wf.Phases[len(wf.Phases)-1].Name
 	st.FailedStep = ""
 	st.Error = ""
 	st.RuntimeVars = runtimeVars

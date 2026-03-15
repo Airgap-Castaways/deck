@@ -4,7 +4,6 @@ phases:
   - name: install
     steps:
       - id: install-k8s-binaries
-        apiVersion: deck/v1alpha1
         kind: Artifacts
         spec:
           artifacts:

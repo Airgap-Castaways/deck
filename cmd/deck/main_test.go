@@ -1051,23 +1051,19 @@ func TestInit(t *testing.T) {
 			filepath.Join("workflows", "scenarios", "prepare.yaml"): strings.Join([]string{
 				"role: prepare",
 				"version: v1alpha1",
-				"varImports:",
-				"  - ../vars.yaml",
 				"phases:",
 				"  - name: prepare",
 				"    imports:",
-				"      - path: ../components/example-prepare.yaml",
+				"      - path: example-prepare.yaml",
 				"",
 			}, "\n"),
 			filepath.Join("workflows", "scenarios", "apply.yaml"): strings.Join([]string{
 				"role: apply",
 				"version: v1alpha1",
-				"varImports:",
-				"  - ../vars.yaml",
 				"phases:",
 				"  - name: install",
 				"    imports:",
-				"      - path: ../components/example-apply.yaml",
+				"      - path: example-apply.yaml",
 				"",
 			}, "\n"),
 			filepath.Join("workflows", "components", "example-prepare.yaml"): "role: prepare\nversion: v1alpha1\nsteps: []\n",
@@ -1235,8 +1231,6 @@ func TestRunPrepareCreatesPreparedBundleDir(t *testing.T) {
 	packPath := filepath.Join(workflowsDir, "scenarios", "prepare.yaml")
 	packBody := fmt.Sprintf(`role: prepare
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 phases:
   - name: prepare
     steps:
@@ -1253,7 +1247,7 @@ phases:
 	if err := os.WriteFile(packPath, []byte(packBody), 0o644); err != nil {
 		t.Fatalf("write prepare workflow: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nsteps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
 		t.Fatalf("write apply workflow: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("kubernetesVersion: v1.30.1\n"), 0o644); err != nil {
@@ -1302,10 +1296,10 @@ func TestRunPrepareDryRunDoesNotWrite(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
 		t.Fatalf("write prepare workflow: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nsteps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
 		t.Fatalf("write apply workflow: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("x: y\n"), 0o644); err != nil {
@@ -1341,7 +1335,7 @@ func TestRunPrepareSucceedsWithoutApplyWorkflow(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
 		t.Fatalf("write prepare workflow: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("x: y\n"), 0o644); err != nil {
@@ -1392,8 +1386,6 @@ func TestRunPrepareVarFlagOverridesWorkflowVars(t *testing.T) {
 	packPath := filepath.Join(workflowsDir, "scenarios", "prepare.yaml")
 	packBody := fmt.Sprintf(`role: prepare
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 vars:
   relPath: default.bin
 phases:
@@ -1414,7 +1406,7 @@ phases:
 	if err := os.WriteFile(packPath, []byte(packBody), 0o644); err != nil {
 		t.Fatalf("write prepare workflow: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nsteps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
 		t.Fatalf("write apply workflow: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("kubernetesVersion: v1.30.1\n"), 0o644); err != nil {
@@ -1687,8 +1679,6 @@ func TestApplyRemoteWorkflow(t *testing.T) {
 		logPath := filepath.Join(t.TempDir(), "remote-vars.log")
 		workflowBody := fmt.Sprintf(`role: apply
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 phases:
   - name: install
     steps:
@@ -1999,7 +1989,7 @@ func TestAssistedDoctorUsesLocalEngine(t *testing.T) {
 
 	localRepo := t.TempDir()
 	reportPath := filepath.Join(t.TempDir(), "doctor-assist.json")
-	workflowBody := "role: apply\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nphases:\n  - name: install\n    steps:\n      - id: doctor-check\n        kind: File\n        spec:\n          source:\n            path: files/dummy.txt\n          fetch:\n            sources:\n              - type: local\n                path: \"{{ .vars.localRepo }}\"\n          output:\n            path: files/dummy.txt\n"
+	workflowBody := "role: apply\nversion: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: doctor-check\n        kind: File\n        spec:\n          source:\n            path: files/dummy.txt\n          fetch:\n            sources:\n              - type: local\n                path: \"{{ .vars.localRepo }}\"\n          output:\n            path: files/dummy.txt\n"
 	varsBody := fmt.Sprintf("localRepo: %q\n", localRepo)
 	manifestBody := "{\n  \"entries\": []\n}\n"
 	uploaded := false
@@ -2493,8 +2483,6 @@ func TestBundledApplyWorksFromBundleDir(t *testing.T) {
 	}
 	packBody := fmt.Sprintf(`role: prepare
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 phases:
   - name: prepare
     steps:
@@ -2514,8 +2502,6 @@ phases:
 	applyLogPath := filepath.Join(tmpRoot, "apply.log")
 	applyBody := fmt.Sprintf(`role: apply
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 phases:
   - name: install
     steps:
@@ -2837,7 +2823,7 @@ func writeApplyBundleTarFixture(t *testing.T, archivePath string) {
 	}{
 		{name: "bundle/workflows/", mode: 0o755},
 		{name: "bundle/workflows/scenarios/", mode: 0o755},
-		{name: "bundle/workflows/scenarios/apply.yaml", body: []byte("role: apply\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nsteps: []\n"), mode: 0o644},
+		{name: "bundle/workflows/scenarios/apply.yaml", body: []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), mode: 0o644},
 		{name: "bundle/workflows/vars.yaml", body: []byte("{}\n"), mode: 0o644},
 	}
 
@@ -2863,7 +2849,7 @@ func writeApplyBundleTarFixture(t *testing.T, archivePath string) {
 
 func writeSiteReleaseBundleTarFixture(t *testing.T, archivePath string) {
 	t.Helper()
-	workflowBody := []byte("role: apply\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nsteps: []\n")
+	workflowBody := []byte("role: apply\nversion: v1alpha1\nsteps: []\n")
 	workflowSum := sha256.Sum256(workflowBody)
 	manifest := fmt.Sprintf("{\n  \"entries\": [\n    {\"path\": %q, \"sha256\": %q, \"size\": %d}\n  ]\n}\n", "workflows/scenarios/apply.yaml", hex.EncodeToString(workflowSum[:]), len(workflowBody))
 

@@ -4,13 +4,11 @@ phases:
   - name: install
     steps:
       - id: prep-disable-swap
-        apiVersion: deck/v1alpha1
         kind: Swap
         spec:
           disable: true
           persist: false
       - id: prep-enable-ip-forward
-        apiVersion: deck/v1alpha1
         kind: File
         spec:
           action: install
@@ -18,7 +16,6 @@ phases:
           content: |
             net.ipv4.ip_forward = 1
       - id: prep-apply-ip-forward
-        apiVersion: deck/v1alpha1
         kind: Sysctl
         spec:
           writeFile: /etc/sysctl.d/99-kubernetes-ipforward.conf
