@@ -5,6 +5,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: Packages
     spec:
+      action: download
       distro:
         family: debian
         release: ubuntu2204

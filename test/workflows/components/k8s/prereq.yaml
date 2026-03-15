@@ -20,4 +20,7 @@ phases:
         apiVersion: deck/v1alpha1
         kind: Sysctl
         spec:
-          file: /etc/sysctl.d/99-kubernetes-ipforward.conf
+          writeFile: /etc/sysctl.d/99-kubernetes-ipforward.conf
+          values:
+            net.ipv4.ip_forward: 1
+          apply: true

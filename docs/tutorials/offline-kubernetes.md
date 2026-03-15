@@ -56,7 +56,7 @@ deck prepare
 deck bundle build --out ./bundle.tar
 ```
 
-The bundle can include `packages/`, `images/`, `files/`, `workflows/`, the `deck` binary, and `.deck/manifest.json` checksums.
+The bundle includes the canonical workspace inputs: `outputs/packages/`, `outputs/images/`, `outputs/files/`, `workflows/`, the `deck` binary, and `.deck/manifest.json` checksums.
 
 ## 5. Move the bundle into the offline site
 

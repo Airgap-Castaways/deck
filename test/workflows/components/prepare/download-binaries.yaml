@@ -5,6 +5,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://dl.k8s.io/release/{{ .vars.kubernetesVersion }}/bin/linux/amd64/kubelet
       output:
@@ -14,6 +15,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://dl.k8s.io/release/{{ .vars.kubernetesVersion }}/bin/linux/amd64/kubeadm
       output:
@@ -23,6 +25,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://dl.k8s.io/release/{{ .vars.kubernetesVersion }}/bin/linux/amd64/kubectl
       output:
@@ -32,6 +35,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.30.0/crictl-v1.30.0-linux-amd64.tar.gz
       output:
@@ -40,6 +44,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://github.com/containerd/containerd/releases/download/v1.7.18/containerd-1.7.18-linux-amd64.tar.gz
       output:
@@ -48,6 +53,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://github.com/opencontainers/runc/releases/download/v1.1.13/runc.amd64
       output:
@@ -57,6 +63,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-amd64-v1.5.1.tgz
       output:
@@ -65,6 +72,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://dl.k8s.io/release/{{ .vars.kubernetesVersion }}/bin/linux/arm64/kubelet
       output:
@@ -74,6 +82,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://dl.k8s.io/release/{{ .vars.kubernetesVersion }}/bin/linux/arm64/kubeadm
       output:
@@ -83,6 +92,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://dl.k8s.io/release/{{ .vars.kubernetesVersion }}/bin/linux/arm64/kubectl
       output:
@@ -92,6 +102,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.30.0/crictl-v1.30.0-linux-arm64.tar.gz
       output:
@@ -100,6 +111,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://github.com/containerd/containerd/releases/download/v1.7.18/containerd-1.7.18-linux-arm64.tar.gz
       output:
@@ -108,6 +120,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://github.com/opencontainers/runc/releases/download/v1.1.13/runc.arm64
       output:
@@ -117,6 +130,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: download
       source:
         url: https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-arm64-v1.5.1.tgz
       output:

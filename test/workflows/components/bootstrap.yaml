@@ -5,6 +5,7 @@ steps:
     apiVersion: deck/v1alpha1
     kind: Kubeadm
     spec:
+      action: reset
       force: true
       ignoreErrors: true
       criSocket: unix:///run/containerd/containerd.sock
@@ -70,9 +71,10 @@ steps:
   - id: bootstrap-init
     apiVersion: deck/v1alpha1
     kind: Kubeadm
+    timeout: 20m
     spec:
+      action: init
       mode: real
-      timeout: 20m
       configTemplate: default
       configFile: /tmp/deck/kubeadm-init.yaml
       pullImages: true
@@ -91,12 +93,14 @@ steps:
     apiVersion: deck/v1alpha1
     kind: File
     spec:
+      action: copy
       src: /tmp/deck/join.txt
       dest: /tmp/deck/server-root/files/cluster/join.txt
   - id: bootstrap-kubeconfig-ready
     apiVersion: deck/v1alpha1
     kind: Wait
     spec:
+      action: fileExists
       timeout: 5m
       path: /etc/kubernetes/admin.conf
       state: exists

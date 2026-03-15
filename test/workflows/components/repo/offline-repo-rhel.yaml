@@ -7,6 +7,7 @@ phases:
         apiVersion: deck/v1alpha1
         kind: Repository
         spec:
+          action: configure
           format: yum
           path: /etc/yum.repos.d/deck-offline.repo
           replaceExisting: true

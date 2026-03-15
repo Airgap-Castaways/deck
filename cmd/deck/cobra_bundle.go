@@ -40,13 +40,13 @@ func newBundleVerifyCommand() *cobra.Command {
 func newBundleBuildCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build",
-		Short: "Create a bundle archive from a prepared directory",
+		Short: "Archive deck, workflows, outputs, and manifest",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return executeBundleBuild(cmdFlagValue(cmd, "root"), cmdFlagValue(cmd, "out"))
 		},
 	}
-	cmd.Flags().String("root", ".", "workspace root to archive")
+	cmd.Flags().String("root", ".", "workspace root containing deck, workflows, outputs, and .deck/manifest.json")
 	cmd.Flags().String("out", "", "output tar archive path")
 	return cmd
 }

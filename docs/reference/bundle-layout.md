@@ -4,17 +4,18 @@
 
 The bundle is part of the product model, not an afterthought.
 
-## Typical bundle contents
+## Canonical bundle inputs
 
-- `workflows/`: the workflow files copied into the bundle
+`deck bundle build` archives the canonical workspace inputs below.
+
+- `deck`: the current deck binary copied to the workspace root during `prepare`
+- `workflows/`: scenario, component, and variable files used at the site
 - `outputs/packages/`: operating system or Kubernetes packages fetched during prepare
 - `outputs/images/`: container image archives fetched during prepare
 - `outputs/files/`: supporting files copied or downloaded during prepare
-- `deck`: the current deck binary copied to the workspace root
 - `.deck/manifest.json`: integrity manifest used by `bundle verify`
-- `deck`: the `deck` binary placed in the bundle root
-- `files/deck`: an additional bundled copy of the binary
-- `.deck/manifest.json`: checksum metadata for bundled artifacts
+
+`bundle build` does not archive arbitrary extra root-level paths by default. If a workflow needs additional content at the site, that content should be modeled under `workflows/` or produced under `outputs/` so it becomes part of the canonical bundle.
 
 ## Why the bundle matters
 
@@ -25,4 +26,4 @@ The bundle is part of the product model, not an afterthought.
 
 ## Core rule
 
-If the site needs it to run the workflow, the safest default is to include it in the bundle rather than assume it already exists.
+If the site needs it to run the workflow, the safest default is to place it in the canonical bundle inputs rather than assume it already exists.

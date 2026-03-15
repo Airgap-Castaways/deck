@@ -71,7 +71,7 @@ deck apply --session session-1
 
 - `prepare` expects `workflows/scenarios/prepare.yaml`. `workflows/vars.yaml` and `workflows/scenarios/apply.yaml` are optional.
 - `prepare` writes generated artifacts under `./outputs/` and updates the root `deck` binary by default.
-- `bundle build` archives the current workspace root and respects `.deckignore`.
+- `bundle build` archives the canonical workspace bundle inputs: `deck`, `workflows/`, `outputs/`, and `.deck/manifest.json`, and respects `.deckignore` within those paths.
 - `apply` defaults to the `install` phase when phases are used.
 - Help text is shown on stdout only when you request it with `--help` or `help`.
 - Command and flag errors are written to stderr without automatic usage output.

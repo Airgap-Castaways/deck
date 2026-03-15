@@ -6,6 +6,7 @@ steps:
     kind: Kubeadm
     when: vars.allowDestructive == "true"
     spec:
+      action: reset
       force: true
       criSocket: unix:///run/containerd/containerd.sock
       removePaths:
