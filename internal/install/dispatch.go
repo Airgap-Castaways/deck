@@ -14,11 +14,11 @@ func executeStep(ctx context.Context, kind string, spec map[string]any, bundleRo
 
 	switch kind {
 	case "Artifacts":
-		return runArtifactsApply(ctx, spec, bundleRoot)
+		return runInstallArtifacts(ctx, spec)
 	case "Packages":
 		return runPackages(ctx, spec)
 	case "File":
-		if fileAction(spec) == "download" {
+		if workflowexec.InferStepAction("File", spec) == "download" {
 			_, err := runFileDownload(ctx, bundleRoot, spec)
 			return err
 		}
@@ -38,7 +38,7 @@ func executeStep(ctx context.Context, kind string, spec map[string]any, bundleRo
 	case "PackageCache":
 		return runPackageCache(spec)
 	case "Containerd":
-		return runContainerdConfigure(ctx, spec)
+		return runContainerdConfig(ctx, spec)
 	case "Swap":
 		return runSwap(spec)
 	case "KernelModule":

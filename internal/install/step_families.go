@@ -3,60 +3,62 @@ package install
 import (
 	"context"
 	"fmt"
+
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 func runFile(spec map[string]any) error {
-	switch fileAction(spec) {
+	switch workflowexec.InferStepAction("File", spec) {
 	case "download":
 		return fmt.Errorf("file action download is not supported in apply dispatch without context")
 	case "write":
-		return runFileWrite(spec)
+		return runWriteFile(spec)
 	case "copy":
-		return runFileCopy(spec)
+		return runCopyFile(spec)
 	case "edit":
-		return runFileEdit(spec)
+		return runEditFile(spec)
 	default:
 		return fmt.Errorf("unsupported File action %q", stringValue(spec, "action"))
 	}
 }
 
 func runPackages(ctx context.Context, spec map[string]any) error {
-	switch packagesAction(spec) {
+	switch workflowexec.InferStepAction("Packages", spec) {
 	case "download":
 		return fmt.Errorf("packages action download is not supported in apply dispatch")
 	case "install":
-		return runPackagesApply(ctx, spec)
+		return runInstallPackages(ctx, spec)
 	default:
 		return fmt.Errorf("unsupported Packages action %q", stringValue(spec, "action"))
 	}
 }
 
 func runContainerd(ctx context.Context, spec map[string]any) error {
-	return runContainerdConfigure(ctx, spec)
+	return runContainerdConfig(ctx, spec)
 }
 
 func runRepository(spec map[string]any) error {
-	switch repositoryAction(spec) {
+	switch workflowexec.InferStepAction("Repository", spec) {
 	case "configure":
-		return runRepositoryConfigure(spec)
+		return runRepoConfig(spec)
 	default:
 		return fmt.Errorf("unsupported Repository action %q", stringValue(spec, "action"))
 	}
 }
 
 func runImage(ctx context.Context, spec map[string]any) error {
-	switch imageAction(spec) {
+	switch workflowexec.InferStepAction("Image", spec) {
 	case "download":
 		return fmt.Errorf("image action download is not supported in apply dispatch")
 	case "verify":
-		return runImageVerify(ctx, spec)
+		return runVerifyImages(ctx, spec)
 	default:
 		return fmt.Errorf("unsupported Image action %q", stringValue(spec, "action"))
 	}
 }
 
 func runKubeadm(ctx context.Context, spec map[string]any) error {
-	switch kubeadmAction(spec) {
+	switch workflowexec.InferStepAction("Kubeadm", spec) {
 	case "init":
 		return runKubeadmInit(ctx, spec)
 	case "join":
@@ -66,60 +68,4 @@ func runKubeadm(ctx context.Context, spec map[string]any) error {
 	default:
 		return fmt.Errorf("unsupported Kubeadm action %q", stringValue(spec, "action"))
 	}
-}
-
-func fileAction(spec map[string]any) string {
-	if action := stringValue(spec, "action"); action != "" {
-		return action
-	}
-	if spec != nil && (spec["source"] != nil || spec["output"] != nil) {
-		return "download"
-	}
-	if _, ok := spec["edits"]; ok {
-		return "edit"
-	}
-	if spec["src"] != nil || spec["dest"] != nil {
-		return "copy"
-	}
-	return "write"
-}
-
-func packagesAction(spec map[string]any) string {
-	if action := stringValue(spec, "action"); action != "" {
-		return action
-	}
-	if spec != nil && (spec["backend"] != nil || spec["distro"] != nil || spec["repo"] != nil) {
-		return "download"
-	}
-	return "install"
-}
-
-func repositoryAction(spec map[string]any) string {
-	if action := stringValue(spec, "action"); action != "" {
-		return action
-	}
-	return "configure"
-}
-
-func imageAction(spec map[string]any) string {
-	if action := stringValue(spec, "action"); action != "" {
-		return action
-	}
-	if spec != nil && (spec["backend"] != nil || spec["output"] != nil) {
-		return "download"
-	}
-	return "verify"
-}
-
-func kubeadmAction(spec map[string]any) string {
-	if action := stringValue(spec, "action"); action != "" {
-		return action
-	}
-	if spec["joinFile"] != nil {
-		return "join"
-	}
-	if spec["outputJoinFile"] != nil {
-		return "init"
-	}
-	return "reset"
 }

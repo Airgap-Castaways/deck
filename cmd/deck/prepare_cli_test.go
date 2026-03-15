@@ -1,0 +1,234 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestRunPrepareCreatesPreparedBundleDir(t *testing.T) {
+	root := t.TempDir()
+	workflowsDir := filepath.Join(root, "workflows")
+	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflow scenarios: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(workflowsDir, "components"), 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	seedDir := filepath.Join(root, "seed", "files")
+	if err := os.MkdirAll(seedDir, 0o755); err != nil {
+		t.Fatalf("mkdir seed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(seedDir, "source.bin"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed file: %v", err)
+	}
+	packPath := filepath.Join(workflowsDir, "scenarios", "prepare.yaml")
+	packBody := fmt.Sprintf(`role: prepare
+version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: p1
+        kind: File
+        spec:
+          source:
+            path: files/source.bin
+          fetch:
+            sources:
+              - type: local
+                path: %q
+`, filepath.Join(root, "seed"))
+	if err := os.WriteFile(packPath, []byte(packBody), 0o644); err != nil {
+		t.Fatalf("write prepare workflow: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("kubernetesVersion: v1.30.1\n"), 0o644); err != nil {
+		t.Fatalf("write vars workflow: %v", err)
+	}
+	fragmentDir := filepath.Join(workflowsDir, "components", "offline-multinode")
+	if err := os.MkdirAll(fragmentDir, 0o755); err != nil {
+		t.Fatalf("mkdir fragment dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fragmentDir, "apply-common.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write workflow fragment: %v", err)
+	}
+
+	originalCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(originalCWD)
+	})
+
+	preparedRoot := filepath.Join(root, "outputs")
+	if _, err := runWithCapturedStdout([]string{"prepare", "--root", preparedRoot}); err != nil {
+		t.Fatalf("prepare failed: %v", err)
+	}
+	for _, required := range []string{
+		filepath.Join("files", "source.bin"),
+	} {
+		if _, err := os.Stat(filepath.Join(preparedRoot, required)); err != nil {
+			t.Fatalf("missing prepared path %s: %v", required, err)
+		}
+	}
+	for _, required := range []string{"deck", filepath.Join(".deck", "manifest.json"), filepath.Join("workflows", "scenarios", "prepare.yaml")} {
+		if _, err := os.Stat(filepath.Join(root, required)); err != nil {
+			t.Fatalf("missing workspace path %s: %v", required, err)
+		}
+	}
+}
+
+func TestRunPrepareDryRunDoesNotWrite(t *testing.T) {
+	root := t.TempDir()
+	workflowsDir := filepath.Join(root, "workflows")
+	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
+		t.Fatalf("write prepare workflow: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("x: y\n"), 0o644); err != nil {
+		t.Fatalf("write vars workflow: %v", err)
+	}
+	originalCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(originalCWD)
+	})
+
+	preparedRoot := filepath.Join(root, "outputs")
+	planOut, err := runWithCapturedStdout([]string{"prepare", "--dry-run"})
+	if err != nil {
+		t.Fatalf("prepare dry-run failed: %v", err)
+	}
+	if !strings.Contains(planOut, "PREPARE_WORKFLOW=") {
+		t.Fatalf("expected dry-run plan output, got %q", planOut)
+	}
+	if _, statErr := os.Stat(preparedRoot); !os.IsNotExist(statErr) {
+		t.Fatalf("dry-run must not create prepared root, stat err=%v", statErr)
+	}
+}
+
+func TestRunPrepareSucceedsWithoutApplyWorkflow(t *testing.T) {
+	root := t.TempDir()
+	workflowsDir := filepath.Join(root, "workflows")
+	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
+		t.Fatalf("write prepare workflow: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("x: y\n"), 0o644); err != nil {
+		t.Fatalf("write vars workflow: %v", err)
+	}
+
+	originalCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(originalCWD)
+	})
+
+	preparedRoot := filepath.Join(root, "outputs")
+	out, err := runWithCapturedStdout([]string{"prepare", "--root", preparedRoot})
+	if err != nil {
+		t.Fatalf("prepare failed without apply workflow: %v", err)
+	}
+	if !strings.Contains(out, "prepare: ok") {
+		t.Fatalf("unexpected output: %q", out)
+	}
+	if _, statErr := os.Stat(filepath.Join(preparedRoot, "workflows", "scenarios", "apply.yaml")); !os.IsNotExist(statErr) {
+		t.Fatalf("apply workflow must remain optional, stat err=%v", statErr)
+	}
+}
+
+func TestRunPrepareVarFlagOverridesWorkflowVars(t *testing.T) {
+	root := t.TempDir()
+	workflowsDir := filepath.Join(root, "workflows")
+	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(workflowsDir, "components"), 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	seedDir := filepath.Join(root, "seed", "files")
+	if err := os.MkdirAll(seedDir, 0o755); err != nil {
+		t.Fatalf("mkdir seed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(seedDir, "source.bin"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed file: %v", err)
+	}
+
+	packPath := filepath.Join(workflowsDir, "scenarios", "prepare.yaml")
+	packBody := fmt.Sprintf(`role: prepare
+version: v1alpha1
+vars:
+  relPath: default.bin
+phases:
+  - name: prepare
+    steps:
+      - id: p1
+        kind: File
+        spec:
+          source:
+            path: files/source.bin
+          fetch:
+            sources:
+              - type: local
+                path: %q
+          output:
+            path: files/{{ .vars.relPath  }}
+`, filepath.Join(root, "seed"))
+	if err := os.WriteFile(packPath, []byte(packBody), 0o644); err != nil {
+		t.Fatalf("write prepare workflow: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("kubernetesVersion: v1.30.1\n"), 0o644); err != nil {
+		t.Fatalf("write vars workflow: %v", err)
+	}
+
+	originalCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(originalCWD)
+	})
+
+	preparedRoot := filepath.Join(root, "outputs")
+	if _, err := runWithCapturedStdout([]string{"prepare", "--root", preparedRoot, "--var", "relPath=override.bin"}); err != nil {
+		t.Fatalf("prepare failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(preparedRoot, "files", "override.bin")); err != nil {
+		t.Fatalf("expected override output in prepared root: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(preparedRoot, "files", "default.bin")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected default output in prepared root: %v", err)
+	}
+}

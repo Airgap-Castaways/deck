@@ -35,6 +35,13 @@ func editFileBackupEnabled(spec map[string]any) bool {
 	return v
 }
 
+func editFileBackupEnabledValue(backup *bool) bool {
+	if backup == nil {
+		return true
+	}
+	return *backup
+}
+
 func createEditFileBackup(path string, content []byte) (string, error) {
 	base := path + ".bak-" + time.Now().UTC().Format("20060102T150405Z")
 	backupPath := base

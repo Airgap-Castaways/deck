@@ -15,35 +15,70 @@ import (
 	"time"
 
 	"github.com/taedi90/deck/internal/fetch"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
+
+type fileDownloadBundleSpec struct {
+	Root string `json:"root"`
+	Path string `json:"path"`
+}
+
+type fileDownloadSourceSpec struct {
+	URL    string                  `json:"url"`
+	Path   string                  `json:"path"`
+	SHA256 string                  `json:"sha256"`
+	Bundle *fileDownloadBundleSpec `json:"bundle"`
+}
+
+type fileDownloadOutputSpec struct {
+	Path  string `json:"path"`
+	Chmod string `json:"chmod"`
+}
+
+type fileDownloadFetchSourceSpec struct {
+	Type string `json:"type"`
+	Path string `json:"path"`
+	URL  string `json:"url"`
+}
+
+type fileDownloadFetchSpec struct {
+	OfflineOnly bool                          `json:"offlineOnly"`
+	Sources     []fileDownloadFetchSourceSpec `json:"sources"`
+}
+
+type fileDownloadSpec struct {
+	Source  fileDownloadSourceSpec `json:"source"`
+	Output  fileDownloadOutputSpec `json:"output"`
+	Fetch   fileDownloadFetchSpec  `json:"fetch"`
+	Timeout string                 `json:"timeout"`
+}
 
 func runFileDownload(ctx context.Context, bundleRoot string, spec map[string]any) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	source := mapValue(spec, "source")
-	output := mapValue(spec, "output")
-	fetchCfg := mapValue(spec, "fetch")
-	bundleRef := mapValue(source, "bundle")
-	if len(bundleRef) > 0 {
-		root := stringValue(bundleRef, "root")
-		refPath := stringValue(bundleRef, "path")
+	decoded, err := workflowexec.DecodeSpec[fileDownloadSpec](spec)
+	if err != nil {
+		return "", fmt.Errorf("decode File download spec: %w", err)
+	}
+	bundleRef := decoded.Source.Bundle
+	if bundleRef != nil {
+		root := strings.TrimSpace(bundleRef.Root)
+		refPath := strings.TrimSpace(bundleRef.Path)
 		if root == "" || refPath == "" {
 			return "", fmt.Errorf("DownloadFile bundle source requires root and path")
 		}
-		source["path"] = filepath.ToSlash(filepath.Join(root, refPath))
-		delete(source, "bundle")
+		decoded.Source.Path = filepath.ToSlash(filepath.Join(root, refPath))
+		decoded.Source.Bundle = nil
 		if bundleRoot != "" {
-			sourcesRaw, _ := fetchCfg["sources"].([]any)
-			fetchCfg["sources"] = append([]any{map[string]any{"type": "bundle", "path": bundleRoot}}, sourcesRaw...)
+			decoded.Fetch.Sources = append([]fileDownloadFetchSourceSpec{{Type: "bundle", Path: bundleRoot}}, decoded.Fetch.Sources...)
 		}
-		spec["fetch"] = fetchCfg
 	}
-	url := stringValue(source, "url")
-	sourcePath := stringValue(source, "path")
-	expectedSHA := strings.ToLower(stringValue(source, "sha256"))
-	offlineOnly := boolValue(fetchCfg, "offlineOnly")
-	outPath := stringValue(output, "path")
+	url := strings.TrimSpace(decoded.Source.URL)
+	sourcePath := strings.TrimSpace(decoded.Source.Path)
+	expectedSHA := strings.ToLower(strings.TrimSpace(decoded.Source.SHA256))
+	offlineOnly := decoded.Fetch.OfflineOnly
+	outPath := strings.TrimSpace(decoded.Output.Path)
 	if strings.TrimSpace(outPath) == "" {
 		outPath = filepath.ToSlash(filepath.Join("files", inferDownloadFileName(sourcePath, url)))
 	}
@@ -56,7 +91,7 @@ func runFileDownload(ctx context.Context, bundleRoot string, spec map[string]any
 		return "", fmt.Errorf("create output directory: %w", err)
 	}
 
-	reuse, err := canReuseDownloadFile(ctx, spec, target)
+	reuse, err := canReuseDownloadFile(ctx, decoded, target)
 	if err != nil {
 		return "", err
 	}
@@ -71,7 +106,7 @@ func runFileDownload(ctx context.Context, bundleRoot string, spec map[string]any
 	defer func() { _ = f.Close() }()
 
 	if sourcePath != "" {
-		raw, resolveErr := resolveSourceBytes(ctx, spec, sourcePath)
+		raw, resolveErr := resolveSourceBytesFromSpec(ctx, decoded, sourcePath)
 		if resolveErr == nil {
 			if _, err := f.Write(raw); err != nil {
 				return "", fmt.Errorf("write output file: %w", err)
@@ -89,7 +124,7 @@ func runFileDownload(ctx context.Context, bundleRoot string, spec map[string]any
 			if err := f.Truncate(0); err != nil {
 				return "", fmt.Errorf("truncate output file: %w", err)
 			}
-			if err := downloadURLToFile(ctx, f, url, commandTimeout(spec)); err != nil {
+			if err := downloadURLToFile(ctx, f, url, parseStepTimeout(decoded.Timeout, 30*time.Second)); err != nil {
 				return "", err
 			}
 		}
@@ -97,7 +132,7 @@ func runFileDownload(ctx context.Context, bundleRoot string, spec map[string]any
 		if offlineOnly {
 			return "", fmt.Errorf("%s: source.url blocked by offline policy", errCodeInstallOfflineBlocked)
 		}
-		if err := downloadURLToFile(ctx, f, url, commandTimeout(spec)); err != nil {
+		if err := downloadURLToFile(ctx, f, url, parseStepTimeout(decoded.Timeout, 30*time.Second)); err != nil {
 			return "", err
 		}
 	}
@@ -108,7 +143,7 @@ func runFileDownload(ctx context.Context, bundleRoot string, spec map[string]any
 		}
 	}
 
-	if modeRaw := stringValue(output, "chmod"); modeRaw != "" {
+	if modeRaw := strings.TrimSpace(decoded.Output.Chmod); modeRaw != "" {
 		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
 		if err != nil {
 			return "", fmt.Errorf("invalid chmod: %w", err)
@@ -145,26 +180,23 @@ func downloadURLToFile(ctx context.Context, target *os.File, url string, timeout
 }
 
 func resolveSourceBytes(ctx context.Context, spec map[string]any, sourcePath string) ([]byte, error) {
-	fetchCfg := mapValue(spec, "fetch")
-	sourcesRaw, ok := fetchCfg["sources"].([]any)
-	offlineOnly := boolValue(fetchCfg, "offlineOnly")
-	if ok && len(sourcesRaw) > 0 {
-		sources := make([]fetch.SourceConfig, 0, len(sourcesRaw))
-		for _, raw := range sourcesRaw {
-			s, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			sources = append(sources, fetch.SourceConfig{
-				Type: stringValue(s, "type"),
-				Path: stringValue(s, "path"),
-				URL:  stringValue(s, "url"),
-			})
+	decoded, err := workflowexec.DecodeSpec[fileDownloadSpec](spec)
+	if err != nil {
+		return nil, fmt.Errorf("decode File download spec: %w", err)
+	}
+	return resolveSourceBytesFromSpec(ctx, decoded, sourcePath)
+}
+
+func resolveSourceBytesFromSpec(ctx context.Context, spec fileDownloadSpec, sourcePath string) ([]byte, error) {
+	if len(spec.Fetch.Sources) > 0 {
+		sources := make([]fetch.SourceConfig, 0, len(spec.Fetch.Sources))
+		for _, source := range spec.Fetch.Sources {
+			sources = append(sources, fetch.SourceConfig{Type: source.Type, Path: source.Path, URL: source.URL})
 		}
 		if len(sources) == 0 {
 			return nil, fmt.Errorf("%s: source.path %s not found in configured fetch sources", errCodeInstallSourceNotFound, sourcePath)
 		}
-		raw, err := fetch.ResolveBytes(ctx, sourcePath, sources, fetch.ResolveOptions{OfflineOnly: offlineOnly})
+		raw, err := fetch.ResolveBytes(ctx, sourcePath, sources, fetch.ResolveOptions{OfflineOnly: spec.Fetch.OfflineOnly})
 		if err == nil {
 			return raw, nil
 		}
@@ -197,7 +229,7 @@ func verifyFileSHA256(path, expected string) error {
 	return nil
 }
 
-func canReuseDownloadFile(ctx context.Context, spec map[string]any, target string) (bool, error) {
+func canReuseDownloadFile(ctx context.Context, spec fileDownloadSpec, target string) (bool, error) {
 	info, err := os.Stat(target)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -209,8 +241,7 @@ func canReuseDownloadFile(ctx context.Context, spec map[string]any, target strin
 		return false, nil
 	}
 
-	source := mapValue(spec, "source")
-	expectedSHA := strings.ToLower(stringValue(source, "sha256"))
+	expectedSHA := strings.ToLower(strings.TrimSpace(spec.Source.SHA256))
 	if expectedSHA != "" {
 		if err := verifyFileSHA256(target, expectedSHA); err == nil {
 			return true, nil
@@ -218,11 +249,11 @@ func canReuseDownloadFile(ctx context.Context, spec map[string]any, target strin
 		return false, nil
 	}
 
-	sourcePath := stringValue(source, "path")
+	sourcePath := strings.TrimSpace(spec.Source.Path)
 	if sourcePath == "" {
 		return false, nil
 	}
-	raw, err := resolveSourceBytes(ctx, spec, sourcePath)
+	raw, err := resolveSourceBytesFromSpec(ctx, spec, sourcePath)
 	if err != nil {
 		return false, nil
 	}

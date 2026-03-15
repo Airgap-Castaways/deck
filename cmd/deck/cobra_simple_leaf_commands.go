@@ -1,10 +1,6 @@
 package main
 
-import (
-	"fmt"
-
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 func newLintCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -125,7 +121,7 @@ func newNodeAssignmentShowCommand() *cobra.Command {
 func cmdFlagValue(cmd *cobra.Command, name string) string {
 	value, err := cmd.Flags().GetString(name)
 	if err != nil {
-		panic(fmt.Sprintf("internal CLI wiring error: string flag %q not registered on %q: %v", name, cmd.CommandPath(), err))
+		return ""
 	}
 	return value
 }
@@ -133,7 +129,7 @@ func cmdFlagValue(cmd *cobra.Command, name string) string {
 func cmdFlagIntValue(cmd *cobra.Command, name string) int {
 	value, err := cmd.Flags().GetInt(name)
 	if err != nil {
-		panic(fmt.Sprintf("internal CLI wiring error: int flag %q not registered on %q: %v", name, cmd.CommandPath(), err))
+		return 0
 	}
 	return value
 }
@@ -141,7 +137,7 @@ func cmdFlagIntValue(cmd *cobra.Command, name string) int {
 func cmdFlagBoolValue(cmd *cobra.Command, name string) bool {
 	value, err := cmd.Flags().GetBool(name)
 	if err != nil {
-		panic(fmt.Sprintf("internal CLI wiring error: bool flag %q not registered on %q: %v", name, cmd.CommandPath(), err))
+		return false
 	}
 	return value
 }

@@ -28,7 +28,7 @@ func (s *Store) SaveAssignment(sessionID string, assignment Assignment) error {
 		assignment.SessionID = sessionID
 	}
 	if assignment.SessionID != sessionID {
-		return fmt.Errorf("assignment session_id must match %q", sessionID)
+		return conflictError("assignment session_id must match %q", sessionID)
 	}
 	if _, err := s.requireOpenSession(sessionID); err != nil {
 		return err

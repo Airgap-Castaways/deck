@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/taedi90/deck/internal/preparecli"
+	"github.com/taedi90/deck/internal/workspacepaths"
 )
 
 type prepareOptions struct {
@@ -30,7 +31,7 @@ func newPrepareCommand() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().String("root", defaultPreparedRoot("."), "prepared bundle output directory")
+	cmd.Flags().String("root", workspacepaths.DefaultPreparedRoot("."), "prepared bundle output directory")
 	cmd.Flags().Bool("dry-run", false, "print prepare plan without writing files")
 	cmd.Flags().Bool("refresh", false, "re-download artifacts instead of reusing prepared files")
 	cmd.Flags().Bool("clean", false, "remove the prepared directory before writing")

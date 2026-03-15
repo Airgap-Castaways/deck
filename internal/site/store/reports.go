@@ -3,7 +3,6 @@ package store
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -23,7 +22,7 @@ func (s *Store) SaveExecutionReport(sessionID string, report ExecutionReport) er
 		report.SessionID = sessionID
 	}
 	if report.SessionID != sessionID {
-		return fmt.Errorf("report session_id must match %q", sessionID)
+		return conflictError("report session_id must match %q", sessionID)
 	}
 	if _, err := s.requireOpenSession(sessionID); err != nil {
 		return err

@@ -331,25 +331,11 @@ func resolveLocalWorkflowImport(originPath string, importRef string) (string, er
 	if strings.HasPrefix(cleaned, "../") || cleaned == ".." || strings.HasPrefix(cleaned, "/") || cleaned == "" {
 		return "", fmt.Errorf("workflow import path must stay under components root: %s", ref)
 	}
-	workflowRoot, err := localWorkflowRoot(originPath)
+	workflowRoot, err := config.WorkflowRootForPath(originPath)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(workflowRoot, "components", filepath.FromSlash(filepath.Clean(cleaned))), nil
-}
-
-func localWorkflowRoot(localPath string) (string, error) {
-	current := filepath.Dir(localPath)
-	for {
-		if filepath.Base(current) == "workflows" {
-			return current, nil
-		}
-		next := filepath.Dir(current)
-		if next == current {
-			return "", fmt.Errorf("workflow import requires file under workflows/: %s", localPath)
-		}
-		current = next
-	}
 }
 
 func cloneAnyMap(input map[string]any) map[string]any {

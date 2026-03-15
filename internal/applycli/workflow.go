@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 func BuildPrefetchWorkflow(wf *config.Workflow) *config.Workflow {
@@ -15,8 +16,7 @@ func BuildPrefetchWorkflow(wf *config.Workflow) *config.Workflow {
 	prefetchSteps := make([]config.Step, 0)
 	for _, phase := range wf.Phases {
 		for _, step := range phase.Steps {
-			action, _ := step.Spec["action"].(string)
-			if step.Kind == "File" && strings.TrimSpace(action) == "download" {
+			if step.Kind == "File" && workflowexec.InferStepAction(step.Kind, step.Spec) == "download" {
 				prefetchSteps = append(prefetchSteps, step)
 			}
 		}

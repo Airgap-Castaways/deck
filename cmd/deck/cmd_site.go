@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taedi90/deck/internal/applycli"
 	"github.com/taedi90/deck/internal/bundle"
 	sitestore "github.com/taedi90/deck/internal/site/store"
 )
@@ -33,7 +34,7 @@ func executeSiteReleaseImport(root string, releaseID string, bundlePath string, 
 		return err
 	}
 
-	bundleSHA256, err := sha256FileHex(resolvedBundlePath)
+	bundleSHA256, err := applycli.BundleSHA256Hex(resolvedBundlePath)
 	if err != nil {
 		return fmt.Errorf("site release import: read bundle hash: %w", err)
 	}
@@ -48,7 +49,7 @@ func executeSiteReleaseImport(root string, releaseID string, bundlePath string, 
 		return fmt.Errorf("site release import: %w", err)
 	}
 	importedBundlePath := filepath.Join(importRoot, "bundle")
-	if !hasWorkflowDir(importedBundlePath) {
+	if !applycli.HasWorkflowDir(importedBundlePath) {
 		return fmt.Errorf("site release import: extracted bundle missing workflows/: %s", importedBundlePath)
 	}
 

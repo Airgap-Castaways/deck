@@ -296,6 +296,14 @@ func ResolveBundleRoot(positionalBundle string) (string, error) {
 	return "", fmt.Errorf("bundle not found: expected positional bundle path, ./bundle.tar, ./bundle, or current directory with workflows/")
 }
 
+func BundleSHA256Hex(path string) (string, error) {
+	return sha256FileHex(path)
+}
+
+func HasWorkflowDir(root string) bool {
+	return hasWorkflowDir(root)
+}
+
 func resolveBundleCandidate(candidate string, strict bool) (string, error) {
 	resolved, err := filepath.Abs(strings.TrimSpace(candidate))
 	if err != nil {

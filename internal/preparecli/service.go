@@ -14,14 +14,7 @@ import (
 
 	"github.com/taedi90/deck/internal/config"
 	"github.com/taedi90/deck/internal/prepare"
-)
-
-const (
-	workflowRootDir     = "workflows"
-	canonicalPrepareRel = "scenarios/prepare.yaml"
-	canonicalApplyRel   = "scenarios/apply.yaml"
-	workflowVarsRel     = "vars.yaml"
-	preparedDirRel      = "outputs"
+	"github.com/taedi90/deck/internal/workspacepaths"
 )
 
 type Options struct {
@@ -51,7 +44,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
-	workflowRootDirPath, err := locateWorkflowTreeRoot(prepareWorkflowPath)
+	workflowRootDirPath, err := workspacepaths.LocateWorkflowTreeRoot(prepareWorkflowPath)
 	if err != nil {
 		return err
 	}
@@ -65,7 +58,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	resolvedPreparedRoot := strings.TrimSpace(opts.PreparedRoot)
 	if resolvedPreparedRoot == "" {
-		resolvedPreparedRoot = defaultPreparedRoot(".")
+		resolvedPreparedRoot = workspacepaths.DefaultPreparedRoot(".")
 	}
 	resolvedPreparedRootAbs, err := filepath.Abs(resolvedPreparedRoot)
 	if err != nil {
@@ -153,37 +146,8 @@ func printLine(w io.Writer, line string) error {
 	return err
 }
 
-func workflowPath(root string, rel string) string {
-	parts := append([]string{root, workflowRootDir}, strings.Split(filepath.ToSlash(rel), "/")...)
-	return filepath.Join(parts...)
-}
-
-func canonicalPrepareWorkflowPath(root string) string { return workflowPath(root, canonicalPrepareRel) }
-func canonicalApplyWorkflowPath(root string) string   { return workflowPath(root, canonicalApplyRel) }
-func canonicalVarsPath(root string) string            { return workflowPath(root, workflowVarsRel) }
-func defaultPreparedRoot(root string) string          { return filepath.Join(root, preparedDirRel) }
-
-func locateWorkflowTreeRoot(workflowPath string) (string, error) {
-	resolved, err := filepath.Abs(strings.TrimSpace(workflowPath))
-	if err != nil {
-		return "", fmt.Errorf("resolve workflow path: %w", err)
-	}
-	dir := filepath.Dir(resolved)
-	for {
-		if filepath.Base(dir) == workflowRootDir {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return "", fmt.Errorf("workflow path is not under %s/: %s", workflowRootDir, resolved)
-}
-
 func discoverPrepareWorkflow(ctx context.Context) (string, error) {
-	workflowDir := filepath.Join(".", workflowRootDir)
+	workflowDir := filepath.Join(".", workspacepaths.WorkflowRootDir)
 	absWorkflowDir, err := filepath.Abs(workflowDir)
 	if err != nil {
 		return "", fmt.Errorf("resolve workflow directory: %w", err)
@@ -193,7 +157,7 @@ func discoverPrepareWorkflow(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("workflow directory not found: %s", absWorkflowDir)
 	}
 
-	preferred := canonicalPrepareWorkflowPath(filepath.Dir(absWorkflowDir))
+	preferred := workspacepaths.CanonicalPrepareWorkflowPath(filepath.Dir(absWorkflowDir))
 	preferredInfo, statErr := os.Stat(preferred)
 	if statErr != nil || preferredInfo.IsDir() {
 		return "", fmt.Errorf("prepare workflow not found: %s", preferred)
@@ -209,7 +173,7 @@ func discoverPrepareWorkflow(ctx context.Context) (string, error) {
 }
 
 func resolveOptionalApplyWorkflowPath(workflowRootPath string) (string, error) {
-	path := canonicalApplyWorkflowPath(filepath.Dir(workflowRootPath))
+	path := workspacepaths.CanonicalApplyWorkflowPath(filepath.Dir(workflowRootPath))
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -224,7 +188,7 @@ func resolveOptionalApplyWorkflowPath(workflowRootPath string) (string, error) {
 }
 
 func resolveOptionalVarsWorkflowPath(workflowRootPath string) (string, error) {
-	varsPath := canonicalVarsPath(filepath.Dir(workflowRootPath))
+	varsPath := workspacepaths.CanonicalVarsPath(filepath.Dir(workflowRootPath))
 	if info, err := os.Stat(varsPath); err == nil && !info.IsDir() {
 		return varsPath, nil
 	}

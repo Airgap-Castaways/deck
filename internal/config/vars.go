@@ -12,7 +12,7 @@ import (
 
 func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, error) {
 	if origin.localPath != "" {
-		workflowRoot, err := localWorkflowRoot(origin.localPath)
+		workflowRoot, err := WorkflowRootForPath(origin.localPath)
 		varsPath := ""
 		if err == nil {
 			varsPath = filepath.Join(workflowRoot, "vars.yaml")

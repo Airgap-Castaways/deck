@@ -54,14 +54,14 @@ func normalizeComponentImportRef(ref string) (string, error) {
 }
 
 func localComponentsRoot(localPath string) (string, error) {
-	workflowRoot, err := localWorkflowRoot(localPath)
+	workflowRoot, err := WorkflowRootForPath(localPath)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(workflowRoot, "components"), nil
 }
 
-func localWorkflowRoot(localPath string) (string, error) {
+func WorkflowRootForPath(localPath string) (string, error) {
 	current := filepath.Dir(localPath)
 	for {
 		if filepath.Base(current) == "workflows" {

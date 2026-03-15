@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -103,7 +104,7 @@ func TestReportRejectsClosedSession(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected closed-session rejection")
 	}
-	if !strings.Contains(err.Error(), "is closed") {
+	if !errors.Is(err, ErrClosedSession) {
 		t.Fatalf("expected explicit closed-session error, got %v", err)
 	}
 
@@ -111,7 +112,7 @@ func TestReportRejectsClosedSession(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected unknown-session rejection")
 	}
-	if !strings.Contains(err.Error(), "not found") {
+	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected explicit unknown-session error, got %v", err)
 	}
 }
@@ -151,7 +152,7 @@ func TestReportRejectsAssignmentMismatch(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected assignment mismatch rejection")
 	}
-	if !strings.Contains(err.Error(), "assignment mismatch") {
+	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("expected explicit mismatch error, got %v", err)
 	}
 }

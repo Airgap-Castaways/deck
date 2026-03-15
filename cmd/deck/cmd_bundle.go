@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/bundle"
+	"github.com/taedi90/deck/internal/workspacepaths"
 )
 
 func executeInit(output string) error {
@@ -94,9 +95,9 @@ func initTemplateFiles(root string) map[string]string {
 	}, "\n")
 
 	return map[string]string{
-		canonicalVarsPath(root):            "{}\n",
-		canonicalPrepareWorkflowPath(root): prepareScenarioContent,
-		canonicalApplyWorkflowPath(root):   applyScenarioContent,
+		workspacepaths.CanonicalVarsPath(root):                                            "{}\n",
+		workspacepaths.CanonicalPrepareWorkflowPath(root):                                 prepareScenarioContent,
+		workspacepaths.CanonicalApplyWorkflowPath(root):                                   applyScenarioContent,
 		filepath.Join(root, workflowRootDir, workflowComponentsDir, "example-apply.yaml"): applyComponentContent,
 		filepath.Join(root, preparedDirRel, "files", ".keep"):                             "",
 		filepath.Join(root, preparedDirRel, "images", ".keep"):                            "",
