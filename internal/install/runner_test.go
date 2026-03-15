@@ -225,6 +225,16 @@ func TestRun_ManifestIntegrityMismatch(t *testing.T) {
 	}
 }
 
+func TestRun_NoPhasesFails(t *testing.T) {
+	err := Run(context.Background(), &config.Workflow{Version: "v1"}, RunOptions{})
+	if err == nil {
+		t.Fatalf("expected no phases error")
+	}
+	if !strings.Contains(err.Error(), "no phases found") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRun_ResumeFromFailedStep(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state", "state.json")

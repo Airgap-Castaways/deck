@@ -1212,6 +1212,42 @@ func TestRunWorkflowRunDryRunPrintsPlan(t *testing.T) {
 	}
 }
 
+func TestRunWorkflowRunDryRunWithNonInstallPhaseName(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	t.Setenv("HOME", home)
+	bundle := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle workflows: %v", err)
+	}
+
+	wf := writeApplyTrueWorkflowFixture(t, "bootstrap")
+
+	out, err := runWithCapturedStdout([]string{"apply", "--file", wf, "--dry-run", bundle})
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if !strings.Contains(out, "PHASE=bootstrap") {
+		t.Fatalf("expected bootstrap phase line in output, got %q", out)
+	}
+	if !strings.Contains(out, "run-true Command PLAN") {
+		t.Fatalf("expected step plan line in output, got %q", out)
+	}
+
+	planOut, err := runWithCapturedStdout([]string{"plan", "--file", wf})
+	if err != nil {
+		t.Fatalf("expected plan success, got %v", err)
+	}
+	if strings.Contains(planOut, "install phase not found") {
+		t.Fatalf("plan must not require install phase, got %q", planOut)
+	}
+	if !strings.Contains(planOut, "run-true Command RUN") {
+		t.Fatalf("expected plan output, got %q", planOut)
+	}
+}
+
 func TestRunPrepareCreatesPreparedBundleDir(t *testing.T) {
 	root := t.TempDir()
 	workflowsDir := filepath.Join(root, "workflows")
@@ -2760,8 +2796,13 @@ func writeWorkflowYAML(t *testing.T, path string, content string) {
 
 func writeInstallTrueWorkflowFixture(t *testing.T) string {
 	t.Helper()
+	return writeApplyTrueWorkflowFixture(t, "install")
+}
+
+func writeApplyTrueWorkflowFixture(t *testing.T, phaseName string) string {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "install-true.yaml")
-	content := "role: apply\nversion: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: run-true\n        kind: Command\n        spec:\n          command: [\"true\"]\n"
+	content := fmt.Sprintf("role: apply\nversion: v1alpha1\nphases:\n  - name: %s\n    steps:\n      - id: run-true\n        kind: Command\n        spec:\n          command: [\"true\"]\n", phaseName)
 	writeWorkflowYAML(t, path, content)
 	return path
 }
