@@ -28,4 +28,4 @@
 ## Examples
 
 - `examples/README.md`: example workflows to adapt to real procedures
-- `schemas/README.md`: raw schema files and validation entry points
+- `../schemas/README.md`: raw schema files and validation entry points

@@ -77,9 +77,9 @@ func (s *Store) ResolveAssignment(sessionID, nodeID, role string) (Assignment, e
 	}
 
 	if role == "" {
-		return Assignment{}, fmt.Errorf("no assignment matched session %q node_id %q", sessionID, nodeID)
+		return Assignment{}, notFoundError("no assignment matched session %q node_id %q", sessionID, nodeID)
 	}
-	return Assignment{}, fmt.Errorf("no assignment matched session %q node_id %q role %q", sessionID, nodeID, role)
+	return Assignment{}, notFoundError("no assignment matched session %q node_id %q role %q", sessionID, nodeID, role)
 }
 
 func (s *Store) listAssignments(sessionID string) ([]Assignment, error) {

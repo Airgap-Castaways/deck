@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -111,7 +112,7 @@ func (h *serverHandler) handleSiteSessionAssignmentGet(w http.ResponseWriter, r 
 	}
 	assignment, err := h.siteStore.ResolveAssignment(sessionID, nodeID, action)
 	if err != nil {
-		if isNotFoundStoreError(err) {
+		if errors.Is(err, store.ErrNotFound) {
 			h.writeJSONError(w, http.StatusNotFound, err.Error())
 			return
 		}
@@ -132,10 +133,12 @@ func (h *serverHandler) handleSiteSessionReportPost(w http.ResponseWriter, r *ht
 	}
 	if err := h.siteStore.SaveExecutionReport(sessionID, report); err != nil {
 		switch {
-		case strings.Contains(err.Error(), " is closed"):
+		case errors.Is(err, store.ErrClosedSession):
 			h.writeJSONError(w, http.StatusConflict, err.Error())
-		case isNotFoundStoreError(err):
+		case errors.Is(err, store.ErrNotFound):
 			h.writeJSONError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, store.ErrConflict):
+			h.writeJSONError(w, http.StatusConflict, err.Error())
 		default:
 			h.writeJSONError(w, http.StatusBadRequest, err.Error())
 		}
@@ -161,14 +164,6 @@ func (h *serverHandler) handleSiteSessionStatusGet(w http.ResponseWriter, sessio
 	}
 	out := sessionStatusResponse{Session: session, Status: aggregated}
 	h.writeJSON(w, http.StatusOK, out)
-}
-
-func isNotFoundStoreError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, " not found") || strings.Contains(msg, "no assignment matched")
 }
 
 func (h *serverHandler) writeJSONError(w http.ResponseWriter, code int, message string) {

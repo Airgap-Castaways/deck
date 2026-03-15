@@ -34,10 +34,10 @@ func (s *Store) SaveExecutionReport(sessionID string, report ExecutionReport) er
 		return err
 	}
 	if report.AssignmentID != "" && report.AssignmentID != resolved.ID {
-		return fmt.Errorf("report assignment mismatch: node_id %q action %q expected assignment_id %q but got %q", report.NodeID, report.Action, resolved.ID, report.AssignmentID)
+		return conflictError("report assignment mismatch: node_id %q action %q expected assignment_id %q but got %q", report.NodeID, report.Action, resolved.ID, report.AssignmentID)
 	}
 	if resolved.Workflow != "" && report.WorkflowRef != "" && resolved.Workflow != report.WorkflowRef {
-		return fmt.Errorf("report assignment mismatch: node_id %q action %q expected workflow_ref %q but got %q", report.NodeID, report.Action, resolved.Workflow, report.WorkflowRef)
+		return conflictError("report assignment mismatch: node_id %q action %q expected workflow_ref %q but got %q", report.NodeID, report.Action, resolved.Workflow, report.WorkflowRef)
 	}
 	if report.AssignmentID == "" {
 		report.AssignmentID = resolved.ID

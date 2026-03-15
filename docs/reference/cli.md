@@ -17,6 +17,8 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 ## Optional site-local helpers
 
 - `server set`: save a default server URL and optional API token for commands that accept `--server` and `--api-token`
+- `server show`: show the effective saved default server URL and token presence
+- `server unset`: clear the saved default server URL and token
 - `server up`: expose a prepared bundle root over HTTP inside the air gap when a shared local source is useful
 - `server down`: stop a daemonized local server started with `deck server up -d`
 - `server scenarios`: inspect available scenarios from a saved or explicitly chosen server

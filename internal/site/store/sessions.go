@@ -23,7 +23,7 @@ func (s *Store) CreateSession(session Session) error {
 
 	path := filepath.Join(s.sessionDir(session.ID), "session.json")
 	if _, err := os.Stat(path); err == nil {
-		return fmt.Errorf("session %q already exists", session.ID)
+		return alreadyExistsError("session %q already exists", session.ID)
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("check session file: %w", err)
 	}
@@ -73,7 +73,7 @@ func (s *Store) CloseSession(sessionID, closedAt string) (Session, error) {
 		return Session{}, err
 	}
 	if !found {
-		return Session{}, fmt.Errorf("session %q not found", sessionID)
+		return Session{}, notFoundError("session %q not found", sessionID)
 	}
 	session.Status = "closed"
 	session.ClosedAt = strings.TrimSpace(closedAt)
@@ -91,10 +91,10 @@ func (s *Store) requireOpenSession(sessionID string) (Session, error) {
 		return Session{}, err
 	}
 	if !found {
-		return Session{}, fmt.Errorf("session %q not found", sessionID)
+		return Session{}, notFoundError("session %q not found", sessionID)
 	}
 	if strings.EqualFold(strings.TrimSpace(session.Status), "closed") {
-		return Session{}, fmt.Errorf("session %q is closed", sessionID)
+		return Session{}, closedSessionError("session %q is closed", sessionID)
 	}
 	return session, nil
 }

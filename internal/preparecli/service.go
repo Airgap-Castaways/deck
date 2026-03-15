@@ -1,0 +1,291 @@
+package preparecli
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/prepare"
+)
+
+const (
+	workflowRootDir     = "workflows"
+	canonicalPrepareRel = "scenarios/prepare.yaml"
+	canonicalApplyRel   = "scenarios/apply.yaml"
+	workflowVarsRel     = "vars.yaml"
+	preparedDirRel      = "outputs"
+)
+
+type Options struct {
+	PreparedRoot string
+	DryRun       bool
+	Refresh      bool
+	Clean        bool
+	VarOverrides map[string]any
+	Stdout       io.Writer
+}
+
+type preparedManifest struct {
+	Entries []preparedManifestEntry `json:"entries"`
+}
+
+type preparedManifestEntry struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
+}
+
+func Run(ctx context.Context, opts Options) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	prepareWorkflowPath, err := discoverPrepareWorkflow(ctx)
+	if err != nil {
+		return err
+	}
+	workflowRootDirPath, err := locateWorkflowTreeRoot(prepareWorkflowPath)
+	if err != nil {
+		return err
+	}
+	varsWorkflowPath, err := resolveOptionalVarsWorkflowPath(workflowRootDirPath)
+	if err != nil {
+		return err
+	}
+	applyWorkflowPath, err := resolveOptionalApplyWorkflowPath(workflowRootDirPath)
+	if err != nil {
+		return err
+	}
+	resolvedPreparedRoot := strings.TrimSpace(opts.PreparedRoot)
+	if resolvedPreparedRoot == "" {
+		resolvedPreparedRoot = defaultPreparedRoot(".")
+	}
+	resolvedPreparedRootAbs, err := filepath.Abs(resolvedPreparedRoot)
+	if err != nil {
+		return fmt.Errorf("resolve --root: %w", err)
+	}
+
+	if opts.DryRun {
+		for _, line := range []string{
+			fmt.Sprintf("PREPARE_WORKFLOW=%s", filepath.ToSlash(prepareWorkflowPath)),
+			fmt.Sprintf("WORKFLOW_INCLUDE=%s", filepath.ToSlash(prepareWorkflowPath)),
+			fmt.Sprintf("PREPARED_ROOT=%s", filepath.ToSlash(resolvedPreparedRootAbs)),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(resolvedPreparedRootAbs, "packages"))),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(resolvedPreparedRootAbs, "images"))),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(resolvedPreparedRootAbs, "files"))),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(filepath.Dir(resolvedPreparedRootAbs), "deck"))),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(filepath.Dir(resolvedPreparedRootAbs), ".deck", "manifest.json"))),
+		} {
+			if err := printLine(opts.Stdout, line); err != nil {
+				return err
+			}
+		}
+		if varsWorkflowPath != "" {
+			if err := printLine(opts.Stdout, fmt.Sprintf("WORKFLOW_INCLUDE=%s", filepath.ToSlash(varsWorkflowPath))); err != nil {
+				return err
+			}
+		}
+		if applyWorkflowPath != "" {
+			if err := printLine(opts.Stdout, fmt.Sprintf("WORKFLOW_INCLUDE=%s", filepath.ToSlash(applyWorkflowPath))); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if opts.Clean {
+		if err := os.RemoveAll(resolvedPreparedRootAbs); err != nil {
+			return fmt.Errorf("reset prepared root: %w", err)
+		}
+	}
+	if err := os.MkdirAll(resolvedPreparedRootAbs, 0o755); err != nil {
+		return fmt.Errorf("create prepared root: %w", err)
+	}
+
+	prepareWorkflow, err := config.LoadWithOptions(ctx, prepareWorkflowPath, config.LoadOptions{VarOverrides: opts.VarOverrides})
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(prepareWorkflow.Role) != "prepare" {
+		return fmt.Errorf("prepare workflow role must be prepare: %s", prepareWorkflowPath)
+	}
+
+	if err := prepare.Run(ctx, prepareWorkflow, prepare.RunOptions{BundleRoot: resolvedPreparedRootAbs, ForceRedownload: opts.Refresh}); err != nil {
+		return err
+	}
+
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve deck binary path: %w", err)
+	}
+	binaryBytes, err := os.ReadFile(execPath)
+	if err != nil {
+		return fmt.Errorf("read deck binary: %w", err)
+	}
+	workspaceRoot := filepath.Dir(resolvedPreparedRootAbs)
+	if err := writeBytes(filepath.Join(workspaceRoot, "deck"), binaryBytes, 0o755); err != nil {
+		return err
+	}
+
+	manifest, err := buildPreparedManifest(resolvedPreparedRootAbs)
+	if err != nil {
+		return err
+	}
+	if err := writePreparedManifest(filepath.Join(workspaceRoot, ".deck", "manifest.json"), manifest); err != nil {
+		return err
+	}
+
+	return printLine(opts.Stdout, fmt.Sprintf("prepare: ok (%s)", resolvedPreparedRootAbs))
+}
+
+func printLine(w io.Writer, line string) error {
+	if w == nil {
+		w = os.Stdout
+	}
+	_, err := fmt.Fprintln(w, line)
+	return err
+}
+
+func workflowPath(root string, rel string) string {
+	parts := append([]string{root, workflowRootDir}, strings.Split(filepath.ToSlash(rel), "/")...)
+	return filepath.Join(parts...)
+}
+
+func canonicalPrepareWorkflowPath(root string) string { return workflowPath(root, canonicalPrepareRel) }
+func canonicalApplyWorkflowPath(root string) string   { return workflowPath(root, canonicalApplyRel) }
+func canonicalVarsPath(root string) string            { return workflowPath(root, workflowVarsRel) }
+func defaultPreparedRoot(root string) string          { return filepath.Join(root, preparedDirRel) }
+
+func locateWorkflowTreeRoot(workflowPath string) (string, error) {
+	resolved, err := filepath.Abs(strings.TrimSpace(workflowPath))
+	if err != nil {
+		return "", fmt.Errorf("resolve workflow path: %w", err)
+	}
+	dir := filepath.Dir(resolved)
+	for {
+		if filepath.Base(dir) == workflowRootDir {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", fmt.Errorf("workflow path is not under %s/: %s", workflowRootDir, resolved)
+}
+
+func discoverPrepareWorkflow(ctx context.Context) (string, error) {
+	workflowDir := filepath.Join(".", workflowRootDir)
+	absWorkflowDir, err := filepath.Abs(workflowDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve workflow directory: %w", err)
+	}
+	info, err := os.Stat(absWorkflowDir)
+	if err != nil || !info.IsDir() {
+		return "", fmt.Errorf("workflow directory not found: %s", absWorkflowDir)
+	}
+
+	preferred := canonicalPrepareWorkflowPath(filepath.Dir(absWorkflowDir))
+	preferredInfo, statErr := os.Stat(preferred)
+	if statErr != nil || preferredInfo.IsDir() {
+		return "", fmt.Errorf("prepare workflow not found: %s", preferred)
+	}
+	wf, loadErr := config.Load(ctx, preferred)
+	if loadErr != nil {
+		return "", loadErr
+	}
+	if strings.TrimSpace(wf.Role) != "prepare" {
+		return "", fmt.Errorf("prepare workflow role must be prepare: %s", preferred)
+	}
+	return preferred, nil
+}
+
+func resolveOptionalApplyWorkflowPath(workflowRootPath string) (string, error) {
+	path := canonicalApplyWorkflowPath(filepath.Dir(workflowRootPath))
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("apply workflow path is a directory: %s", path)
+	}
+	return path, nil
+}
+
+func resolveOptionalVarsWorkflowPath(workflowRootPath string) (string, error) {
+	varsPath := canonicalVarsPath(filepath.Dir(workflowRootPath))
+	if info, err := os.Stat(varsPath); err == nil && !info.IsDir() {
+		return varsPath, nil
+	}
+	return "", nil
+}
+
+func writeBytes(path string, data []byte, mode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create parent directory for %s: %w", path, err)
+	}
+	if err := os.WriteFile(path, data, mode); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
+func buildPreparedManifest(bundleRoot string) (preparedManifest, error) {
+	entries := make([]preparedManifestEntry, 0)
+	workspaceRoot := filepath.Dir(bundleRoot)
+	for _, root := range []string{"packages", "images", "files"} {
+		rootPath := filepath.Join(bundleRoot, root)
+		if _, err := os.Stat(rootPath); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return preparedManifest{}, err
+		}
+		if err := filepath.WalkDir(rootPath, func(path string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if d.IsDir() {
+				return nil
+			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				return err
+			}
+			rel, err := filepath.Rel(workspaceRoot, path)
+			if err != nil {
+				return err
+			}
+			sum := sha256.Sum256(raw)
+			entries = append(entries, preparedManifestEntry{Path: filepath.ToSlash(rel), SHA256: hex.EncodeToString(sum[:]), Size: info.Size()})
+			return nil
+		}); err != nil {
+			return preparedManifest{}, err
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
+	return preparedManifest{Entries: entries}, nil
+}
+
+func writePreparedManifest(path string, manifest preparedManifest) error {
+	raw, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode prepare manifest: %w", err)
+	}
+	return writeBytes(path, raw, 0o644)
+}

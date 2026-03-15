@@ -37,8 +37,14 @@ type assistedExecutionContext struct {
 	ReportEnded   time.Time
 }
 
+type assistedManifestEntry struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
+}
+
 type assistedManifest struct {
-	Entries []preparedManifestEntry `json:"entries"`
+	Entries []assistedManifestEntry `json:"entries"`
 }
 
 func resolveAssistedExecutionConfig(server, session, apiToken string) (assistedExecutionConfig, bool, error) {

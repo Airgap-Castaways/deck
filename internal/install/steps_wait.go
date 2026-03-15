@@ -7,12 +7,34 @@ import (
 	"os"
 	"os/exec"
 	"time"
+
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
+type waitSpec struct {
+	Action       string   `json:"action"`
+	State        string   `json:"state"`
+	Interval     string   `json:"interval"`
+	PollInterval string   `json:"pollInterval"`
+	InitialDelay string   `json:"initialDelay"`
+	Path         string   `json:"path"`
+	Type         string   `json:"type"`
+	NonEmpty     bool     `json:"nonEmpty"`
+	Name         string   `json:"name"`
+	Command      []string `json:"command"`
+	Address      string   `json:"address"`
+	Port         string   `json:"port"`
+	Timeout      string   `json:"timeout"`
+}
+
 func runWait(parent context.Context, spec map[string]any) error {
-	action := stringValue(spec, "action")
+	decoded, err := workflowexec.DecodeSpec[waitSpec](spec)
+	if err != nil {
+		return fmt.Errorf("decode Wait spec: %w", err)
+	}
+	action := decoded.Action
 	if action == "" {
-		if stringValue(spec, "state") == "absent" {
+		if decoded.State == "absent" {
 			action = "fileAbsent"
 		} else {
 			action = "fileExists"
@@ -22,7 +44,7 @@ func runWait(parent context.Context, spec map[string]any) error {
 		return fmt.Errorf("wait requires action")
 	}
 	interval := 500 * time.Millisecond
-	if raw := firstNonEmpty(stringValue(spec, "interval"), stringValue(spec, "pollInterval")); raw != "" {
+	if raw := firstNonEmpty(decoded.Interval, decoded.PollInterval); raw != "" {
 		parsed, err := time.ParseDuration(raw)
 		if err != nil || parsed <= 0 {
 			return fmt.Errorf("invalid Wait interval %q", raw)
@@ -30,7 +52,7 @@ func runWait(parent context.Context, spec map[string]any) error {
 		interval = parsed
 	}
 	initialDelay := time.Duration(0)
-	if raw := stringValue(spec, "initialDelay"); raw != "" {
+	if raw := decoded.InitialDelay; raw != "" {
 		parsed, err := time.ParseDuration(raw)
 		if err != nil || parsed < 0 {
 			return fmt.Errorf("invalid Wait initialDelay %q", raw)
@@ -50,7 +72,7 @@ func runWait(parent context.Context, spec map[string]any) error {
 		}
 	}
 	for {
-		ok, err := waitConditionMet(ctx, action, spec)
+		ok, err := waitConditionMet(ctx, action, decoded)
 		if err != nil {
 			return err
 		}
@@ -60,9 +82,9 @@ func runWait(parent context.Context, spec map[string]any) error {
 		select {
 		case <-ctx.Done():
 			detail := action
-			if p := stringValue(spec, "path"); p != "" {
+			if p := decoded.Path; p != "" {
 				if action == "fileExists" || action == "fileAbsent" {
-					detail = waitPathExpectedCondition(p, map[string]string{"fileExists": "exists", "fileAbsent": "absent"}[action], waitPathType(spec), boolValue(spec, "nonEmpty"))
+					detail = waitPathExpectedCondition(p, map[string]string{"fileExists": "exists", "fileAbsent": "absent"}[action], waitPathType(decoded), decoded.NonEmpty)
 				} else {
 					detail = fmt.Sprintf("%s (%s)", action, p)
 				}
@@ -73,14 +95,14 @@ func runWait(parent context.Context, spec map[string]any) error {
 	}
 }
 
-func waitConditionMet(ctx context.Context, action string, spec map[string]any) (bool, error) {
+func waitConditionMet(ctx context.Context, action string, spec waitSpec) (bool, error) {
 	switch action {
 	case "fileExists":
-		return waitPathConditionMet(stringValue(spec, "path"), "exists", waitPathType(spec), boolValue(spec, "nonEmpty"))
+		return waitPathConditionMet(spec.Path, "exists", waitPathType(spec), spec.NonEmpty)
 	case "fileAbsent":
-		return waitPathConditionMet(stringValue(spec, "path"), "absent", waitPathType(spec), false)
+		return waitPathConditionMet(spec.Path, "absent", waitPathType(spec), false)
 	case "serviceActive":
-		name := stringValue(spec, "name")
+		name := spec.Name
 		if name == "" {
 			return false, fmt.Errorf("wait action serviceActive requires name")
 		}
@@ -93,7 +115,7 @@ func waitConditionMet(ctx context.Context, action string, spec map[string]any) (
 		}
 		return false, err
 	case "commandSuccess":
-		cmd := stringSlice(spec["command"])
+		cmd := spec.Command
 		if len(cmd) == 0 {
 			return false, fmt.Errorf("wait action commandSuccess requires command")
 		}
@@ -106,11 +128,11 @@ func waitConditionMet(ctx context.Context, action string, spec map[string]any) (
 		}
 		return false, err
 	case "tcpPortClosed", "tcpPortOpen":
-		address := stringValue(spec, "address")
+		address := spec.Address
 		if address == "" {
 			address = "127.0.0.1"
 		}
-		port := stringValue(spec, "port")
+		port := spec.Port
 		if port == "" {
 			return false, fmt.Errorf("wait action %s requires port", action)
 		}
@@ -131,8 +153,8 @@ func waitConditionMet(ctx context.Context, action string, spec map[string]any) (
 	}
 }
 
-func waitPathType(spec map[string]any) string {
-	pathType := stringValue(spec, "type")
+func waitPathType(spec waitSpec) string {
+	pathType := spec.Type
 	if pathType == "" {
 		pathType = "any"
 	}
