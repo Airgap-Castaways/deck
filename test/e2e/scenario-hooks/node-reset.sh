@@ -156,8 +156,8 @@ node_reset_prepare() {
 }
 
 node_reset_apply() {
-  local workflow_url="${SERVER_URL}/files/workflows/scenarios/worker-join.yaml"
-  local node_reset_url="${SERVER_URL}/files/workflows/scenarios/node-reset.yaml"
+  local workflow_url="${SERVER_URL}/workflows/scenarios/worker-join.yaml"
+  local node_reset_url="${SERVER_URL}/workflows/scenarios/node-reset.yaml"
   local release="${OFFLINE_RELEASE_WORKER}"
   local os_family="debian"
   local server_no_scheme="${SERVER_URL#http://}"

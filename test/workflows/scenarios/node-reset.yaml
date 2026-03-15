@@ -1,19 +1,19 @@
 role: apply
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 vars:
   clusterName: node-reset
   resetReason: node-reset-acceptance
   resetStatePath: /tmp/deck/reports/reset-state.txt
 phases:
-  - name: install
+  - name: host-prereqs
     imports:
-      - path: ../components/k8s/prereq.yaml
-      - path: ../components/node-reset.yaml
+      - path: scenario/reset-host-prereqs.yaml
+  - name: reset
+    imports:
+      - path: scenario/reset-actions.yaml
+  - name: verify
     steps:
       - id: reset-summary
-        apiVersion: deck/v1alpha1
         kind: Command
         spec:
           command:

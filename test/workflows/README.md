@@ -14,7 +14,11 @@ Each canonical scenario keeps scenario meaning in one entry workflow file instea
 
 - `scenarios/<name>.yaml`, the scenario entry workflow passed to `deck lint --file` and the scenario runner
 - `components/...`, reusable workflow fragments imported by the scenario entrypoints
-- `vars.yaml`, shared workflow defaults overridden by scenario `vars:` blocks and CLI `--var`
+- `vars.yaml`, shared workflow defaults loaded automatically and overridden by scenario `vars:` blocks and CLI `--var`
+- scenario entrypoints should split major execution stages into separate phases so readers can follow the scenario flow at a glance
+- each phase can still hide lower-level detail behind intent-focused scenario components when needed
+
+Component imports resolve from the `components/` root, so workflows should use paths like `k8s/prereq.yaml` or `scenario/bootstrap-runtime.yaml` instead of `../components/...`.
 
 E2E harness sidecars live outside the workflow tree:
 

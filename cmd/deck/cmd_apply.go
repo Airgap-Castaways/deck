@@ -59,7 +59,7 @@ func newPlanCommand() *cobra.Command {
 	cmd.Flags().String("server", "", "site server URL (defaults to saved server when --session is set)")
 	cmd.Flags().String("session", "", "site session id for assisted mode")
 	cmd.Flags().String("api-token", "", "bearer token for assisted site APIs (defaults to saved token)")
-	cmd.Flags().String("phase", "install", "phase name to plan")
+	cmd.Flags().String("phase", "", "phase name to plan (defaults to all phases)")
 	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	return cmd
@@ -89,7 +89,7 @@ func executeDiff(workflowPath, selectedPhase, output string, varOverrides map[st
 		WorkflowPath:                 workflowPath,
 		VarOverrides:                 varOverrides,
 		SelectedPhase:                selectedPhase,
-		DefaultPhase:                 "install",
+		DefaultPhase:                 "",
 		BuildExecutionWorkflow:       true,
 		ResolveStatePath:             true,
 		StatePathFromExecutionTarget: true,
@@ -585,7 +585,7 @@ func newApplyCommand() *cobra.Command {
 	cmd.Flags().String("server", "", "site server URL (defaults to saved server when --session is set)")
 	cmd.Flags().String("session", "", "site session id for assisted mode")
 	cmd.Flags().String("api-token", "", "bearer token for assisted site APIs (defaults to saved token)")
-	cmd.Flags().String("phase", "install", "phase name to execute")
+	cmd.Flags().String("phase", "", "phase name to execute (defaults to all phases)")
 	cmd.Flags().Bool("prefetch", false, "execute File download steps before other steps")
 	cmd.Flags().Bool("dry-run", false, "print apply plan without executing steps")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
@@ -627,7 +627,7 @@ func executeApply(workflowPath, bundleRoot, selectedPhase string, prefetch, dryR
 		AllowRemoteWorkflow:          true,
 		VarOverrides:                 varOverrides,
 		SelectedPhase:                selectedPhase,
-		DefaultPhase:                 "install",
+		DefaultPhase:                 "",
 		BuildExecutionWorkflow:       true,
 		ResolveStatePath:             true,
 		StatePathFromExecutionTarget: false,
@@ -792,6 +792,18 @@ func buildApplyExecutionWorkflow(wf *config.Workflow, phaseName string) (*config
 	if wf == nil {
 		return nil, errors.New("workflow is nil")
 	}
+	if strings.TrimSpace(phaseName) == "" {
+		phases := make([]config.Phase, len(wf.Phases))
+		copy(phases, wf.Phases)
+		return &config.Workflow{
+			Role:           wf.Role,
+			Version:        wf.Version,
+			Vars:           wf.Vars,
+			Phases:         phases,
+			StateKey:       wf.StateKey,
+			WorkflowSHA256: wf.WorkflowSHA256,
+		}, nil
+	}
 	selectedPhase, found := findWorkflowPhaseByName(wf, phaseName)
 	if !found {
 		return nil, fmt.Errorf("%s phase not found", phaseName)
@@ -801,20 +813,18 @@ func buildApplyExecutionWorkflow(wf *config.Workflow, phaseName string) (*config
 		Role:           wf.Role,
 		Version:        wf.Version,
 		Vars:           wf.Vars,
-		Phases:         []config.Phase{{Name: "install", Steps: selectedPhase.Steps}},
+		Phases:         []config.Phase{{Name: selectedPhase.Name, Steps: selectedPhase.Steps}},
 		StateKey:       wf.StateKey,
 		WorkflowSHA256: wf.WorkflowSHA256,
 	}, nil
 }
 
 func runApplyDryRun(wf *config.Workflow, selectedPhaseName string, bundleRoot string) error {
-	phaseView, found := findWorkflowPhaseByName(wf, "install")
-	if !found {
+	if wf == nil || len(wf.Phases) == 0 {
+		if selectedPhaseName == "" {
+			return errors.New("no phases found")
+		}
 		return fmt.Errorf("%s phase not found", selectedPhaseName)
-	}
-
-	if err := stdoutPrintf("PHASE=%s\n", selectedPhaseName); err != nil {
-		return err
 	}
 
 	state, err := loadInstallDryRunState(wf)
@@ -838,25 +848,30 @@ func runApplyDryRun(wf *config.Workflow, selectedPhaseName string, bundleRoot st
 	}
 	ctxData := map[string]any{"bundleRoot": bundleRoot, "stateFile": statePath}
 
-	for _, step := range phaseView.Steps {
-		if completed[step.ID] {
-			if err := stdoutPrintf("%s %s SKIP (completed)\n", step.ID, step.Kind); err != nil {
+	for _, phase := range wf.Phases {
+		if err := stdoutPrintf("PHASE=%s\n", phase.Name); err != nil {
+			return err
+		}
+		for _, step := range phase.Steps {
+			if completed[step.ID] {
+				if err := stdoutPrintf("%s %s SKIP (completed)\n", step.ID, step.Kind); err != nil {
+					return err
+				}
+				continue
+			}
+
+			ok, evalErr := install.EvaluateWhen(step.When, wf.Vars, runtimeVars, ctxData)
+			if evalErr != nil {
+				return fmt.Errorf("WHEN_EVAL_ERROR: step %s (%s): %w", step.ID, step.Kind, evalErr)
+			}
+
+			status := "PLAN"
+			if !ok {
+				status = "SKIP"
+			}
+			if err := stdoutPrintf("%s %s %s\n", step.ID, step.Kind, status); err != nil {
 				return err
 			}
-			continue
-		}
-
-		ok, evalErr := install.EvaluateWhen(step.When, wf.Vars, runtimeVars, ctxData)
-		if evalErr != nil {
-			return fmt.Errorf("WHEN_EVAL_ERROR: step %s (%s): %w", step.ID, step.Kind, evalErr)
-		}
-
-		status := "PLAN"
-		if !ok {
-			status = "SKIP"
-		}
-		if err := stdoutPrintf("%s %s %s\n", step.ID, step.Kind, status); err != nil {
-			return err
 		}
 	}
 

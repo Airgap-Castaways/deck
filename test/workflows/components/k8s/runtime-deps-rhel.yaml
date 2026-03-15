@@ -4,7 +4,6 @@ phases:
   - name: install
     steps:
       - id: install-runtime-deps-rhel
-        apiVersion: deck/v1alpha1
         kind: Artifacts
         timeout: 20m
         spec:
@@ -62,14 +61,12 @@ phases:
               extract:
                 destination: /opt/cni/bin
       - id: symlink-runc-rhel
-        apiVersion: deck/v1alpha1
         kind: Symlink
         spec:
           path: /usr/bin/runc
           target: /usr/local/sbin/runc
           force: true
       - id: write-containerd-unit-rhel
-        apiVersion: deck/v1alpha1
         kind: SystemdUnit
         spec:
           path: /etc/systemd/system/containerd.service

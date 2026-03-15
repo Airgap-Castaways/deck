@@ -26,10 +26,10 @@ func TestWorkflowIntegrationBootstrap(t *testing.T) {
 	if got := wf.Vars["clusterName"]; got != "bootstrap-cli" {
 		t.Fatalf("expected CLI var precedence, got %v", got)
 	}
-	if got := len(wf.Phases); got != 1 {
-		t.Fatalf("expected 1 phase, got %d", got)
+	if got := len(wf.Phases); got != 4 {
+		t.Fatalf("expected 4 phases, got %d", got)
 	}
-	steps := wf.Phases[0].Steps
+	steps := flattenWorkflowSteps(wf.Phases)
 	prereq := stepIndexByID(steps, "prep-disable-swap")
 	reset := stepIndexByID(steps, "bootstrap-reset-preflight")
 	init := stepIndexByID(steps, "bootstrap-init")
@@ -44,7 +44,10 @@ func TestWorkflowIntegrationBootstrap(t *testing.T) {
 
 	out := runWorkflowApplyDryRun(t, root, workflowPath)
 	requireDryRunOutput(t, out,
-		"PHASE=install",
+		"PHASE=host-prereqs",
+		"PHASE=runtime",
+		"PHASE=bootstrap",
+		"PHASE=verify",
 		"prep-disable-swap Swap PLAN",
 		"bootstrap-reset-preflight Kubeadm PLAN",
 		"bootstrap-init Kubeadm PLAN",
@@ -65,12 +68,14 @@ func TestWorkflowIntegrationWorkerJoin(t *testing.T) {
 		t.Fatalf("expected CLI joinFile override, got %v", got)
 	}
 	if got := wf.Vars["joinSource"]; got != "cluster-file" {
-		t.Fatalf("expected scenario var from varImports, got %v", got)
+		t.Fatalf("expected scenario var from vars.yaml, got %v", got)
 	}
 
 	out := runWorkflowApplyDryRun(t, root, workflowPath)
 	requireDryRunOutput(t, out,
-		"PHASE=install",
+		"PHASE=host-prereqs",
+		"PHASE=runtime",
+		"PHASE=join",
 		"prep-disable-swap Swap PLAN",
 		"fetch-join-file File PLAN",
 		"join-worker Kubeadm PLAN",
@@ -87,12 +92,14 @@ func TestWorkflowIntegrationNodeReset(t *testing.T) {
 	}
 
 	if got := wf.Vars["allowDestructive"]; got != "false" {
-		t.Fatalf("expected non-destructive default from varImports, got %v", got)
+		t.Fatalf("expected non-destructive default from vars.yaml, got %v", got)
 	}
 
 	out := runWorkflowApplyDryRun(t, root, workflowPath)
 	requireDryRunOutput(t, out,
-		"PHASE=install",
+		"PHASE=host-prereqs",
+		"PHASE=reset",
+		"PHASE=verify",
 		"prep-disable-swap Swap PLAN",
 		"reset-node Kubeadm SKIP",
 		"reset-runtime-ready Command PLAN",
@@ -103,7 +110,11 @@ func TestWorkflowIntegrationNodeReset(t *testing.T) {
 
 func TestWorkflowIntegrationRejectsBrokenImports(t *testing.T) {
 	dir := t.TempDir()
-	workflowPath := filepath.Join(dir, "broken.yaml")
+	workflowsDir := filepath.Join(dir, "workflows")
+	if err := os.MkdirAll(workflowsDir, 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	workflowPath := filepath.Join(workflowsDir, "broken.yaml")
 	content := "role: apply\nversion: v1alpha1\nimports:\n  - missing/import.yaml\nphases:\n  - name: install\n    steps: []\n"
 	if err := os.WriteFile(workflowPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write broken workflow: %v", err)
@@ -133,8 +144,9 @@ phases:
         apiVersion: deck/v1alpha1
         kind: File
         spec:
-          sourcePath: /tmp/nonexistent-join.txt
-          destinationPath: /tmp/published-join.txt
+          action: copy
+          src: /tmp/nonexistent-join.txt
+          dest: /tmp/published-join.txt
       - id: bootstrap-report
         apiVersion: deck/v1alpha1
         kind: Command
@@ -158,6 +170,7 @@ phases:
         apiVersion: deck/v1alpha1
         kind: File
         spec:
+          action: download
           source:
             url: http://127.0.0.1:9/join.txt
           output:
@@ -169,7 +182,7 @@ phases:
           command: ["bash", "-lc", "test -s /tmp/deck/join.txt"]
 `)
 	err := runWorkflowApplyExpectError(t, root, workflowPath)
-	if !strings.Contains(err, "fetch-join-file") && !strings.Contains(err, "DownloadFile") {
+	if !strings.Contains(err, "fetch-join-file") && !strings.Contains(err, "File") {
 		t.Fatalf("expected join fetch failure, got %s", err)
 	}
 }
@@ -256,6 +269,14 @@ func stepIndexByID(steps []config.Step, id string) int {
 		}
 	}
 	return -1
+}
+
+func flattenWorkflowSteps(phases []config.Phase) []config.Step {
+	steps := make([]config.Step, 0)
+	for _, phase := range phases {
+		steps = append(steps, phase.Steps...)
+	}
+	return steps
 }
 
 func runWorkflowApplyDryRun(t *testing.T, repoRoot, workflowPath string, vars ...string) string {

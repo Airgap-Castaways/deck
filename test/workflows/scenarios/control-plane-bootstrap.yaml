@@ -1,23 +1,21 @@
 role: apply
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 vars:
   clusterName: bootstrap-root
   enableBootstrap: "true"
 phases:
-  - name: install
+  - name: host-prereqs
     imports:
-      - path: ../components/k8s/prereq.yaml
-      - path: ../components/repo/offline-repo-debian.yaml
-      - path: ../components/k8s/runtime-deps-debian.yaml
-      - path: ../components/k8s/k8s-binaries.yaml
-      - path: ../components/k8s/containerd-kubelet.yaml
-      - path: ../components/bootstrap.yaml
-      - path: ../components/k8s/cni.yaml
+      - path: scenario/bootstrap-host-prereqs.yaml
+  - name: runtime
+    imports:
+      - path: scenario/bootstrap-runtime.yaml
+  - name: bootstrap
+    imports:
+      - path: scenario/bootstrap-cluster.yaml
+  - name: verify
     steps:
       - id: bootstrap-report
-        apiVersion: deck/v1alpha1
         kind: Command
         spec:
           timeout: 10m

@@ -349,7 +349,7 @@ func TestServe_StaticReadOnly(t *testing.T) {
 		if indexRR.Code != http.StatusOK {
 			t.Fatalf("expected workflow index 200, got %d", indexRR.Code)
 		}
-		if strings.Contains(indexRR.Body.String(), "apply.yaml") {
+		if strings.Contains(indexRR.Body.String(), "apply") {
 			t.Fatalf("expected ignored workflow to be absent from index, got %q", indexRR.Body.String())
 		}
 	})

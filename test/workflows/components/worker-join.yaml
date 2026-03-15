@@ -2,7 +2,6 @@ role: apply
 version: v1alpha1
 steps:
   - id: fetch-join-file
-    apiVersion: deck/v1alpha1
     kind: File
     spec:
       action: download
@@ -11,7 +10,6 @@ steps:
       output:
         path: "{{ .vars.joinFile }}"
   - id: join-worker
-    apiVersion: deck/v1alpha1
     kind: Kubeadm
     spec:
       action: join

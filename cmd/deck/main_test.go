@@ -396,10 +396,10 @@ func TestHealthUsesSavedDefaultServer(t *testing.T) {
 	}
 }
 
-func TestServerWorkflowsUsesSavedDefaultServer(t *testing.T) {
+func TestServerScenariosUsesSavedDefaultServer(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "server.json")
 	t.Setenv("DECK_SERVER_CONFIG_PATH", configPath)
-	items := []string{"workflows/scenarios/prepare.yaml", "workflows/scenarios/apply.yaml"}
+	items := []string{"prepare", "apply"}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/workflows/index.json" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -413,9 +413,9 @@ func TestServerWorkflowsUsesSavedDefaultServer(t *testing.T) {
 		t.Fatalf("server set failed: %v", err)
 	}
 
-	out, err := runWithCapturedStdout([]string{"server", "workflows"})
+	out, err := runWithCapturedStdout([]string{"server", "scenarios"})
 	if err != nil {
-		t.Fatalf("server workflows with saved default failed: %v", err)
+		t.Fatalf("server scenarios with saved default failed: %v", err)
 	}
 	expected := strings.Join(items, "\n") + "\n"
 	if out != expected {
@@ -423,9 +423,9 @@ func TestServerWorkflowsUsesSavedDefaultServer(t *testing.T) {
 	}
 }
 
-func TestServerWorkflowsWithoutSavedServerReportsClearGuidance(t *testing.T) {
+func TestServerScenariosWithoutSavedServerReportsClearGuidance(t *testing.T) {
 	t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "server.json"))
-	_, err := runWithCapturedStdout([]string{"server", "workflows"})
+	_, err := runWithCapturedStdout([]string{"server", "scenarios"})
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -500,7 +500,7 @@ func TestMigratedLeafHelpContracts(t *testing.T) {
 		args []string
 		want string
 	}{
-		{args: []string{"help", "server", "workflows"}, want: "deck server workflows [flags]"},
+		{args: []string{"help", "server", "scenarios"}, want: "deck server scenarios [flags]"},
 		{args: []string{"help", "lint"}, want: "deck lint [scenario] [flags]"},
 		{args: []string{"help", "server", "health"}, want: "deck server health [flags]"},
 	}
@@ -831,9 +831,9 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 	})
 }
 
-func TestServerWorkflowsIgnoresLegacyPositionalArgShape(t *testing.T) {
+func TestServerScenariosIgnoresLegacyPositionalArgShape(t *testing.T) {
 	t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "server.json"))
-	_, err := runWithCapturedStdout([]string{"server", "workflows", "extra"})
+	_, err := runWithCapturedStdout([]string{"server", "scenarios", "extra"})
 	if err == nil {
 		t.Fatalf("expected missing server error")
 	}
@@ -842,9 +842,9 @@ func TestServerWorkflowsIgnoresLegacyPositionalArgShape(t *testing.T) {
 	}
 }
 
-func TestServerWorkflowsExtraPositionalStopsFlagParsingLikeLegacy(t *testing.T) {
+func TestServerScenariosExtraPositionalStopsFlagParsingLikeLegacy(t *testing.T) {
 	t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "server.json"))
-	_, err := runWithCapturedStdout([]string{"server", "workflows", "extra", "--output", "invalid"})
+	_, err := runWithCapturedStdout([]string{"server", "scenarios", "extra", "--output", "invalid"})
 	if err == nil {
 		t.Fatalf("expected missing server error")
 	}
@@ -1051,23 +1051,19 @@ func TestInit(t *testing.T) {
 			filepath.Join("workflows", "scenarios", "prepare.yaml"): strings.Join([]string{
 				"role: prepare",
 				"version: v1alpha1",
-				"varImports:",
-				"  - ../vars.yaml",
 				"phases:",
 				"  - name: prepare",
 				"    imports:",
-				"      - path: ../components/example-prepare.yaml",
+				"      - path: example-prepare.yaml",
 				"",
 			}, "\n"),
 			filepath.Join("workflows", "scenarios", "apply.yaml"): strings.Join([]string{
 				"role: apply",
 				"version: v1alpha1",
-				"varImports:",
-				"  - ../vars.yaml",
 				"phases:",
 				"  - name: install",
 				"    imports:",
-				"      - path: ../components/example-apply.yaml",
+				"      - path: example-apply.yaml",
 				"",
 			}, "\n"),
 			filepath.Join("workflows", "components", "example-prepare.yaml"): "role: prepare\nversion: v1alpha1\nsteps: []\n",
@@ -1235,8 +1231,6 @@ func TestRunPrepareCreatesPreparedBundleDir(t *testing.T) {
 	packPath := filepath.Join(workflowsDir, "scenarios", "prepare.yaml")
 	packBody := fmt.Sprintf(`role: prepare
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 phases:
   - name: prepare
     steps:
@@ -1253,7 +1247,7 @@ phases:
 	if err := os.WriteFile(packPath, []byte(packBody), 0o644); err != nil {
 		t.Fatalf("write prepare workflow: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nsteps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
 		t.Fatalf("write apply workflow: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("kubernetesVersion: v1.30.1\n"), 0o644); err != nil {
@@ -1302,10 +1296,10 @@ func TestRunPrepareDryRunDoesNotWrite(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
 		t.Fatalf("write prepare workflow: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nsteps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
 		t.Fatalf("write apply workflow: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("x: y\n"), 0o644); err != nil {
@@ -1341,7 +1335,7 @@ func TestRunPrepareSucceedsWithoutApplyWorkflow(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
 		t.Fatalf("write prepare workflow: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("x: y\n"), 0o644); err != nil {
@@ -1392,8 +1386,6 @@ func TestRunPrepareVarFlagOverridesWorkflowVars(t *testing.T) {
 	packPath := filepath.Join(workflowsDir, "scenarios", "prepare.yaml")
 	packBody := fmt.Sprintf(`role: prepare
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 vars:
   relPath: default.bin
 phases:
@@ -1414,7 +1406,7 @@ phases:
 	if err := os.WriteFile(packPath, []byte(packBody), 0o644); err != nil {
 		t.Fatalf("write prepare workflow: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nsteps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
 		t.Fatalf("write apply workflow: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("kubernetesVersion: v1.30.1\n"), 0o644); err != nil {
@@ -1687,8 +1679,6 @@ func TestApplyRemoteWorkflow(t *testing.T) {
 		logPath := filepath.Join(t.TempDir(), "remote-vars.log")
 		workflowBody := fmt.Sprintf(`role: apply
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 phases:
   - name: install
     steps:
@@ -1999,7 +1989,7 @@ func TestAssistedDoctorUsesLocalEngine(t *testing.T) {
 
 	localRepo := t.TempDir()
 	reportPath := filepath.Join(t.TempDir(), "doctor-assist.json")
-	workflowBody := "role: apply\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nphases:\n  - name: install\n    steps:\n      - id: doctor-check\n        kind: File\n        spec:\n          source:\n            path: files/dummy.txt\n          fetch:\n            sources:\n              - type: local\n                path: \"{{ .vars.localRepo }}\"\n          output:\n            path: files/dummy.txt\n"
+	workflowBody := "role: apply\nversion: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: doctor-check\n        kind: File\n        spec:\n          source:\n            path: files/dummy.txt\n          fetch:\n            sources:\n              - type: local\n                path: \"{{ .vars.localRepo }}\"\n          output:\n            path: files/dummy.txt\n"
 	varsBody := fmt.Sprintf("localRepo: %q\n", localRepo)
 	manifestBody := "{\n  \"entries\": []\n}\n"
 	uploaded := false
@@ -2493,8 +2483,6 @@ func TestBundledApplyWorksFromBundleDir(t *testing.T) {
 	}
 	packBody := fmt.Sprintf(`role: prepare
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 phases:
   - name: prepare
     steps:
@@ -2514,8 +2502,6 @@ phases:
 	applyLogPath := filepath.Join(tmpRoot, "apply.log")
 	applyBody := fmt.Sprintf(`role: apply
 version: v1alpha1
-varImports:
-  - ../vars.yaml
 phases:
   - name: install
     steps:
@@ -2837,7 +2823,7 @@ func writeApplyBundleTarFixture(t *testing.T, archivePath string) {
 	}{
 		{name: "bundle/workflows/", mode: 0o755},
 		{name: "bundle/workflows/scenarios/", mode: 0o755},
-		{name: "bundle/workflows/scenarios/apply.yaml", body: []byte("role: apply\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nsteps: []\n"), mode: 0o644},
+		{name: "bundle/workflows/scenarios/apply.yaml", body: []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), mode: 0o644},
 		{name: "bundle/workflows/vars.yaml", body: []byte("{}\n"), mode: 0o644},
 	}
 
@@ -2863,7 +2849,7 @@ func writeApplyBundleTarFixture(t *testing.T, archivePath string) {
 
 func writeSiteReleaseBundleTarFixture(t *testing.T, archivePath string) {
 	t.Helper()
-	workflowBody := []byte("role: apply\nversion: v1alpha1\nvarImports:\n  - ../vars.yaml\nsteps: []\n")
+	workflowBody := []byte("role: apply\nversion: v1alpha1\nsteps: []\n")
 	workflowSum := sha256.Sum256(workflowBody)
 	manifest := fmt.Sprintf("{\n  \"entries\": [\n    {\"path\": %q, \"sha256\": %q, \"size\": %d}\n  ]\n}\n", "workflows/scenarios/apply.yaml", hex.EncodeToString(workflowSum[:]), len(workflowBody))
 
@@ -2909,8 +2895,8 @@ func writeSiteReleaseBundleTarFixture(t *testing.T, archivePath string) {
 	}
 }
 
-func TestServerWorkflows(t *testing.T) {
-	items := []string{"workflows/scenarios/prepare.yaml", "workflows/scenarios/apply.yaml"}
+func TestServerScenarios(t *testing.T) {
+	items := []string{"prepare", "apply"}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Fatalf("unexpected method: %s", r.Method)
@@ -2924,7 +2910,7 @@ func TestServerWorkflows(t *testing.T) {
 	defer srv.Close()
 
 	t.Run("text", func(t *testing.T) {
-		out, err := runWithCapturedStdout([]string{"server", "workflows", "--server", srv.URL})
+		out, err := runWithCapturedStdout([]string{"server", "scenarios", "--server", srv.URL})
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
@@ -2935,7 +2921,7 @@ func TestServerWorkflows(t *testing.T) {
 	})
 
 	t.Run("json", func(t *testing.T) {
-		out, err := runWithCapturedStdout([]string{"server", "workflows", "--server", srv.URL, "-o", "json"})
+		out, err := runWithCapturedStdout([]string{"server", "scenarios", "--server", srv.URL, "-o", "json"})
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
@@ -2950,7 +2936,7 @@ func TestServerWorkflows(t *testing.T) {
 
 	t.Run("without server returns guidance error", func(t *testing.T) {
 		t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "server.json"))
-		_, err := runWithCapturedStdout([]string{"server", "workflows"})
+		_, err := runWithCapturedStdout([]string{"server", "scenarios"})
 		if err == nil {
 			t.Fatalf("expected error, got success")
 		}
@@ -2965,7 +2951,7 @@ func TestServerWorkflows(t *testing.T) {
 		}))
 		defer missing.Close()
 
-		textOut, err := runWithCapturedStdout([]string{"server", "workflows", "--server", missing.URL})
+		textOut, err := runWithCapturedStdout([]string{"server", "scenarios", "--server", missing.URL})
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
@@ -2973,7 +2959,7 @@ func TestServerWorkflows(t *testing.T) {
 			t.Fatalf("expected empty text output, got %q", textOut)
 		}
 
-		jsonOut, err := runWithCapturedStdout([]string{"server", "workflows", "--server", missing.URL, "-o", "json"})
+		jsonOut, err := runWithCapturedStdout([]string{"server", "scenarios", "--server", missing.URL, "-o", "json"})
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}

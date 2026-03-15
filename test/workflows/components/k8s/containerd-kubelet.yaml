@@ -4,7 +4,6 @@ phases:
   - name: install
     steps:
       - id: configure-containerd-runtime
-        apiVersion: deck/v1alpha1
         kind: Containerd
         spec:
           path: /etc/containerd/config.toml
@@ -17,9 +16,9 @@ phases:
               capabilities: [pull, resolve]
               skipVerify: true
       - id: update-containerd-pause-image
-        apiVersion: deck/v1alpha1
         kind: File
         spec:
+          action: edit
           path: /etc/containerd/config.toml
           backup: false
           edits:
@@ -27,24 +26,20 @@ phases:
               match: registry.k8s.io/pause:3.8
               with: registry.k8s.io/pause:3.9
       - id: restart-containerd
-        apiVersion: deck/v1alpha1
         kind: Service
         spec:
           name: containerd
           enabled: true
           state: restarted
       - id: ensure-kubelet-state-dir
-        apiVersion: deck/v1alpha1
         kind: Directory
         spec:
           path: /var/lib/kubelet
       - id: ensure-kubelet-defaults-dir
-        apiVersion: deck/v1alpha1
         kind: Directory
         spec:
           path: /etc/default
       - id: setup-kubelet-systemd
-        apiVersion: deck/v1alpha1
         kind: SystemdUnit
         spec:
           path: /etc/systemd/system/kubelet.service
