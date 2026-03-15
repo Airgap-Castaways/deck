@@ -10,24 +10,32 @@ import (
 )
 
 func TestCollectArchive(t *testing.T) {
-	t.Run("creates archive with bundle files", func(t *testing.T) {
+	t.Run("creates archive with workspace files", func(t *testing.T) {
 		root := t.TempDir()
-		bundleRoot := filepath.Join(root, "bundle")
-		if err := os.MkdirAll(filepath.Join(bundleRoot, "files"), 0o755); err != nil {
-			t.Fatalf("mkdir bundle files: %v", err)
+		if err := os.MkdirAll(filepath.Join(root, "outputs", "files"), 0o755); err != nil {
+			t.Fatalf("mkdir outputs files: %v", err)
 		}
-		if err := os.MkdirAll(filepath.Join(bundleRoot, ".deck"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, ".deck"), 0o755); err != nil {
 			t.Fatalf("mkdir manifest dir: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(bundleRoot, ".deck", "manifest.json"), []byte(`{"entries":[]}`), 0o644); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+			t.Fatalf("mkdir workflows: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, ".deck", "manifest.json"), []byte(`{"entries":[]}`), 0o644); err != nil {
 			t.Fatalf("write manifest: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(bundleRoot, "files", "a.txt"), []byte("hello"), 0o644); err != nil {
-			t.Fatalf("write bundle file: %v", err)
+		if err := os.WriteFile(filepath.Join(root, "outputs", "files", "a.txt"), []byte("hello"), 0o644); err != nil {
+			t.Fatalf("write output file: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+			t.Fatalf("write workflow: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "deck"), []byte("bin"), 0o755); err != nil {
+			t.Fatalf("write deck: %v", err)
 		}
 
 		out := filepath.Join(root, "bundle.tar")
-		if err := CollectArchive(bundleRoot, out); err != nil {
+		if err := CollectArchive(root, out); err != nil {
 			t.Fatalf("collect archive: %v", err)
 		}
 
@@ -35,29 +43,24 @@ func TestCollectArchive(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read tar entries: %v", err)
 		}
-		if !containsName(names, "bundle/.deck/manifest.json") {
-			t.Fatalf("expected bundle/.deck/manifest.json in archive, got %#v", names)
-		}
-		if !containsName(names, "bundle/files/a.txt") {
-			t.Fatalf("expected bundle/files/a.txt in archive, got %#v", names)
+		for _, want := range []string{"bundle/.deck/manifest.json", "bundle/outputs/files/a.txt", "bundle/workflows/scenarios/apply.yaml", "bundle/deck"} {
+			if !containsName(names, want) {
+				t.Fatalf("expected %s in archive, got %#v", want, names)
+			}
 		}
 	})
 
-	t.Run("excludes output when output inside bundle root", func(t *testing.T) {
+	t.Run("excludes output when output inside workspace root", func(t *testing.T) {
 		root := t.TempDir()
-		bundleRoot := filepath.Join(root, "bundle")
-		if err := os.MkdirAll(bundleRoot, 0o755); err != nil {
-			t.Fatalf("mkdir bundle root: %v", err)
-		}
-		if err := os.MkdirAll(filepath.Join(bundleRoot, ".deck"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, ".deck"), 0o755); err != nil {
 			t.Fatalf("mkdir manifest dir: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(bundleRoot, ".deck", "manifest.json"), []byte(`{"entries":[]}`), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, ".deck", "manifest.json"), []byte(`{"entries":[]}`), 0o644); err != nil {
 			t.Fatalf("write manifest: %v", err)
 		}
 
-		out := filepath.Join(bundleRoot, "bundle.tar")
-		if err := CollectArchive(bundleRoot, out); err != nil {
+		out := filepath.Join(root, "bundle.tar")
+		if err := CollectArchive(root, out); err != nil {
 			t.Fatalf("collect archive: %v", err)
 		}
 
@@ -71,35 +74,62 @@ func TestCollectArchive(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("honors deckignore", func(t *testing.T) {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "outputs", "files"), 0o755); err != nil {
+			t.Fatalf("mkdir outputs files: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(root, ".deck"), 0o755); err != nil {
+			t.Fatalf("mkdir manifest dir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, ".deck", "manifest.json"), []byte(`{"entries":[]}`), 0o644); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, ".deckignore"), []byte("outputs/files/\n"), 0o644); err != nil {
+			t.Fatalf("write .deckignore: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "outputs", "files", "a.txt"), []byte("hello"), 0o644); err != nil {
+			t.Fatalf("write output file: %v", err)
+		}
+
+		out := filepath.Join(root, "bundle.tar")
+		if err := CollectArchive(root, out); err != nil {
+			t.Fatalf("collect archive: %v", err)
+		}
+		names, err := tarEntryNames(out)
+		if err != nil {
+			t.Fatalf("read tar entries: %v", err)
+		}
+		if containsName(names, "bundle/outputs/files/a.txt") {
+			t.Fatalf("expected outputs/files/a.txt to be ignored, got %#v", names)
+		}
+	})
 }
 
-func TestBundleTarPrefix(t *testing.T) {
+func TestBundleTarRootRelative(t *testing.T) {
 	root := t.TempDir()
-	bundleRoot := filepath.Join(root, "bundle")
-	if err := os.MkdirAll(filepath.Join(bundleRoot, "files"), 0o755); err != nil {
-		t.Fatalf("mkdir bundle files: %v", err)
+	if err := os.MkdirAll(filepath.Join(root, "outputs", "files"), 0o755); err != nil {
+		t.Fatalf("mkdir outputs files: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(bundleRoot, ".deck"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".deck"), 0o755); err != nil {
 		t.Fatalf("mkdir manifest dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(bundleRoot, ".deck", "manifest.json"), []byte(`{"entries":[]}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".deck", "manifest.json"), []byte(`{"entries":[]}`), 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(bundleRoot, "files", "a.txt"), []byte("hello"), 0o644); err != nil {
-		t.Fatalf("write bundle file: %v", err)
+	if err := os.WriteFile(filepath.Join(root, "outputs", "files", "a.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write output file: %v", err)
 	}
 
 	archivePath := filepath.Join(root, "bundle.tar")
-	if err := CollectArchive(bundleRoot, archivePath); err != nil {
+	if err := CollectArchive(root, archivePath); err != nil {
 		t.Fatalf("collect archive: %v", err)
 	}
 
 	names, err := tarEntryNames(archivePath)
 	if err != nil {
 		t.Fatalf("read tar entries: %v", err)
-	}
-	if len(names) == 0 {
-		t.Fatal("expected archive entries")
 	}
 	for _, name := range names {
 		if !strings.HasPrefix(name, "bundle/") {
@@ -113,15 +143,10 @@ func TestBundleTarPrefix(t *testing.T) {
 	}
 
 	if _, err := os.Stat(filepath.Join(dest, "bundle", ".deck", "manifest.json")); err != nil {
-		t.Fatalf("expected imported bundle manifest: %v", err)
+		t.Fatalf("expected imported manifest: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dest, "bundle", "files", "a.txt")); err != nil {
+	if _, err := os.Stat(filepath.Join(dest, "bundle", "outputs", "files", "a.txt")); err != nil {
 		t.Fatalf("expected imported bundle file: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dest, "manifest.json")); err == nil {
-		t.Fatal("manifest.json at archive root must not be extracted")
-	} else if !os.IsNotExist(err) {
-		t.Fatalf("stat root manifest: %v", err)
 	}
 }
 

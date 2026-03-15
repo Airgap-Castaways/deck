@@ -5,23 +5,15 @@ phases:
     steps:
       - id: install-runtime-deps-rhel
         apiVersion: deck/v1alpha1
-        kind: Artifacts
+        kind: InstallArtifacts
         timeout: 20m
         spec:
-          fetch:
-            sources:
-              - type: online
-                url: http://{{ .vars.serverURL }}
           artifacts:
             - source:
                 amd64:
-                  bundle:
-                    root: files
-                    path: bin/linux/amd64/containerd.tar.gz
+                  url: http://{{ .vars.serverURL }}/files/bin/linux/amd64/containerd.tar.gz
                 arm64:
-                  bundle:
-                    root: files
-                    path: bin/linux/arm64/containerd.tar.gz
+                  url: http://{{ .vars.serverURL }}/files/bin/linux/arm64/containerd.tar.gz
               skipIfPresent:
                 path: /usr/local/bin/containerd
                 executable: true
@@ -53,13 +45,9 @@ phases:
                 mode: "0755"
             - source:
                 amd64:
-                  bundle:
-                    root: files
-                    path: bin/linux/amd64/runc
+                  url: http://{{ .vars.serverURL }}/files/bin/linux/amd64/runc
                 arm64:
-                  bundle:
-                    root: files
-                    path: bin/linux/arm64/runc
+                  url: http://{{ .vars.serverURL }}/files/bin/linux/arm64/runc
               skipIfPresent:
                 path: /usr/local/sbin/runc
                 executable: true
@@ -68,13 +56,9 @@ phases:
                 mode: "0755"
             - source:
                 amd64:
-                  bundle:
-                    root: files
-                    path: bin/linux/amd64/cni-plugins.tgz
+                  url: http://{{ .vars.serverURL }}/files/bin/linux/amd64/cni-plugins.tgz
                 arm64:
-                  bundle:
-                    root: files
-                    path: bin/linux/arm64/cni-plugins.tgz
+                  url: http://{{ .vars.serverURL }}/files/bin/linux/arm64/cni-plugins.tgz
               extract:
                 destination: /opt/cni/bin
       - id: symlink-runc-rhel

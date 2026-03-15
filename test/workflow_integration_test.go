@@ -46,9 +46,9 @@ func TestWorkflowIntegrationBootstrap(t *testing.T) {
 	requireDryRunOutput(t, out,
 		"PHASE=install",
 		"prep-disable-swap Swap PLAN",
-		"bootstrap-reset-preflight Kubeadm PLAN",
-		"bootstrap-init Kubeadm PLAN",
-		"bootstrap-report Command PLAN",
+		"bootstrap-reset-preflight KubeadmReset PLAN",
+		"bootstrap-init KubeadmInit PLAN",
+		"bootstrap-report RunCommand PLAN",
 	)
 }
 
@@ -65,15 +65,15 @@ func TestWorkflowIntegrationWorkerJoin(t *testing.T) {
 		t.Fatalf("expected CLI joinFile override, got %v", got)
 	}
 	if got := wf.Vars["joinSource"]; got != "cluster-file" {
-		t.Fatalf("expected scenario var from vars.yaml, got %v", got)
+		t.Fatalf("expected scenario var from varImports, got %v", got)
 	}
 
 	out := runWorkflowApplyDryRun(t, root, workflowPath)
 	requireDryRunOutput(t, out,
 		"PHASE=install",
 		"prep-disable-swap Swap PLAN",
-		"fetch-join-file File PLAN",
-		"join-worker Kubeadm PLAN",
+		"fetch-join-file DownloadFile PLAN",
+		"join-worker KubeadmJoin PLAN",
 	)
 }
 
@@ -87,27 +87,23 @@ func TestWorkflowIntegrationNodeReset(t *testing.T) {
 	}
 
 	if got := wf.Vars["allowDestructive"]; got != "false" {
-		t.Fatalf("expected non-destructive default from vars.yaml, got %v", got)
+		t.Fatalf("expected non-destructive default from varImports, got %v", got)
 	}
 
 	out := runWorkflowApplyDryRun(t, root, workflowPath)
 	requireDryRunOutput(t, out,
 		"PHASE=install",
 		"prep-disable-swap Swap PLAN",
-		"reset-node Kubeadm SKIP",
-		"reset-runtime-ready Command PLAN",
-		"reset-state-report Command PLAN",
-		"reset-summary Command PLAN",
+		"reset-node KubeadmReset SKIP",
+		"reset-runtime-ready RunCommand PLAN",
+		"reset-state-report RunCommand PLAN",
+		"reset-summary RunCommand PLAN",
 	)
 }
 
 func TestWorkflowIntegrationRejectsBrokenImports(t *testing.T) {
 	dir := t.TempDir()
-	workflowsDir := filepath.Join(dir, "workflows")
-	if err := os.MkdirAll(workflowsDir, 0o755); err != nil {
-		t.Fatalf("mkdir workflows: %v", err)
-	}
-	workflowPath := filepath.Join(workflowsDir, "broken.yaml")
+	workflowPath := filepath.Join(dir, "broken.yaml")
 	content := "role: apply\nversion: v1alpha1\nimports:\n  - missing/import.yaml\nphases:\n  - name: install\n    steps: []\n"
 	if err := os.WriteFile(workflowPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write broken workflow: %v", err)
@@ -130,24 +126,23 @@ phases:
     steps:
       - id: bootstrap-init
         apiVersion: deck/v1alpha1
-        kind: Command
+        kind: RunCommand
         spec:
           command: ["bash", "-lc", "true"]
       - id: bootstrap-publish-join
         apiVersion: deck/v1alpha1
-        kind: File
+        kind: CopyFile
         spec:
-          action: copy
           sourcePath: /tmp/nonexistent-join.txt
           destinationPath: /tmp/published-join.txt
       - id: bootstrap-report
         apiVersion: deck/v1alpha1
-        kind: Command
+        kind: RunCommand
         spec:
           command: ["bash", "-lc", "test -f /tmp/published-join.txt"]
 `)
 	err := runWorkflowApplyExpectError(t, root, workflowPath)
-	if !strings.Contains(err, "bootstrap-publish-join") && !strings.Contains(err, "File") {
+	if !strings.Contains(err, "bootstrap-publish-join") && !strings.Contains(err, "CopyFile") {
 		t.Fatalf("expected join publish failure, got %s", err)
 	}
 }
@@ -161,21 +156,20 @@ phases:
     steps:
       - id: fetch-join-file
         apiVersion: deck/v1alpha1
-        kind: File
+        kind: DownloadFile
         spec:
-          action: download
           source:
             url: http://127.0.0.1:9/join.txt
           output:
             path: /tmp/deck/join.txt
       - id: join-worker
         apiVersion: deck/v1alpha1
-        kind: Command
+        kind: RunCommand
         spec:
           command: ["bash", "-lc", "test -s /tmp/deck/join.txt"]
 `)
 	err := runWorkflowApplyExpectError(t, root, workflowPath)
-	if !strings.Contains(err, "fetch-join-file") && !strings.Contains(err, "File") {
+	if !strings.Contains(err, "fetch-join-file") && !strings.Contains(err, "DownloadFile") {
 		t.Fatalf("expected join fetch failure, got %s", err)
 	}
 }
@@ -189,12 +183,12 @@ phases:
     steps:
       - id: reset-runtime-ready
         apiVersion: deck/v1alpha1
-        kind: Command
+        kind: RunCommand
         spec:
           command: ["bash", "-lc", "echo runtime unhealthy >&2; exit 1"]
       - id: reset-state-report
         apiVersion: deck/v1alpha1
-        kind: Command
+        kind: RunCommand
         spec:
           command: ["bash", "-lc", "echo should-not-run"]
 `)

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func runContainerdConfigure(ctx context.Context, spec map[string]any) error {
+func runContainerdConfig(ctx context.Context, spec map[string]any) error {
 	path := stringValue(spec, "path")
 	if path == "" {
 		path = "/etc/containerd/config.toml"

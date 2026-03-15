@@ -5,16 +5,15 @@ phases:
     steps:
       - id: apply-offline-repo-config-debian
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: RepoConfig
         spec:
-          action: configure
           format: apt
           path: /etc/apt/sources.list.d/offline.list
           replaceExisting: true
           repositories:
             - type: deb
               trusted: true
-              baseurl: http://{{ .vars.serverURL  }}/packages/deb/{{ .vars.release  }}
+              baseurl: http://{{ .vars.serverURL  }}/packages/apt/{{ .vars.release  }}
               suite: ./
       - id: refresh-apt-package-cache
         apiVersion: deck/v1alpha1
@@ -23,5 +22,3 @@ phases:
           manager: apt
           clean: true
           update: true
-          restrictToRepos:
-            - /etc/apt/sources.list.d/offline.list

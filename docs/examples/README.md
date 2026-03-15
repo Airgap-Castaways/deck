@@ -15,7 +15,7 @@ They are meant to show how `deck` keeps operational work readable: use typed ste
 
 - these are not remote orchestration playbooks
 - these do not require a shared server to be useful
-- `Command` is not the preferred first choice just because it is flexible
+- `RunCommand` is not the preferred first choice just because it is flexible
 
 ## Files
 
@@ -28,10 +28,10 @@ They are meant to show how `deck` keeps operational work readable: use typed ste
 
 ## Validation
 
-Use `deck validate` for schema-level checks:
+Use `deck lint` for schema-level checks:
 
 ```bash
-deck validate --file docs/examples/offline-k8s-control-plane.yaml
+deck lint --file docs/examples/offline-k8s-control-plane.yaml
 ```
 
 `cases.tsv` remains the lightweight example index used by repository maintainers.

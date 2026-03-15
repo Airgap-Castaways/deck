@@ -38,7 +38,7 @@ type assistedExecutionContext struct {
 }
 
 type assistedManifest struct {
-	Entries []packManifestEntry `json:"entries"`
+	Entries []preparedManifestEntry `json:"entries"`
 }
 
 func resolveAssistedExecutionConfig(server, session, apiToken string) (assistedExecutionConfig, bool, error) {

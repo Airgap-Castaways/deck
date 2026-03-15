@@ -243,7 +243,7 @@ func mergeArchiveToLocal(bundleData stagedBundle, root string, dryRun bool) (Mer
 	if err != nil {
 		return MergeReport{}, err
 	}
-	mergedIndex := NormalizeScenarioIndex(existingIndex, workflowPaths)
+	mergedIndex := mergeWorkflowIndex(existingIndex, workflowPaths)
 	indexAction := "overwrite"
 	if !exists {
 		indexAction = "upload"
@@ -331,17 +331,17 @@ func writeLocalWorkflowIndex(indexPath string, items []string) error {
 	return nil
 }
 
-func NormalizeScenarioIndex(existing, incoming []string) []string {
+func mergeWorkflowIndex(existing, incoming []string) []string {
 	set := map[string]struct{}{}
 	for _, item := range existing {
-		cleaned := NormalizeScenarioIndexItem(item)
+		cleaned := normalizeWorkflowIndexPath(item)
 		if cleaned == "" {
 			continue
 		}
 		set[cleaned] = struct{}{}
 	}
 	for _, item := range incoming {
-		cleaned := NormalizeScenarioIndexItem(item)
+		cleaned := normalizeWorkflowIndexPath(item)
 		if cleaned == "" {
 			continue
 		}
@@ -356,39 +356,13 @@ func NormalizeScenarioIndex(existing, incoming []string) []string {
 	return merged
 }
 
-func NormalizeScenarioIndexItem(raw string) string {
+func normalizeWorkflowIndexPath(raw string) string {
 	cleaned := path.Clean(strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/")))
 	if cleaned == "" || cleaned == "." {
 		return ""
 	}
 	cleaned = strings.TrimPrefix(cleaned, "/")
-	hadScenariosPrefix := false
-	if strings.HasPrefix(cleaned, "workflows/") {
-		cleaned = strings.TrimPrefix(cleaned, "workflows/")
-		if !strings.HasPrefix(cleaned, "scenarios/") {
-			return ""
-		}
-	}
-	if strings.HasPrefix(cleaned, "scenarios/") {
-		cleaned = strings.TrimPrefix(cleaned, "scenarios/")
-		hadScenariosPrefix = true
-	}
-	if strings.HasPrefix(cleaned, "components/") || strings.Contains(cleaned, "/components/") || cleaned == "index.json" {
-		return ""
-	}
-	if strings.HasSuffix(cleaned, ".yaml") {
-		if !hadScenariosPrefix {
-			return ""
-		}
-		cleaned = strings.TrimSuffix(cleaned, ".yaml")
-	}
-	if strings.HasSuffix(cleaned, ".yml") {
-		if !hadScenariosPrefix {
-			return ""
-		}
-		cleaned = strings.TrimSuffix(cleaned, ".yml")
-	}
-	if cleaned == "" {
+	if cleaned == "workflows" || !strings.HasPrefix(cleaned, "workflows/") || !strings.HasSuffix(cleaned, ".yaml") {
 		return ""
 	}
 	return cleaned

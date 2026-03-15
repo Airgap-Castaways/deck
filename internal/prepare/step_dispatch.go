@@ -1,43 +1,40 @@
 package prepare
 
-import (
-	"context"
-	"fmt"
-
-	"github.com/taedi90/deck/internal/workflowexec"
-)
+import "context"
 
 func runPrepareStep(ctx context.Context, runner CommandRunner, bundleRoot, kind string, rendered map[string]any, opts RunOptions) ([]string, map[string]any, error) {
-	if !workflowexec.StepAllowedForRole("prepare", kind, rendered) {
-		return nil, nil, fmt.Errorf("%s: unsupported step kind %s", errCodePrepareKindUnsupported, kind)
-	}
-
 	switch kind {
-	case "File":
-		f, err := runFileDownload(ctx, bundleRoot, rendered, opts)
+	case "DownloadFile":
+		f, err := runDownloadFile(ctx, bundleRoot, rendered, opts)
 		if err != nil {
 			return nil, nil, err
 		}
 		return []string{f}, map[string]any{"path": f, "artifacts": []string{f}}, nil
-	case "Packages":
-		files, err := runPackagesDownload(ctx, runner, bundleRoot, rendered, "packages", opts)
+	case "DownloadPackages":
+		files, err := runDownloadPackages(ctx, runner, bundleRoot, rendered, "packages", opts)
 		if err != nil {
 			return nil, nil, err
 		}
 		return files, map[string]any{"artifacts": files}, nil
-	case "Image":
-		files, err := runImageDownload(ctx, runner, bundleRoot, rendered, opts)
+	case "DownloadK8sPackages":
+		files, err := runDownloadK8sPackages(ctx, runner, bundleRoot, rendered, opts)
 		if err != nil {
 			return nil, nil, err
 		}
 		return files, map[string]any{"artifacts": files}, nil
-	case "Inspection":
+	case "DownloadImages":
+		files, err := runDownloadImages(ctx, runner, bundleRoot, rendered, opts)
+		if err != nil {
+			return nil, nil, err
+		}
+		return files, map[string]any{"artifacts": files}, nil
+	case "CheckHost":
 		outputs, err := runCheckHost(runner, rendered)
 		if err != nil {
 			return nil, nil, err
 		}
 		return nil, outputs, nil
 	default:
-		return nil, nil, fmt.Errorf("%s: unsupported step kind %s", errCodePrepareKindUnsupported, kind)
+		return nil, map[string]any{}, nil
 	}
 }

@@ -5,16 +5,15 @@ phases:
     steps:
       - id: apply-offline-repo-config-rhel
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: RepoConfig
         spec:
-          action: configure
           format: yum
           path: /etc/yum.repos.d/deck-offline.repo
           replaceExisting: true
           repositories:
             - id: deck-os
               name: deck-os
-              baseurl: http://{{ .vars.serverURL  }}/packages/rpm/{{ .vars.release  }}
+              baseurl: http://{{ .vars.serverURL  }}/packages/yum/{{ .vars.release  }}
               enabled: true
               gpgcheck: false
       - id: refresh-dnf-package-cache
@@ -24,5 +23,3 @@ phases:
           manager: dnf
           clean: true
           update: true
-          restrictToRepos:
-            - deck-os

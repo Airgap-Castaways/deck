@@ -24,7 +24,7 @@ type ResolveOptions struct {
 }
 
 const (
-	defaultHTTPMaxBytes = int64(256 << 20) // 256MiB
+	defaultHTTPMaxBytes = int64(32 << 20) // 32MiB
 	defaultHTTPTimeout  = 30 * time.Second
 )
 

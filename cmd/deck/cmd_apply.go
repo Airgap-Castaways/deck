@@ -579,7 +579,7 @@ func newApplyCommand() *cobra.Command {
 	cmd.Flags().String("session", "", "site session id for assisted mode")
 	cmd.Flags().String("api-token", "", "bearer token for assisted site APIs (defaults to saved token)")
 	cmd.Flags().String("phase", "install", "phase name to execute")
-	cmd.Flags().Bool("prefetch", false, "execute File download steps before other steps")
+	cmd.Flags().Bool("prefetch", false, "execute DownloadFile steps before other steps")
 	cmd.Flags().Bool("dry-run", false, "print apply plan without executing steps")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	return cmd
@@ -760,7 +760,7 @@ func buildApplyPrefetchWorkflow(wf *config.Workflow) *config.Workflow {
 	prefetchSteps := make([]config.Step, 0)
 	for _, phase := range wf.Phases {
 		for _, step := range phase.Steps {
-			if step.Kind == "File" && prefetchFileAction(step.Spec) == "download" {
+			if step.Kind == "DownloadFile" {
 				prefetchSteps = append(prefetchSteps, step)
 			}
 		}
@@ -778,18 +778,6 @@ func buildApplyPrefetchWorkflow(wf *config.Workflow) *config.Workflow {
 		StateKey:       wf.StateKey,
 		WorkflowSHA256: wf.WorkflowSHA256,
 	}
-}
-
-func prefetchFileAction(spec map[string]any) string {
-	if spec != nil {
-		if action, ok := spec["action"].(string); ok && action != "" {
-			return action
-		}
-		if spec["source"] != nil || spec["output"] != nil {
-			return "download"
-		}
-	}
-	return "install"
 }
 
 func buildApplyExecutionWorkflow(wf *config.Workflow, phaseName string) (*config.Workflow, error) {
@@ -910,7 +898,7 @@ func resolveApplyBundleRoot(positionalBundle string) (string, error) {
 		return resolveApplyBundleCandidate(positionalBundle, true)
 	}
 
-	for _, candidate := range []string{"./bundle.tar", "./bundle", "."} {
+	for _, candidate := range []string{"./bundle.tar", "."} {
 		resolved, err := resolveApplyBundleCandidate(candidate, false)
 		if err != nil {
 			return "", err
@@ -1023,12 +1011,12 @@ func hasWorkflowDir(root string) bool {
 func discoverApplyWorkflow(bundleRoot string) (string, error) {
 	ctx := context.Background()
 
-	workflowDir := filepath.Join(bundleRoot, "workflows")
+	workflowDir := filepath.Join(bundleRoot, workflowRootDir)
 	if !hasWorkflowDir(bundleRoot) {
 		return "", fmt.Errorf("workflow directory not found: %s", workflowDir)
 	}
 
-	preferred := filepath.Join(workflowDir, "apply.yaml")
+	preferred := canonicalApplyWorkflowPath(bundleRoot)
 	if info, err := os.Stat(preferred); err == nil && !info.IsDir() {
 		wf, loadErr := config.Load(ctx, preferred)
 		if loadErr != nil {
@@ -1078,44 +1066,61 @@ func discoverApplyWorkflow(bundleRoot string) (string, error) {
 	return matches[0], nil
 }
 
-func executeValidate(file string, scenario string) error {
-	resolved, err := resolveValidateTarget(strings.TrimSpace(file), strings.TrimSpace(scenario))
+func executeLint(root string, file string) error {
+	resolvedFile := strings.TrimSpace(file)
+	if resolvedFile != "" {
+		if isLocalComponentWorkflowPath(resolvedFile) {
+			return fmt.Errorf("lint entrypoints must live under workflows/scenarios/: %s", resolvedFile)
+		}
+		if isLocalScenarioWorkflowPath(resolvedFile) {
+			files, err := validate.Entrypoint(resolvedFile)
+			if err != nil {
+				return err
+			}
+			return stdoutPrintf("lint: ok (%d workflows)\n", len(files))
+		}
+		if err := validate.File(resolvedFile); err != nil {
+			return err
+		}
+		wf, err := config.Load(context.Background(), resolvedFile)
+		if err != nil {
+			return err
+		}
+		if err := validate.Workflow(resolvedFile, wf); err != nil {
+			return err
+		}
+		return stdoutPrintf("lint: ok (%s)\n", resolvedFile)
+	}
+
+	files, err := validate.Workspace(root)
 	if err != nil {
 		return err
 	}
-
-	if err := validate.File(resolved); err != nil {
-		return err
-	}
-
-	return stdoutPrintln("validate: ok")
+	return stdoutPrintf("lint: ok (%d workflows)\n", len(files))
 }
 
-func resolveValidateTarget(file string, scenario string) (string, error) {
-	if file != "" {
-		return file, nil
+func isLocalComponentWorkflowPath(path string) bool {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" || strings.Contains(trimmed, "://") {
+		return false
 	}
-	if scenario == "" {
-		return "", errors.New("--file (or -f) is required or provide a scenario name")
+	resolved, err := filepath.Abs(trimmed)
+	if err != nil {
+		return false
 	}
-	if candidate, ok := resolveScenarioPath(scenario); ok {
-		return candidate, nil
-	}
-	return "", fmt.Errorf("scenario not found under workflows/scenarios: %s", scenario)
+	marker := string(filepath.Separator) + workflowRootDir + string(filepath.Separator) + workflowComponentsDir + string(filepath.Separator)
+	return strings.Contains(resolved, marker)
 }
 
-func resolveScenarioPath(name string) (string, bool) {
-	trimmed := strings.TrimSpace(name)
-	if trimmed == "" || strings.Contains(trimmed, "..") || strings.Contains(trimmed, "\\") {
-		return "", false
+func isLocalScenarioWorkflowPath(path string) bool {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" || strings.Contains(trimmed, "://") {
+		return false
 	}
-	workflowDir := filepath.Join(".", "workflows", "scenarios")
-	for _, suffix := range []string{".yaml", ".yml"} {
-		candidate := filepath.Join(workflowDir, trimmed+suffix)
-		info, err := os.Stat(candidate)
-		if err == nil && !info.IsDir() {
-			return candidate, true
-		}
+	resolved, err := filepath.Abs(trimmed)
+	if err != nil {
+		return false
 	}
-	return "", false
+	marker := string(filepath.Separator) + workflowRootDir + string(filepath.Separator) + workflowScenariosDir + string(filepath.Separator)
+	return strings.Contains(resolved, marker)
 }

@@ -39,7 +39,7 @@
 - 절차가 길어질수록 리뷰 품질이 빠르게 떨어집니다.
 - 재사용, 검증, step 단위 reasoning이 약해집니다.
 
-`deck`은 shell을 완전히 없애려는 도구가 아닙니다. 절차를 더 잘 보이게 구조화하고, `Command`는 기본 작성 방식이 아니라 escape hatch로 남겨둡니다.
+`deck`은 shell을 완전히 없애려는 도구가 아닙니다. 절차를 더 잘 보이게 구조화하고, `RunCommand`는 기본 작성 방식이 아니라 escape hatch로 남겨둡니다.
 
 ## Core flow
 
@@ -51,7 +51,7 @@
 
 ## Minimal workflow
 
-일반적인 호스트 변경에는 typed step을 우선 사용하고, 적절한 step kind가 없을 때만 `Command`를 사용하세요.
+일반적인 호스트 변경에는 typed step을 우선 사용하고, 적절한 step kind가 없을 때만 `RunCommand`를 사용하세요.
 
 ```yaml
 role: apply
@@ -59,9 +59,8 @@ version: v1alpha1
 steps:
   - id: write-repo-config
     apiVersion: deck/v1alpha1
-    kind: File
+    kind: WriteFile
     spec:
-      action: install
       path: /etc/example.repo
       content: |
         [offline-base]
@@ -93,11 +92,12 @@ deck --help
 
 ```bash
 deck init --out ./demo
-deck validate --file ./demo/workflows/apply.yaml
-deck validate --file ./demo/workflows/prepare.yaml
+deck lint
+deck lint --file ./demo/workflows/scenarios/apply.yaml
 
 cd ./demo
-deck prepare --out ./bundle.tar
+deck prepare
+deck bundle build --out ./bundle.tar
 deck apply
 ```
 
@@ -126,7 +126,7 @@ deck apply
 
 ```bash
 go test ./...
-go run ./cmd/deck validate --file <workflow.yaml>
+go run ./cmd/deck lint
 
 # linux host with libvirt-backed vagrant
 bash test/e2e/vagrant/run-scenario.sh --scenario k8s-control-plane-bootstrap

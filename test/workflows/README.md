@@ -12,7 +12,7 @@
 
 Each canonical scenario keeps scenario meaning in one entry workflow file instead of spreading it across per-scenario subdirectories:
 
-- `scenarios/<name>.yaml`, the scenario entry workflow passed to `deck validate` and the scenario runner
+- `scenarios/<name>.yaml`, the scenario entry workflow passed to `deck lint --file` and the scenario runner
 - `components/...`, reusable workflow fragments imported by the scenario entrypoints
 - `vars.yaml`, shared workflow defaults overridden by scenario `vars:` blocks and CLI `--var`
 
@@ -21,4 +21,4 @@ E2E harness sidecars live outside the workflow tree:
 - `test/e2e/scenario-meta/<name>.env`, VM topology and verify-stage metadata
 - `test/e2e/scenario-hooks/<name>.sh`, scenario-specific VM helper hooks
 
-`scenarios/prepare.yaml` is the shared prepare entrypoint used to build the prepared bundle cache for the regression scenarios. Scenario imports resolve from `components/` using component-relative paths.
+`scenarios/prepare.yaml` is the shared `prepare` entrypoint used to build the prepared bundle cache for the regression scenarios.

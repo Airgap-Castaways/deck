@@ -20,15 +20,13 @@ func runPackageCache(spec map[string]any) error {
 	clean := boolValue(spec, "clean")
 	update := boolValue(spec, "update")
 	if !clean && !update {
-		return fmt.Errorf("%s: PackageCache requires clean and/or update", errCodeInstallPackageCacheManagerInvalid)
+		return fmt.Errorf("%s: PackageCache requires clean and/or update", errCodeInstallPackageCacheMgr)
 	}
-	policy := packageRepoPolicyFromSpec(spec)
 
 	return runPackageCacheCommands(
 		manager,
 		clean,
 		update,
-		policy,
 		commandTimeoutWithDefault(spec, defaultPackageCacheTimeout),
 		packageCacheRunTimedCommand,
 		"package cache refresh",
@@ -51,7 +49,7 @@ func resolvePackageCacheManager(spec map[string]any) (string, error) {
 		}
 		return repoConfigFormatToPackageManager(autoFormat), nil
 	default:
-		return "", fmt.Errorf("%s: PackageCache manager must be one of auto, apt, dnf", errCodeInstallPackageCacheManagerInvalid)
+		return "", fmt.Errorf("%s: PackageCache manager must be one of auto, apt, dnf", errCodeInstallPackageCacheMgr)
 	}
 }
 
@@ -66,7 +64,6 @@ func runPackageCacheCommands(
 	manager string,
 	clean bool,
 	update bool,
-	policy packageRepoPolicy,
 	timeout time.Duration,
 	runner func(name string, args []string, timeout time.Duration) error,
 	timeoutContext string,
@@ -84,37 +81,29 @@ func runPackageCacheCommands(
 
 	switch strings.TrimSpace(manager) {
 	case "apt":
-		repoArgs, cleanup, err := aptRepoArgs(policy)
-		if err != nil {
-			return err
-		}
-		if cleanup != nil {
-			defer cleanup()
-		}
 		if clean {
-			if err := run("apt-get", append(append([]string{}, repoArgs...), "clean")); err != nil {
+			if err := run("apt-get", []string{"clean"}); err != nil {
 				return err
 			}
 		}
 		if update {
-			if err := run("apt-get", append(append([]string{}, repoArgs...), "update")); err != nil {
+			if err := run("apt-get", []string{"update"}); err != nil {
 				return err
 			}
 		}
 	case "dnf":
-		repoArgs := dnfRepoArgs(policy)
 		if clean {
-			if err := run("dnf", append(append([]string{}, repoArgs...), "clean", "all")); err != nil {
+			if err := run("dnf", []string{"clean", "all"}); err != nil {
 				return err
 			}
 		}
 		if update {
-			if err := run("dnf", append(append([]string{}, repoArgs...), "makecache", "-y")); err != nil {
+			if err := run("dnf", []string{"makecache", "-y"}); err != nil {
 				return err
 			}
 		}
 	default:
-		return fmt.Errorf("%s: unsupported package cache manager %q", errCodeInstallPackageCacheManagerInvalid, manager)
+		return fmt.Errorf("%s: unsupported package cache manager %q", errCodeInstallPackageCacheMgr, manager)
 	}
 
 	return nil

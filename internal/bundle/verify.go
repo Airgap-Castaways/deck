@@ -314,7 +314,6 @@ func normalizeTarBundleEntry(raw string) (string, error) {
 	if !strings.HasPrefix(cleaned, "bundle/") {
 		return "", fmt.Errorf("E_BUNDLE_IMPORT_INVALID_PREFIX: %s", raw)
 	}
-
 	rel := strings.TrimPrefix(cleaned, "bundle/")
 	if rel == "" || rel == "." {
 		return "", nil
@@ -347,42 +346,58 @@ func tarManifestPath() string {
 }
 
 func isManifestTrackedPath(rel string) bool {
-	return strings.HasPrefix(rel, "packages/") || strings.HasPrefix(rel, "images/") || strings.HasPrefix(rel, "files/")
+	return strings.HasPrefix(rel, "outputs/packages/") || strings.HasPrefix(rel, "outputs/images/") || strings.HasPrefix(rel, "outputs/files/") || strings.HasPrefix(rel, "packages/") || strings.HasPrefix(rel, "images/") || strings.HasPrefix(rel, "files/")
 }
 
 func verifyOfflineArtifactCoverage(bundleRoot string, manifestPaths map[string]struct{}) error {
-	if err := verifyAPTRepoCoverage(bundleRoot, manifestPaths, filepath.Join("packages", "deb")); err != nil {
-		return err
+	for _, repoRoot := range []string{filepath.Join("outputs", "packages", "apt"), filepath.Join("packages", "apt")} {
+		if err := verifyAPTRepoCoverage(bundleRoot, manifestPaths, repoRoot); err != nil {
+			return err
+		}
 	}
-	if err := verifyAPTRepoCoverage(bundleRoot, manifestPaths, filepath.Join("packages", "deb-k8s")); err != nil {
-		return err
+	for _, repoRoot := range []string{filepath.Join("outputs", "packages", "apt-k8s"), filepath.Join("packages", "apt-k8s")} {
+		if err := verifyAPTRepoCoverage(bundleRoot, manifestPaths, repoRoot); err != nil {
+			return err
+		}
 	}
-	if err := verifyYUMRepoCoverage(bundleRoot, manifestPaths, filepath.Join("packages", "rpm")); err != nil {
-		return err
+	for _, repoRoot := range []string{filepath.Join("outputs", "packages", "yum"), filepath.Join("packages", "yum")} {
+		if err := verifyYUMRepoCoverage(bundleRoot, manifestPaths, repoRoot); err != nil {
+			return err
+		}
 	}
-	if err := verifyYUMRepoCoverage(bundleRoot, manifestPaths, filepath.Join("packages", "rpm-k8s")); err != nil {
-		return err
+	for _, repoRoot := range []string{filepath.Join("outputs", "packages", "yum-k8s"), filepath.Join("packages", "yum-k8s")} {
+		if err := verifyYUMRepoCoverage(bundleRoot, manifestPaths, repoRoot); err != nil {
+			return err
+		}
 	}
 
 	return verifyImageTarCoverage(bundleRoot, manifestPaths)
 }
 
 func verifyOfflineArtifactCoverageFromTar(files map[string]tarFileInfo, dirs map[string]struct{}, manifestPaths map[string]struct{}) error {
-	if err := verifyAPTRepoCoverageFromTar(files, dirs, manifestPaths, path.Join("packages", "deb")); err != nil {
-		return err
+	for _, repoRoot := range []string{path.Join("outputs", "packages", "apt"), path.Join("packages", "apt")} {
+		if err := verifyAPTRepoCoverageFromTar(files, dirs, manifestPaths, repoRoot); err != nil {
+			return err
+		}
 	}
-	if err := verifyAPTRepoCoverageFromTar(files, dirs, manifestPaths, path.Join("packages", "deb-k8s")); err != nil {
-		return err
+	for _, repoRoot := range []string{path.Join("outputs", "packages", "apt-k8s"), path.Join("packages", "apt-k8s")} {
+		if err := verifyAPTRepoCoverageFromTar(files, dirs, manifestPaths, repoRoot); err != nil {
+			return err
+		}
 	}
-	if err := verifyYUMRepoCoverageFromTar(files, dirs, manifestPaths, path.Join("packages", "rpm")); err != nil {
-		return err
+	for _, repoRoot := range []string{path.Join("outputs", "packages", "yum"), path.Join("packages", "yum")} {
+		if err := verifyYUMRepoCoverageFromTar(files, dirs, manifestPaths, repoRoot); err != nil {
+			return err
+		}
 	}
-	if err := verifyYUMRepoCoverageFromTar(files, dirs, manifestPaths, path.Join("packages", "rpm-k8s")); err != nil {
-		return err
+	for _, repoRoot := range []string{path.Join("outputs", "packages", "yum-k8s"), path.Join("packages", "yum-k8s")} {
+		if err := verifyYUMRepoCoverageFromTar(files, dirs, manifestPaths, repoRoot); err != nil {
+			return err
+		}
 	}
 
 	for rel := range files {
-		if strings.HasPrefix(rel, "images/") && path.Ext(rel) == ".tar" {
+		if (strings.HasPrefix(rel, "outputs/images/") || strings.HasPrefix(rel, "images/")) && path.Ext(rel) == ".tar" {
 			if err := requireInTarAndManifest(files, manifestPaths, rel); err != nil {
 				return err
 			}
@@ -453,21 +468,23 @@ func verifyYUMRepoCoverageFromTar(files map[string]tarFileInfo, dirs map[string]
 }
 
 func verifyImageTarCoverage(bundleRoot string, manifestPaths map[string]struct{}) error {
-	imagesDir := filepath.Join(bundleRoot, "images")
-	entries, err := os.ReadDir(imagesDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
+	for _, relDir := range []string{filepath.Join("outputs", "images"), filepath.Join("images")} {
+		imagesDir := filepath.Join(bundleRoot, relDir)
+		entries, err := os.ReadDir(imagesDir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("E_BUNDLE_INTEGRITY: scan images dir: %w", err)
 		}
-		return fmt.Errorf("E_BUNDLE_INTEGRITY: scan images dir: %w", err)
-	}
 
-	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".tar" {
-			continue
-		}
-		if err := requireInBundleAndManifest(bundleRoot, manifestPaths, filepath.Join("images", e.Name())); err != nil {
-			return err
+		for _, e := range entries {
+			if e.IsDir() || filepath.Ext(e.Name()) != ".tar" {
+				continue
+			}
+			if err := requireInBundleAndManifest(bundleRoot, manifestPaths, filepath.Join(relDir, e.Name())); err != nil {
+				return err
+			}
 		}
 	}
 

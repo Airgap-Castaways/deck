@@ -12,16 +12,15 @@ func TestFile(t *testing.T) {
 	t.Run("valid yaml", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "cluster.yaml")
-		content := []byte(`role: prepare
+		content := []byte(`role: apply
 version: v1alpha1
 phases:
   - name: prepare
     steps:
       - id: prepare-images
         apiVersion: deck/v1alpha1
-        kind: Image
+        kind: DownloadImages
         spec:
-          action: download
           images: [registry.k8s.io/kube-apiserver:v1.30.1]
           backend:
             engine: go-containerregistry
@@ -39,7 +38,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema valid Packages without source", func(t *testing.T) {
+	t.Run("tool schema valid InstallPackages without source", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -49,9 +48,8 @@ phases:
     steps:
       - id: install-packages
         apiVersion: deck/v1alpha1
-        kind: Packages
+        kind: InstallPackages
         spec:
-          action: install
           packages: [containerd]
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
@@ -88,7 +86,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema valid Artifacts", func(t *testing.T) {
+	t.Run("tool schema valid InstallArtifacts", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -98,7 +96,7 @@ phases:
     steps:
       - id: install-artifacts
         apiVersion: deck/v1alpha1
-        kind: Artifacts
+        kind: InstallArtifacts
         spec:
           artifacts:
             - source:
@@ -131,7 +129,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema rejects invalid Artifacts", func(t *testing.T) {
+	t.Run("tool schema rejects invalid InstallArtifacts", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -141,7 +139,7 @@ phases:
     steps:
       - id: bad-install-artifacts
         apiVersion: deck/v1alpha1
-        kind: Artifacts
+        kind: InstallArtifacts
         spec:
           artifacts:
             - source:
@@ -160,7 +158,7 @@ phases:
 		if err == nil {
 			t.Fatalf("expected tool schema validation error")
 		}
-		if got := err.Error(); !strings.HasPrefix(got, "E_SCHEMA_INVALID") {
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
 			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
@@ -187,12 +185,12 @@ phases:
 		if err == nil {
 			t.Fatalf("expected tool schema validation error")
 		}
-		if got := err.Error(); !strings.HasPrefix(got, "E_SCHEMA_INVALID") {
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
 			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
 
-	t.Run("install phase accepts Packages with only spec.packages", func(t *testing.T) {
+	t.Run("install phase accepts InstallPackages with only spec.packages", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -202,9 +200,8 @@ phases:
     steps:
       - id: install-packages-curl
         apiVersion: deck/v1alpha1
-        kind: Packages
+        kind: InstallPackages
         spec:
-          action: install
           packages: [curl]
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
@@ -216,7 +213,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema valid Repository apt without path", func(t *testing.T) {
+	t.Run("tool schema valid RepoConfig apt without path", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -226,9 +223,8 @@ phases:
     steps:
       - id: repo-apt
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: RepoConfig
         spec:
-          action: configure
           format: apt
           replaceExisting: true
           refreshCache:
@@ -282,7 +278,7 @@ phases:
 	t.Run("schema invalid kind", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: prepare
+		content := []byte(`role: apply
 version: v1alpha1
 phases:
   - name: prepare
@@ -304,16 +300,15 @@ phases:
 	t.Run("duplicate step id", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: prepare
+		content := []byte(`role: apply
 version: v1alpha1
 phases:
   - name: prepare
     steps:
       - id: dup-id
         apiVersion: deck/v1alpha1
-        kind: File
+        kind: DownloadFile
         spec:
-          action: download
           source:
             url: https://example.local/a
           output:
@@ -322,7 +317,7 @@ phases:
     steps:
       - id: dup-id
         apiVersion: deck/v1alpha1
-        kind: Command
+        kind: RunCommand
         spec:
           command: ["true"]
 `)
@@ -338,14 +333,14 @@ phases:
 	t.Run("runtime register redefinition", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: prepare
+		content := []byte(`role: apply
 version: v1alpha1
 phases:
   - name: prepare
     steps:
       - id: s1
         apiVersion: deck/v1alpha1
-        kind: File
+        kind: DownloadFile
         register:
           token: outputA
         spec:
@@ -355,7 +350,7 @@ phases:
             path: files/a
       - id: s2
         apiVersion: deck/v1alpha1
-        kind: File
+        kind: DownloadFile
         register:
           token: outputB
         spec:
@@ -383,7 +378,7 @@ phases:
     steps:
       - id: bad-run-command
         apiVersion: deck/v1alpha1
-        kind: Command
+        kind: RunCommand
         spec:
           command: []
 `)
@@ -395,12 +390,39 @@ phases:
 		if err == nil {
 			t.Fatalf("expected tool schema validation error")
 		}
-		if got := err.Error(); !strings.HasPrefix(got, "E_SCHEMA_INVALID") {
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
 			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
 
-	t.Run("tool schema valid Wait", func(t *testing.T) {
+	t.Run("file error includes workflow path", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: bad-run-command
+        apiVersion: deck/v1alpha1
+        kind: RunCommand
+        spec:
+          command: []
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if !strings.Contains(err.Error(), path+": E_SCHEMA_INVALID") {
+			t.Fatalf("expected path-prefixed error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema valid WaitPath", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -410,9 +432,8 @@ phases:
     steps:
       - id: wait-admin-conf
         apiVersion: deck/v1alpha1
-        kind: Wait
+        kind: WaitPath
         spec:
-          action: fileExists
           path: /etc/kubernetes/admin.conf
           state: exists
           type: file
@@ -429,7 +450,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema rejects Wait nonEmpty with absent state", func(t *testing.T) {
+	t.Run("tool schema rejects WaitPath nonEmpty with absent state", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -439,9 +460,8 @@ phases:
     steps:
       - id: bad-wait
         apiVersion: deck/v1alpha1
-        kind: Wait
+        kind: WaitPath
         spec:
-          action: fileAbsent
           path: /tmp/old-file
           state: absent
           nonEmpty: true
@@ -454,12 +474,12 @@ phases:
 		if err == nil {
 			t.Fatalf("expected tool schema validation error")
 		}
-		if got := err.Error(); !strings.HasPrefix(got, "E_SCHEMA_INVALID") {
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
 			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
 
-	t.Run("tool schema rejects Wait invalid type", func(t *testing.T) {
+	t.Run("tool schema rejects WaitPath invalid type", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -469,9 +489,8 @@ phases:
     steps:
       - id: bad-wait-type
         apiVersion: deck/v1alpha1
-        kind: Wait
+        kind: WaitPath
         spec:
-          action: fileExists
           path: /tmp/target
           state: exists
           type: socket
@@ -484,7 +503,7 @@ phases:
 		if err == nil {
 			t.Fatalf("expected tool schema validation error")
 		}
-		if got := err.Error(); !strings.HasPrefix(got, "E_SCHEMA_INVALID") {
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
 			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
@@ -538,7 +557,7 @@ phases:
 		if err == nil {
 			t.Fatalf("expected tool schema validation error")
 		}
-		if got := err.Error(); !strings.HasPrefix(got, "E_SCHEMA_INVALID") {
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
 			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
@@ -605,12 +624,12 @@ phases:
 		if err == nil {
 			t.Fatalf("expected tool schema validation error")
 		}
-		if got := err.Error(); !strings.HasPrefix(got, "E_SCHEMA_INVALID") {
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
 			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
 
-	t.Run("tool schema valid Kubeadm", func(t *testing.T) {
+	t.Run("tool schema valid KubeadmReset", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -620,9 +639,8 @@ phases:
     steps:
       - id: reset-node
         apiVersion: deck/v1alpha1
-        kind: Kubeadm
+        kind: KubeadmReset
         spec:
-          action: reset
           force: true
           ignoreErrors: true
           stopKubelet: true
@@ -641,7 +659,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema valid expanded Kubeadm", func(t *testing.T) {
+	t.Run("tool schema valid expanded KubeadmInit", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -651,9 +669,8 @@ phases:
     steps:
       - id: kubeadm-init
         apiVersion: deck/v1alpha1
-        kind: Kubeadm
+        kind: KubeadmInit
         spec:
-          action: init
           mode: real
           outputJoinFile: /tmp/deck/join.txt
           configFile: /tmp/deck/kubeadm-init.yaml
@@ -674,7 +691,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema rejects invalid expanded Kubeadm shape", func(t *testing.T) {
+	t.Run("tool schema rejects invalid expanded KubeadmInit shape", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -684,9 +701,8 @@ phases:
     steps:
       - id: kubeadm-init
         apiVersion: deck/v1alpha1
-        kind: Kubeadm
+        kind: KubeadmInit
         spec:
-          action: init
           mode: real
           outputJoinFile: /tmp/deck/join.txt
           pullImages: "yes"
@@ -699,12 +715,12 @@ phases:
 		if err == nil {
 			t.Fatalf("expected tool schema validation error")
 		}
-		if got := err.Error(); !strings.HasPrefix(got, "E_SCHEMA_INVALID") {
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
 			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
 
-	t.Run("tool schema rejects invalid Kubeadm", func(t *testing.T) {
+	t.Run("tool schema rejects invalid KubeadmReset", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -714,9 +730,8 @@ phases:
     steps:
       - id: reset-node
         apiVersion: deck/v1alpha1
-        kind: Kubeadm
+        kind: KubeadmReset
         spec:
-          action: reset
           cleanupContainers: kube-apiserver
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
@@ -727,7 +742,7 @@ phases:
 		if err == nil {
 			t.Fatalf("expected tool schema validation error")
 		}
-		if got := err.Error(); !strings.HasPrefix(got, "E_SCHEMA_INVALID") {
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
 			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
@@ -742,11 +757,10 @@ phases:
     steps:
       - id: w1
         apiVersion: deck/v1alpha1
-        kind: File
+        kind: WriteFile
         register:
           x: notARealOutput
         spec:
-          action: install
           path: /tmp/a.txt
           content: hello
 `)
@@ -758,7 +772,7 @@ phases:
 		if err == nil {
 			t.Fatalf("expected register output error")
 		}
-		if got := err.Error(); !strings.HasPrefix(got, "E_REGISTER_OUTPUT_NOT_FOUND") {
+		if got := err.Error(); !strings.Contains(got, "E_REGISTER_OUTPUT_NOT_FOUND") {
 			t.Fatalf("expected E_REGISTER_OUTPUT_NOT_FOUND, got %v", err)
 		}
 	})
@@ -766,14 +780,14 @@ phases:
 	t.Run("register output key valid for kind", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: prepare
+		content := []byte(`role: apply
 version: v1alpha1
 phases:
   - name: prepare
     steps:
       - id: d1
         apiVersion: deck/v1alpha1
-        kind: File
+        kind: DownloadFile
         register:
           fetched: path
         spec:
@@ -791,108 +805,17 @@ phases:
 		}
 	})
 
-	t.Run("kind rejected for role", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: prepare
-version: v1alpha1
-phases:
-  - name: prepare
-    steps:
-      - id: install-file
-        apiVersion: deck/v1alpha1
-        kind: File
-        spec:
-          action: install
-          path: /tmp/a.txt
-          content: hello
-`)
-		if err := os.WriteFile(path, content, 0o644); err != nil {
-			t.Fatalf("write file: %v", err)
-		}
-
-		err := File(path)
-		if err == nil {
-			t.Fatalf("expected role/kind validation error")
-		}
-		if got := err.Error(); !strings.HasPrefix(got, "E_KIND_ROLE_MISMATCH") {
-			t.Fatalf("expected E_KIND_ROLE_MISMATCH, got %v", err)
-		}
-	})
-
-	t.Run("valid declared prepare workflow", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: prepare
-version: v1alpha1
-artifacts:
-  files:
-    - group: binaries
-      items:
-        - id: kubeadm
-          source:
-            url: https://example.local/kubeadm
-          output:
-            path: bin/kubeadm
-  images:
-    - group: control-plane
-      items:
-        - image: registry.k8s.io/kube-apiserver:v1.30.1
-  packages:
-    - group: ubuntu
-      targets:
-        - osFamily: debian
-          release: ubuntu2204
-          arch: amd64
-      items:
-        - name: containerd
-`)
-		if err := os.WriteFile(path, content, 0o644); err != nil {
-			t.Fatalf("write file: %v", err)
-		}
-		if err := File(path); err != nil {
-			t.Fatalf("expected valid prepare workflow, got %v", err)
-		}
-	})
-
-	t.Run("declared prepare file path rejects files prefix", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: prepare
-version: v1alpha1
-artifacts:
-  files:
-    - group: binaries
-      items:
-        - id: kubeadm
-          source:
-            url: https://example.local/kubeadm
-          output:
-            path: files/bin/kubeadm
-`)
-		if err := os.WriteFile(path, content, 0o644); err != nil {
-			t.Fatalf("write file: %v", err)
-		}
-		err := File(path)
-		if err == nil {
-			t.Fatalf("expected invalid prepare output path")
-		}
-		if !strings.Contains(err.Error(), "relative to files root") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	t.Run("register output key valid for checkhost", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: prepare
+		content := []byte(`role: apply
 version: v1alpha1
 phases:
   - name: prepare
     steps:
       - id: c1
         apiVersion: deck/v1alpha1
-        kind: Inspection
+        kind: CheckHost
         register:
           hostOk: passed
         spec:
@@ -936,14 +859,14 @@ phases:
 	t.Run("reserved runtime host key is rejected", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
-		content := []byte(`role: prepare
+		content := []byte(`role: apply
 version: v1alpha1
 phases:
   - name: prepare
     steps:
       - id: c1
         apiVersion: deck/v1alpha1
-        kind: Inspection
+        kind: CheckHost
         register:
           host: passed
         spec:
@@ -957,7 +880,7 @@ phases:
 		if err == nil {
 			t.Fatalf("expected reserved runtime host key error")
 		}
-		if got := err.Error(); !strings.HasPrefix(got, "E_RUNTIME_VAR_RESERVED") {
+		if got := err.Error(); !strings.Contains(got, "E_RUNTIME_VAR_RESERVED") {
 			t.Fatalf("expected E_RUNTIME_VAR_RESERVED, got %v", err)
 		}
 	})
@@ -970,7 +893,7 @@ func TestSchema_ApiVersionOptional(t *testing.T) {
 version: v1alpha1
 steps:
   - id: run-without-api-version
-    kind: Command
+    kind: RunCommand
     spec:
       command: ["true"]
 `)
@@ -990,7 +913,7 @@ func TestValidate_SingleBraceTemplateShowsLine(t *testing.T) {
 version: v1alpha1
 steps:
   - id: bad-template
-    kind: Command
+    kind: RunCommand
     spec:
       command:
         - "echo"
@@ -1022,7 +945,7 @@ imports:
   - ./legacy.yaml
 steps:
   - id: ok-step
-    kind: Command
+    kind: RunCommand
     spec:
       command: ["true"]
 `)
@@ -1035,15 +958,17 @@ steps:
 	}
 }
 
-func TestSchema_AcceptsComponentPhaseImports(t *testing.T) {
+func TestSchema_AcceptsVarImportsAndPhaseImports(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "workflow.yaml")
 	content := []byte(`role: apply
 version: v1alpha1
+varImports:
+  - ./vars/common.yaml
 phases:
   - name: install
     imports:
-      - path: k8s/prereq.yaml
+      - path: ./fragments/install-common.yaml
         when: vars.osFamily == "rhel"
 `)
 	if err := os.WriteFile(path, content, 0o644); err != nil {
@@ -1064,7 +989,7 @@ context:
   bundleRoot: /tmp/bundle
 steps:
   - id: ok-step
-    kind: Command
+    kind: RunCommand
     spec:
       command: ["true"]
 `)
@@ -1076,7 +1001,7 @@ steps:
 	if err == nil {
 		t.Fatalf("expected schema validation error")
 	}
-	if got := err.Error(); !strings.HasPrefix(got, "E_SCHEMA_INVALID") {
+	if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
 		t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 	}
 }
@@ -1102,28 +1027,25 @@ steps:
       ignoreMissing: true
       state: stopped
   - id: ensure-dir
-    kind: Directory
+    kind: EnsureDir
     spec:
       path: /etc/containerd/certs.d
       mode: "0755"
   - id: install-file
-    kind: File
+    kind: InstallFile
     spec:
-      action: install
       path: /etc/modules-load.d/k8s.conf
       content: |
         overlay
-  - id: hosts-file
-    kind: File
+  - id: template-file
+    kind: TemplateFile
     spec:
-      action: install
       path: /etc/containerd/certs.d/registry.k8s.io/hosts.toml
-      contentFromTemplate: |
+      template: |
         server = "http://registry.local"
   - id: repo-config
-    kind: Repository
+    kind: RepoConfig
     spec:
-      action: configure
       path: /etc/yum.repos.d/offline.repo
       repositories:
         - id: offline-base
@@ -1131,7 +1053,7 @@ steps:
           enabled: true
           gpgcheck: false
   - id: containerd-config
-    kind: Containerd
+    kind: ContainerdConfig
     spec:
       path: /etc/containerd/config.toml
       configPath: /etc/containerd/certs.d
@@ -1153,15 +1075,12 @@ steps:
       name: br_netfilter
       load: true
       persist: true
-  - id: sysctl
-    kind: Sysctl
+  - id: sysctl-apply
+    kind: SysctlApply
     spec:
-      writeFile: /etc/sysctl.d/99-kubernetes-cri.conf
-      apply: true
-      values:
-        net.ipv4.ip_forward: 1
+      file: /etc/sysctl.d/99-kubernetes-cri.conf
   - id: run-cmd
-    kind: Command
+    kind: RunCommand
     spec:
       command: ["true"]
 `)
@@ -1192,7 +1111,7 @@ steps:
 	if err == nil {
 		t.Fatalf("expected schema error for missing service.name")
 	}
-	if !strings.HasPrefix(err.Error(), "E_SCHEMA_INVALID") {
+	if !strings.Contains(err.Error(), "E_SCHEMA_INVALID") {
 		t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 	}
 }

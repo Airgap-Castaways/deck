@@ -8,9 +8,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/taedi90/deck/internal/deckignore"
 )
+
+const serverOutputsDir = "outputs"
 
 func (h *serverHandler) handleReleaseBundleRead(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -48,6 +53,53 @@ func (h *serverHandler) handleReleaseBundleRead(w http.ResponseWriter, r *http.R
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
+}
+
+func buildWorkflowIndex(root string) ([]byte, error) {
+	ignore, err := deckignore.Load(root)
+	if err != nil {
+		return nil, err
+	}
+	scenarioRoot := filepath.Join(root, "workflows", "scenarios")
+	items := make([]string, 0)
+	err = filepath.WalkDir(scenarioRoot, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relFromRoot, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		relFromRoot = filepath.ToSlash(relFromRoot)
+		if relFromRoot != "." && ignore.Matches(relFromRoot, d.IsDir()) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		name := strings.ToLower(d.Name())
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			return nil
+		}
+		rel, err := filepath.Rel(filepath.Join(root, "workflows"), path)
+		if err != nil {
+			return err
+		}
+		items = append(items, filepath.ToSlash(filepath.Join("workflows", rel)))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(items)
+	quoted := make([]string, 0, len(items))
+	for _, item := range items {
+		quoted = append(quoted, strconv.Quote(item))
+	}
+	return []byte("[" + strings.Join(quoted, ",") + "]"), nil
 }
 
 func (h *serverHandler) resolveReleaseBundlePath(urlPath string) (string, string, string, int) {
@@ -108,12 +160,17 @@ func (h *serverHandler) handleStatic(w http.ResponseWriter, r *http.Request) {
 
 	data, err := os.ReadFile(targetPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			w.WriteHeader(http.StatusNotFound)
+		if os.IsNotExist(err) && category == "workflows" && relPath == "index.json" {
+			data, err = buildWorkflowIndex(h.rootAbs)
+		}
+		if err != nil {
+			if os.IsNotExist(err) {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(http.StatusInternalServerError)
-		return
 	}
 
 	hash := sha256.Sum256(data)
@@ -162,8 +219,14 @@ func matchETag(rawHeader, expected string) bool {
 }
 
 func (h *serverHandler) resolveCategoryPath(urlPath string) (string, string, string, int) {
+	ignore, err := deckignore.Load(h.rootAbs)
+	if err != nil {
+		return "", "", "", http.StatusInternalServerError
+	}
 	category := ""
 	switch {
+	case urlPath == "/deck":
+		category = "deck"
 	case strings.HasPrefix(urlPath, "/files/"):
 		category = "files"
 	case strings.HasPrefix(urlPath, "/packages/"):
@@ -176,11 +239,23 @@ func (h *serverHandler) resolveCategoryPath(urlPath string) (string, string, str
 		return "", "", "", http.StatusNotFound
 	}
 
-	relPath := strings.TrimPrefix(urlPath, "/"+category+"/")
-	relPath = strings.TrimSpace(relPath)
-	if relPath == "" {
-		return "", "", "", http.StatusNotFound
+	if category == "deck" {
+		if ignore.Matches("deck", false) {
+			return "", "", "", http.StatusNotFound
+		}
+		targetPath := filepath.Join(h.rootAbs, "deck")
+		resolvedTarget, err := filepath.Abs(targetPath)
+		if err != nil {
+			return "", "", "", http.StatusForbidden
+		}
+		return category, "deck", resolvedTarget, 0
 	}
+
+	relPath := strings.TrimPrefix(urlPath, "/"+category+"/")
+	if urlPath == "/"+category || urlPath == "/"+category+"/" {
+		relPath = ""
+	}
+	relPath = strings.TrimSpace(relPath)
 	if strings.Contains(relPath, "\\") {
 		return "", "", "", http.StatusForbidden
 	}
@@ -191,13 +266,27 @@ func (h *serverHandler) resolveCategoryPath(urlPath string) (string, string, str
 	}
 	cleanRel := strings.TrimPrefix(path.Clean("/"+relPath), "/")
 	if cleanRel == "." || cleanRel == "" {
+		cleanRel = ""
+	}
+	ignorePath := filepath.ToSlash(filepath.Join(category, cleanRel))
+	if category == "files" || category == "packages" || category == "images" {
+		ignorePath = filepath.ToSlash(filepath.Join(serverOutputsDir, category, cleanRel))
+	}
+	if cleanRel != "" && ignore.Matches(ignorePath, false) {
 		return "", "", "", http.StatusNotFound
 	}
 	if cleanRel == ".deck" || strings.HasPrefix(cleanRel, ".deck/") || strings.Contains(cleanRel, "/.deck/") {
 		return "", "", "", http.StatusForbidden
 	}
 
-	targetPath := filepath.Join(h.rootAbs, category, filepath.FromSlash(cleanRel))
+	baseDir := category
+	if category == "files" || category == "packages" || category == "images" {
+		preferred := filepath.Join(h.rootAbs, serverOutputsDir, category, filepath.FromSlash(cleanRel))
+		if _, err := os.Stat(preferred); err == nil {
+			baseDir = filepath.ToSlash(filepath.Join(serverOutputsDir, category))
+		}
+	}
+	targetPath := filepath.Join(h.rootAbs, filepath.FromSlash(baseDir), filepath.FromSlash(cleanRel))
 	resolvedTarget, err := filepath.Abs(targetPath)
 	if err != nil {
 		return "", "", "", http.StatusForbidden

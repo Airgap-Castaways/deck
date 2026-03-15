@@ -17,68 +17,140 @@ func executeInit(output string) error {
 	if resolvedOutput == "" {
 		resolvedOutput = "."
 	}
-	workflowsDir := filepath.Join(resolvedOutput, "workflows")
-
-	if info, err := os.Stat(workflowsDir); err == nil {
-		if !info.IsDir() {
-			return fmt.Errorf("init: workflows path exists and is not a directory: %s", workflowsDir)
-		}
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("init: stat workflows directory %s: %w", workflowsDir, err)
-	}
-
-	templates := initTemplateFiles()
+	gitignorePath := filepath.Join(resolvedOutput, ".gitignore")
+	deckignorePath := filepath.Join(resolvedOutput, ".deckignore")
+	templates := initTemplateFiles(resolvedOutput)
 	overwriteTargets := make([]string, 0, len(templates))
-	for fileName := range templates {
-		targetPath := filepath.Join(workflowsDir, fileName)
-		if _, err := os.Stat(targetPath); err == nil {
-			overwriteTargets = append(overwriteTargets, targetPath)
+	for path := range templates {
+		if _, err := os.Stat(path); err == nil {
+			overwriteTargets = append(overwriteTargets, path)
 		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("init: stat target file %s: %w", targetPath, err)
+			return fmt.Errorf("init: stat target path %s: %w", path, err)
 		}
 	}
 	if len(overwriteTargets) > 0 {
 		sort.Strings(overwriteTargets)
-		return fmt.Errorf("init: workflows already contains target files; refusing to overwrite: %s (choose another --out or remove these files)", strings.Join(overwriteTargets, ", "))
+		return fmt.Errorf("init: starter layout already contains target paths; refusing to overwrite: %s (choose another --out or remove these files)", strings.Join(overwriteTargets, ", "))
 	}
 
-	if err := os.MkdirAll(workflowsDir, 0o755); err != nil {
-		return fmt.Errorf("init: create workflows directory %s: %w", workflowsDir, err)
-	}
-	for fileName, body := range templates {
-		targetPath := filepath.Join(workflowsDir, fileName)
-		if err := os.WriteFile(targetPath, []byte(body), 0o644); err != nil {
-			return fmt.Errorf("init: write %s: %w", targetPath, err)
+	dirs := initTemplateDirs(resolvedOutput)
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("init: create directory %s: %w", dir, err)
 		}
 	}
-	created := make([]string, 0, len(templates))
-	for fileName := range templates {
-		created = append(created, filepath.Join(workflowsDir, fileName))
+	if err := ensureFileWithDefault(gitignorePath, defaultGitignoreContent()); err != nil {
+		return err
+	}
+	if err := ensureFileWithDefault(deckignorePath, defaultDeckignoreContent()); err != nil {
+		return err
+	}
+	for path, body := range templates {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			return fmt.Errorf("init: write %s: %w", path, err)
+		}
+	}
+	created := make([]string, 0, len(dirs)+len(templates))
+	created = append(created, dirs...)
+	created = append(created, gitignorePath, deckignorePath)
+	for path := range templates {
+		created = append(created, path)
 	}
 	sort.Strings(created)
 	return stdoutPrintf("init: wrote %s\n", strings.Join(created, ", "))
 }
 
-func initTemplateFiles() map[string]string {
-	prepareContent := strings.Join([]string{
+func initTemplateDirs(root string) []string {
+	return []string{
+		filepath.Join(root, deckWorkDirName),
+		filepath.Join(root, workflowRootDir),
+		filepath.Join(root, workflowRootDir, workflowScenariosDir),
+		filepath.Join(root, workflowRootDir, workflowComponentsDir),
+		filepath.Join(root, preparedDirRel),
+		filepath.Join(root, preparedDirRel, "files"),
+		filepath.Join(root, preparedDirRel, "images"),
+		filepath.Join(root, preparedDirRel, "packages"),
+	}
+}
+
+func initTemplateFiles(root string) map[string]string {
+	prepareComponentContent := strings.Join([]string{
 		"role: prepare",
 		"version: v1alpha1",
-		"artifacts:",
-		"  files: []",
+		"steps: []",
 		"",
 	}, "\n")
-	applyContent := strings.Join([]string{
+	applyComponentContent := strings.Join([]string{
 		"role: apply",
 		"version: v1alpha1",
 		"steps: []",
 		"",
 	}, "\n")
+	prepareScenarioContent := strings.Join([]string{
+		"role: prepare",
+		"version: v1alpha1",
+		"varImports:",
+		"  - ../vars.yaml",
+		"phases:",
+		"  - name: prepare",
+		"    imports:",
+		"      - path: ../components/example-prepare.yaml",
+		"",
+	}, "\n")
+	applyScenarioContent := strings.Join([]string{
+		"role: apply",
+		"version: v1alpha1",
+		"varImports:",
+		"  - ../vars.yaml",
+		"phases:",
+		"  - name: install",
+		"    imports:",
+		"      - path: ../components/example-apply.yaml",
+		"",
+	}, "\n")
 
 	return map[string]string{
-		"vars.yaml":    "{}\n",
-		"prepare.yaml": prepareContent,
-		"apply.yaml":   applyContent,
+		canonicalVarsPath(root):            "{}\n",
+		canonicalPrepareWorkflowPath(root): prepareScenarioContent,
+		canonicalApplyWorkflowPath(root):   applyScenarioContent,
+		filepath.Join(root, workflowRootDir, workflowComponentsDir, "example-prepare.yaml"): prepareComponentContent,
+		filepath.Join(root, workflowRootDir, workflowComponentsDir, "example-apply.yaml"):   applyComponentContent,
+		filepath.Join(root, preparedDirRel, "files", ".keep"):                               "",
+		filepath.Join(root, preparedDirRel, "images", ".keep"):                              "",
+		filepath.Join(root, preparedDirRel, "packages", ".keep"):                            "",
 	}
+}
+
+func ensureFileWithDefault(path string, content string) error {
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("init: stat target path %s: %w", path, err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("init: write %s: %w", path, err)
+	}
+	return nil
+}
+
+func defaultGitignoreContent() string {
+	return strings.Join([]string{
+		"/.deck/",
+		"/deck",
+		"/outputs/",
+		"*.tar",
+		"",
+	}, "\n")
+}
+
+func defaultDeckignoreContent() string {
+	return strings.Join([]string{
+		".git/",
+		".gitignore",
+		".deckignore",
+		"/*.tar",
+		"",
+	}, "\n")
 }
 
 func executeBundleVerify(filePath string, positionalArgs []string) error {
@@ -119,7 +191,7 @@ func executeBundleInspect(filePath string, output string, positionalArgs []strin
 	return nil
 }
 
-func executeBundleImport(filePath string, destDir string) error {
+func executeBundleExtract(filePath string, destDir string) error {
 	if strings.TrimSpace(filePath) == "" {
 		return errors.New("--file is required")
 	}
@@ -131,54 +203,23 @@ func executeBundleImport(filePath string, destDir string) error {
 		return err
 	}
 
-	return stdoutPrintf("bundle import: ok (%s -> %s)\n", filePath, destDir)
+	return stdoutPrintf("bundle extract: ok (%s -> %s)\n", filePath, destDir)
 }
 
-func executeBundleCollect(root string, out string) error {
-	if strings.TrimSpace(root) == "" {
-		return errors.New("--root is required")
+func executeBundleBuild(root string, out string) error {
+	resolvedRoot := strings.TrimSpace(root)
+	if resolvedRoot == "" {
+		resolvedRoot = "."
 	}
 	if strings.TrimSpace(out) == "" {
 		return errors.New("--out is required")
 	}
 
-	if err := bundle.CollectArchive(root, out); err != nil {
+	if err := bundle.CollectArchive(resolvedRoot, out); err != nil {
 		return err
 	}
 
-	return stdoutPrintf("bundle collect: ok (%s -> %s)\n", root, out)
-}
-
-func executeBundleMerge(to string, dryRun bool, positionalArgs []string) error {
-	if len(positionalArgs) == 0 {
-		return errors.New("bundle merge requires <bundle.tar>")
-	}
-	archivePath := strings.TrimSpace(positionalArgs[0])
-	if archivePath == "" {
-		return errors.New("bundle merge requires <bundle.tar>")
-	}
-	if strings.TrimSpace(to) == "" {
-		return errors.New("--to is required")
-	}
-
-	report, err := bundle.MergeArchive(archivePath, strings.TrimSpace(to), dryRun)
-	if err != nil {
-		return err
-	}
-
-	if dryRun {
-		if err := stdoutPrintf("bundle merge: dry-run (%s -> %s)\n", archivePath, report.Destination); err != nil {
-			return err
-		}
-		for _, action := range report.Actions {
-			if err := stdoutPrintf("PLAN %s %s (%s)\n", action.Action, action.Path, action.Reason); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	return stdoutPrintf("bundle merge: ok (%s -> %s)\n", archivePath, report.Destination)
+	return stdoutPrintf("bundle build: ok (%s -> %s)\n", resolvedRoot, out)
 }
 
 func resolveBundlePathArg(filePath string, positionalArgs []string, tooManyArgsErr string) (string, error) {

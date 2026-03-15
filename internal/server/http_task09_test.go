@@ -12,10 +12,10 @@ import (
 
 func TestServeTask09_AuditAndSafety(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "files"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "outputs", "files"), 0o755); err != nil {
 		t.Fatalf("mkdir files: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "files", "ok.txt"), []byte("ok"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "outputs", "files", "ok.txt"), []byte("ok"), 0o644); err != nil {
 		t.Fatalf("write ok file: %v", err)
 	}
 

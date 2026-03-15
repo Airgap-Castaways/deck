@@ -5,14 +5,13 @@ phases:
     steps:
       - id: setup-basic-cni
         apiVersion: deck/v1alpha1
-        kind: Directory
+        kind: EnsureDir
         spec:
           path: /etc/cni/net.d
       - id: write-basic-cni-config
         apiVersion: deck/v1alpha1
-        kind: File
+        kind: InstallFile
         spec:
-          action: install
           path: /etc/cni/net.d/10-deck-bridge.conflist
           content: |
             {
@@ -39,7 +38,7 @@ phases:
              }
       - id: ensure-cni-bin-path
         apiVersion: deck/v1alpha1
-        kind: Command
+        kind: RunCommand
         spec:
           command:
             - bash

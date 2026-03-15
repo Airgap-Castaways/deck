@@ -16,7 +16,7 @@ func TestImportArchive(t *testing.T) {
 
 		if err := writeTarArchive(archive, []tarEntry{
 			{name: "bundle/.deck/manifest.json", body: []byte("{}")},
-			{name: "bundle/files/a.txt", body: []byte("hello")},
+			{name: "bundle/outputs/files/a.txt", body: []byte("hello")},
 		}); err != nil {
 			t.Fatalf("write tar: %v", err)
 		}
@@ -25,7 +25,7 @@ func TestImportArchive(t *testing.T) {
 			t.Fatalf("import archive: %v", err)
 		}
 
-		raw, err := os.ReadFile(filepath.Join(dest, "bundle", "files", "a.txt"))
+		raw, err := os.ReadFile(filepath.Join(dest, "bundle", "outputs", "files", "a.txt"))
 		if err != nil {
 			t.Fatalf("read imported file: %v", err)
 		}
@@ -57,7 +57,7 @@ func TestImportArchive(t *testing.T) {
 		archive := filepath.Join(root, "bundle.tar")
 		dest := filepath.Join(root, "imported")
 
-		if err := writeTarArchive(archive, []tarEntry{{name: "manifest.json", body: []byte("x")}}); err != nil {
+		if err := writeTarArchive(archive, []tarEntry{{name: "deck", body: []byte("x")}}); err != nil {
 			t.Fatalf("write tar: %v", err)
 		}
 

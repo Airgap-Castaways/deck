@@ -24,32 +24,9 @@ mkdir -p "${TARGET_DIR}"
 
 if [[ -d "${CANONICAL_ROOT}" ]]; then
   cp -a "${CANONICAL_ROOT}/." "${TARGET_DIR}/"
-  mkdir -p "${TARGET_DIR}/components/scenarios"
-  cp -a "${CANONICAL_ROOT}/scenarios/." "${TARGET_DIR}/components/scenarios/"
 fi
 
 if [[ "${SCENARIO_ID}" == "offline-multinode" ]] && [[ -d "${COMPAT_ROOT}" ]]; then
   mkdir -p "${TARGET_DIR}/offline-multinode"
   cp -a "${COMPAT_ROOT}/." "${TARGET_DIR}/offline-multinode/"
 fi
-
-cat > "${TARGET_DIR}/prepare.yaml" <<EOF
-role: prepare
-version: v1alpha1
-imports:
-  - scenarios/prepare.yaml
-EOF
-cat > "${TARGET_DIR}/apply.yaml" <<'EOF'
-role: apply
-version: v1alpha1
-imports:
-  - scenarios/__SCENARIO__.yaml
-EOF
-python3 - <<'PY' "${TARGET_DIR}/apply.yaml" "$(scenario_basename "${SCENARIO_ID}")"
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-scenario = sys.argv[2]
-path.write_text(path.read_text().replace("__SCENARIO__", scenario))
-PY

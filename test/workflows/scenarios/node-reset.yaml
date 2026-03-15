@@ -1,5 +1,7 @@
 role: apply
 version: v1alpha1
+varImports:
+  - ../vars.yaml
 vars:
   clusterName: node-reset
   resetReason: node-reset-acceptance
@@ -7,12 +9,12 @@ vars:
 phases:
   - name: install
     imports:
-      - path: k8s/prereq.yaml
-      - path: node-reset.yaml
+      - path: ../components/k8s/prereq.yaml
+      - path: ../components/node-reset.yaml
     steps:
       - id: reset-summary
         apiVersion: deck/v1alpha1
-        kind: Command
+        kind: RunCommand
         spec:
           command:
             - bash

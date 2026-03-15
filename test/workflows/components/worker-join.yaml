@@ -3,24 +3,16 @@ version: v1alpha1
 steps:
   - id: fetch-join-file
     apiVersion: deck/v1alpha1
-    kind: File
+    kind: DownloadFile
     spec:
-      action: download
       source:
-        bundle:
-          root: files
-          path: cluster/join.txt
-      fetch:
-        sources:
-          - type: online
-            url: http://{{ .vars.serverURL }}
+        url: http://{{ .vars.serverURL }}/files/cluster/join.txt
       output:
         path: "{{ .vars.joinFile }}"
   - id: join-worker
     apiVersion: deck/v1alpha1
-    kind: Kubeadm
+    kind: KubeadmJoin
     spec:
-      action: join
       mode: real
       joinFile: "{{ .vars.joinFile }}"
       extraArgs: ["--cri-socket", "unix:///run/containerd/containerd.sock", "--ignore-preflight-errors=Swap,FileExisting-crictl,FileExisting-conntrack,FileExisting-socat"]

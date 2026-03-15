@@ -28,12 +28,12 @@ These examples are meant to be read and adapted, not treated as opaque automatio
 The mental model is:
 
 ```text
-prepare artifacts -> prepare bundle -> transfer bundle -> run locally on each node
+prepare artifacts -> build bundle -> transfer bundle -> run locally on each node
 ```
 
 ## 3. Model the procedure clearly
 
-Use declarative `prepare` inventory for `prepare`, and use steps and phases to show the operator what `apply` is doing.
+Use steps and phases to show the operator what the procedure is doing.
 
 Typical boundaries in Kubernetes workflows:
 
@@ -43,16 +43,17 @@ Typical boundaries in Kubernetes workflows:
 - kubeadm bootstrap or join
 - verification
 
-Prefer typed steps where possible. Keep `Command` for the edges that are not modeled yet.
+Prefer typed steps where possible. Keep `RunCommand` for the edges that are not modeled yet.
 
 ## 4. Prepare the bundle in the connected environment
 
-Author a `prepare` workflow that declares the packages, container images, files, and templates your site needs. Keep file output paths relative to the `files/` bundle root.
+Author a `prepare` workflow that gathers the packages, container images, files, and templates your site needs.
 
 Then build the bundle:
 
 ```bash
-deck prepare --out ./bundle.tar
+deck prepare
+deck bundle build --out ./bundle.tar
 ```
 
 The bundle can include `packages/`, `images/`, `files/`, `workflows/`, the `deck` binary, and `.deck/manifest.json` checksums.
@@ -82,12 +83,12 @@ Keep that choice explicit and secondary. The operator workflow still centers on 
 ## 8. Validate before transport and execution
 
 ```bash
-deck validate --file ./workflows/prepare.yaml
-deck validate --file ./workflows/apply.yaml
+deck lint
+deck lint --file ./workflows/scenarios/apply.yaml
 ```
 
 For planning and diagnostics, also review:
 
 - `../reference/workflow-model.md`
-- `../reference/schema/index.md`
+- `../reference/schema-reference.md`
 - `../reference/server-audit-log.md`

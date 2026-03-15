@@ -44,7 +44,7 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 				Steps: []config.Step{
 					{
 						ID:   "download-file",
-						Kind: "File",
+						Kind: "DownloadFile",
 						Spec: map[string]any{
 							"source": map[string]any{"url": server.URL + "/artifact"},
 							"output": map[string]any{"path": "files/artifact.bin"},
@@ -52,14 +52,22 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 					},
 					{
 						ID:   "download-os-packages",
-						Kind: "Packages",
+						Kind: "DownloadPackages",
 						Spec: map[string]any{
 							"packages": []any{"containerd", "iptables"},
 						},
 					},
 					{
+						ID:   "download-k8s-packages",
+						Kind: "DownloadK8sPackages",
+						Spec: map[string]any{
+							"kubernetesVersion": "{{ .vars.kubernetesVersion }}",
+							"components":        []any{"kubelet"},
+						},
+					},
+					{
 						ID:   "download-images",
-						Kind: "Image",
+						Kind: "DownloadImages",
 						Spec: map[string]any{
 							"images": []any{"registry.k8s.io/kube-apiserver:{{ .vars.kubernetesVersion }}"},
 						},
@@ -77,6 +85,7 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 		"files/artifact.bin",
 		"packages/containerd.txt",
 		"packages/iptables.txt",
+		"packages/kubelet-v1.30.1.txt",
 		"images/registry.k8s.io_kube-apiserver_v1.30.1.tar",
 		".deck/manifest.json",
 	}
@@ -104,8 +113,8 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 		t.Fatalf("parse manifest: %v", err)
 	}
 
-	if len(mf.Entries) < 4 {
-		t.Fatalf("expected >= 4 entries, got %d", len(mf.Entries))
+	if len(mf.Entries) < 5 {
+		t.Fatalf("expected >= 5 entries, got %d", len(mf.Entries))
 	}
 	for _, e := range mf.Entries {
 		if e.Path == "" || e.SHA256 == "" || e.Size <= 0 {
@@ -120,88 +129,10 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 	}
 }
 
-func TestRun_DeclaredPrepareArtifactsAndManifest(t *testing.T) {
-	stubImageDownload(t)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("hello-declared-prepare"))
-	}))
-	defer server.Close()
-
-	bundle := t.TempDir()
-	wf := &config.Workflow{
-		Role:    "prepare",
-		Version: "v1alpha1",
-		Vars: map[string]any{
-			"kubernetesVersion": "v1.30.1",
-		},
-		Artifacts: &config.ArtifactsSpec{
-			Files: []config.ArtifactFileGroup{{
-				Group: "binaries",
-				Targets: []config.ArtifactTarget{{
-					OS:   "linux",
-					Arch: "amd64",
-				}},
-				Items: []config.ArtifactFileItem{{
-					ID:     "artifact",
-					Source: config.ArtifactSource{URL: server.URL + "/artifact"},
-					Output: config.ArtifactFileOutput{Path: "bin/{{ .target.os }}/{{ .target.arch }}/artifact.bin", Mode: "0755"},
-				}},
-			}},
-			Images: []config.ArtifactImageGroup{{
-				Group: "control-plane",
-				Items: []config.ArtifactImageItem{{
-					Image: "registry.k8s.io/kube-apiserver:{{ .vars.kubernetesVersion }}",
-				}},
-			}},
-			Packages: []config.ArtifactPackageGroup{{
-				Group: "ubuntu-runtime",
-				Targets: []config.ArtifactTarget{{
-					OSFamily: "debian",
-					Release:  "ubuntu2204",
-					Arch:     "amd64",
-				}},
-				Items: []config.ArtifactPackageItem{{Name: "containerd"}},
-			}},
-		},
-	}
-
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
-
-	for _, rel := range []string{
-		"files/bin/linux/amd64/artifact.bin",
-		"images/registry.k8s.io_kube-apiserver_v1.30.1.tar",
-		"packages/containerd.txt",
-	} {
-		if _, err := os.Stat(filepath.Join(bundle, rel)); err != nil {
-			t.Fatalf("expected artifact %s: %v", rel, err)
-		}
-	}
-}
-
 func TestRun_NoPreparePhase(t *testing.T) {
 	wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "install"}}}
 	if err := Run(context.Background(), wf, RunOptions{BundleRoot: t.TempDir()}); err == nil {
 		t.Fatalf("expected error when prepare phase is missing")
-	}
-}
-
-func TestRun_UnsupportedPrepareKind(t *testing.T) {
-	wf := &config.Workflow{
-		Version: "v1",
-		Phases: []config.Phase{{
-			Name:  "prepare",
-			Steps: []config.Step{{ID: "x", Kind: "File", Spec: map[string]any{"path": "/tmp/x", "content": "x"}}},
-		}},
-	}
-	err := Run(context.Background(), wf, RunOptions{BundleRoot: t.TempDir()})
-	if err == nil {
-		t.Fatalf("expected unsupported kind error")
-	}
-	if !strings.Contains(err.Error(), errCodePrepareKindUnsupported) {
-		t.Fatalf("expected %s, got %v", errCodePrepareKindUnsupported, err)
 	}
 }
 
@@ -218,7 +149,7 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "pkg",
-					Kind: "Packages",
+					Kind: "DownloadPackages",
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
@@ -230,7 +161,7 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 				},
 				{
 					ID:   "img",
-					Kind: "Image",
+					Kind: "DownloadImages",
 					Spec: map[string]any{
 						"images": []any{"registry.k8s.io/kube-apiserver:v1.30.1"},
 						"backend": map[string]any{
@@ -254,68 +185,17 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 	}
 }
 
-func TestRun_PackagesDownloadUsesSharedCacheAndCopyOut(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	bundle := t.TempDir()
-	r := &fakeRunner{}
-
-	wf := &config.Workflow{
-		Version: "v1",
-		Phases: []config.Phase{{
-			Name: "prepare",
-			Steps: []config.Step{{
-				ID:   "pkg",
-				Kind: "Packages",
-				Spec: map[string]any{
-					"packages": []any{"containerd"},
-					"backend": map[string]any{
-						"mode":    "container",
-						"runtime": "docker",
-						"image":   "ubuntu:22.04",
-					},
-				},
-			}},
-		}},
-	}
-
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
-
-	joined := strings.Join(r.commands, "\n")
-	if strings.Contains(joined, ":/out ") {
-		t.Fatalf("expected package download to avoid host /out bind mount, commands=%s", joined)
-	}
-	if !strings.Contains(joined, " cp ") {
-		t.Fatalf("expected runtime cp in command flow, commands=%s", joined)
-	}
-	if !strings.Contains(joined, filepath.Join(home, ".deck", "cache", "packages")) {
-		t.Fatalf("expected shared package cache mount under HOME, commands=%s", joined)
-	}
-	if !strings.Contains(joined, "/var/cache/apt/archives") || !strings.Contains(joined, "/var/lib/apt/lists") {
-		t.Fatalf("expected apt cache mounts, commands=%s", joined)
-	}
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "mock-package.deb")); err != nil {
-		t.Fatalf("expected copied package artifact: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(home, ".deck", "cache", "packages")); err != nil {
-		t.Fatalf("expected shared package cache root: %v", err)
-	}
-}
-
 func stubImageDownload(t *testing.T) {
 	t.Helper()
 
 	oldParse := parseImageReferenceFn
-	oldFetch := remoteImageFn
+	oldFetch := remoteImageFetchFn
 	oldWrite := tarballWriteToFileFn
 
 	parseImageReferenceFn = func(v string) (name.Reference, error) {
 		return name.ParseReference(v, name.WeakValidation)
 	}
-	remoteImageFn = func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
+	remoteImageFetchFn = func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
 		return empty.Image, nil
 	}
 	tarballWriteToFileFn = func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
@@ -324,12 +204,56 @@ func stubImageDownload(t *testing.T) {
 
 	t.Cleanup(func() {
 		parseImageReferenceFn = oldParse
-		remoteImageFn = oldFetch
+		remoteImageFetchFn = oldFetch
 		tarballWriteToFileFn = oldWrite
 	})
 }
 
-func TestRun_PackagesContainerRuntimeMissing(t *testing.T) {
+func TestRun_DownloadK8sPackagesContainerBackend(t *testing.T) {
+	bundle := t.TempDir()
+	r := &fakeRunner{}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{
+				{
+					ID:   "k8s-pkgs",
+					Kind: "DownloadK8sPackages",
+					Spec: map[string]any{
+						"kubernetesVersion": "v1.30.1",
+						"components":        []any{"kubelet", "kubeadm"},
+						"backend": map[string]any{
+							"mode":    "container",
+							"runtime": "docker",
+							"image":   "ubuntu:22.04",
+						},
+					},
+				},
+			},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "mock-package.deb")); err != nil {
+		t.Fatalf("expected mock package artifact: %v", err)
+	}
+
+	versionPath := filepath.Join(bundle, "packages", "kubernetes-version.txt")
+	raw, err := os.ReadFile(versionPath)
+	if err != nil {
+		t.Fatalf("expected kubernetes version metadata: %v", err)
+	}
+	if strings.TrimSpace(string(raw)) != "1.30.1" {
+		t.Fatalf("unexpected kubernetes version metadata: %q", strings.TrimSpace(string(raw)))
+	}
+}
+
+func TestRun_DownloadPackagesContainerRuntimeMissing(t *testing.T) {
 	bundle := t.TempDir()
 
 	wf := &config.Workflow{
@@ -339,7 +263,7 @@ func TestRun_PackagesContainerRuntimeMissing(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "pkg",
-					Kind: "Packages",
+					Kind: "DownloadPackages",
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
@@ -362,7 +286,7 @@ func TestRun_PackagesContainerRuntimeMissing(t *testing.T) {
 	}
 }
 
-func TestRun_PackagesContainerNoArtifacts(t *testing.T) {
+func TestRun_DownloadPackagesContainerNoArtifacts(t *testing.T) {
 	bundle := t.TempDir()
 
 	wf := &config.Workflow{
@@ -372,7 +296,7 @@ func TestRun_PackagesContainerNoArtifacts(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "pkg",
-					Kind: "Packages",
+					Kind: "DownloadPackages",
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
@@ -395,7 +319,7 @@ func TestRun_PackagesContainerNoArtifacts(t *testing.T) {
 	}
 }
 
-func TestRun_FileFallbackLocalThenBundle(t *testing.T) {
+func TestRun_DownloadFileFallbackLocalThenBundle(t *testing.T) {
 	bundleOut := t.TempDir()
 	localCache := t.TempDir()
 	bundleCache := t.TempDir()
@@ -416,7 +340,7 @@ func TestRun_FileFallbackLocalThenBundle(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "download-file",
-				Kind: "File",
+				Kind: "DownloadFile",
 				Spec: map[string]any{
 					"source": map[string]any{
 						"path":   relSource,
@@ -448,7 +372,7 @@ func TestRun_FileFallbackLocalThenBundle(t *testing.T) {
 	}
 }
 
-func TestRun_FileFallbackSourceMissing(t *testing.T) {
+func TestRun_DownloadFileFallbackSourceMissing(t *testing.T) {
 	bundleOut := t.TempDir()
 
 	wf := &config.Workflow{
@@ -457,7 +381,7 @@ func TestRun_FileFallbackSourceMissing(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "download-file",
-				Kind: "File",
+				Kind: "DownloadFile",
 				Spec: map[string]any{
 					"source": map[string]any{
 						"path": "files/missing.bin",
@@ -507,7 +431,7 @@ func TestResolveSourceBytes_PreservesContextCancellation(t *testing.T) {
 	}
 }
 
-func TestRun_FileFallbackRepoThenOnline(t *testing.T) {
+func TestRun_DownloadFileFallbackRepoThenOnline(t *testing.T) {
 	bundleOut := t.TempDir()
 
 	repo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -530,7 +454,7 @@ func TestRun_FileFallbackRepoThenOnline(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "download-file",
-				Kind: "File",
+				Kind: "DownloadFile",
 				Spec: map[string]any{
 					"source": map[string]any{
 						"path": "files/remote.bin",
@@ -561,7 +485,7 @@ func TestRun_FileFallbackRepoThenOnline(t *testing.T) {
 	}
 }
 
-func TestRun_FileOfflinePolicyBlocksOnlineFallback(t *testing.T) {
+func TestRun_DownloadFileOfflinePolicyBlocksOnlineFallback(t *testing.T) {
 	bundleOut := t.TempDir()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -575,7 +499,7 @@ func TestRun_FileOfflinePolicyBlocksOnlineFallback(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "download-file",
-				Kind: "File",
+				Kind: "DownloadFile",
 				Spec: map[string]any{
 					"source": map[string]any{
 						"path": "files/not-found.bin",
@@ -601,7 +525,7 @@ func TestRun_FileOfflinePolicyBlocksOnlineFallback(t *testing.T) {
 	}
 }
 
-func TestRun_FileOfflinePolicyBlocksDirectURL(t *testing.T) {
+func TestRun_DownloadFileOfflinePolicyBlocksDirectURL(t *testing.T) {
 	bundleOut := t.TempDir()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -615,7 +539,7 @@ func TestRun_FileOfflinePolicyBlocksDirectURL(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "download-file",
-				Kind: "File",
+				Kind: "DownloadFile",
 				Spec: map[string]any{
 					"source": map[string]any{"url": server.URL + "/files/a.bin"},
 					"fetch":  map[string]any{"offlineOnly": true},
@@ -655,7 +579,7 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "download-a",
-					Kind: "File",
+					Kind: "DownloadFile",
 					Spec: map[string]any{
 						"source": map[string]any{"path": sourceRel},
 						"fetch":  map[string]any{"sources": []any{map[string]any{"type": "local", "path": localCache}}},
@@ -665,7 +589,7 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 				},
 				{
 					ID:   "download-b",
-					Kind: "File",
+					Kind: "DownloadFile",
 					When: "vars.role == \"control-plane\"",
 					Spec: map[string]any{
 						"source": map[string]any{"path": "{{ .runtime.downloaded }}"},
@@ -675,7 +599,7 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 				},
 				{
 					ID:   "skip-worker-only",
-					Kind: "File",
+					Kind: "DownloadFile",
 					When: "vars.role == \"worker\"",
 					Spec: map[string]any{
 						"source": map[string]any{"path": sourceRel},
@@ -712,7 +636,7 @@ func TestRun_RetrySemantics(t *testing.T) {
 				Name: "prepare",
 				Steps: []config.Step{{
 					ID:    "retry-packages",
-					Kind:  "Packages",
+					Kind:  "DownloadPackages",
 					Retry: 1,
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
@@ -743,7 +667,7 @@ func TestRun_RetrySemantics(t *testing.T) {
 				Name: "prepare",
 				Steps: []config.Step{{
 					ID:    "retry-fail",
-					Kind:  "File",
+					Kind:  "DownloadFile",
 					Retry: 1,
 					Spec: map[string]any{
 						"source": map[string]any{"path": "files/missing.bin"},
@@ -773,7 +697,7 @@ func TestRun_WhenInvalidExpression(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "bad-when",
-				Kind: "Packages",
+				Kind: "DownloadPackages",
 				When: "vars.role = \"worker\"",
 				Spec: map[string]any{"packages": []any{"containerd"}},
 			}},
@@ -827,7 +751,7 @@ func TestWhen_NamespaceEnforced(t *testing.T) {
 	}
 }
 
-func TestRun_InspectionStep(t *testing.T) {
+func TestRun_CheckHostStep(t *testing.T) {
 	t.Run("pass and register", func(t *testing.T) {
 		bundle := t.TempDir()
 		wf := &config.Workflow{
@@ -838,7 +762,7 @@ func TestRun_InspectionStep(t *testing.T) {
 				Steps: []config.Step{
 					{
 						ID:       "host-check",
-						Kind:     "Inspection",
+						Kind:     "CheckHost",
 						Register: map[string]string{"hostPassed": "passed"},
 						Spec: map[string]any{
 							"checks":   []any{"os", "arch", "binaries"},
@@ -847,7 +771,7 @@ func TestRun_InspectionStep(t *testing.T) {
 					},
 					{
 						ID:   "runtime-branch",
-						Kind: "Packages",
+						Kind: "DownloadPackages",
 						When: "runtime.hostPassed == true and vars.want == \"ok\" and runtime.host.os.family == \"debian\" and runtime.host.arch == \"arm64\"",
 						Spec: map[string]any{
 							"packages": []any{"containerd"},
@@ -896,7 +820,7 @@ func TestRun_InspectionStep(t *testing.T) {
 				Name: "prepare",
 				Steps: []config.Step{{
 					ID:   "host-check",
-					Kind: "Inspection",
+					Kind: "CheckHost",
 					Spec: map[string]any{
 						"checks":   []any{"os", "arch", "binaries", "swap", "kernelModules"},
 						"binaries": []any{"missing-bin"},
@@ -931,8 +855,8 @@ func TestRun_InspectionStep(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected checkhost failure")
 		}
-		if !strings.Contains(err.Error(), "E_PREPARE_INSPECTION_CHECK_FAILED") {
-			t.Fatalf("expected E_PREPARE_INSPECTION_CHECK_FAILED, got %v", err)
+		if !strings.Contains(err.Error(), "E_PREPARE_CHECKHOST_FAILED") {
+			t.Fatalf("expected E_PREPARE_CHECKHOST_FAILED, got %v", err)
 		}
 		if !strings.Contains(err.Error(), "os:") || !strings.Contains(err.Error(), "arch:") || !strings.Contains(err.Error(), "binaries:") {
 			t.Fatalf("expected aggregated failures, got %v", err)
@@ -940,7 +864,7 @@ func TestRun_InspectionStep(t *testing.T) {
 	})
 }
 
-func TestRun_PackagesRepoModeAptFlatGeneratesMetadata(t *testing.T) {
+func TestRun_DownloadPackagesRepoModeAptFlatGeneratesMetadata(t *testing.T) {
 	bundle := t.TempDir()
 	r := &fakeRunner{}
 
@@ -950,7 +874,7 @@ func TestRun_PackagesRepoModeAptFlatGeneratesMetadata(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "pkgs",
-				Kind: "Packages",
+				Kind: "DownloadPackages",
 				Spec: map[string]any{
 					"packages": []any{"containerd"},
 					"distro": map[string]any{
@@ -974,18 +898,18 @@ func TestRun_PackagesRepoModeAptFlatGeneratesMetadata(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "deb", "ubuntu2204", "pkgs", "mock-package.deb")); err != nil {
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "apt", "ubuntu2204", "pkgs", "mock-package.deb")); err != nil {
 		t.Fatalf("expected mock deb artifact: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "deb", "ubuntu2204", "Packages.gz")); err != nil {
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "apt", "ubuntu2204", "Packages.gz")); err != nil {
 		t.Fatalf("expected Packages.gz: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "deb", "ubuntu2204", "Release")); err != nil {
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "apt", "ubuntu2204", "Release")); err != nil {
 		t.Fatalf("expected Release: %v", err)
 	}
 }
 
-func TestRun_PackagesRepoModeYumGeneratesRepodata(t *testing.T) {
+func TestRun_DownloadPackagesRepoModeYumGeneratesRepodata(t *testing.T) {
 	bundle := t.TempDir()
 	r := &fakeRunner{}
 
@@ -995,7 +919,7 @@ func TestRun_PackagesRepoModeYumGeneratesRepodata(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "pkgs",
-				Kind: "Packages",
+				Kind: "DownloadPackages",
 				Spec: map[string]any{
 					"packages": []any{"containerd"},
 					"distro": map[string]any{
@@ -1019,19 +943,14 @@ func TestRun_PackagesRepoModeYumGeneratesRepodata(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "rpm", "rhel9", "repodata", "repomd.xml")); err != nil {
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "yum", "rhel9", "repodata", "repomd.xml")); err != nil {
 		t.Fatalf("expected repodata/repomd.xml: %v", err)
-	}
-	joined := strings.Join(r.commands, "\n")
-	if strings.Contains(joined, "module enable") {
-		t.Fatalf("did not expect module enable without repo.modules, commands=%s", joined)
-	}
-	if strings.Contains(joined, "yumdownloader") == false && strings.Contains(joined, "dnf -y download") == false {
-		t.Fatalf("expected rpm download command, commands=%s", joined)
 	}
 }
 
-func TestRun_PackagesRepoModeYumEnablesModules(t *testing.T) {
+type fakeRunner struct{}
+
+func TestRun_DownloadK8sPackagesRepoModeAptFlatGeneratesMetadata(t *testing.T) {
 	bundle := t.TempDir()
 	r := &fakeRunner{}
 
@@ -1040,19 +959,69 @@ func TestRun_PackagesRepoModeYumEnablesModules(t *testing.T) {
 		Phases: []config.Phase{{
 			Name: "prepare",
 			Steps: []config.Step{{
-				ID:   "pkgs",
-				Kind: "Packages",
+				ID:   "k8s-pkgs",
+				Kind: "DownloadK8sPackages",
 				Spec: map[string]any{
-					"packages": []any{"containerd"},
+					"kubernetesVersion": "v1.30.1",
+					"components":        []any{"kubelet", "kubeadm", "kubectl"},
+					"distro": map[string]any{
+						"family":  "debian",
+						"release": "ubuntu2204",
+					},
+					"repo": map[string]any{
+						"type": "apt-flat",
+					},
+					"backend": map[string]any{
+						"mode":    "container",
+						"runtime": "docker",
+						"image":   "ubuntu:22.04",
+					},
+				},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	base := filepath.Join(bundle, "packages", "apt-k8s", "ubuntu2204")
+	for _, name := range []string{"kubelet.deb", "kubeadm.deb", "kubectl.deb"} {
+		if _, err := os.Stat(filepath.Join(base, "pkgs", name)); err != nil {
+			t.Fatalf("expected %s: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(base, "Packages.gz")); err != nil {
+		t.Fatalf("expected Packages.gz: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(base, "Release")); err != nil {
+		t.Fatalf("expected Release: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(base, "kubernetes-version.txt")); err != nil {
+		t.Fatalf("expected kubernetes-version.txt: %v", err)
+	}
+}
+
+func TestRun_DownloadK8sPackagesRepoModeYumGeneratesRepodata(t *testing.T) {
+	bundle := t.TempDir()
+	r := &fakeRunner{}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{{
+				ID:   "k8s-pkgs",
+				Kind: "DownloadK8sPackages",
+				Spec: map[string]any{
+					"kubernetesVersion": "v1.30.1",
+					"components":        []any{"kubelet", "kubeadm"},
 					"distro": map[string]any{
 						"family":  "rhel",
 						"release": "rhel9",
 					},
 					"repo": map[string]any{
 						"type": "yum",
-						"modules": []any{
-							map[string]any{"name": "container-tools", "stream": "4.0"},
-						},
 					},
 					"backend": map[string]any{
 						"mode":    "container",
@@ -1068,74 +1037,17 @@ func TestRun_PackagesRepoModeYumEnablesModules(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	joined := strings.Join(r.commands, "\n")
-	if !strings.Contains(joined, "dnf -y module enable 'container-tools:4.0'") {
-		t.Fatalf("expected module enable command, commands=%s", joined)
-	}
-	if strings.Contains(joined, "yumdownloader") {
-		t.Fatalf("did not expect yumdownloader fallback when modules are configured, commands=%s", joined)
-	}
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "rpm", "rhel9", "repodata", "repomd.xml")); err != nil {
+	base := filepath.Join(bundle, "packages", "yum-k8s", "rhel9")
+	if _, err := os.Stat(filepath.Join(base, "repodata", "repomd.xml")); err != nil {
 		t.Fatalf("expected repodata/repomd.xml: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "rpm", "rhel9", "mock-package.rpm")); err != nil {
-		t.Fatalf("expected rpm artifact: %v", err)
+	if _, err := os.Stat(filepath.Join(base, "kubernetes-version.txt")); err != nil {
+		t.Fatalf("expected kubernetes-version.txt: %v", err)
 	}
-}
-
-func TestRun_PackagesRepoModeYumModuleRequiresStream(t *testing.T) {
-	bundle := t.TempDir()
-	wf := &config.Workflow{
-		Version: "v1",
-		Phases: []config.Phase{{
-			Name: "prepare",
-			Steps: []config.Step{{
-				ID:   "pkgs",
-				Kind: "Packages",
-				Spec: map[string]any{
-					"packages": []any{"containerd"},
-					"distro": map[string]any{
-						"family":  "rhel",
-						"release": "rhel9",
-					},
-					"repo": map[string]any{
-						"type": "yum",
-						"modules": []any{
-							map[string]any{"name": "container-tools"},
-						},
-					},
-					"backend": map[string]any{
-						"mode":    "container",
-						"runtime": "docker",
-						"image":   "rockylinux:9",
-					},
-				},
-			}},
-		}},
-	}
-
-	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}})
-	if err == nil {
-		t.Fatalf("expected missing module stream error")
-	}
-	if !strings.Contains(err.Error(), "repo.modules entries require name and stream") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-type fakeRunner struct {
-	commands   []string
-	containers map[string]fakeContainer
-}
-
-type fakeContainer struct {
-	outDir string
-	script string
 }
 
 type failOnceRunner struct {
-	calls  int
-	innerR *fakeRunner
+	calls int
 }
 
 type noRuntimeRunner struct{}
@@ -1148,16 +1060,12 @@ func (f *failOnceRunner) LookPath(file string) (string, error) {
 }
 
 func (f *failOnceRunner) Run(ctx context.Context, name string, args ...string) error {
-	if len(args) > 0 && args[0] == "create" {
-		f.calls++
-		if f.calls == 1 {
-			return fmt.Errorf("intentional first failure")
-		}
+	f.calls++
+	if f.calls == 1 {
+		return fmt.Errorf("intentional first failure")
 	}
-	if f.innerR == nil {
-		f.innerR = &fakeRunner{}
-	}
-	return f.innerR.Run(ctx, name, args...)
+	fr := &fakeRunner{}
+	return fr.Run(ctx, name, args...)
 }
 
 func (n *noRuntimeRunner) LookPath(_ string) (string, error) {
@@ -1192,78 +1100,6 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) error {
 	if name != "docker" && name != "podman" {
 		return nil
 	}
-	f.commands = append(f.commands, name+" "+strings.Join(args, " "))
-	if f.containers == nil {
-		f.containers = map[string]fakeContainer{}
-	}
-	if len(args) > 0 {
-		switch args[0] {
-		case "create":
-			containerName := ""
-			script := ""
-			for i := 1; i < len(args); i++ {
-				if args[i] == "--name" && i+1 < len(args) {
-					containerName = args[i+1]
-					i++
-				}
-			}
-			if len(args) > 0 {
-				script = args[len(args)-1]
-			}
-			if containerName == "" {
-				return fmt.Errorf("missing container name")
-			}
-			outDir := filepath.Join(os.TempDir(), containerName)
-			if err := os.RemoveAll(outDir); err != nil {
-				return err
-			}
-			if err := os.MkdirAll(outDir, 0o755); err != nil {
-				return err
-			}
-			f.containers[containerName] = fakeContainer{outDir: outDir, script: script}
-			return nil
-		case "start":
-			if len(args) == 0 {
-				return nil
-			}
-			containerName := args[len(args)-1]
-			container, ok := f.containers[containerName]
-			if !ok {
-				return fmt.Errorf("unknown container %s", containerName)
-			}
-			return populateFakePackageOutput(container.outDir, container.script)
-		case "cp":
-			if len(args) < 3 {
-				return fmt.Errorf("invalid cp args")
-			}
-			src := args[1]
-			dest := args[2]
-			parts := strings.SplitN(src, ":", 2)
-			if len(parts) != 2 {
-				return fmt.Errorf("invalid cp source %q", src)
-			}
-			container, ok := f.containers[parts[0]]
-			if !ok {
-				return fmt.Errorf("unknown container %s", parts[0])
-			}
-			if err := os.MkdirAll(dest, 0o755); err != nil {
-				return err
-			}
-			return copyDirContents(container.outDir, dest)
-		case "rm":
-			if len(args) == 0 {
-				return nil
-			}
-			containerName := args[len(args)-1]
-			if container, ok := f.containers[containerName]; ok {
-				if err := os.RemoveAll(container.outDir); err != nil {
-					return err
-				}
-				delete(f.containers, containerName)
-			}
-			return nil
-		}
-	}
 
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-v" && i+1 < len(args) {
@@ -1279,13 +1115,22 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) error {
 					return err
 				}
 				// repo-mode simulation: create minimal artifacts + metadata
-				if strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"deb"+string(filepath.Separator)) {
+				if strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"apt"+string(filepath.Separator)) ||
+					strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"apt-k8s"+string(filepath.Separator)) {
 					pkgs := filepath.Join(host, "pkgs")
 					if err := os.MkdirAll(pkgs, 0o755); err != nil {
 						return err
 					}
-					if err := os.WriteFile(filepath.Join(pkgs, "mock-package.deb"), []byte("pkg"), 0o644); err != nil {
-						return err
+					if strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"apt-k8s"+string(filepath.Separator)) {
+						for _, name := range []string{"kubelet.deb", "kubeadm.deb", "kubectl.deb"} {
+							if err := os.WriteFile(filepath.Join(pkgs, name), []byte("pkg"), 0o644); err != nil {
+								return err
+							}
+						}
+					} else {
+						if err := os.WriteFile(filepath.Join(pkgs, "mock-package.deb"), []byte("pkg"), 0o644); err != nil {
+							return err
+						}
 					}
 					if err := os.WriteFile(filepath.Join(host, "Packages"), []byte("Packages"), 0o644); err != nil {
 						return err
@@ -1298,7 +1143,8 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) error {
 					}
 					continue
 				}
-				if strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"rpm"+string(filepath.Separator)) {
+				if strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"yum"+string(filepath.Separator)) ||
+					strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"yum-k8s"+string(filepath.Separator)) {
 					repodata := filepath.Join(host, "repodata")
 					if err := os.MkdirAll(repodata, 0o755); err != nil {
 						return err
@@ -1338,70 +1184,6 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) error {
 		}
 	}
 
-	return nil
-}
-
-func populateFakePackageOutput(outDir, script string) error {
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return err
-	}
-	if strings.Contains(script, "apt-ftparchive packages") {
-		pkgs := filepath.Join(outDir, "pkgs")
-		if err := os.MkdirAll(pkgs, 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(pkgs, "mock-package.deb"), []byte("pkg"), 0o644); err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(outDir, "Packages"), []byte("Packages"), 0o644); err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(outDir, "Packages.gz"), []byte("Packages.gz"), 0o644); err != nil {
-			return err
-		}
-		return os.WriteFile(filepath.Join(outDir, "Release"), []byte("Release"), 0o644)
-	}
-	if strings.Contains(script, "createrepo_c /out") {
-		repodata := filepath.Join(outDir, "repodata")
-		if err := os.MkdirAll(repodata, 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(outDir, "mock-package.rpm"), []byte("pkg"), 0o644); err != nil {
-			return err
-		}
-		return os.WriteFile(filepath.Join(repodata, "repomd.xml"), []byte("repomd"), 0o644)
-	}
-	return os.WriteFile(filepath.Join(outDir, "mock-package.deb"), []byte("pkg"), 0o644)
-}
-
-func copyDirContents(src, dest string) error {
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		destPath := filepath.Join(dest, entry.Name())
-		if entry.IsDir() {
-			if err := os.MkdirAll(destPath, 0o755); err != nil {
-				return err
-			}
-			if err := copyDirContents(srcPath, destPath); err != nil {
-				return err
-			}
-			continue
-		}
-		raw, err := os.ReadFile(srcPath)
-		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(destPath, raw, 0o644); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 

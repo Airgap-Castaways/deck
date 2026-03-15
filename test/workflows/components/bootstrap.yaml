@@ -3,9 +3,8 @@ version: v1alpha1
 steps:
   - id: bootstrap-reset-preflight
     apiVersion: deck/v1alpha1
-    kind: Kubeadm
+    kind: KubeadmReset
     spec:
-      action: reset
       force: true
       ignoreErrors: true
       criSocket: unix:///run/containerd/containerd.sock
@@ -27,7 +26,7 @@ steps:
       restartRuntimeService: containerd
   - id: bootstrap-runtime-ready
     apiVersion: deck/v1alpha1
-    kind: Command
+    kind: RunCommand
     spec:
       timeout: 5m
       command:
@@ -70,9 +69,8 @@ steps:
           systemctl is-active --quiet kubelet
   - id: bootstrap-init
     apiVersion: deck/v1alpha1
-    kind: Kubeadm
+    kind: KubeadmInit
     spec:
-      action: init
       mode: real
       timeout: 20m
       configTemplate: default
@@ -86,28 +84,27 @@ steps:
       ignorePreflightErrors: [Swap, FileExisting-crictl, FileExisting-conntrack, FileExisting-socat, Port-10250]
   - id: bootstrap-publish-join-dir
     apiVersion: deck/v1alpha1
-    kind: Directory
+    kind: EnsureDir
     spec:
       path: /tmp/deck/server-root/files/cluster
   - id: bootstrap-publish-join
     apiVersion: deck/v1alpha1
-    kind: File
+    kind: CopyFile
     spec:
-      action: copy
       src: /tmp/deck/join.txt
       dest: /tmp/deck/server-root/files/cluster/join.txt
   - id: bootstrap-kubeconfig-ready
     apiVersion: deck/v1alpha1
-    kind: Wait
+    kind: WaitPath
     spec:
-      action: fileExists
       timeout: 5m
       path: /etc/kubernetes/admin.conf
+      state: exists
       type: file
       nonEmpty: true
   - id: bootstrap-offline-guard
     apiVersion: deck/v1alpha1
-    kind: Command
+    kind: RunCommand
     spec:
       command:
         - bash

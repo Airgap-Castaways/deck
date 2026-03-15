@@ -23,7 +23,7 @@ func writeFileIfChanged(path string, content []byte, mode os.FileMode) error {
 	return os.WriteFile(path, content, mode)
 }
 
-func fileBackupEnabled(spec map[string]any) bool {
+func editFileBackupEnabled(spec map[string]any) bool {
 	backup, exists := spec["backup"]
 	if !exists {
 		return true
@@ -35,7 +35,7 @@ func fileBackupEnabled(spec map[string]any) bool {
 	return v
 }
 
-func createFileBackup(path string, content []byte) (string, error) {
+func createEditFileBackup(path string, content []byte) (string, error) {
 	base := path + ".bak-" + time.Now().UTC().Format("20060102T150405Z")
 	backupPath := base
 	for i := 0; i < 5; i++ {
@@ -54,7 +54,7 @@ func createFileBackup(path string, content []byte) (string, error) {
 	return backupPath, fmt.Errorf("unable to allocate unique backup name")
 }
 
-func trimFileBackups(path string, keep int) error {
+func trimEditFileBackups(path string, keep int) error {
 	if keep < 1 {
 		return nil
 	}

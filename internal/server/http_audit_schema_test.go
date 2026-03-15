@@ -11,10 +11,10 @@ import (
 
 func TestAuditSchema(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "files"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "outputs", "files"), 0o755); err != nil {
 		t.Fatalf("mkdir files: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "files", "a.txt"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "outputs", "files", "a.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 

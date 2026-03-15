@@ -14,12 +14,12 @@ func runSysctl(spec map[string]any) error {
 		path = stringValue(spec, "dest")
 	}
 	if path == "" {
-		return fmt.Errorf("%s: Sysctl requires writeFile or dest", errCodeInstallSysctlFileRequired)
+		return fmt.Errorf("%s: Sysctl requires writeFile or dest", errCodeInstallSysctlPathMiss)
 	}
 
 	values, ok := spec["values"].(map[string]any)
 	if !ok || len(values) == 0 {
-		return fmt.Errorf("%s: Sysctl requires values", errCodeInstallSysctlValuesRequired)
+		return fmt.Errorf("%s: Sysctl requires values", errCodeInstallSysctlValsMiss)
 	}
 
 	lines := make([]string, 0, len(values))
@@ -30,23 +30,34 @@ func runSysctl(spec map[string]any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+}
+
+func runModprobe(spec map[string]any) error {
+	persistPath := stringValue(spec, "persistFile")
+	if persistPath == "" {
+		return nil
+	}
+
+	mods := stringSlice(spec["modules"])
+	if len(mods) == 0 {
+		return fmt.Errorf("%s: Modprobe requires modules", errCodeInstallModulesMissing)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(persistPath), 0o755); err != nil {
 		return err
 	}
-	if apply, ok := spec["apply"].(bool); ok && apply {
-		return runTimedCommand("sysctl", []string{"-p", path}, commandTimeoutWithDefault(spec, 30*time.Second))
-	}
-	return nil
+	return os.WriteFile(persistPath, []byte(strings.Join(mods, "\n")+"\n"), 0o644)
 }
 
 func runService(spec map[string]any) error {
 	name := stringValue(spec, "name")
 	names := stringSlice(spec["names"])
 	if name == "" && len(names) == 0 {
-		return fmt.Errorf("%s: Service requires name or names", errCodeInstallServiceNameRequired)
+		return fmt.Errorf("%s: Service requires name or names", errCodeInstallServiceNameMiss)
 	}
 	if name != "" && len(names) > 0 {
-		return fmt.Errorf("%s: Service accepts either name or names", errCodeInstallServiceNameRequired)
+		return fmt.Errorf("%s: Service accepts either name or names", errCodeInstallServiceNameMiss)
 	}
 	if name != "" {
 		names = []string{name}
@@ -207,9 +218,9 @@ func runSwap(spec map[string]any) error {
 }
 
 func runKernelModule(spec map[string]any) error {
-	names, err := kernelModuleNames(spec)
-	if err != nil {
-		return err
+	name := stringValue(spec, "name")
+	if name == "" {
+		return fmt.Errorf("%s: KernelModule requires name", errCodeInstallKernelModuleMiss)
 	}
 
 	load := true
@@ -233,27 +244,20 @@ func runKernelModule(spec map[string]any) error {
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
-		existing := map[string]bool{}
-		for _, line := range strings.Split(string(raw), "\n") {
-			trimmed := strings.TrimSpace(line)
-			if trimmed != "" {
-				existing[trimmed] = true
+		lines := strings.Split(string(raw), "\n")
+		present := false
+		for _, line := range lines {
+			if strings.TrimSpace(line) == name {
+				present = true
+				break
 			}
 		}
-		content := strings.TrimRight(string(raw), "\n")
-		changed := false
-		for _, name := range names {
-			if existing[name] {
-				continue
-			}
+		if !present {
+			content := strings.TrimRight(string(raw), "\n")
 			if content != "" {
 				content += "\n"
 			}
-			content += name
-			changed = true
-		}
-		if changed {
-			content += "\n"
+			content += name + "\n"
 			if err := os.WriteFile(persistFile, []byte(content), 0o644); err != nil {
 				return err
 			}
@@ -261,15 +265,13 @@ func runKernelModule(spec map[string]any) error {
 	}
 
 	if load {
-		for _, name := range names {
-			loaded, err := kernelModuleLoaded(name)
-			if err != nil {
+		loaded, err := kernelModuleLoaded(name)
+		if err != nil {
+			return err
+		}
+		if !loaded {
+			if err := runTimedCommand("modprobe", []string{name}, commandTimeoutWithDefault(spec, 30*time.Second)); err != nil {
 				return err
-			}
-			if !loaded {
-				if err := runTimedCommand("modprobe", []string{name}, commandTimeoutWithDefault(spec, 30*time.Second)); err != nil {
-					return err
-				}
 			}
 		}
 	}
@@ -277,19 +279,17 @@ func runKernelModule(spec map[string]any) error {
 	return nil
 }
 
-func kernelModuleNames(spec map[string]any) ([]string, error) {
-	name := strings.TrimSpace(stringValue(spec, "name"))
-	names := stringSlice(spec["names"])
-	if name != "" && len(names) > 0 {
-		return nil, fmt.Errorf("%s: KernelModule accepts either name or names", errCodeInstallKernelModuleNameRequired)
+func runSysctlApply(spec map[string]any) error {
+	file := stringValue(spec, "file")
+	args := stringSlice(spec["command"])
+	if len(args) == 0 {
+		if file != "" {
+			args = []string{"sysctl", "-p", file}
+		} else {
+			args = []string{"sysctl", "--system"}
+		}
 	}
-	if name != "" {
-		return []string{name}, nil
-	}
-	if len(names) == 0 {
-		return nil, fmt.Errorf("%s: KernelModule requires name or names", errCodeInstallKernelModuleNameRequired)
-	}
-	return names, nil
+	return runTimedCommand(args[0], args[1:], commandTimeoutWithDefault(spec, 30*time.Second))
 }
 
 func swapActive() (bool, error) {
