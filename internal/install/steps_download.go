@@ -253,9 +253,9 @@ func canReuseDownloadFile(ctx context.Context, spec fileDownloadSpec, target str
 	if sourcePath == "" {
 		return false, nil
 	}
-	raw, err := resolveSourceBytesFromSpec(ctx, spec, sourcePath)
-	if err != nil {
-		return false, nil
+	raw, resolveErr := resolveSourceBytesFromSpec(ctx, spec, sourcePath)
+	if resolveErr != nil {
+		return false, resolveErr
 	}
 	targetSHA, err := fileSHA256(target)
 	if err != nil {

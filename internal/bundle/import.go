@@ -67,17 +67,18 @@ func ImportArchive(archivePath, destRoot string) error {
 		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return fmt.Errorf("%s: %s", errCodeBundleImportTraversal, hdr.Name)
 		}
+		mode := os.FileMode(hdr.Mode & 0o777)
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
+			if err := os.MkdirAll(target, mode); err != nil {
 				return fmt.Errorf("create import directory: %w", err)
 			}
 		case tar.TypeReg:
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return fmt.Errorf("create import parent directory: %w", err)
 			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode))
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 			if err != nil {
 				return fmt.Errorf("create import file: %w", err)
 			}

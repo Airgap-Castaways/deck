@@ -7,13 +7,25 @@ run:
 linters:
   default: none
   enable:
+    - gocritic
+    - gosec
     - errcheck
     - govet
     - bodyclose
     - ineffassign
     - misspell
+    - nilerr
     - staticcheck
     - unused
+  exclusions:
+    rules:
+      - path: '.*_test\.go'
+        linters:
+          - gosec
+        text: 'G(204|301|302|304|306)'
+      - linters:
+          - gosec
+        text: 'G(101|110|117|122|204|301|302|304|306|703|705)'
 
 formatters:
   enable:

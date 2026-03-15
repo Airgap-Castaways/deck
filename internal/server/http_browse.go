@@ -240,10 +240,9 @@ func (h *serverHandler) renderImageBrowse(rel string) (string, error) {
 		items := []browseEntry{{Name: "..", Href: "/browse/images/", Kind: "dir"}}
 		return renderBrowsePage("/browse/images/"+rel+"/", items), nil
 	}
-	resolved, err := h.resolveRegistryImage(repo, tag)
-	if err != nil {
-		items := []browseEntry{{Name: "..", Href: "/browse/images/" + repo + "/", Kind: "dir"}}
-		return renderBrowsePage("/browse/images/"+repo+"/"+tag+"/", items), nil
+	resolved, resolveErr := h.resolveRegistryImage(repo, tag)
+	if resolveErr != nil {
+		return "", resolveErr
 	}
 	items := []browseEntry{{Name: "..", Href: "/browse/images/" + repo + "/", Kind: "dir"}}
 	items = append(items,

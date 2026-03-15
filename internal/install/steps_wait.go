@@ -202,11 +202,12 @@ func waitPathConditionMet(path, state, pathType string, nonEmpty bool) (bool, er
 
 func waitPathExpectedCondition(path, state, pathType string, nonEmpty bool) string {
 	condition := "exist"
-	if state == "absent" {
+	switch {
+	case state == "absent":
 		condition = "be absent"
-	} else if pathType == "file" {
+	case pathType == "file":
 		condition = "exist as a file"
-	} else if pathType == "dir" {
+	case pathType == "dir":
 		condition = "exist as a directory"
 	}
 	if nonEmpty {

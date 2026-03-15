@@ -271,9 +271,9 @@ func executeDoctor(ctx context.Context, workflowPath string, varOverrides map[st
 	checkByName := map[string]*doctorCheck{}
 	addCheck := func(c doctorCheck) {
 		if existing, ok := checkByName[c.Name]; ok {
-			usedBy := append(existing.UsedBy, c.UsedBy...)
-			sort.Strings(usedBy)
-			existing.UsedBy = dedupeStrings(usedBy)
+			existing.UsedBy = append(existing.UsedBy, c.UsedBy...)
+			sort.Strings(existing.UsedBy)
+			existing.UsedBy = dedupeStrings(existing.UsedBy)
 			if existing.Status == "passed" && c.Status == "failed" {
 				existing.Status = "failed"
 				existing.Message = c.Message

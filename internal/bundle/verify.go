@@ -468,7 +468,7 @@ func verifyYUMRepoCoverageFromTar(files map[string]tarFileInfo, dirs map[string]
 }
 
 func verifyImageTarCoverage(bundleRoot string, manifestPaths map[string]struct{}) error {
-	for _, relDir := range []string{filepath.Join("outputs", "images"), filepath.Join("images")} {
+	for _, relDir := range []string{filepath.Join("outputs", "images"), "images"} {
 		imagesDir := filepath.Join(bundleRoot, relDir)
 		entries, err := os.ReadDir(imagesDir)
 		if err != nil {

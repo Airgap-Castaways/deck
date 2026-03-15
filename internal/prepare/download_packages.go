@@ -498,8 +498,8 @@ func tryReusePackageArtifacts(bundleRoot, rootRel string, packages []string, opt
 		return nil, false, err
 	}
 	var meta packageCacheMeta
-	if err := json.Unmarshal(raw, &meta); err != nil {
-		return nil, false, nil
+	if decodeErr := json.Unmarshal(raw, &meta); decodeErr != nil {
+		return nil, false, fmt.Errorf("decode package cache metadata: %w", decodeErr)
 	}
 	want := normalizeStrings(packages)
 	got := normalizeStrings(meta.Packages)
@@ -513,7 +513,10 @@ func tryReusePackageArtifacts(bundleRoot, rootRel string, packages []string, opt
 	for _, rel := range files {
 		abs := filepath.Join(bundleRoot, filepath.FromSlash(rel))
 		info, statErr := os.Stat(abs)
-		if statErr != nil || info.Size() == 0 {
+		if statErr != nil {
+			return nil, false, fmt.Errorf("stat cached package artifact %s: %w", abs, statErr)
+		}
+		if info.Size() == 0 {
 			return nil, false, nil
 		}
 	}
