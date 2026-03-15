@@ -14,7 +14,7 @@ The workflow schema currently enforces:
 
 - required `role` and `version`
 - `role` must be `prepare` or `apply`
-- either `steps`, `phases`, or `imports` must be present
+- either `artifacts`, `steps`, `phases`, or `imports` must be present
 - a step must include `id`, `kind`, and `spec`
 - optional `when`, `retry`, `timeout`, and `register`
 
@@ -140,7 +140,7 @@ Writes a unit file at `path` from either `content` or `contentFromTemplate`. It 
 
 ### `Artifacts`
 
-Installs or extracts per-architecture artifacts. Each entry requires `source.amd64` and `source.arm64`, optional `skipIfPresent`, and exactly one of `install` or `extract`. The step also supports shared `fetch` defaults.
+Installs or extracts prepared artifacts onto the target host. This step keeps artifact-install intent explicit instead of overloading generic file-copy behavior.
 
 ```yaml
 - id: install-k8s-binaries
@@ -150,12 +150,9 @@ Installs or extracts per-architecture artifacts. Each entry requires `source.amd
     artifacts:
       - source:
           amd64:
-            url: http://{{ .vars.serverURL }}/files/bin/linux/amd64/kubelet
+            path: outputs/files/bin/linux/amd64/kubelet
           arm64:
-            url: http://{{ .vars.serverURL }}/files/bin/linux/arm64/kubelet
-        skipIfPresent:
-          path: /usr/bin/kubelet
-          executable: true
+            path: outputs/files/bin/linux/arm64/kubelet
         install:
           path: /usr/bin/kubelet
           mode: "0755"
@@ -181,15 +178,16 @@ Runs `kubeadm init` with either `configFile` or `configTemplate`, plus bootstrap
     criSocket: unix:///run/containerd/containerd.sock
 ```
 
-### `Kubeadm` (reset mode)
+### `Kubeadm` reset action
 
-Wraps `kubeadm reset` and related cleanup with `force`, `ignoreErrors`, `stopKubelet`, `criSocket`, `removePaths`, `removeFiles`, `cleanupContainers`, `restartRuntimeService`, and `timeout`.
+The same `Kubeadm` kind also supports `action: reset` for teardown and cleanup behavior.
 
 ```yaml
 - id: bootstrap-reset-preflight
   apiVersion: deck/v1alpha1
   kind: Kubeadm
   spec:
+    action: reset
     force: true
     ignoreErrors: true
     criSocket: unix:///run/containerd/containerd.sock
@@ -206,18 +204,18 @@ Wraps `kubeadm reset` and related cleanup with `force`, `ignoreErrors`, `stopKub
 
 ### `Wait`
 
-Waits for a path to become `exists` or `absent`. The step also supports `type`, `nonEmpty`, `pollInterval`, and `timeout`. Use `nonEmpty` only with `state: exists`.
+Waits for runtime conditions such as file presence, file absence, service activity, or command success. For path-based waiting, use `action: fileExists` or `action: fileAbsent`.
 
 ```yaml
 - id: wait-admin-conf
   apiVersion: deck/v1alpha1
   kind: Wait
   spec:
+    action: fileExists
     path: /etc/kubernetes/admin.conf
-    state: exists
     type: file
     nonEmpty: true
-    pollInterval: 2s
+    interval: 2s
     timeout: 5m
 ```
 

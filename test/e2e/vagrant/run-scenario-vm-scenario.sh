@@ -314,7 +314,7 @@ PY
 }
 
 apply_control_plane_workflow() {
-  CONTROL_PLANE_WORKFLOW_URL="${SERVER_URL}/files/workflows/scenarios/control-plane-bootstrap.yaml"
+  CONTROL_PLANE_WORKFLOW_URL="${SERVER_URL}/workflows/scenarios/control-plane-bootstrap.yaml"
   local server_no_scheme="${SERVER_URL#http://}"
   server_no_scheme="${server_no_scheme#https://}"
   sudo -n "${DECK_BIN}" apply --file "${CONTROL_PLANE_WORKFLOW_URL}" --phase install \
@@ -521,8 +521,8 @@ apply_node_reset_worker_lifecycle() {
 }
 
 apply_worker_workflow() {
-  local workflow_url="${SERVER_URL}/files/workflows/scenarios/worker-join.yaml"
-  local node_reset_url="${SERVER_URL}/files/workflows/scenarios/node-reset.yaml"
+  local workflow_url="${SERVER_URL}/workflows/scenarios/worker-join.yaml"
+  local node_reset_url="${SERVER_URL}/workflows/scenarios/node-reset.yaml"
   local release="${OFFLINE_RELEASE_WORKER}"
   local os_family="debian"
   local server_no_scheme="${SERVER_URL#http://}"

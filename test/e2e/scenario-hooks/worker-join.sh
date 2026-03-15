@@ -121,7 +121,7 @@ worker_join_prepare() {
 }
 
 worker_join_apply() {
-  local workflow_url="${SERVER_URL}/files/workflows/scenarios/worker-join.yaml"
+  local workflow_url="${SERVER_URL}/workflows/scenarios/worker-join.yaml"
   local release="${OFFLINE_RELEASE_WORKER}"
   local os_family="debian"
   local server_no_scheme="${SERVER_URL#http://}"

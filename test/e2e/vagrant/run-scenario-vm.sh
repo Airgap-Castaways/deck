@@ -61,7 +61,7 @@ REPO_TYPE="apt-flat"
 OFFLINE_GUARD_ACTIVE=0
 KEEP_PROCESSES=0
 SERVER_PID_FILE="/tmp/deck/offline-server.pid"
-CONTROL_PLANE_WORKFLOW_URL="${SERVER_URL}/files/workflows/scenarios/control-plane-bootstrap.yaml"
+CONTROL_PLANE_WORKFLOW_URL="${SERVER_URL}/workflows/scenarios/control-plane-bootstrap.yaml"
 SCENARIO_HELPERS="/workspace/test/e2e/vagrant/run-scenario-vm-scenario.sh"
 
 if [[ ! -f "${SCENARIO_HELPERS}" ]]; then
@@ -190,12 +190,12 @@ prepare_server_bundle() {
 }
 
 write_runtime_workflows() {
-  local workflow_dir="${SERVER_ROOT}/files/workflows"
+  local workflow_dir="${SERVER_ROOT}/workflows"
   rm -rf "${workflow_dir}"
   mkdir -p "${workflow_dir}"
   ensure_advertise_address
   cp -a "/workspace/test/workflows/." "${workflow_dir}/"
-  CONTROL_PLANE_WORKFLOW_URL="${SERVER_URL}/files/workflows/scenarios/control-plane-bootstrap.yaml"
+  CONTROL_PLANE_WORKFLOW_URL="${SERVER_URL}/workflows/scenarios/control-plane-bootstrap.yaml"
   rm -rf "${RENDERED_WORKFLOWS_DIR}"
   mkdir -p "${RENDERED_WORKFLOWS_DIR}"
   cp -a "${workflow_dir}/." "${RENDERED_WORKFLOWS_DIR}/"

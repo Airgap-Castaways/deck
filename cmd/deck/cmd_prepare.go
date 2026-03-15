@@ -60,7 +60,7 @@ func runPrepareWithOptions(opts prepareOptions) error {
 	if err != nil {
 		return err
 	}
-	varsWorkflowPath, err := resolveRequiredVarsWorkflowPath(workflowRootDirPath)
+	varsWorkflowPath, err := resolveOptionalVarsWorkflowPath(workflowRootDirPath)
 	if err != nil {
 		return err
 	}
@@ -68,13 +68,6 @@ func runPrepareWithOptions(opts prepareOptions) error {
 	if err != nil {
 		return err
 	}
-	for _, requiredPath := range []string{varsWorkflowPath} {
-		info, statErr := os.Stat(requiredPath)
-		if statErr != nil || info.IsDir() {
-			return fmt.Errorf("required workflow file not found: %s", requiredPath)
-		}
-	}
-
 	resolvedPreparedRoot := strings.TrimSpace(opts.preparedRoot)
 	if resolvedPreparedRoot == "" {
 		resolvedPreparedRoot = defaultPreparedRoot(".")
@@ -88,7 +81,6 @@ func runPrepareWithOptions(opts prepareOptions) error {
 		for _, line := range []string{
 			fmt.Sprintf("PREPARE_WORKFLOW=%s", filepath.ToSlash(prepareWorkflowPath)),
 			fmt.Sprintf("WORKFLOW_INCLUDE=%s", filepath.ToSlash(prepareWorkflowPath)),
-			fmt.Sprintf("WORKFLOW_INCLUDE=%s", filepath.ToSlash(varsWorkflowPath)),
 			fmt.Sprintf("PREPARED_ROOT=%s", filepath.ToSlash(resolvedPreparedRootAbs)),
 			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(resolvedPreparedRootAbs, "packages"))),
 			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(resolvedPreparedRootAbs, "images"))),
@@ -97,6 +89,11 @@ func runPrepareWithOptions(opts prepareOptions) error {
 			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(filepath.Dir(resolvedPreparedRootAbs), ".deck", "manifest.json"))),
 		} {
 			if err := stdoutPrintln(line); err != nil {
+				return err
+			}
+		}
+		if varsWorkflowPath != "" {
+			if err := stdoutPrintf("WORKFLOW_INCLUDE=%s\n", filepath.ToSlash(varsWorkflowPath)); err != nil {
 				return err
 			}
 		}
@@ -194,12 +191,12 @@ func resolveOptionalApplyWorkflowPath(workflowRootPath string) (string, error) {
 	return path, nil
 }
 
-func resolveRequiredVarsWorkflowPath(workflowRootPath string) (string, error) {
+func resolveOptionalVarsWorkflowPath(workflowRootPath string) (string, error) {
 	varsPath := canonicalVarsPath(filepath.Dir(workflowRootPath))
 	if info, err := os.Stat(varsPath); err == nil && !info.IsDir() {
 		return varsPath, nil
 	}
-	return "", fmt.Errorf("required workflow file not found: %s", varsPath)
+	return "", nil
 }
 
 func writeBytes(path string, data []byte, mode os.FileMode) error {
