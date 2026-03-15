@@ -84,11 +84,13 @@ func buildWorkflowIndex(root string) ([]byte, error) {
 		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
 			return nil
 		}
-		rel, err := filepath.Rel(filepath.Join(root, "workflows"), path)
+		rel, err := filepath.Rel(scenarioRoot, path)
 		if err != nil {
 			return err
 		}
-		items = append(items, filepath.ToSlash(filepath.Join("workflows", rel)))
+		rel = filepath.ToSlash(rel)
+		rel = strings.TrimSuffix(rel, filepath.Ext(rel))
+		items = append(items, rel)
 		return nil
 	})
 	if err != nil {

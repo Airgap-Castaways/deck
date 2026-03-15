@@ -113,7 +113,7 @@ func executeServe(root string, addr string, apiToken string, reportMax int, audi
 	}
 }
 
-func executeList(server string, output string) error {
+func executeListScenarios(server string, output string) error {
 	if output != "text" && output != "json" {
 		return errors.New("--output must be text or json")
 	}
@@ -122,7 +122,7 @@ func executeList(server string, output string) error {
 	if err != nil {
 		return err
 	}
-	items, err := fetchWorkflowIndexFromServer(resolvedServer)
+	items, err := fetchScenarioIndexFromServer(resolvedServer)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func executeList(server string, output string) error {
 	if output == "json" {
 		enc := json.NewEncoder(os.Stdout)
 		if err := enc.Encode(items); err != nil {
-			return fmt.Errorf("server workflows: encode output: %w", err)
+			return fmt.Errorf("server scenarios: encode output: %w", err)
 		}
 		return nil
 	}
@@ -144,28 +144,28 @@ func executeList(server string, output string) error {
 	return w.Flush()
 }
 
-func fetchWorkflowIndexFromServer(server string) ([]string, error) {
+func fetchScenarioIndexFromServer(server string) ([]string, error) {
 	trimmed := strings.TrimRight(server, "/")
 	indexURL := trimmed + "/workflows/index.json"
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, indexURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("server workflows: build request: %w", err)
+		return nil, fmt.Errorf("server scenarios: build request: %w", err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("server workflows: request failed: %w", err)
+		return nil, fmt.Errorf("server scenarios: request failed: %w", err)
 	}
 	defer closeSilently(resp.Body)
 	if resp.StatusCode == http.StatusNotFound {
 		return []string{}, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server workflows: unexpected status %d", resp.StatusCode)
+		return nil, fmt.Errorf("server scenarios: unexpected status %d", resp.StatusCode)
 	}
 
 	var items []string
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-		return nil, fmt.Errorf("server workflows: decode response: %w", err)
+		return nil, fmt.Errorf("server scenarios: decode response: %w", err)
 	}
 	return items, nil
 }
