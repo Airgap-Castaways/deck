@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 var (
@@ -18,8 +20,41 @@ var (
 
 var yumEnabledTruePattern = regexp.MustCompile(`(?i)^\s*enabled\s*=\s*(1|yes|true)\s*$`)
 
+type editFileEditSpec struct {
+	Match string `json:"match"`
+	With  string `json:"with"`
+}
+
+type editFileSpec struct {
+	Path   string             `json:"path"`
+	Backup *bool              `json:"backup"`
+	Edits  []editFileEditSpec `json:"edits"`
+}
+
+type copyFileSpec struct {
+	Src  string `json:"src"`
+	Dest string `json:"dest"`
+}
+
+type writeFileSpec struct {
+	Path                string `json:"path"`
+	Content             string `json:"content"`
+	ContentFromTemplate string `json:"contentFromTemplate"`
+	Mode                string `json:"mode"`
+}
+
+type templateFileSpec struct {
+	Path     string `json:"path"`
+	Template string `json:"template"`
+	Mode     string `json:"mode"`
+}
+
 func runEditFile(spec map[string]any) error {
-	path := stringValue(spec, "path")
+	decoded, err := workflowexec.DecodeSpec[editFileSpec](spec)
+	if err != nil {
+		return fmt.Errorf("decode EditFile spec: %w", err)
+	}
+	path := strings.TrimSpace(decoded.Path)
 	if path == "" {
 		return fmt.Errorf("%s: EditFile requires path", errCodeInstallEditPathMissing)
 	}
@@ -28,7 +63,7 @@ func runEditFile(spec map[string]any) error {
 	if err != nil {
 		return err
 	}
-	if editFileBackupEnabled(spec) {
+	if editFileBackupEnabledValue(decoded.Backup) {
 		backupPath, err := createEditFileBackup(path, content)
 		if err != nil {
 			return fmt.Errorf("create backup %s: %w", backupPath, err)
@@ -39,18 +74,13 @@ func runEditFile(spec map[string]any) error {
 	}
 	updated := string(content)
 
-	edits, ok := spec["edits"].([]any)
-	if !ok || len(edits) == 0 {
+	if len(decoded.Edits) == 0 {
 		return fmt.Errorf("%s: EditFile requires edits", errCodeInstallEditsMissing)
 	}
 
-	for _, e := range edits {
-		em, ok := e.(map[string]any)
-		if !ok {
-			continue
-		}
-		match := stringValue(em, "match")
-		with := stringValue(em, "with")
+	for _, edit := range decoded.Edits {
+		match := strings.TrimSpace(edit.Match)
+		with := edit.With
 		if match == "" {
 			continue
 		}
@@ -61,8 +91,12 @@ func runEditFile(spec map[string]any) error {
 }
 
 func runCopyFile(spec map[string]any) error {
-	src := stringValue(spec, "src")
-	dest := stringValue(spec, "dest")
+	decoded, err := workflowexec.DecodeSpec[copyFileSpec](spec)
+	if err != nil {
+		return fmt.Errorf("decode CopyFile spec: %w", err)
+	}
+	src := strings.TrimSpace(decoded.Src)
+	dest := strings.TrimSpace(decoded.Dest)
 	if src == "" || dest == "" {
 		return fmt.Errorf("%s: CopyFile requires src and dest", errCodeInstallCopyPathMissing)
 	}
@@ -151,13 +185,17 @@ func runSymlink(spec map[string]any) error {
 }
 
 func runWriteFile(spec map[string]any) error {
-	path := stringValue(spec, "path")
+	decoded, err := workflowexec.DecodeSpec[writeFileSpec](spec)
+	if err != nil {
+		return fmt.Errorf("decode WriteFile spec: %w", err)
+	}
+	path := strings.TrimSpace(decoded.Path)
 	if path == "" {
 		return fmt.Errorf("%s: WriteFile requires path", errCodeInstallInstallFilePath)
 	}
-	content := stringValue(spec, "content")
+	content := decoded.Content
 	if content == "" {
-		if from := stringValue(spec, "contentFromTemplate"); from != "" {
+		if from := decoded.ContentFromTemplate; from != "" {
 			content = from
 		}
 	}
@@ -174,7 +212,7 @@ func runWriteFile(spec map[string]any) error {
 	if err := writeFileIfChanged(path, []byte(content), 0o644); err != nil {
 		return err
 	}
-	if modeRaw := stringValue(spec, "mode"); modeRaw != "" {
+	if modeRaw := strings.TrimSpace(decoded.Mode); modeRaw != "" {
 		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
 		if err != nil {
 			return fmt.Errorf("invalid mode: %w", err)
@@ -187,18 +225,22 @@ func runWriteFile(spec map[string]any) error {
 }
 
 func runTemplateFile(spec map[string]any) error {
-	path := stringValue(spec, "path")
+	decoded, err := workflowexec.DecodeSpec[templateFileSpec](spec)
+	if err != nil {
+		return fmt.Errorf("decode TemplateFile spec: %w", err)
+	}
+	path := strings.TrimSpace(decoded.Path)
 	if path == "" {
 		return fmt.Errorf("%s: TemplateFile requires path", errCodeInstallTemplatePathMiss)
 	}
-	body := stringValue(spec, "template")
+	body := decoded.Template
 	if body == "" {
 		return fmt.Errorf("%s: TemplateFile requires template", errCodeInstallTemplateBodyMiss)
 	}
 	return runWriteFile(map[string]any{
 		"path":    path,
 		"content": body,
-		"mode":    stringValue(spec, "mode"),
+		"mode":    decoded.Mode,
 	})
 }
 

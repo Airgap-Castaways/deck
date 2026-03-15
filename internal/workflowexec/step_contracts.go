@@ -132,6 +132,10 @@ func StepHasOutput(kind string, spec map[string]any, output string) bool {
 	return contract.Actions[action].Outputs[output]
 }
 
+func InferStepAction(kind string, spec map[string]any) string {
+	return inferContractAction(kind, spec)
+}
+
 func inferContractAction(kind string, spec map[string]any) string {
 	if spec != nil {
 		if raw, ok := spec["action"].(string); ok && raw != "" {

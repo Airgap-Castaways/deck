@@ -2,14 +2,10 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,9 +14,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 
-	"github.com/taedi90/deck/internal/bundle"
+	"github.com/taedi90/deck/internal/applycli"
 	"github.com/taedi90/deck/internal/config"
 	"github.com/taedi90/deck/internal/install"
 	"github.com/taedi90/deck/internal/validate"
@@ -43,7 +38,7 @@ func newPlanCommand() *cobra.Command {
 		Aliases: []string{"diff"},
 		Short:   "Show the planned apply step execution",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runDiffWithOptions(diffOptions{
+			return runDiffWithOptions(cmd.Context(), diffOptions{
 				workflowPath:  cmdFlagValue(cmd, "file"),
 				server:        cmdFlagValue(cmd, "server"),
 				session:       cmdFlagValue(cmd, "session"),
@@ -65,7 +60,7 @@ func newPlanCommand() *cobra.Command {
 	return cmd
 }
 
-func runDiffWithOptions(opts diffOptions) error {
+func runDiffWithOptions(ctx context.Context, opts diffOptions) error {
 	assistedConfig, assistedMode, err := resolveAssistedExecutionConfig(opts.server, opts.session, opts.apiToken)
 	if err != nil {
 		return err
@@ -73,18 +68,18 @@ func runDiffWithOptions(opts diffOptions) error {
 	workflowPath := strings.TrimSpace(opts.workflowPath)
 	selectedPhase := strings.TrimSpace(opts.selectedPhase)
 	if assistedMode {
-		return runAssistedAction(assistedConfig, "diff", func(ctx assistedExecutionContext) error {
-			return executeDiff(ctx.WorkflowPath, selectedPhase, opts.output, varsAsAnyMap(opts.varOverrides))
+		return runAssistedAction(assistedConfig, "diff", func(assistedCtx assistedExecutionContext) error {
+			return executeDiff(ctx, assistedCtx.WorkflowPath, selectedPhase, opts.output, varsAsAnyMap(opts.varOverrides))
 		})
 	}
 	if workflowPath == "" {
 		return errors.New("--file (or -f) is required")
 	}
-	return executeDiff(workflowPath, selectedPhase, opts.output, varsAsAnyMap(opts.varOverrides))
+	return executeDiff(ctx, workflowPath, selectedPhase, opts.output, varsAsAnyMap(opts.varOverrides))
 }
 
-func executeDiff(workflowPath, selectedPhase, output string, varOverrides map[string]any) error {
-	resolvedRequest, err := resolveApplyExecutionRequest(applyExecutionRequestOptions{
+func executeDiff(ctx context.Context, workflowPath, selectedPhase, output string, varOverrides map[string]any) error {
+	resolvedRequest, err := applycli.ResolveExecutionRequest(ctx, applycli.ExecutionRequestOptions{
 		CommandName:                  "diff",
 		WorkflowPath:                 workflowPath,
 		VarOverrides:                 varOverrides,
@@ -99,7 +94,7 @@ func executeDiff(workflowPath, selectedPhase, output string, varOverrides map[st
 	}
 	applyExecutionWorkflow := resolvedRequest.ExecutionWorkflow
 
-	state, err := loadInstallDryRunState(applyExecutionWorkflow)
+	state, err := applycli.LoadInstallDryRunState(applyExecutionWorkflow)
 	if err != nil {
 		return err
 	}
@@ -215,7 +210,7 @@ func newDoctorCommand() *cobra.Command {
 		Use:   "doctor",
 		Short: "Check referenced artifact inputs before apply",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runDoctorWithOptions(doctorOptions{
+			return runDoctorWithOptions(cmd.Context(), doctorOptions{
 				workflowPath: cmdFlagValue(cmd, "file"),
 				server:       cmdFlagValue(cmd, "server"),
 				session:      cmdFlagValue(cmd, "session"),
@@ -235,7 +230,7 @@ func newDoctorCommand() *cobra.Command {
 	return cmd
 }
 
-func runDoctorWithOptions(opts doctorOptions) error {
+func runDoctorWithOptions(ctx context.Context, opts doctorOptions) error {
 	resolvedOut := strings.TrimSpace(opts.outPath)
 	assistedConfig, assistedMode, err := resolveAssistedExecutionConfig(opts.server, opts.session, opts.apiToken)
 	if err != nil {
@@ -249,19 +244,19 @@ func runDoctorWithOptions(opts doctorOptions) error {
 	}
 
 	if assistedMode {
-		return runAssistedAction(assistedConfig, "doctor", func(ctx assistedExecutionContext) error {
-			return executeDoctor(ctx.WorkflowPath, varsAsAnyMap(opts.varOverrides), resolvedOut)
+		return runAssistedAction(assistedConfig, "doctor", func(assistedCtx assistedExecutionContext) error {
+			return executeDoctor(ctx, assistedCtx.WorkflowPath, varsAsAnyMap(opts.varOverrides), resolvedOut)
 		})
 	}
 
-	return executeDoctor(strings.TrimSpace(opts.workflowPath), varsAsAnyMap(opts.varOverrides), resolvedOut)
+	return executeDoctor(ctx, strings.TrimSpace(opts.workflowPath), varsAsAnyMap(opts.varOverrides), resolvedOut)
 }
 
-func executeDoctor(workflowPath string, varOverrides map[string]any, resolvedOut string) error {
-	resolvedRequest, err := resolveApplyExecutionRequest(applyExecutionRequestOptions{
+func executeDoctor(ctx context.Context, workflowPath string, varOverrides map[string]any, resolvedOut string) error {
+	resolvedRequest, err := applycli.ResolveExecutionRequest(ctx, applycli.ExecutionRequestOptions{
 		CommandName:                "doctor",
 		WorkflowPath:               strings.TrimSpace(workflowPath),
-		DiscoverWorkflow:           func() (string, error) { return discoverApplyWorkflow(".") },
+		DiscoverWorkflow:           func(context.Context) (string, error) { return applycli.DiscoverApplyWorkflow(ctx, ".") },
 		AllowRemoteWorkflow:        true,
 		NormalizeLocalWorkflowPath: true,
 		VarOverrides:               varOverrides,
@@ -430,131 +425,6 @@ func doctorCheckHTTPReachable(url string) (string, string) {
 	return "passed", ""
 }
 
-func loadInstallDryRunState(wf *config.Workflow) (*install.State, error) {
-	statePath, err := resolveInstallStatePath(wf)
-	if err != nil {
-		return nil, err
-	}
-	return install.LoadState(statePath)
-}
-
-func resolveInstallStatePath(wf *config.Workflow) (string, error) {
-	return install.DefaultStatePath(wf)
-}
-
-type applyExecutionRequestOptions struct {
-	CommandName                  string
-	WorkflowPath                 string
-	DiscoverWorkflow             func() (string, error)
-	AllowRemoteWorkflow          bool
-	NormalizeLocalWorkflowPath   bool
-	VarOverrides                 map[string]any
-	SelectedPhase                string
-	DefaultPhase                 string
-	BuildExecutionWorkflow       bool
-	ResolveStatePath             bool
-	StatePathFromExecutionTarget bool
-}
-
-type applyExecutionRequest struct {
-	WorkflowPath      string
-	Workflow          *config.Workflow
-	SelectedPhase     string
-	ExecutionWorkflow *config.Workflow
-	StatePath         string
-}
-
-func resolveApplyExecutionRequest(opts applyExecutionRequestOptions) (applyExecutionRequest, error) {
-	workflowPath := strings.TrimSpace(opts.WorkflowPath)
-	if workflowPath == "" && opts.DiscoverWorkflow != nil {
-		resolvedWorkflowPath, err := opts.DiscoverWorkflow()
-		if err != nil {
-			return applyExecutionRequest{}, err
-		}
-		workflowPath = strings.TrimSpace(resolvedWorkflowPath)
-	}
-
-	isRemoteWorkflow := opts.AllowRemoteWorkflow && isHTTPWorkflowPath(workflowPath)
-	if isRemoteWorkflow {
-		workflowBytes, err := fetchWorkflowForApplyValidation(workflowPath)
-		if err != nil {
-			return applyExecutionRequest{}, err
-		}
-		var wfMeta config.Workflow
-		if err := yaml.Unmarshal(workflowBytes, &wfMeta); err == nil {
-			if strings.TrimSpace(wfMeta.Role) != "apply" {
-				return applyExecutionRequest{}, fmt.Errorf("%s workflow role must be apply: %s", opts.CommandName, workflowPath)
-			}
-		}
-		if err := validate.Bytes(workflowPath, workflowBytes); err != nil {
-			return applyExecutionRequest{}, err
-		}
-	} else {
-		if opts.NormalizeLocalWorkflowPath {
-			resolvedWorkflowPath, err := filepath.Abs(workflowPath)
-			if err != nil {
-				return applyExecutionRequest{}, fmt.Errorf("resolve workflow path: %w", err)
-			}
-			workflowPath = resolvedWorkflowPath
-		}
-		if err := validate.File(workflowPath); err != nil {
-			return applyExecutionRequest{}, err
-		}
-	}
-
-	ctx := context.Background()
-	wf, err := config.LoadWithOptions(ctx, workflowPath, config.LoadOptions{VarOverrides: opts.VarOverrides})
-	if err != nil {
-		return applyExecutionRequest{}, err
-	}
-	if strings.TrimSpace(wf.Role) != "apply" {
-		return applyExecutionRequest{}, fmt.Errorf("%s workflow role must be apply: %s", opts.CommandName, workflowPath)
-	}
-
-	selectedPhase := strings.TrimSpace(opts.SelectedPhase)
-	if selectedPhase == "" {
-		selectedPhase = strings.TrimSpace(opts.DefaultPhase)
-	}
-
-	var executionWorkflow *config.Workflow
-	if opts.BuildExecutionWorkflow {
-		executionWorkflow, err = buildApplyExecutionWorkflow(wf, selectedPhase)
-		if err != nil {
-			return applyExecutionRequest{}, err
-		}
-	}
-
-	statePath := ""
-	if opts.ResolveStatePath {
-		stateWorkflow := wf
-		if opts.StatePathFromExecutionTarget {
-			stateWorkflow = executionWorkflow
-		}
-		resolvedStatePath, err := resolveInstallStatePath(stateWorkflow)
-		if err != nil {
-			return applyExecutionRequest{}, err
-		}
-		statePath = resolvedStatePath
-	}
-
-	return applyExecutionRequest{
-		WorkflowPath:      workflowPath,
-		Workflow:          wf,
-		SelectedPhase:     selectedPhase,
-		ExecutionWorkflow: executionWorkflow,
-		StatePath:         statePath,
-	}, nil
-}
-
-func findWorkflowPhaseByName(wf *config.Workflow, name string) (config.Phase, bool) {
-	for _, phase := range wf.Phases {
-		if phase.Name == name {
-			return phase, true
-		}
-	}
-	return config.Phase{}, false
-}
-
 type applyOptions struct {
 	workflowPath  string
 	server        string
@@ -579,7 +449,7 @@ func newApplyCommand() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runApplyWithOptions(applyOptions{
+			return runApplyWithOptions(cmd.Context(), applyOptions{
 				workflowPath:  cmdFlagValue(cmd, "file"),
 				server:        cmdFlagValue(cmd, "server"),
 				session:       cmdFlagValue(cmd, "session"),
@@ -604,7 +474,7 @@ func newApplyCommand() *cobra.Command {
 	return cmd
 }
 
-func runApplyWithOptions(opts applyOptions) error {
+func runApplyWithOptions(ctx context.Context, opts applyOptions) error {
 	if len(opts.positional) > 2 {
 		return errors.New("apply accepts at most two positional arguments: [workflow] [bundle]")
 	}
@@ -618,22 +488,20 @@ func runApplyWithOptions(opts applyOptions) error {
 		return err
 	}
 	if assistedMode {
-		return runAssistedAction(assistedConfig, "apply", func(ctx assistedExecutionContext) error {
-			return executeApply(ctx.WorkflowPath, ctx.BundleRoot, strings.TrimSpace(opts.selectedPhase), opts.prefetch, opts.dryRun, varsAsAnyMap(opts.varOverrides))
+		return runAssistedAction(assistedConfig, "apply", func(assistedCtx assistedExecutionContext) error {
+			return executeApply(ctx, assistedCtx.WorkflowPath, assistedCtx.BundleRoot, strings.TrimSpace(opts.selectedPhase), opts.prefetch, opts.dryRun, varsAsAnyMap(opts.varOverrides))
 		})
 	}
 
-	workflowPath, bundleRoot, err := resolveApplyWorkflowAndBundle(strings.TrimSpace(opts.workflowPath), positionalArgs)
+	workflowPath, bundleRoot, err := applycli.ResolveWorkflowAndBundle(ctx, strings.TrimSpace(opts.workflowPath), positionalArgs)
 	if err != nil {
 		return err
 	}
-	return executeApply(workflowPath, bundleRoot, strings.TrimSpace(opts.selectedPhase), opts.prefetch, opts.dryRun, varsAsAnyMap(opts.varOverrides))
+	return executeApply(ctx, workflowPath, bundleRoot, strings.TrimSpace(opts.selectedPhase), opts.prefetch, opts.dryRun, varsAsAnyMap(opts.varOverrides))
 }
 
-func executeApply(workflowPath, bundleRoot, selectedPhase string, prefetch, dryRun bool, varOverrides map[string]any) error {
-	ctx := context.Background()
-
-	resolvedRequest, err := resolveApplyExecutionRequest(applyExecutionRequestOptions{
+func executeApply(ctx context.Context, workflowPath, bundleRoot, selectedPhase string, prefetch, dryRun bool, varOverrides map[string]any) error {
+	resolvedRequest, err := applycli.ResolveExecutionRequest(ctx, applycli.ExecutionRequestOptions{
 		CommandName:                  "apply",
 		WorkflowPath:                 workflowPath,
 		AllowRemoteWorkflow:          true,
@@ -656,7 +524,7 @@ func executeApply(workflowPath, bundleRoot, selectedPhase string, prefetch, dryR
 	}
 
 	if prefetch {
-		prefetchWorkflow := buildApplyPrefetchWorkflow(wf)
+		prefetchWorkflow := applycli.BuildPrefetchWorkflow(wf)
 		if len(prefetchWorkflow.Phases) > 0 && len(prefetchWorkflow.Phases[0].Steps) > 0 {
 			if err := install.Run(ctx, prefetchWorkflow, install.RunOptions{BundleRoot: bundleRoot, StatePath: statePath}); err != nil {
 				return err
@@ -671,166 +539,6 @@ func executeApply(workflowPath, bundleRoot, selectedPhase string, prefetch, dryR
 	return stdoutPrintln("apply: ok")
 }
 
-func resolveApplyWorkflowAndBundle(fileFlagValue string, positionalArgs []string) (string, string, error) {
-	workflowPath := strings.TrimSpace(fileFlagValue)
-	positionalWorkflow := ""
-	positionalBundle := ""
-
-	if workflowPath != "" {
-		if len(positionalArgs) == 2 {
-			return "", "", errors.New("apply accepts at most one positional bundle path when --file is set")
-		}
-		if len(positionalArgs) == 1 {
-			positionalBundle = strings.TrimSpace(positionalArgs[0])
-		}
-	} else {
-		if len(positionalArgs) == 1 {
-			arg0 := strings.TrimSpace(positionalArgs[0])
-			if looksLikeWorkflowReference(arg0) {
-				positionalWorkflow = arg0
-			} else {
-				positionalBundle = arg0
-			}
-		}
-		if len(positionalArgs) == 2 {
-			arg0 := strings.TrimSpace(positionalArgs[0])
-			arg1 := strings.TrimSpace(positionalArgs[1])
-			if !looksLikeWorkflowReference(arg0) {
-				return "", "", errors.New("apply with two positional arguments requires [workflow] [bundle]")
-			}
-			positionalWorkflow = arg0
-			positionalBundle = arg1
-		}
-	}
-
-	if workflowPath == "" {
-		workflowPath = positionalWorkflow
-	}
-
-	isRemoteWorkflow := isHTTPWorkflowPath(workflowPath)
-	bundleRoot := ""
-
-	if !isRemoteWorkflow {
-		resolvedBundleRoot, err := resolveApplyBundleRoot(positionalBundle)
-		if err != nil {
-			return "", "", err
-		}
-		bundleRoot = resolvedBundleRoot
-
-		if workflowPath == "" {
-			resolvedWorkflowPath, err := discoverApplyWorkflow(bundleRoot)
-			if err != nil {
-				return "", "", err
-			}
-			workflowPath = resolvedWorkflowPath
-		} else {
-			resolvedWorkflowPath, err := filepath.Abs(workflowPath)
-			if err != nil {
-				return "", "", fmt.Errorf("resolve workflow path: %w", err)
-			}
-			workflowPath = resolvedWorkflowPath
-		}
-	}
-
-	if workflowPath == "" {
-		resolvedBundleRoot, err := resolveApplyBundleRoot(positionalBundle)
-		if err != nil {
-			return "", "", err
-		}
-		bundleRoot = resolvedBundleRoot
-		resolvedWorkflowPath, err := discoverApplyWorkflow(bundleRoot)
-		if err != nil {
-			return "", "", err
-		}
-		workflowPath = resolvedWorkflowPath
-	}
-
-	return workflowPath, bundleRoot, nil
-}
-
-func looksLikeWorkflowReference(raw string) bool {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return false
-	}
-	if isHTTPWorkflowPath(trimmed) {
-		return true
-	}
-	lower := strings.ToLower(trimmed)
-	if strings.HasSuffix(lower, ".yaml") || strings.HasSuffix(lower, ".yml") {
-		return true
-	}
-	resolved, err := filepath.Abs(trimmed)
-	if err != nil {
-		return false
-	}
-	info, statErr := os.Stat(resolved)
-	if statErr != nil {
-		return false
-	}
-	return !info.IsDir()
-}
-
-func buildApplyPrefetchWorkflow(wf *config.Workflow) *config.Workflow {
-	if wf == nil {
-		return &config.Workflow{}
-	}
-
-	prefetchSteps := make([]config.Step, 0)
-	for _, phase := range wf.Phases {
-		for _, step := range phase.Steps {
-			action, _ := step.Spec["action"].(string)
-			if step.Kind == "File" && strings.TrimSpace(action) == "download" {
-				prefetchSteps = append(prefetchSteps, step)
-			}
-		}
-	}
-
-	if len(prefetchSteps) == 0 {
-		return &config.Workflow{}
-	}
-
-	return &config.Workflow{
-		Role:           wf.Role,
-		Version:        wf.Version,
-		Vars:           wf.Vars,
-		Phases:         []config.Phase{{Name: "prefetch", Steps: prefetchSteps}},
-		StateKey:       wf.StateKey,
-		WorkflowSHA256: wf.WorkflowSHA256,
-	}
-}
-
-func buildApplyExecutionWorkflow(wf *config.Workflow, phaseName string) (*config.Workflow, error) {
-	if wf == nil {
-		return nil, errors.New("workflow is nil")
-	}
-	if strings.TrimSpace(phaseName) == "" {
-		phases := make([]config.Phase, len(wf.Phases))
-		copy(phases, wf.Phases)
-		return &config.Workflow{
-			Role:           wf.Role,
-			Version:        wf.Version,
-			Vars:           wf.Vars,
-			Phases:         phases,
-			StateKey:       wf.StateKey,
-			WorkflowSHA256: wf.WorkflowSHA256,
-		}, nil
-	}
-	selectedPhase, found := findWorkflowPhaseByName(wf, phaseName)
-	if !found {
-		return nil, fmt.Errorf("%s phase not found", phaseName)
-	}
-
-	return &config.Workflow{
-		Role:           wf.Role,
-		Version:        wf.Version,
-		Vars:           wf.Vars,
-		Phases:         []config.Phase{{Name: selectedPhase.Name, Steps: selectedPhase.Steps}},
-		StateKey:       wf.StateKey,
-		WorkflowSHA256: wf.WorkflowSHA256,
-	}, nil
-}
-
 func runApplyDryRun(wf *config.Workflow, selectedPhaseName string, bundleRoot string) error {
 	if wf == nil || len(wf.Phases) == 0 {
 		if selectedPhaseName == "" {
@@ -839,7 +547,7 @@ func runApplyDryRun(wf *config.Workflow, selectedPhaseName string, bundleRoot st
 		return fmt.Errorf("%s phase not found", selectedPhaseName)
 	}
 
-	state, err := loadInstallDryRunState(wf)
+	state, err := applycli.LoadInstallDryRunState(wf)
 	if err != nil {
 		return err
 	}
@@ -854,7 +562,7 @@ func runApplyDryRun(wf *config.Workflow, selectedPhaseName string, bundleRoot st
 		completed[stepID] = true
 	}
 
-	statePath, err := resolveInstallStatePath(wf)
+	statePath, err := applycli.ResolveInstallStatePath(wf)
 	if err != nil {
 		return err
 	}
@@ -890,218 +598,7 @@ func runApplyDryRun(wf *config.Workflow, selectedPhaseName string, bundleRoot st
 	return nil
 }
 
-func isHTTPWorkflowPath(raw string) bool {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return false
-	}
-	parsed, err := url.Parse(trimmed)
-	if err != nil {
-		return false
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return false
-	}
-	return strings.TrimSpace(parsed.Host) != ""
-}
-
-func fetchWorkflowForApplyValidation(rawURL string) ([]byte, error) {
-	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("get workflow url: %w", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("get workflow url: %w", err)
-	}
-	defer closeSilently(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("get workflow url: unexpected status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read workflow url: %w", err)
-	}
-	return body, nil
-}
-
-func resolveApplyBundleRoot(positionalBundle string) (string, error) {
-	if strings.TrimSpace(positionalBundle) != "" {
-		return resolveApplyBundleCandidate(positionalBundle, true)
-	}
-
-	for _, candidate := range []string{"./bundle.tar", "."} {
-		resolved, err := resolveApplyBundleCandidate(candidate, false)
-		if err != nil {
-			return "", err
-		}
-		if resolved != "" {
-			return resolved, nil
-		}
-	}
-
-	return "", errors.New("bundle not found: expected positional bundle path, ./bundle.tar, ./bundle, or current directory with workflows/")
-}
-
-func resolveApplyBundleCandidate(candidate string, strict bool) (string, error) {
-	resolved, err := filepath.Abs(strings.TrimSpace(candidate))
-	if err != nil {
-		return "", fmt.Errorf("resolve bundle path: %w", err)
-	}
-
-	info, err := os.Stat(resolved)
-	if err != nil {
-		if os.IsNotExist(err) && !strict {
-			return "", nil
-		}
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("bundle path not found: %s", resolved)
-		}
-		return "", fmt.Errorf("stat bundle path: %w", err)
-	}
-
-	if info.IsDir() {
-		if hasWorkflowDir(resolved) {
-			return resolved, nil
-		}
-		if strict {
-			return "", fmt.Errorf("bundle directory must contain workflows/: %s", resolved)
-		}
-		return "", nil
-	}
-
-	if strings.ToLower(filepath.Ext(resolved)) != ".tar" {
-		if strict {
-			return "", fmt.Errorf("bundle path must be a directory or .tar archive: %s", resolved)
-		}
-		return "", nil
-	}
-
-	extractedRoot, err := extractApplyBundleArchive(resolved)
-	if err != nil {
-		return "", err
-	}
-	return extractedRoot, nil
-}
-
-func extractApplyBundleArchive(archivePath string) (string, error) {
-	sum, err := sha256FileHex(archivePath)
-	if err != nil {
-		return "", fmt.Errorf("hash bundle archive: %w", err)
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve user home directory: %w", err)
-	}
-
-	extractRoot := filepath.Join(home, ".deck", "extract", sum)
-	bundleRoot := filepath.Join(extractRoot, "bundle")
-	if hasWorkflowDir(bundleRoot) {
-		return bundleRoot, nil
-	}
-
-	if err := os.RemoveAll(extractRoot); err != nil {
-		return "", fmt.Errorf("reset extract cache: %w", err)
-	}
-	if err := os.MkdirAll(extractRoot, 0o755); err != nil {
-		return "", fmt.Errorf("create extract cache directory: %w", err)
-	}
-	if err := bundle.ImportArchive(archivePath, extractRoot); err != nil {
-		return "", err
-	}
-	if !hasWorkflowDir(bundleRoot) {
-		return "", fmt.Errorf("extracted bundle missing workflows/: %s", bundleRoot)
-	}
-
-	return bundleRoot, nil
-}
-
-func sha256FileHex(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer closeSilently(f)
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-func hasWorkflowDir(root string) bool {
-	workflowDir := filepath.Join(root, "workflows")
-	info, err := os.Stat(workflowDir)
-	if err != nil {
-		return false
-	}
-	return info.IsDir()
-}
-
-func discoverApplyWorkflow(bundleRoot string) (string, error) {
-	ctx := context.Background()
-
-	workflowDir := filepath.Join(bundleRoot, workflowRootDir)
-	if !hasWorkflowDir(bundleRoot) {
-		return "", fmt.Errorf("workflow directory not found: %s", workflowDir)
-	}
-
-	preferred := canonicalApplyWorkflowPath(bundleRoot)
-	if info, err := os.Stat(preferred); err == nil && !info.IsDir() {
-		wf, loadErr := config.Load(ctx, preferred)
-		if loadErr != nil {
-			return "", loadErr
-		}
-		if strings.TrimSpace(wf.Role) == "prepare" {
-			return "", fmt.Errorf("apply workflow role must be apply: %s", preferred)
-		}
-		if strings.TrimSpace(wf.Role) != "apply" {
-			return "", fmt.Errorf("apply workflow role must be apply: %s", preferred)
-		}
-		return preferred, nil
-	}
-
-	entries, err := os.ReadDir(workflowDir)
-	if err != nil {
-		return "", fmt.Errorf("read workflow directory: %w", err)
-	}
-
-	matches := make([]string, 0)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		lower := strings.ToLower(entry.Name())
-		if !strings.HasSuffix(lower, ".yaml") && !strings.HasSuffix(lower, ".yml") {
-			continue
-		}
-
-		candidate := filepath.Join(workflowDir, entry.Name())
-		wf, loadErr := config.Load(ctx, candidate)
-		if loadErr != nil {
-			return "", loadErr
-		}
-		if strings.TrimSpace(wf.Role) == "apply" {
-			matches = append(matches, candidate)
-		}
-	}
-
-	sort.Strings(matches)
-	if len(matches) == 0 {
-		return "", fmt.Errorf("apply workflow not found under %s", workflowDir)
-	}
-	if len(matches) > 1 {
-		return "", fmt.Errorf("multiple apply workflows found under %s", workflowDir)
-	}
-	return matches[0], nil
-}
-
-func executeLint(root string, file string, scenario string) error {
+func executeLint(ctx context.Context, root string, file string, scenario string) error {
 	resolvedFile := strings.TrimSpace(file)
 	resolvedScenario := strings.TrimSpace(scenario)
 	if resolvedScenario != "" {
@@ -1132,7 +629,7 @@ func executeLint(root string, file string, scenario string) error {
 		if err := validate.File(resolvedFile); err != nil {
 			return err
 		}
-		wf, err := config.Load(context.Background(), resolvedFile)
+		wf, err := config.Load(ctx, resolvedFile)
 		if err != nil {
 			return err
 		}

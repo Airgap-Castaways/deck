@@ -25,22 +25,48 @@ type kubeadmResetSpec struct {
 	Timeout               string   `json:"timeout"`
 }
 
+type kubeadmInitSpec struct {
+	Mode                  string   `json:"mode"`
+	OutputJoinFile        string   `json:"outputJoinFile"`
+	CriSocket             string   `json:"criSocket"`
+	KubernetesVersion     string   `json:"kubernetesVersion"`
+	ConfigFile            string   `json:"configFile"`
+	ConfigTemplate        string   `json:"configTemplate"`
+	PodNetworkCIDR        string   `json:"podNetworkCIDR"`
+	AdvertiseAddress      string   `json:"advertiseAddress"`
+	PullImages            bool     `json:"pullImages"`
+	IgnorePreflightErrors []string `json:"ignorePreflightErrors"`
+	ExtraArgs             []string `json:"extraArgs"`
+	Timeout               string   `json:"timeout"`
+}
+
+type kubeadmJoinSpec struct {
+	Mode      string   `json:"mode"`
+	JoinFile  string   `json:"joinFile"`
+	ExtraArgs []string `json:"extraArgs"`
+	Timeout   string   `json:"timeout"`
+}
+
 func runKubeadmInit(ctx context.Context, spec map[string]any) error {
-	mode := stringValue(spec, "mode")
+	decoded, err := workflowexec.DecodeSpec[kubeadmInitSpec](spec)
+	if err != nil {
+		return fmt.Errorf("decode KubeadmInit spec: %w", err)
+	}
+	mode := strings.TrimSpace(decoded.Mode)
 	if mode == "" {
 		mode = "stub"
 	}
 	if mode == "stub" {
-		return runKubeadmInitStub(spec)
+		return runKubeadmInitStub(decoded)
 	}
 	if mode != "real" {
 		return fmt.Errorf("%s: unsupported mode %q", errCodeInstallInitModeInvalid, mode)
 	}
-	return runKubeadmInitReal(ctx, spec)
+	return runKubeadmInitReal(ctx, decoded)
 }
 
-func runKubeadmInitStub(spec map[string]any) error {
-	joinFile := stringValue(spec, "outputJoinFile")
+func runKubeadmInitStub(spec kubeadmInitSpec) error {
+	joinFile := strings.TrimSpace(spec.OutputJoinFile)
 	if joinFile == "" {
 		return fmt.Errorf("%s: KubeadmInit requires outputJoinFile", errCodeInstallInitJoinMissing)
 	}
@@ -52,21 +78,25 @@ func runKubeadmInitStub(spec map[string]any) error {
 }
 
 func runKubeadmJoin(ctx context.Context, spec map[string]any) error {
-	mode := stringValue(spec, "mode")
+	decoded, err := workflowexec.DecodeSpec[kubeadmJoinSpec](spec)
+	if err != nil {
+		return fmt.Errorf("decode KubeadmJoin spec: %w", err)
+	}
+	mode := strings.TrimSpace(decoded.Mode)
 	if mode == "" {
 		mode = "stub"
 	}
 	if mode == "stub" {
-		return runKubeadmJoinStub(spec)
+		return runKubeadmJoinStub(decoded)
 	}
 	if mode != "real" {
 		return fmt.Errorf("%s: unsupported mode %q", errCodeInstallJoinModeInvalid, mode)
 	}
-	return runKubeadmJoinReal(ctx, spec)
+	return runKubeadmJoinReal(ctx, decoded)
 }
 
-func runKubeadmJoinStub(spec map[string]any) error {
-	joinFile := stringValue(spec, "joinFile")
+func runKubeadmJoinStub(spec kubeadmJoinSpec) error {
+	joinFile := strings.TrimSpace(spec.JoinFile)
 	if joinFile == "" {
 		return fmt.Errorf("%s: KubeadmJoin requires joinFile", errCodeInstallJoinPathMissing)
 	}
@@ -76,16 +106,16 @@ func runKubeadmJoinStub(spec map[string]any) error {
 	return nil
 }
 
-func runKubeadmInitReal(parent context.Context, spec map[string]any) error {
-	joinFile := stringValue(spec, "outputJoinFile")
+func runKubeadmInitReal(parent context.Context, spec kubeadmInitSpec) error {
+	joinFile := strings.TrimSpace(spec.OutputJoinFile)
 	if joinFile == "" {
 		return fmt.Errorf("%s: KubeadmInit requires outputJoinFile", errCodeInstallInitJoinMissing)
 	}
-	timeout := commandTimeoutWithDefault(spec, 10*time.Minute)
-	criSocket := stringValue(spec, "criSocket")
-	kubernetesVersion := stringValue(spec, "kubernetesVersion")
-	configFile := stringValue(spec, "configFile")
-	configTemplate := stringValue(spec, "configTemplate")
+	timeout := parseStepTimeout(spec.Timeout, 10*time.Minute)
+	criSocket := strings.TrimSpace(spec.CriSocket)
+	kubernetesVersion := strings.TrimSpace(spec.KubernetesVersion)
+	configFile := strings.TrimSpace(spec.ConfigFile)
+	configTemplate := strings.TrimSpace(spec.ConfigTemplate)
 
 	advertiseAddress, err := resolveKubeadmAdvertiseAddress(parent, spec, configTemplate, timeout)
 	if err != nil {
@@ -101,7 +131,7 @@ func runKubeadmInitReal(parent context.Context, spec map[string]any) error {
 			configBody = renderDefaultKubeadmInitConfig(
 				advertiseAddress,
 				kubernetesVersion,
-				stringValue(spec, "podNetworkCIDR"),
+				strings.TrimSpace(spec.PodNetworkCIDR),
 				criSocket,
 			)
 		}
@@ -116,7 +146,7 @@ func runKubeadmInitReal(parent context.Context, spec map[string]any) error {
 		}
 	}
 
-	if boolValue(spec, "pullImages") {
+	if spec.PullImages {
 		pullArgs := []string{"config", "images", "pull"}
 		if kubernetesVersion != "" {
 			pullArgs = append(pullArgs, "--kubernetes-version", kubernetesVersion)
@@ -139,7 +169,7 @@ func runKubeadmInitReal(parent context.Context, spec map[string]any) error {
 		if advertiseAddress != "" {
 			args = append(args, "--apiserver-advertise-address", advertiseAddress)
 		}
-		if podCIDR := stringValue(spec, "podNetworkCIDR"); podCIDR != "" {
+		if podCIDR := strings.TrimSpace(spec.PodNetworkCIDR); podCIDR != "" {
 			args = append(args, "--pod-network-cidr", podCIDR)
 		}
 		if criSocket != "" {
@@ -149,10 +179,10 @@ func runKubeadmInitReal(parent context.Context, spec map[string]any) error {
 			args = append(args, "--kubernetes-version", kubernetesVersion)
 		}
 	}
-	if ignore := stringSlice(spec["ignorePreflightErrors"]); len(ignore) > 0 {
+	if ignore := trimmedStringSlice(spec.IgnorePreflightErrors); len(ignore) > 0 {
 		args = append(args, "--ignore-preflight-errors", strings.Join(ignore, ","))
 	}
-	if extra := stringSlice(spec["extraArgs"]); len(extra) > 0 {
+	if extra := trimmedStringSlice(spec.ExtraArgs); len(extra) > 0 {
 		args = append(args, extra...)
 	}
 
@@ -182,8 +212,8 @@ func runKubeadmInitReal(parent context.Context, spec map[string]any) error {
 	return os.WriteFile(joinFile, []byte(joinCmd+"\n"), 0o644)
 }
 
-func resolveKubeadmAdvertiseAddress(ctx context.Context, spec map[string]any, configTemplate string, timeout time.Duration) (string, error) {
-	advertiseAddress := stringValue(spec, "advertiseAddress")
+func resolveKubeadmAdvertiseAddress(ctx context.Context, spec kubeadmInitSpec, configTemplate string, timeout time.Duration) (string, error) {
+	advertiseAddress := strings.TrimSpace(spec.AdvertiseAddress)
 	if strings.EqualFold(advertiseAddress, "auto") || (advertiseAddress == "" && strings.EqualFold(configTemplate, "default")) {
 		resolved, err := detectKubeadmAdvertiseAddress(ctx, timeout)
 		if err != nil {
@@ -270,8 +300,8 @@ func renderDefaultKubeadmInitConfig(advertiseAddress, kubernetesVersion, podSubn
 	return b.String()
 }
 
-func runKubeadmJoinReal(ctx context.Context, spec map[string]any) error {
-	joinFile := stringValue(spec, "joinFile")
+func runKubeadmJoinReal(ctx context.Context, spec kubeadmJoinSpec) error {
+	joinFile := strings.TrimSpace(spec.JoinFile)
 	if joinFile == "" {
 		return fmt.Errorf("%s: KubeadmJoin requires joinFile", errCodeInstallJoinPathMissing)
 	}
@@ -287,11 +317,11 @@ func runKubeadmJoinReal(ctx context.Context, spec map[string]any) error {
 	if len(args) == 0 || args[0] != "kubeadm" {
 		return fmt.Errorf("%s: join command must start with kubeadm", errCodeInstallJoinCmdInvalid)
 	}
-	if extra := stringSlice(spec["extraArgs"]); len(extra) > 0 {
+	if extra := trimmedStringSlice(spec.ExtraArgs); len(extra) > 0 {
 		args = append(args, extra...)
 	}
 
-	if err := runTimedCommandWithContext(ctx, args[0], args[1:], commandTimeoutWithDefault(spec, 5*time.Minute)); err != nil {
+	if err := runTimedCommandWithContext(ctx, args[0], args[1:], parseStepTimeout(spec.Timeout, 5*time.Minute)); err != nil {
 		if errors.Is(err, errStepCommandTimeout) {
 			return fmt.Errorf("%s: kubeadm join timed out: %w", errCodeInstallJoinFailed, err)
 		}
@@ -315,7 +345,7 @@ func runKubeadmReset(ctx context.Context, spec map[string]any) error {
 		stopKubelet = *decoded.StopKubelet
 	}
 	if stopKubelet {
-		_ = runTimedCommandWithContext(ctx, "systemctl", []string{"stop", "kubelet"}, commandTimeoutWithDefault(spec, 2*time.Minute))
+		_ = runTimedCommandWithContext(ctx, "systemctl", []string{"stop", "kubelet"}, parseStepTimeout(decoded.Timeout, 2*time.Minute))
 	}
 
 	kubeadmArgs := []string{"reset"}
@@ -326,7 +356,7 @@ func runKubeadmReset(ctx context.Context, spec map[string]any) error {
 		kubeadmArgs = append(kubeadmArgs, "--cri-socket", strings.TrimSpace(decoded.CriSocket))
 	}
 
-	resetErr := runTimedCommandWithContext(ctx, "kubeadm", kubeadmArgs, commandTimeoutWithDefault(spec, 10*time.Minute))
+	resetErr := runTimedCommandWithContext(ctx, "kubeadm", kubeadmArgs, parseStepTimeout(decoded.Timeout, 10*time.Minute))
 	if resetErr != nil && !decoded.IgnoreErrors {
 		if errors.Is(resetErr, errStepCommandTimeout) {
 			return fmt.Errorf("%s: kubeadm reset timed out: %w", errCodeInstallResetFailed, resetErr)
@@ -343,14 +373,14 @@ func runKubeadmReset(ctx context.Context, spec map[string]any) error {
 
 	cleanupContainers := trimmedStringSlice(decoded.CleanupContainers)
 	for _, name := range cleanupContainers {
-		if err := cleanupContainerByName(ctx, name, strings.TrimSpace(decoded.CriSocket), commandTimeoutWithDefault(spec, 2*time.Minute)); err != nil {
+		if err := cleanupContainerByName(ctx, name, strings.TrimSpace(decoded.CriSocket), parseStepTimeout(decoded.Timeout, 2*time.Minute)); err != nil {
 			return fmt.Errorf("%s: cleanup stale container %s: %w", errCodeInstallResetFailed, name, err)
 		}
 	}
 
 	restartRuntime := strings.TrimSpace(decoded.RestartRuntimeService)
 	if restartRuntime != "" {
-		if err := runTimedCommandWithContext(ctx, "systemctl", []string{"restart", restartRuntime}, commandTimeoutWithDefault(spec, 2*time.Minute)); err != nil {
+		if err := runTimedCommandWithContext(ctx, "systemctl", []string{"restart", restartRuntime}, parseStepTimeout(decoded.Timeout, 2*time.Minute)); err != nil {
 			if errors.Is(err, errStepCommandTimeout) {
 				return fmt.Errorf("%s: restart runtime service %s timed out: %w", errCodeInstallResetFailed, restartRuntime, err)
 			}

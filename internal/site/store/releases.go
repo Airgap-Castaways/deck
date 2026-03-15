@@ -30,12 +30,12 @@ func (s *Store) ImportRelease(release Release, importedBundlePath string) error 
 	bundlePath := filepath.Join(releaseDir, "bundle")
 
 	if _, err := os.Stat(manifestPath); err == nil {
-		return fmt.Errorf("release %q already imported", release.ID)
+		return alreadyExistsError("release %q already imported", release.ID)
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("check release manifest: %w", err)
 	}
 	if _, err := os.Stat(bundlePath); err == nil {
-		return fmt.Errorf("release %q bundle already imported", release.ID)
+		return alreadyExistsError("release %q bundle already imported", release.ID)
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("check release bundle path: %w", err)
 	}

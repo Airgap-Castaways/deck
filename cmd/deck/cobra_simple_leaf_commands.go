@@ -16,7 +16,7 @@ func newLintCommand() *cobra.Command {
 			if len(args) == 1 {
 				scenario = args[0]
 			}
-			return executeLint(cmdFlagValue(cmd, "root"), cmdFlagValue(cmd, "file"), scenario)
+			return executeLint(cmd.Context(), cmdFlagValue(cmd, "root"), cmdFlagValue(cmd, "file"), scenario)
 		},
 	}
 	cmd.Flags().String("root", ".", "workspace root containing workflows/")

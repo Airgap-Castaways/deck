@@ -15,18 +15,26 @@ var (
 	goarchFn   = func() string { return runtime.GOARCH }
 )
 
+type checkHostSpec struct {
+	Checks   []string `json:"checks"`
+	Binaries []string `json:"binaries"`
+	FailFast *bool    `json:"failFast"`
+}
+
 func runCheckHost(runner CommandRunner, spec map[string]any) (map[string]any, error) {
-	checks := stringSlice(spec["checks"])
+	decoded, err := workflowexec.DecodeSpec[checkHostSpec](spec)
+	if err != nil {
+		return nil, fmt.Errorf("decode Checks spec: %w", err)
+	}
+	checks := decoded.Checks
 	if len(checks) == 0 {
 		return nil, fmt.Errorf("%s: CheckHost requires checks", errCodePrepareCheckHostFailed)
 	}
 	host := detectHostFacts()
 
 	failFast := true
-	if raw, ok := spec["failFast"]; ok {
-		if b, ok := raw.(bool); ok {
-			failFast = b
-		}
+	if decoded.FailFast != nil {
+		failFast = *decoded.FailFast
 	}
 
 	failed := make([]string, 0)
@@ -82,7 +90,7 @@ func runCheckHost(runner CommandRunner, spec map[string]any) (map[string]any, er
 				}
 			}
 		case "binaries":
-			bins := stringSlice(spec["binaries"])
+			bins := decoded.Binaries
 			if len(bins) == 0 {
 				if err := fail("binaries", "binaries list required"); err != nil {
 					return nil, err
