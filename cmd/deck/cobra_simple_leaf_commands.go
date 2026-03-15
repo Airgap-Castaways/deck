@@ -6,19 +6,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newValidateCommand() *cobra.Command {
+func newLintCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "validate [scenario]",
-		Short: "Validate a deck file",
+		Use:   "lint [scenario]",
+		Short: "Lint the workflow tree or a single workflow file",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			scenario := ""
 			if len(args) == 1 {
 				scenario = args[0]
 			}
-			return executeValidate(cmdFlagValue(cmd, "file"), scenario)
+			return executeLint(cmdFlagValue(cmd, "root"), cmdFlagValue(cmd, "file"), scenario)
 		},
 	}
+	cmd.Flags().String("root", ".", "workspace root containing workflows/")
 	cmd.Flags().StringP("file", "f", "", "path or URL to workflow file")
 	return cmd
 }

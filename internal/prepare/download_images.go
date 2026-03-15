@@ -15,7 +15,7 @@ import (
 
 var (
 	parseImageReferenceFn = func(v string) (name.Reference, error) { return name.ParseReference(v, name.WeakValidation) }
-	remoteImageFn         = remote.Image
+	remoteImageFetchFn    = remote.Image
 	tarballWriteToFileFn  = tarball.WriteToFile
 )
 
@@ -71,7 +71,7 @@ func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string
 			return nil, fmt.Errorf("parse image reference %s: %w", img, err)
 		}
 
-		imageObj, err := remoteImageFn(
+		imageObj, err := remoteImageFetchFn(
 			ref,
 			remote.WithAuthFromKeychain(authn.DefaultKeychain),
 			remote.WithContext(ctx),

@@ -16,19 +16,12 @@ The goal is not to invent a giant DSL. The goal is to give air-gapped operationa
 - `role`: required, either `prepare` or `apply`
 - `version`: currently `v1alpha1`
 - `vars`: optional variable map
+- `varImports`: optional external variable imports
 - `imports`: optional workflow imports
-- `artifacts`: declarative prepare artifact inventory for `role: prepare`
 - `steps`: top-level step list
 - `phases`: named phase list for more structured execution
 
-The schema allows one execution mode at a time:
-
-- `artifacts` for declarative prepare workflows
-- top-level `steps`
-- named `phases`
-- imported workflow fragments that resolve to one of those modes
-
-Workflow imports and phase imports resolve from `workflows/components/`. Write component-relative paths such as `k8s/prereq.yaml`, not `../components/k8s/prereq.yaml`.
+The schema allows either top-level `steps`, named `phases`, or imported workflow fragments.
 
 ## Minimal workflow
 
@@ -42,22 +35,6 @@ steps:
     spec:
       path: /var/lib/deck
       mode: "0755"
-```
-
-## Minimal prepare workflow
-
-```yaml
-role: prepare
-version: v1alpha1
-artifacts:
-  files:
-    - group: binaries
-      items:
-        - id: kubeadm
-          source:
-            url: https://example.local/kubeadm
-          output:
-            path: bin/kubeadm
 ```
 
 ## Step shape
@@ -80,8 +57,6 @@ Optional execution controls:
 
 Use phases when the procedure has natural boundaries.
 
-`artifacts` is the preferred prepare authoring mode. Use `steps` or `phases` for `apply`, or for older prepare workflows that have not been migrated yet.
-
 That keeps large workflows readable and lets the operator see the intended order without reading every command detail.
 
 Typical examples:
@@ -99,33 +74,24 @@ They make the workflow easier to scan, easier to validate, and easier to evolve 
 
 Supported step kinds include:
 
-- `Inspection`
 - `Artifacts`
-- `Packages`
-- `Sysctl`
-- `Service`
-- `Directory`
-- `Symlink`
-- `SystemdUnit`
-- `File`
-- `Repository`
-- `PackageCache`
-- `Containerd`
-- `Swap`
-- `KernelModule`
 - `Command`
-- `Wait`
+- `Containerd`
+- `Directory`
+- `File`
 - `Image`
+- `Inspection`
+- `KernelModule`
 - `Kubeadm`
-
-## Prepare semantics
-
-`role: prepare` can use top-level `artifacts` to declare artifact inventory instead of writing repeated download steps.
-
-- `artifacts.files[*].items[*].output.path` is relative to the `files/` bundle root, so use `bin/kubeadm`, not `files/bin/kubeadm`
-- `artifacts.images` declares image groups and lets the engine choose bundle tar layout
-- `artifacts.packages` declares package groups per target OS family, release, and arch
-- internally, `deck` still plans typed actions, but the authoring model stays inventory-driven
+- `PackageCache`
+- `Packages`
+- `Repository`
+- `Service`
+- `Swap`
+- `Symlink`
+- `Sysctl`
+- `SystemdUnit`
+- `Wait`
 
 ## When to use Command
 
@@ -135,7 +101,7 @@ That is the escape hatch, not the ideal authoring path. If a workflow leans heav
 
 ## Validation model
 
-`deck validate` checks:
+`deck lint` checks:
 
 - the top-level workflow schema
 - the schema for each referenced step kind
@@ -146,6 +112,6 @@ This is one of the main reasons to use a workflow model instead of passing aroun
 ## Related references
 
 - `../concepts/why-deck.md`
-- `schema/index.md`
+- `schema-reference.md`
 - `bundle-layout.md`
-- `../../schemas/deck-workflow.schema.json`
+- `../schemas/deck-workflow.schema.json`

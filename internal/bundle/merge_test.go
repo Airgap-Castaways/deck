@@ -36,8 +36,8 @@ func TestBundleMergeLocal(t *testing.T) {
 	mustWriteFile(t, filepath.Join(dest, "packages", "pkg-a.txt"), []byte("same-package"))
 	mustWriteFile(t, filepath.Join(dest, "images", "img-a.tar"), []byte("old-image"))
 	mustWriteFile(t, filepath.Join(dest, "files", "deck"), []byte("deck-binary"))
-	mustWriteFile(t, filepath.Join(dest, "workflows", "scenarios", "bootstrap.yaml"), []byte("old-bootstrap"))
-	mustWriteFile(t, filepath.Join(dest, "workflows", "index.json"), []byte("[\"existing\"]\n"))
+	mustWriteFile(t, filepath.Join(dest, "workflows", "apply.yaml"), []byte("old-apply"))
+	mustWriteFile(t, filepath.Join(dest, "workflows", "index.json"), []byte("[\"workflows/existing.yaml\"]\n"))
 
 	report, err := MergeArchive(archivePath, dest, false)
 	if err != nil {
@@ -71,11 +71,11 @@ func TestBundleMergeLocal(t *testing.T) {
 	if actions["files/deck"].Action != "skip" {
 		t.Fatalf("expected files/deck skip action, got %q", actions["files/deck"].Action)
 	}
-	if actions["workflows/scenarios/bootstrap.yaml"].Action != "overwrite" {
-		t.Fatalf("expected workflows/scenarios/bootstrap.yaml overwrite action, got %q", actions["workflows/scenarios/bootstrap.yaml"].Action)
+	if actions["workflows/apply.yaml"].Action != "overwrite" {
+		t.Fatalf("expected workflows/apply.yaml overwrite action, got %q", actions["workflows/apply.yaml"].Action)
 	}
-	if actions["workflows/components/common.yaml"].Action != "overwrite" {
-		t.Fatalf("expected workflows/components/common.yaml overwrite action, got %q", actions["workflows/components/common.yaml"].Action)
+	if actions["workflows/worker.yaml"].Action != "overwrite" {
+		t.Fatalf("expected workflows/worker.yaml overwrite action, got %q", actions["workflows/worker.yaml"].Action)
 	}
 	if actions["workflows/index.json"].Action != "overwrite" {
 		t.Fatalf("expected workflows/index.json overwrite action, got %q", actions["workflows/index.json"].Action)
@@ -87,7 +87,7 @@ func TestBundleMergeLocal(t *testing.T) {
 	if got := mustReadFileString(t, filepath.Join(dest, "files", "new.conf")); got != "new-config" {
 		t.Fatalf("expected new config upload, got %q", got)
 	}
-	if got := mustReadFileString(t, filepath.Join(dest, "workflows", "scenarios", "bootstrap.yaml")); got != "new-bootstrap" {
+	if got := mustReadFileString(t, filepath.Join(dest, "workflows", "apply.yaml")); got != "new-apply" {
 		t.Fatalf("expected workflow overwrite, got %q", got)
 	}
 
@@ -100,7 +100,7 @@ func TestBundleMergeLocal(t *testing.T) {
 		t.Fatalf("parse workflow index: %v", err)
 	}
 	sort.Strings(workflowIndex)
-	expectedIndex := []string{"bootstrap", "existing"}
+	expectedIndex := []string{"workflows/apply.yaml", "workflows/existing.yaml", "workflows/worker.yaml"}
 	if strings.Join(workflowIndex, ",") != strings.Join(expectedIndex, ",") {
 		t.Fatalf("unexpected workflow index: got=%v want=%v", workflowIndex, expectedIndex)
 	}
@@ -110,12 +110,12 @@ func writeMergeBundleTarFixture(t *testing.T, archivePath string) {
 	t.Helper()
 
 	entries := map[string][]byte{
-		"packages/pkg-a.txt":                 []byte("same-package"),
-		"images/img-a.tar":                   []byte("new-image"),
-		"files/new.conf":                     []byte("new-config"),
-		"files/deck":                         []byte("deck-binary"),
-		"workflows/scenarios/bootstrap.yaml": []byte("new-bootstrap"),
-		"workflows/components/common.yaml":   []byte("new-common"),
+		"packages/pkg-a.txt":    []byte("same-package"),
+		"images/img-a.tar":      []byte("new-image"),
+		"files/new.conf":        []byte("new-config"),
+		"files/deck":            []byte("deck-binary"),
+		"workflows/apply.yaml":  []byte("new-apply"),
+		"workflows/worker.yaml": []byte("new-worker"),
 	}
 
 	manifestEntries := make([]ManifestEntry, 0, 4)
@@ -142,7 +142,7 @@ func writeMergeBundleTarFixture(t *testing.T, archivePath string) {
 	tw := tar.NewWriter(f)
 	defer func() { _ = tw.Close() }()
 
-	orderedPaths := []string{".deck/manifest.json", "packages/pkg-a.txt", "images/img-a.tar", "files/new.conf", "files/deck", "workflows/scenarios/bootstrap.yaml", "workflows/components/common.yaml"}
+	orderedPaths := []string{".deck/manifest.json", "packages/pkg-a.txt", "images/img-a.tar", "files/new.conf", "files/deck", "workflows/apply.yaml", "workflows/worker.yaml"}
 	for _, rel := range orderedPaths {
 		name := path.Join("bundle", rel)
 		body := entries[rel]

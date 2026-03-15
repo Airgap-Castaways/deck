@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 )
 
 type packageCacheMeta struct {
@@ -64,9 +63,9 @@ func runPackagesDownload(ctx context.Context, runner CommandRunner, bundleRoot s
 			var repoRoot string
 			switch repoType {
 			case "apt-flat":
-				repoRoot = filepath.ToSlash(filepath.Join("packages", "deb", release))
+				repoRoot = filepath.ToSlash(filepath.Join("packages", "apt", release))
 			case "yum":
-				repoRoot = filepath.ToSlash(filepath.Join("packages", "rpm", release))
+				repoRoot = filepath.ToSlash(filepath.Join("packages", "yum", release))
 			default:
 				return nil, fmt.Errorf("packages action download repo.type must be apt-flat or yum")
 			}
@@ -424,25 +423,12 @@ func preparePackageCacheMounts(family string, cacheKey string) ([]packageCacheMo
 }
 
 func runPackageDownloadContainer(ctx context.Context, runner CommandRunner, runtimeSel, image, outAbs, script string, mounts []packageCacheMount) error {
-	containerName := fmt.Sprintf("deck-pkg-%d", time.Now().UnixNano())
-	createArgs := []string{"create", "--name", containerName}
+	runArgs := []string{"run", "--rm", "-v", outAbs + ":/out"}
 	for _, mount := range mounts {
-		createArgs = append(createArgs, "-v", mount.host+":"+mount.container)
+		runArgs = append(runArgs, "-v", mount.host+":"+mount.container)
 	}
-	createArgs = append(createArgs, image, "bash", "-lc", script)
-	if err := runner.Run(ctx, runtimeSel, createArgs...); err != nil {
-		return err
-	}
-	defer func() {
-		_ = runner.Run(context.Background(), runtimeSel, "rm", "-f", containerName)
-	}()
-	if err := runner.Run(ctx, runtimeSel, "start", "-a", containerName); err != nil {
-		return err
-	}
-	if err := runner.Run(ctx, runtimeSel, "cp", containerName+":/out/.", outAbs); err != nil {
-		return err
-	}
-	return nil
+	runArgs = append(runArgs, image, "bash", "-lc", script)
+	return runner.Run(ctx, runtimeSel, runArgs...)
 }
 
 func writePackagePlaceholders(bundleRoot, dir string, packages []string) []string {

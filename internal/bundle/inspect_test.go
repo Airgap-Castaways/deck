@@ -13,7 +13,7 @@ func TestBundleInspectTar(t *testing.T) {
 	content := []byte("ok\n")
 	sum := sha256.Sum256(content)
 	manifestRaw, err := json.Marshal(ManifestFile{Entries: []ManifestEntry{{
-		Path:   "files/dummy.txt",
+		Path:   "outputs/files/dummy.txt",
 		SHA256: hex.EncodeToString(sum[:]),
 		Size:   int64(len(content)),
 	}}})
@@ -23,7 +23,7 @@ func TestBundleInspectTar(t *testing.T) {
 
 	if err := writeTarArchive(archive, []tarEntry{
 		{name: "bundle/.deck/manifest.json", body: manifestRaw},
-		{name: "bundle/files/dummy.txt", body: content},
+		{name: "bundle/outputs/files/dummy.txt", body: content},
 	}); err != nil {
 		t.Fatalf("write tar: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestBundleInspectTar(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
-	if entries[0].Path != "files/dummy.txt" {
+	if entries[0].Path != "outputs/files/dummy.txt" {
 		t.Fatalf("unexpected entry path: %s", entries[0].Path)
 	}
 }

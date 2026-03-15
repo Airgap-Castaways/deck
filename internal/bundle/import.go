@@ -48,11 +48,10 @@ func ImportArchive(archivePath, destRoot string) error {
 		if name == "." {
 			continue
 		}
-		if name != "bundle" && !strings.HasPrefix(name, "bundle/") {
+		cleanRel := filepath.Clean(filepath.FromSlash(name))
+		if cleanRel != "bundle" && !strings.HasPrefix(cleanRel, "bundle/") {
 			return fmt.Errorf("%s: %s", errCodeBundleImportPrefix, hdr.Name)
 		}
-
-		cleanRel := filepath.Clean(filepath.FromSlash(name))
 		if cleanRel == "." {
 			continue
 		}

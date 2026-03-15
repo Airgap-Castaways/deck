@@ -25,7 +25,7 @@ func newServerCommand() *cobra.Command {
 		newServerSetCommand(),
 		newServerShowCommand(),
 		newServerUnsetCommand(),
-		newServerScenariosCommand(),
+		newServerWorkflowsCommand(),
 		newServerUpCommand(),
 		newServerDownCommand(),
 		newServerHealthCommand(),
@@ -93,7 +93,7 @@ func newServerUpCommand() *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().String("root", "./bundle", "server content root")
+	cmd.Flags().String("root", ".", "server content root")
 	cmd.Flags().String("addr", ":8080", "server listen address")
 	cmd.Flags().String("api-token", "deck-site-v1", "bearer token required for /api/site/v1 endpoints")
 	cmd.Flags().Int("report-max", 200, "max retained in-memory reports")
@@ -107,12 +107,12 @@ func newServerUpCommand() *cobra.Command {
 	return cmd
 }
 
-func newServerScenariosCommand() *cobra.Command {
+func newServerWorkflowsCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "scenarios",
-		Short: "List available scenarios from a server",
+		Use:   "workflows",
+		Short: "List available workflows from a server",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeListScenarios(cmdFlagValue(cmd, "server"), cmdFlagValue(cmd, "output"))
+			return executeList(cmdFlagValue(cmd, "server"), cmdFlagValue(cmd, "output"))
 		},
 	}
 	cmd.Flags().SetInterspersed(false)
@@ -193,6 +193,15 @@ func executeServerShow() error {
 	if err != nil {
 		return err
 	}
+	if resolved == "" {
+		if err := stdoutPrintln("server="); err != nil {
+			return err
+		}
+		if err := stdoutPrintf("api-token-set=%t\n", strings.TrimSpace(apiToken) != ""); err != nil {
+			return err
+		}
+		return stdoutPrintln("source=none")
+	}
 	if err := stdoutPrintf("server=%s\n", resolved); err != nil {
 		return err
 	}
@@ -203,9 +212,6 @@ func executeServerShow() error {
 		if err := stdoutPrintf("api-token-source=%s\n", apiTokenSource); err != nil {
 			return err
 		}
-	}
-	if resolved == "" {
-		source = "none"
 	}
 	if err := stdoutPrintf("source=%s\n", source); err != nil {
 		return err

@@ -14,7 +14,7 @@ phases:
           repositories:
             - type: deb
               trusted: true
-              baseurl: http://{{ .vars.serverURL  }}/packages/deb/{{ .vars.release  }}
+              baseurl: http://{{ .vars.serverURL  }}/packages/apt/{{ .vars.release  }}
               suite: ./
       - id: refresh-apt-package-cache
         apiVersion: deck/v1alpha1
@@ -23,5 +23,3 @@ phases:
           manager: apt
           clean: true
           update: true
-          restrictToRepos:
-            - /etc/apt/sources.list.d/offline.list

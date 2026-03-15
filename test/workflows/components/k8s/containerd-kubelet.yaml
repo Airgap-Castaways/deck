@@ -20,7 +20,6 @@ phases:
         apiVersion: deck/v1alpha1
         kind: File
         spec:
-          action: edit
           path: /etc/containerd/config.toml
           backup: false
           edits:

@@ -9,7 +9,7 @@ import (
 func newBundleCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bundle",
-		Short: "Verify, inspect, import, collect, or merge bundles",
+		Short: "Build or verify bundles",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
@@ -17,11 +17,8 @@ func newBundleCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(
+		newBundleBuildCommand(),
 		newBundleVerifyCommand(),
-		newBundleInspectCommand(),
-		newBundleImportCommand(),
-		newBundleCollectCommand(),
-		newBundleMergeCommand(),
 	)
 
 	return cmd
@@ -40,60 +37,17 @@ func newBundleVerifyCommand() *cobra.Command {
 	return cmd
 }
 
-func newBundleInspectCommand() *cobra.Command {
+func newBundleBuildCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "inspect [path]",
-		Short: "List manifest entries in a bundle",
-		Args:  bundleSinglePathArgs("bundle inspect accepts a single <path>"),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return executeBundleInspect(cmdFlagValue(cmd, "file"), cmdFlagValue(cmd, "output"), args)
-		},
-	}
-	cmd.Flags().String("file", "", "bundle path (directory or bundle.tar)")
-	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
-	return cmd
-}
-
-func newBundleImportCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "import",
-		Short: "Extract a bundle archive into a directory",
+		Use:   "build",
+		Short: "Archive deck, workflows, outputs, and manifest",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeBundleImport(cmdFlagValue(cmd, "file"), cmdFlagValue(cmd, "dest"))
+			return executeBundleBuild(cmdFlagValue(cmd, "root"), cmdFlagValue(cmd, "out"))
 		},
 	}
-	cmd.Flags().String("file", "", "bundle archive file path")
-	cmd.Flags().String("dest", "", "destination directory")
-	return cmd
-}
-
-func newBundleCollectCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "collect",
-		Short: "Create a bundle archive from a directory",
-		Args:  cobra.ExactArgs(0),
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeBundleCollect(cmdFlagValue(cmd, "root"), cmdFlagValue(cmd, "out"))
-		},
-	}
-	cmd.Flags().String("root", "", "bundle directory")
+	cmd.Flags().String("root", ".", "workspace root containing deck, workflows, outputs, and .deck/manifest.json")
 	cmd.Flags().String("out", "", "output tar archive path")
-	return cmd
-}
-
-func newBundleMergeCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "merge <bundle.tar>",
-		Short: "Merge a bundle archive into a destination directory",
-		Args:  cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return executeBundleMerge(cmdFlagValue(cmd, "to"), cmdFlagBoolValue(cmd, "dry-run"), args)
-		},
-	}
-	cmd.Flags().SetInterspersed(false)
-	cmd.Flags().String("to", "", "merge destination (local directory)")
-	cmd.Flags().Bool("dry-run", false, "print merge plan without writing")
 	return cmd
 }
 

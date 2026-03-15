@@ -12,7 +12,6 @@ phases:
         apiVersion: deck/v1alpha1
         kind: File
         spec:
-          action: install
           path: /etc/cni/net.d/10-deck-bridge.conflist
           content: |
             {

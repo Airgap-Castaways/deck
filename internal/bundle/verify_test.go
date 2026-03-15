@@ -14,11 +14,11 @@ import (
 func TestVerifyManifest(t *testing.T) {
 	t.Run("fails when only legacy root manifest exists", func(t *testing.T) {
 		root := t.TempDir()
-		writeBundleFile(t, root, "files/a.txt", []byte("ok"))
+		writeBundleFile(t, root, "outputs/files/a.txt", []byte("ok"))
 
 		sum := sha256.Sum256([]byte("ok"))
 		legacyRaw, err := json.Marshal(ManifestFile{Entries: []ManifestEntry{{
-			Path:   "files/a.txt",
+			Path:   "outputs/files/a.txt",
 			SHA256: hex.EncodeToString(sum[:]),
 			Size:   2,
 		}}})
@@ -40,14 +40,14 @@ func TestVerifyManifest(t *testing.T) {
 
 	t.Run("passes for valid manifest", func(t *testing.T) {
 		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, "files"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, "outputs", "files"), 0o755); err != nil {
 			t.Fatalf("mkdir files: %v", err)
 		}
 		content := []byte("ok")
-		if err := os.WriteFile(filepath.Join(root, "files", "a.txt"), content, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, "outputs", "files", "a.txt"), content, 0o644); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
-		if err := writeManifest(root, "files/a.txt", content); err != nil {
+		if err := writeManifest(root, "outputs/files/a.txt", content); err != nil {
 			t.Fatalf("write manifest: %v", err)
 		}
 
@@ -58,13 +58,13 @@ func TestVerifyManifest(t *testing.T) {
 
 	t.Run("fails on hash mismatch", func(t *testing.T) {
 		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, "files"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, "outputs", "files"), 0o755); err != nil {
 			t.Fatalf("mkdir files: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(root, "files", "a.txt"), []byte("ok"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, "outputs", "files", "a.txt"), []byte("ok"), 0o644); err != nil {
 			t.Fatalf("write file: %v", err)
 		}
-		if err := writeManifest(root, "files/a.txt", []byte("different")); err != nil {
+		if err := writeManifest(root, "outputs/files/a.txt", []byte("different")); err != nil {
 			t.Fatalf("write manifest: %v", err)
 		}
 
@@ -79,10 +79,10 @@ func TestVerifyManifest(t *testing.T) {
 
 	t.Run("fails when apt metadata missing from manifest", func(t *testing.T) {
 		root := t.TempDir()
-		writeBundleFile(t, root, "packages/deb/jammy/Release", []byte("release"))
-		writeBundleFile(t, root, "packages/deb/jammy/Packages.gz", []byte("packages"))
+		writeBundleFile(t, root, "outputs/packages/apt/jammy/Release", []byte("release"))
+		writeBundleFile(t, root, "outputs/packages/apt/jammy/Packages.gz", []byte("packages"))
 
-		if err := writeManifestForPaths(root, "packages/deb/jammy/Packages.gz"); err != nil {
+		if err := writeManifestForPaths(root, "outputs/packages/apt/jammy/Packages.gz"); err != nil {
 			t.Fatalf("write manifest: %v", err)
 		}
 
@@ -93,17 +93,17 @@ func TestVerifyManifest(t *testing.T) {
 		if !strings.Contains(err.Error(), "required offline artifact missing from manifest") {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(err.Error(), "packages/deb/jammy/Release") {
+		if !strings.Contains(err.Error(), "outputs/packages/apt/jammy/Release") {
 			t.Fatalf("expected missing Release path, got %v", err)
 		}
 	})
 
 	t.Run("fails when yum metadata missing from manifest", func(t *testing.T) {
 		root := t.TempDir()
-		writeBundleFile(t, root, "files/a.txt", []byte("ok"))
-		writeBundleFile(t, root, "packages/rpm/el8/repodata/repomd.xml", []byte("repomd"))
+		writeBundleFile(t, root, "outputs/files/a.txt", []byte("ok"))
+		writeBundleFile(t, root, "outputs/packages/yum/el8/repodata/repomd.xml", []byte("repomd"))
 
-		if err := writeManifestForPaths(root, "files/a.txt"); err != nil {
+		if err := writeManifestForPaths(root, "outputs/files/a.txt"); err != nil {
 			t.Fatalf("write manifest: %v", err)
 		}
 
@@ -114,17 +114,17 @@ func TestVerifyManifest(t *testing.T) {
 		if !strings.Contains(err.Error(), "required offline artifact missing from manifest") {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(err.Error(), "packages/rpm/el8/repodata/repomd.xml") {
+		if !strings.Contains(err.Error(), "outputs/packages/yum/el8/repodata/repomd.xml") {
 			t.Fatalf("expected missing repomd path, got %v", err)
 		}
 	})
 
 	t.Run("fails when image tar missing from manifest", func(t *testing.T) {
 		root := t.TempDir()
-		writeBundleFile(t, root, "files/a.txt", []byte("ok"))
-		writeBundleFile(t, root, "images/k8s.tar", []byte("image"))
+		writeBundleFile(t, root, "outputs/files/a.txt", []byte("ok"))
+		writeBundleFile(t, root, "outputs/images/k8s.tar", []byte("image"))
 
-		if err := writeManifestForPaths(root, "files/a.txt"); err != nil {
+		if err := writeManifestForPaths(root, "outputs/files/a.txt"); err != nil {
 			t.Fatalf("write manifest: %v", err)
 		}
 
@@ -135,7 +135,7 @@ func TestVerifyManifest(t *testing.T) {
 		if !strings.Contains(err.Error(), "required offline artifact missing from manifest") {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !strings.Contains(err.Error(), "images/k8s.tar") {
+		if !strings.Contains(err.Error(), "outputs/images/k8s.tar") {
 			t.Fatalf("expected missing image tar path, got %v", err)
 		}
 	})
@@ -143,13 +143,13 @@ func TestVerifyManifest(t *testing.T) {
 	t.Run("passes when offline artifacts are included in manifest", func(t *testing.T) {
 		root := t.TempDir()
 		paths := []string{
-			"packages/deb/noble/Release",
-			"packages/deb/noble/Packages.gz",
-			"packages/deb-k8s/v1.32/Release",
-			"packages/deb-k8s/v1.32/Packages.gz",
-			"packages/rpm/el9/repodata/repomd.xml",
-			"packages/rpm-k8s/el9-k8s/repodata/repomd.xml",
-			"images/pause.tar",
+			"outputs/packages/apt/noble/Release",
+			"outputs/packages/apt/noble/Packages.gz",
+			"outputs/packages/apt-k8s/v1.32/Release",
+			"outputs/packages/apt-k8s/v1.32/Packages.gz",
+			"outputs/packages/yum/el9/repodata/repomd.xml",
+			"outputs/packages/yum-k8s/el9-k8s/repodata/repomd.xml",
+			"outputs/images/pause.tar",
 		}
 		for i, p := range paths {
 			writeBundleFile(t, root, p, []byte(fmt.Sprintf("content-%d", i)))
@@ -167,9 +167,9 @@ func TestVerifyManifest(t *testing.T) {
 
 func TestVerifyManifest_NewLocation(t *testing.T) {
 	root := t.TempDir()
-	writeBundleFile(t, root, "files/a.txt", []byte("ok"))
+	writeBundleFile(t, root, "outputs/files/a.txt", []byte("ok"))
 
-	if err := writeManifestForPaths(root, "files/a.txt"); err != nil {
+	if err := writeManifestForPaths(root, "outputs/files/a.txt"); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
 	if err := VerifyManifest(root); err != nil {
@@ -238,7 +238,7 @@ func TestBundleVerifyTar(t *testing.T) {
 		content := []byte("ok\n")
 		sum := sha256.Sum256(content)
 		manifestRaw, err := json.Marshal(ManifestFile{Entries: []ManifestEntry{{
-			Path:   "files/dummy.txt",
+			Path:   "outputs/files/dummy.txt",
 			SHA256: hex.EncodeToString(sum[:]),
 			Size:   int64(len(content)),
 		}}})
@@ -248,7 +248,7 @@ func TestBundleVerifyTar(t *testing.T) {
 
 		if err := writeTarArchive(archive, []tarEntry{
 			{name: "bundle/.deck/manifest.json", body: manifestRaw},
-			{name: "bundle/files/dummy.txt", body: content},
+			{name: "bundle/outputs/files/dummy.txt", body: content},
 		}); err != nil {
 			t.Fatalf("write tar: %v", err)
 		}
@@ -260,7 +260,7 @@ func TestBundleVerifyTar(t *testing.T) {
 
 	t.Run("fails when tar manifest is missing", func(t *testing.T) {
 		archive := filepath.Join(t.TempDir(), "bundle.tar")
-		if err := writeTarArchive(archive, []tarEntry{{name: "bundle/files/dummy.txt", body: []byte("ok\n")}}); err != nil {
+		if err := writeTarArchive(archive, []tarEntry{{name: "bundle/outputs/files/dummy.txt", body: []byte("ok\n")}}); err != nil {
 			t.Fatalf("write tar: %v", err)
 		}
 
@@ -276,7 +276,7 @@ func TestBundleVerifyTar(t *testing.T) {
 	t.Run("fails when tar artifact hash mismatches", func(t *testing.T) {
 		archive := filepath.Join(t.TempDir(), "bundle.tar")
 		manifestRaw, err := json.Marshal(ManifestFile{Entries: []ManifestEntry{{
-			Path:   "files/dummy.txt",
+			Path:   "outputs/files/dummy.txt",
 			SHA256: strings.Repeat("0", 64),
 			Size:   int64(len("ok\n")),
 		}}})
@@ -286,7 +286,7 @@ func TestBundleVerifyTar(t *testing.T) {
 
 		if err := writeTarArchive(archive, []tarEntry{
 			{name: "bundle/.deck/manifest.json", body: manifestRaw},
-			{name: "bundle/files/dummy.txt", body: []byte("ok\n")},
+			{name: "bundle/outputs/files/dummy.txt", body: []byte("ok\n")},
 		}); err != nil {
 			t.Fatalf("write tar: %v", err)
 		}

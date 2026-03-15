@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,16 +13,15 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/taedi90/deck/internal/bundle"
 	"github.com/taedi90/deck/internal/config"
 	"github.com/taedi90/deck/internal/prepare"
 )
 
 type prepareOptions struct {
-	outPath      string
+	preparedRoot string
 	dryRun       bool
-	cacheDir     string
-	noCache      bool
+	refresh      bool
+	clean        bool
 	varOverrides map[string]string
 }
 
@@ -31,87 +29,93 @@ func newPrepareCommand() *cobra.Command {
 	vars := &varFlag{}
 	cmd := &cobra.Command{
 		Use:   "prepare",
-		Short: "Build an offline bundle from local deck files",
+		Short: "Prepare bundle contents under outputs/",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runPrepareWithOptions(prepareOptions{
-				outPath:      cmdFlagValue(cmd, "out"),
+				preparedRoot: cmdFlagValue(cmd, "root"),
 				dryRun:       cmdFlagBoolValue(cmd, "dry-run"),
-				cacheDir:     cmdFlagValue(cmd, "cache-dir"),
-				noCache:      cmdFlagBoolValue(cmd, "no-cache"),
+				refresh:      cmdFlagBoolValue(cmd, "refresh"),
+				clean:        cmdFlagBoolValue(cmd, "clean"),
 				varOverrides: vars.AsMap(),
 			})
 		},
 	}
-	cmd.Flags().SetInterspersed(false)
-	cmd.Flags().String("out", "", "output tar archive path")
+	cmd.Flags().String("root", defaultPreparedRoot("."), "prepared bundle output directory")
 	cmd.Flags().Bool("dry-run", false, "print prepare plan without writing files")
-	cmd.Flags().String("cache-dir", "", "artifact cache directory")
-	cmd.Flags().Bool("no-cache", false, "disable artifact cache reuse")
+	cmd.Flags().Bool("refresh", false, "re-download artifacts instead of reusing prepared files")
+	cmd.Flags().Bool("clean", false, "remove the prepared directory before writing")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	return cmd
 }
 
 func runPrepareWithOptions(opts prepareOptions) error {
-	resolvedOut := strings.TrimSpace(opts.outPath)
-	if !opts.dryRun && resolvedOut == "" {
-		return errors.New("--out is required")
-	}
-
 	ctx := context.Background()
 
 	prepareWorkflowPath, err := discoverPrepareWorkflow(ctx)
 	if err != nil {
 		return err
 	}
-	workflowBaseDir := filepath.Dir(prepareWorkflowPath)
-	applyWorkflowPath := filepath.Join(workflowBaseDir, "apply.yaml")
-	varsWorkflowPath := filepath.Join(workflowBaseDir, "vars.yaml")
-	for _, requiredPath := range []string{applyWorkflowPath, varsWorkflowPath} {
+	workflowRootDirPath, err := locateWorkflowTreeRoot(prepareWorkflowPath)
+	if err != nil {
+		return err
+	}
+	varsWorkflowPath, err := resolveRequiredVarsWorkflowPath(workflowRootDirPath)
+	if err != nil {
+		return err
+	}
+	applyWorkflowPath, err := resolveOptionalApplyWorkflowPath(workflowRootDirPath)
+	if err != nil {
+		return err
+	}
+	for _, requiredPath := range []string{varsWorkflowPath} {
 		info, statErr := os.Stat(requiredPath)
 		if statErr != nil || info.IsDir() {
 			return fmt.Errorf("required workflow file not found: %s", requiredPath)
 		}
 	}
 
+	resolvedPreparedRoot := strings.TrimSpace(opts.preparedRoot)
+	if resolvedPreparedRoot == "" {
+		resolvedPreparedRoot = defaultPreparedRoot(".")
+	}
+	resolvedPreparedRootAbs, err := filepath.Abs(resolvedPreparedRoot)
+	if err != nil {
+		return fmt.Errorf("resolve --root: %w", err)
+	}
+
 	if opts.dryRun {
 		for _, line := range []string{
 			fmt.Sprintf("PREPARE_WORKFLOW=%s", filepath.ToSlash(prepareWorkflowPath)),
 			fmt.Sprintf("WORKFLOW_INCLUDE=%s", filepath.ToSlash(prepareWorkflowPath)),
-			fmt.Sprintf("WORKFLOW_INCLUDE=%s", filepath.ToSlash(applyWorkflowPath)),
 			fmt.Sprintf("WORKFLOW_INCLUDE=%s", filepath.ToSlash(varsWorkflowPath)),
-			"ARTIFACT_DEFAULT_DEST=packages->bundle/packages",
-			"ARTIFACT_DEFAULT_DEST=images->bundle/images",
-			"ARTIFACT_DEFAULT_DEST=files->bundle/files",
-			"WRITE=bundle/deck",
-			"WRITE=bundle/files/deck",
-			"WRITE=bundle/.deck/manifest.json",
+			fmt.Sprintf("PREPARED_ROOT=%s", filepath.ToSlash(resolvedPreparedRootAbs)),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(resolvedPreparedRootAbs, "packages"))),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(resolvedPreparedRootAbs, "images"))),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(resolvedPreparedRootAbs, "files"))),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(filepath.Dir(resolvedPreparedRootAbs), "deck"))),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(filepath.Dir(resolvedPreparedRootAbs), ".deck", "manifest.json"))),
 		} {
 			if err := stdoutPrintln(line); err != nil {
 				return err
 			}
 		}
-		if resolvedOut != "" {
-			if err := stdoutPrintf("WRITE_TAR=%s\n", resolvedOut); err != nil {
+		if applyWorkflowPath != "" {
+			if err := stdoutPrintf("WORKFLOW_INCLUDE=%s\n", filepath.ToSlash(applyWorkflowPath)); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
 
-	resolvedOutAbs, err := filepath.Abs(resolvedOut)
-	if err != nil {
-		return fmt.Errorf("resolve --out: %w", err)
+	if opts.clean {
+		if err := os.RemoveAll(resolvedPreparedRootAbs); err != nil {
+			return fmt.Errorf("reset prepared root: %w", err)
+		}
 	}
-	if err := os.MkdirAll(filepath.Dir(resolvedOutAbs), 0o755); err != nil {
-		return fmt.Errorf("create output parent: %w", err)
+	if err := os.MkdirAll(resolvedPreparedRootAbs, 0o755); err != nil {
+		return fmt.Errorf("create prepared root: %w", err)
 	}
-
-	stagingRoot, err := os.MkdirTemp(filepath.Dir(resolvedOutAbs), "deck-prepare-")
-	if err != nil {
-		return fmt.Errorf("create staging root: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(stagingRoot) }()
-	bundleRoot := filepath.Join(stagingRoot, "bundle")
 
 	prepareWorkflow, err := config.LoadWithOptions(ctx, prepareWorkflowPath, config.LoadOptions{VarOverrides: varsAsAnyMap(opts.varOverrides)})
 	if err != nil {
@@ -121,36 +125,7 @@ func runPrepareWithOptions(opts prepareOptions) error {
 		return fmt.Errorf("prepare workflow role must be prepare: %s", prepareWorkflowPath)
 	}
 
-	artifactRoot := bundleRoot
-	if !opts.noCache {
-		if strings.TrimSpace(opts.cacheDir) != "" {
-			artifactRoot, err = filepath.Abs(strings.TrimSpace(opts.cacheDir))
-			if err != nil {
-				return fmt.Errorf("resolve --cache-dir: %w", err)
-			}
-		}
-	}
-
-	if err := prepare.Run(ctx, prepareWorkflow, prepare.RunOptions{BundleRoot: artifactRoot, ForceRedownload: opts.noCache}); err != nil {
-		return err
-	}
-
-	if artifactRoot != bundleRoot {
-		for _, artifactDir := range []string{"packages", "images", "files"} {
-			if err := copySubtreeIfExists(filepath.Join(artifactRoot, artifactDir), filepath.Join(bundleRoot, artifactDir)); err != nil {
-				return err
-			}
-		}
-	}
-
-	workflowOutDir := filepath.Join(bundleRoot, "workflows")
-	if err := os.MkdirAll(workflowOutDir, 0o755); err != nil {
-		return fmt.Errorf("create workflow output dir: %w", err)
-	}
-	if err := copySubtreeIfExists(workflowBaseDir, workflowOutDir); err != nil {
-		return err
-	}
-	if err := writeScenarioIndex(filepath.Join(workflowOutDir, "index.json"), filepath.Join(workflowOutDir, "scenarios")); err != nil {
+	if err := prepare.Run(ctx, prepareWorkflow, prepare.RunOptions{BundleRoot: resolvedPreparedRootAbs, ForceRedownload: opts.refresh}); err != nil {
 		return err
 	}
 
@@ -162,30 +137,24 @@ func runPrepareWithOptions(opts prepareOptions) error {
 	if err != nil {
 		return fmt.Errorf("read deck binary: %w", err)
 	}
-	if err := writeBytes(filepath.Join(bundleRoot, "deck"), binaryBytes, 0o755); err != nil {
-		return err
-	}
-	if err := writeBytes(filepath.Join(bundleRoot, "files", "deck"), binaryBytes, 0o755); err != nil {
+	workspaceRoot := filepath.Dir(resolvedPreparedRootAbs)
+	if err := writeBytes(filepath.Join(workspaceRoot, "deck"), binaryBytes, 0o755); err != nil {
 		return err
 	}
 
-	manifest, err := buildPackManifest(bundleRoot)
+	manifest, err := buildPreparedManifest(resolvedPreparedRootAbs)
 	if err != nil {
 		return err
 	}
-	if err := writePackManifest(filepath.Join(bundleRoot, ".deck", "manifest.json"), manifest); err != nil {
+	if err := writePreparedManifest(filepath.Join(workspaceRoot, ".deck", "manifest.json"), manifest); err != nil {
 		return err
 	}
 
-	if err := bundle.CollectArchive(bundleRoot, resolvedOutAbs); err != nil {
-		return err
-	}
-
-	return stdoutPrintf("prepare: ok (%s)\n", resolvedOutAbs)
+	return stdoutPrintf("prepare: ok (%s)\n", resolvedPreparedRootAbs)
 }
 
 func discoverPrepareWorkflow(ctx context.Context) (string, error) {
-	workflowDir := filepath.Join(".", "workflows")
+	workflowDir := filepath.Join(".", workflowRootDir)
 	absWorkflowDir, err := filepath.Abs(workflowDir)
 	if err != nil {
 		return "", fmt.Errorf("resolve workflow directory: %w", err)
@@ -195,88 +164,42 @@ func discoverPrepareWorkflow(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("workflow directory not found: %s", absWorkflowDir)
 	}
 
-	preferred := filepath.Join(absWorkflowDir, "prepare.yaml")
-	if preferredInfo, statErr := os.Stat(preferred); statErr == nil && !preferredInfo.IsDir() {
-		wf, loadErr := config.Load(ctx, preferred)
-		if loadErr != nil {
-			return "", loadErr
-		}
-		if strings.TrimSpace(wf.Role) != "prepare" {
-			return "", fmt.Errorf("prepare workflow role must be prepare: %s", preferred)
-		}
-		return preferred, nil
+	preferred := canonicalPrepareWorkflowPath(filepath.Dir(absWorkflowDir))
+	preferredInfo, statErr := os.Stat(preferred)
+	if statErr != nil || preferredInfo.IsDir() {
+		return "", fmt.Errorf("prepare workflow not found: %s", preferred)
 	}
-
-	entries, err := os.ReadDir(absWorkflowDir)
-	if err != nil {
-		return "", fmt.Errorf("read workflow directory: %w", err)
+	wf, loadErr := config.Load(ctx, preferred)
+	if loadErr != nil {
+		return "", loadErr
 	}
-	matches := make([]string, 0)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := strings.ToLower(entry.Name())
-		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
-			continue
-		}
-		candidate := filepath.Join(absWorkflowDir, entry.Name())
-		wf, loadErr := config.Load(ctx, candidate)
-		if loadErr != nil {
-			return "", loadErr
-		}
-		if strings.TrimSpace(wf.Role) == "prepare" {
-			matches = append(matches, candidate)
-		}
+	if strings.TrimSpace(wf.Role) != "prepare" {
+		return "", fmt.Errorf("prepare workflow role must be prepare: %s", preferred)
 	}
-	sort.Strings(matches)
-	if len(matches) == 0 {
-		return "", fmt.Errorf("prepare workflow not found under %s", absWorkflowDir)
-	}
-	if len(matches) > 1 {
-		return "", fmt.Errorf("multiple prepare workflows found under %s", absWorkflowDir)
-	}
-
-	return matches[0], nil
+	return preferred, nil
 }
 
-func copySubtreeIfExists(srcRoot, dstRoot string) error {
-	info, err := os.Stat(srcRoot)
+func resolveOptionalApplyWorkflowPath(workflowRootPath string) (string, error) {
+	path := canonicalApplyWorkflowPath(filepath.Dir(workflowRootPath))
+	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return "", nil
 		}
-		return err
+		return "", err
 	}
-	if !info.IsDir() {
-		return nil
+	if info.IsDir() {
+		return "", fmt.Errorf("apply workflow path is a directory: %s", path)
 	}
-
-	return filepath.WalkDir(srcRoot, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		rel, err := filepath.Rel(srcRoot, path)
-		if err != nil {
-			return err
-		}
-		if rel == "." {
-			return nil
-		}
-		target := filepath.Join(dstRoot, rel)
-		if d.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		return copyFile(path, target, 0o644)
-	})
+	return path, nil
 }
 
-func copyFile(srcPath, dstPath string, mode os.FileMode) error {
-	raw, err := os.ReadFile(srcPath)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", srcPath, err)
+func resolveRequiredVarsWorkflowPath(workflowRootPath string) (string, error) {
+	varsPath := canonicalVarsPath(filepath.Dir(workflowRootPath))
+	if info, err := os.Stat(varsPath); err == nil && !info.IsDir() {
+		return varsPath, nil
 	}
-	return writeBytes(dstPath, raw, mode)
+	return "", fmt.Errorf("required workflow file not found: %s", varsPath)
 }
 
 func writeBytes(path string, data []byte, mode os.FileMode) error {
@@ -289,78 +212,26 @@ func writeBytes(path string, data []byte, mode os.FileMode) error {
 	return nil
 }
 
-func writeScenarioIndex(indexPath, scenariosRoot string) error {
-	items, err := collectScenarioIndex(scenariosRoot)
-	if err != nil {
-		return err
-	}
-	raw, err := json.MarshalIndent(items, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode scenario index: %w", err)
-	}
-	raw = append(raw, '\n')
-	return writeBytes(indexPath, raw, 0o644)
+type preparedManifest struct {
+	Entries []preparedManifestEntry `json:"entries"`
 }
 
-func collectScenarioIndex(scenariosRoot string) ([]string, error) {
-	info, err := os.Stat(scenariosRoot)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []string{}, nil
-		}
-		return nil, fmt.Errorf("read scenarios root: %w", err)
-	}
-	if !info.IsDir() {
-		return []string{}, nil
-	}
-	items := make([]string, 0)
-	err = filepath.WalkDir(scenariosRoot, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		name := strings.ToLower(d.Name())
-		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
-			return nil
-		}
-		rel, err := filepath.Rel(scenariosRoot, path)
-		if err != nil {
-			return err
-		}
-		item := filepath.ToSlash(rel)
-		item = strings.TrimSuffix(item, ".yaml")
-		item = strings.TrimSuffix(item, ".yml")
-		items = append(items, item)
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("collect scenario index: %w", err)
-	}
-	sort.Strings(items)
-	return items, nil
-}
-
-type packManifest struct {
-	Entries []packManifestEntry `json:"entries"`
-}
-
-type packManifestEntry struct {
+type preparedManifestEntry struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
 	Size   int64  `json:"size"`
 }
 
-func buildPackManifest(bundleRoot string) (packManifest, error) {
-	entries := make([]packManifestEntry, 0)
+func buildPreparedManifest(bundleRoot string) (preparedManifest, error) {
+	entries := make([]preparedManifestEntry, 0)
+	workspaceRoot := filepath.Dir(bundleRoot)
 	for _, root := range []string{"packages", "images", "files"} {
 		rootPath := filepath.Join(bundleRoot, root)
 		if _, err := os.Stat(rootPath); err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return packManifest{}, err
+			return preparedManifest{}, err
 		}
 		if err := filepath.WalkDir(rootPath, func(path string, d os.DirEntry, walkErr error) error {
 			if walkErr != nil {
@@ -377,26 +248,26 @@ func buildPackManifest(bundleRoot string) (packManifest, error) {
 			if err != nil {
 				return err
 			}
-			rel, err := filepath.Rel(bundleRoot, path)
+			rel, err := filepath.Rel(workspaceRoot, path)
 			if err != nil {
 				return err
 			}
 			sum := sha256.Sum256(raw)
-			entries = append(entries, packManifestEntry{
+			entries = append(entries, preparedManifestEntry{
 				Path:   filepath.ToSlash(rel),
 				SHA256: hex.EncodeToString(sum[:]),
 				Size:   info.Size(),
 			})
 			return nil
 		}); err != nil {
-			return packManifest{}, err
+			return preparedManifest{}, err
 		}
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
-	return packManifest{Entries: entries}, nil
+	return preparedManifest{Entries: entries}, nil
 }
 
-func writePackManifest(path string, manifest packManifest) error {
+func writePreparedManifest(path string, manifest preparedManifest) error {
 	raw, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode prepare manifest: %w", err)

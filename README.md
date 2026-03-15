@@ -4,7 +4,7 @@
 
 `deck` is a simple workflow tool for air-gapped and operationally constrained environments.
 
-It exists for the cases where larger automation platforms are a bad fit and growing Bash procedures become hard to read, review, and maintain. `deck` keeps the model small: write a workflow, validate it, bundle what the site needs, carry it in, and run it locally.
+It exists for the cases where larger automation platforms are a bad fit and growing Bash procedures become hard to read, review, and maintain. `deck` keeps the model small: write a workflow, lint it, bundle what the site needs, carry it in, and run it locally.
 
 ## Visuals
 
@@ -96,11 +96,12 @@ deck --help
 
 ```bash
 deck init --out ./demo
-deck validate --file ./demo/workflows/apply.yaml
-deck validate --file ./demo/workflows/prepare.yaml
+deck lint
+deck lint --file ./demo/workflows/scenarios/apply.yaml
 
 cd ./demo
-deck prepare --out ./bundle.tar
+deck prepare
+deck bundle build --out ./bundle.tar
 deck apply
 ```
 
@@ -146,11 +147,11 @@ go build -o ./deck ./cmd/deck
 ./deck completion fish
 ./deck completion powershell
 go test ./...
-./deck validate --file <workflow.yaml>
-./deck validate --file docs/examples/vagrant-smoke-install.yaml
-./deck validate --file test/workflows/scenarios/control-plane-bootstrap.yaml
-./deck validate --file test/workflows/scenarios/worker-join.yaml
-./deck validate --file test/workflows/scenarios/node-reset.yaml
+./deck lint
+./deck lint --file docs/examples/vagrant-smoke-install.yaml
+./deck lint --file test/workflows/scenarios/control-plane-bootstrap.yaml
+./deck lint --file test/workflows/scenarios/worker-join.yaml
+./deck lint --file test/workflows/scenarios/node-reset.yaml
 
 # linux host with libvirt-backed vagrant
 bash test/e2e/vagrant/run-scenario.sh --scenario k8s-control-plane-bootstrap

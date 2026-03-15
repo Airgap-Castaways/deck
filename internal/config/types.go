@@ -4,6 +4,7 @@ type Workflow struct {
 	Role           string         `yaml:"role" json:"-"`
 	Version        string         `yaml:"version" json:"version"`
 	Imports        []string       `yaml:"imports,omitempty" json:"imports,omitempty"`
+	VarImports     []string       `yaml:"varImports,omitempty" json:"varImports,omitempty"`
 	Vars           map[string]any `yaml:"vars" json:"vars,omitempty"`
 	Artifacts      *ArtifactsSpec `yaml:"artifacts,omitempty" json:"artifacts,omitempty"`
 	Phases         []Phase        `yaml:"phases,omitempty" json:"phases,omitempty"`

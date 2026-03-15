@@ -1,11 +1,13 @@
 package validate
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/xeipuuv/gojsonschema"
@@ -30,7 +32,113 @@ func File(path string) error {
 	if err != nil {
 		return fmt.Errorf("read workflow file: %w", err)
 	}
-	return Bytes(path, content)
+	return withWorkflowName(path, Bytes(path, content))
+}
+
+func Workspace(root string) ([]string, error) {
+	resolvedRoot := strings.TrimSpace(root)
+	if resolvedRoot == "" {
+		resolvedRoot = "."
+	}
+	workflowRoot := filepath.Join(resolvedRoot, "workflows")
+	info, err := os.Stat(workflowRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("workflow directory not found: %s", workflowRoot)
+		}
+		return nil, fmt.Errorf("stat workflow directory: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("workflow directory is not a directory: %s", workflowRoot)
+	}
+
+	required := []string{filepath.Join(workflowRoot, "scenarios", "prepare.yaml")}
+	for _, path := range required {
+		info, err := os.Stat(path)
+		if err != nil || info.IsDir() {
+			return nil, fmt.Errorf("required workflow file not found: %s", path)
+		}
+	}
+
+	scenarioRoot := filepath.Join(workflowRoot, "scenarios")
+	if info, err := os.Stat(scenarioRoot); err != nil || !info.IsDir() {
+		return nil, fmt.Errorf("workflow scenarios directory not found: %s", scenarioRoot)
+	}
+
+	files := make([]string, 0)
+	err = filepath.WalkDir(scenarioRoot, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		name := strings.ToLower(d.Name())
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			return nil
+		}
+		files = append(files, path)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read workflow directory: %w", err)
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no scenario workflow files found under: %s", scenarioRoot)
+	}
+
+	validated := make([]string, 0)
+	visited := map[string]bool{}
+	for _, path := range files {
+		validatedFiles, err := lintLocalEntrypoint(path, nil, visited)
+		if err != nil {
+			return nil, err
+		}
+		validated = append(validated, validatedFiles...)
+	}
+	return dedupeAndSort(validated), nil
+}
+
+func Entrypoint(path string) ([]string, error) {
+	absPath, err := filepath.Abs(strings.TrimSpace(path))
+	if err != nil {
+		return nil, fmt.Errorf("resolve workflow path: %w", err)
+	}
+	return lintLocalEntrypoint(absPath, nil, map[string]bool{})
+}
+
+func Workflow(name string, wf *config.Workflow) error {
+	if strings.TrimSpace(name) == "" {
+		name = "<workflow>"
+	}
+	if wf == nil {
+		return withWorkflowName(name, fmt.Errorf("workflow is nil"))
+	}
+	if len(wf.Phases) > 0 && len(wf.Steps) > 0 {
+		return withWorkflowName(name, fmt.Errorf("workflow cannot set both phases and steps"))
+	}
+	if wf.Role == "" {
+		return withWorkflowName(name, fmt.Errorf("role is required"))
+	}
+	if strings.TrimSpace(wf.Role) != "prepare" && strings.TrimSpace(wf.Role) != "apply" {
+		return withWorkflowName(name, fmt.Errorf("unsupported role: %s (supported: prepare, apply)", wf.Role))
+	}
+	if wf.Version == "" {
+		return withWorkflowName(name, fmt.Errorf("version is required"))
+	}
+	if strings.TrimSpace(wf.Version) != "v1alpha1" {
+		return withWorkflowName(name, fmt.Errorf("unsupported version: %s (supported: v1alpha1)", wf.Version))
+	}
+	if err := validateWorkflowMode(wf); err != nil {
+		return withWorkflowName(name, err)
+	}
+	if err := validateToolSchemas(wf); err != nil {
+		return withWorkflowName(name, err)
+	}
+	if err := validateSemantics(wf); err != nil {
+		return withWorkflowName(name, err)
+	}
+	return nil
 }
 
 func Bytes(name string, content []byte) error {
@@ -78,6 +186,120 @@ func Bytes(name string, content []byte) error {
 	}
 
 	return nil
+}
+
+func withWorkflowName(name string, err error) error {
+	if err == nil {
+		return nil
+	}
+	prefix := strings.TrimSpace(name) + ": "
+	if strings.HasPrefix(err.Error(), prefix) {
+		return err
+	}
+	return fmt.Errorf("%s%w", prefix, err)
+}
+
+func lintLocalEntrypoint(path string, inheritedVars map[string]any, visiting map[string]bool) ([]string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve workflow path: %w", err)
+	}
+	if visiting[absPath] {
+		return nil, nil
+	}
+	visiting[absPath] = true
+
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, withWorkflowName(absPath, fmt.Errorf("read workflow file: %w", err))
+	}
+	if err := validateSingleBraceTemplates(absPath, content); err != nil {
+		return nil, withWorkflowName(absPath, err)
+	}
+	if err := validateSchema(absPath, content); err != nil {
+		return nil, withWorkflowName(absPath, err)
+	}
+
+	var raw config.Workflow
+	if err := yaml.Unmarshal(content, &raw); err != nil {
+		return nil, withWorkflowName(absPath, fmt.Errorf("parse yaml: %w", err))
+	}
+
+	loadOpts := config.LoadOptions{VarOverrides: cloneAnyMap(inheritedVars)}
+	wf, err := config.LoadWithOptions(context.Background(), absPath, loadOpts)
+	if err != nil {
+		return nil, withWorkflowName(absPath, err)
+	}
+
+	validated := []string{absPath}
+	for _, ref := range append([]string{}, raw.Imports...) {
+		child, err := resolveLocalWorkflowImport(absPath, ref)
+		if err != nil {
+			return nil, withWorkflowName(absPath, err)
+		}
+		files, err := lintLocalEntrypoint(child, wf.Vars, visiting)
+		if err != nil {
+			return nil, err
+		}
+		validated = append(validated, files...)
+	}
+	for _, phase := range raw.Phases {
+		for _, phaseImport := range phase.Imports {
+			child, err := resolveLocalWorkflowImport(absPath, phaseImport.Path)
+			if err != nil {
+				return nil, withWorkflowName(absPath, err)
+			}
+			files, err := lintLocalEntrypoint(child, wf.Vars, visiting)
+			if err != nil {
+				return nil, err
+			}
+			validated = append(validated, files...)
+		}
+	}
+	if err := Workflow(absPath, wf); err != nil {
+		return nil, err
+	}
+	return dedupeAndSort(validated), nil
+}
+
+func resolveLocalWorkflowImport(originPath string, importRef string) (string, error) {
+	ref := strings.TrimSpace(importRef)
+	if ref == "" {
+		return "", fmt.Errorf("workflow import path is empty")
+	}
+	if strings.Contains(ref, "://") {
+		return "", fmt.Errorf("remote imports are not supported during workspace lint: %s", ref)
+	}
+	joined := filepath.Clean(filepath.Join(filepath.Dir(originPath), ref))
+	return filepath.Abs(joined)
+}
+
+func cloneAnyMap(input map[string]any) map[string]any {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(input))
+	for k, v := range input {
+		out[k] = v
+	}
+	return out
+}
+
+func dedupeAndSort(values []string) []string {
+	if len(values) == 0 {
+		return values
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func validateWorkflowMode(wf *config.Workflow) error {

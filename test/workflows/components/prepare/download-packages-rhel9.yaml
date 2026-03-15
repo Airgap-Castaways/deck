@@ -1,21 +1,20 @@
 role: prepare
 version: v1alpha1
-artifacts:
-  packages:
-    - group: runtime-deps-rocky9
-      targets:
-        - osFamily: rhel
-          release: rocky9
-          arch: "{{ .vars.arch }}"
+steps:
+  - id: runtime-deps-rocky9
+    apiVersion: deck/v1alpha1
+    kind: Packages
+    spec:
+      action: download
+      distro:
+        family: rhel
+        release: rocky9
+        arch: "{{ .vars.arch }}"
       repo:
         type: yum
         generate: true
-        modules:
-          - name: container-tools
-            stream: "4.0"
+      packages: [bash]
       backend:
         mode: container
         runtime: "{{ .vars.backendRuntime }}"
         image: rockylinux:9
-      items:
-        - name: podman

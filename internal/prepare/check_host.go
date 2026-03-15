@@ -18,7 +18,7 @@ var (
 func runCheckHost(runner CommandRunner, spec map[string]any) (map[string]any, error) {
 	checks := stringSlice(spec["checks"])
 	if len(checks) == 0 {
-		return nil, fmt.Errorf("%s: Inspection requires checks", errCodePrepareInspectionCheckFailed)
+		return nil, fmt.Errorf("%s: CheckHost requires checks", errCodePrepareCheckHostFailed)
 	}
 	host := detectHostFacts()
 
@@ -33,7 +33,7 @@ func runCheckHost(runner CommandRunner, spec map[string]any) (map[string]any, er
 	fail := func(name, reason string) error {
 		failed = append(failed, name+":"+reason)
 		if failFast {
-			return fmt.Errorf("%s: %s", errCodePrepareInspectionCheckFailed, strings.Join(failed, ", "))
+			return fmt.Errorf("%s: %s", errCodePrepareCheckHostFailed, strings.Join(failed, ", "))
 		}
 		return nil
 	}
@@ -108,7 +108,7 @@ func runCheckHost(runner CommandRunner, spec map[string]any) (map[string]any, er
 	}
 
 	if len(failed) > 0 {
-		return map[string]any{"passed": false, "failedChecks": failed, "host": host}, fmt.Errorf("%s: %s", errCodePrepareInspectionCheckFailed, strings.Join(failed, ", "))
+		return map[string]any{"passed": false, "failedChecks": failed, "host": host}, fmt.Errorf("%s: %s", errCodePrepareCheckHostFailed, strings.Join(failed, ", "))
 	}
 	return map[string]any{"passed": true, "failedChecks": []string{}, "host": host}, nil
 }

@@ -20,10 +20,6 @@ func runFile(spec map[string]any) error {
 	}
 }
 
-func runArtifacts(ctx context.Context, spec map[string]any, bundleRoot string) error {
-	return runArtifactsApply(ctx, spec, bundleRoot)
-}
-
 func runPackages(ctx context.Context, spec map[string]any) error {
 	switch packagesAction(spec) {
 	case "download":

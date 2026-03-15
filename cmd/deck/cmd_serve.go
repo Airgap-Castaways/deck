@@ -16,7 +16,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/taedi90/deck/internal/bundle"
 	ctrllogs "github.com/taedi90/deck/internal/logs"
 	"github.com/taedi90/deck/internal/server"
 )
@@ -24,7 +23,7 @@ import (
 func executeServe(root string, addr string, apiToken string, reportMax int, auditMaxSizeMB int, auditMaxFiles int, tlsCert string, tlsKey string, tlsSelfSigned bool) error {
 	resolvedRoot := strings.TrimSpace(root)
 	if resolvedRoot == "" {
-		resolvedRoot = "./bundle"
+		resolvedRoot = "."
 	}
 	resolvedAddr := strings.TrimSpace(addr)
 	if resolvedAddr == "" {
@@ -114,7 +113,7 @@ func executeServe(root string, addr string, apiToken string, reportMax int, audi
 	}
 }
 
-func executeListScenarios(server string, output string) error {
+func executeList(server string, output string) error {
 	if output != "text" && output != "json" {
 		return errors.New("--output must be text or json")
 	}
@@ -123,7 +122,7 @@ func executeListScenarios(server string, output string) error {
 	if err != nil {
 		return err
 	}
-	items, err := fetchScenarioIndexFromServer(resolvedServer)
+	items, err := fetchWorkflowIndexFromServer(resolvedServer)
 	if err != nil {
 		return err
 	}
@@ -131,7 +130,7 @@ func executeListScenarios(server string, output string) error {
 	if output == "json" {
 		enc := json.NewEncoder(os.Stdout)
 		if err := enc.Encode(items); err != nil {
-			return fmt.Errorf("server scenarios: encode output: %w", err)
+			return fmt.Errorf("server workflows: encode output: %w", err)
 		}
 		return nil
 	}
@@ -145,30 +144,30 @@ func executeListScenarios(server string, output string) error {
 	return w.Flush()
 }
 
-func fetchScenarioIndexFromServer(server string) ([]string, error) {
+func fetchWorkflowIndexFromServer(server string) ([]string, error) {
 	trimmed := strings.TrimRight(server, "/")
 	indexURL := trimmed + "/workflows/index.json"
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, indexURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("server scenarios: build request: %w", err)
+		return nil, fmt.Errorf("server workflows: build request: %w", err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("server scenarios: request failed: %w", err)
+		return nil, fmt.Errorf("server workflows: request failed: %w", err)
 	}
 	defer closeSilently(resp.Body)
 	if resp.StatusCode == http.StatusNotFound {
 		return []string{}, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server scenarios: unexpected status %d", resp.StatusCode)
+		return nil, fmt.Errorf("server workflows: unexpected status %d", resp.StatusCode)
 	}
 
 	var items []string
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-		return nil, fmt.Errorf("server scenarios: decode response: %w", err)
+		return nil, fmt.Errorf("server workflows: decode response: %w", err)
 	}
-	return bundle.NormalizeScenarioIndex(nil, items), nil
+	return items, nil
 }
 
 func executeHealth(server string) error {

@@ -46,11 +46,13 @@ const (
 	errCodePrepareEngineUnsupported     = "E_PREPARE_ENGINE_UNSUPPORTED"
 	errCodePrepareArtifactsEmpty        = "E_PREPARE_NO_ARTIFACTS"
 	errCodeArtifactSourceNotFound       = "E_PREPARE_SOURCE_NOT_FOUND"
+	errCodePrepareSourceNotFound        = errCodeArtifactSourceNotFound
 	errCodePrepareChecksumMismatch      = "E_PREPARE_CHECKSUM_MISMATCH"
 	errCodePrepareOfflinePolicyBlock    = "E_PREPARE_OFFLINE_POLICY_BLOCK"
 	errCodePrepareConditionEval         = "E_CONDITION_EVAL"
 	errCodePrepareRegisterMissing       = "E_REGISTER_OUTPUT_NOT_FOUND"
-	errCodePrepareInspectionCheckFailed = "E_PREPARE_INSPECTION_CHECK_FAILED"
+	errCodePrepareInspectionCheckFailed = "E_PREPARE_CHECKHOST_FAILED"
+	errCodePrepareCheckHostFailed       = errCodePrepareInspectionCheckFailed
 	errCodePrepareKindUnsupported       = "E_PREPARE_KIND_UNSUPPORTED"
 	packageCacheMetaFile                = ".deck-cache-packages.json"
 )
@@ -83,10 +85,10 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	if err != nil {
 		return err
 	}
-	prepareCacheEnabled := strings.TrimSpace(wf.Role) == "prepare"
-	prepareCacheStatePath := ""
-	prepareCachePlan := PrepareCachePlan{}
-	if prepareCacheEnabled {
+	packCacheEnabled := strings.TrimSpace(wf.Role) == "prepare"
+	packCacheStatePath := ""
+	packCachePlan := PackCachePlan{}
+	if packCacheEnabled {
 		workflowSHA := strings.TrimSpace(wf.WorkflowSHA256)
 		if workflowSHA == "" {
 			fallbackBytes, err := json.Marshal(wf)
@@ -96,11 +98,11 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 			workflowSHA = computeWorkflowSHA256(fallbackBytes)
 		}
 		var err error
-		prepareCacheStatePath, err = defaultPrepareCacheStatePath(workflowSHA)
+		packCacheStatePath, err = defaultPackCacheStatePath(workflowSHA)
 		if err != nil {
 			return fmt.Errorf("resolve prepare cache state path: %w", err)
 		}
-		prevPrepareCacheState, err := loadPrepareCacheState(prepareCacheStatePath)
+		prevPackCacheState, err := loadPackCacheState(packCacheStatePath)
 		if err != nil {
 			return err
 		}
@@ -108,8 +110,8 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 		if err != nil {
 			return fmt.Errorf("encode workflow for prepare cache plan: %w", err)
 		}
-		prepareCachePlan = ComputePrepareCachePlan(prevPrepareCacheState, workflowBytesForPlan, wf.Vars, prepareSteps)
-		prepareCachePlan.WorkflowSHA256 = workflowSHA
+		packCachePlan = ComputePackCachePlan(prevPackCacheState, workflowBytesForPlan, wf.Vars, prepareSteps)
+		packCachePlan.WorkflowSHA256 = workflowSHA
 	}
 	ctxData := map[string]any{"bundleRoot": bundleRoot, "stateFile": ""}
 
@@ -167,8 +169,8 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	if err := writeManifest(manifestPath, dedupeEntries(filterManifestEntries(entries))); err != nil {
 		return err
 	}
-	if prepareCacheEnabled {
-		if err := savePrepareCacheState(prepareCacheStatePath, prepareCacheStateFromPlan(prepareCachePlan)); err != nil {
+	if packCacheEnabled {
+		if err := savePackCacheState(packCacheStatePath, packCacheStateFromPlan(packCachePlan)); err != nil {
 			return err
 		}
 	}

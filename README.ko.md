@@ -93,11 +93,12 @@ deck --help
 
 ```bash
 deck init --out ./demo
-deck validate --file ./demo/workflows/apply.yaml
-deck validate --file ./demo/workflows/prepare.yaml
+deck lint
+deck lint --file ./demo/workflows/scenarios/apply.yaml
 
 cd ./demo
-deck prepare --out ./bundle.tar
+deck prepare
+deck bundle build --out ./bundle.tar
 deck apply
 ```
 
@@ -126,7 +127,7 @@ deck apply
 
 ```bash
 go test ./...
-go run ./cmd/deck validate --file <workflow.yaml>
+go run ./cmd/deck lint
 
 # linux host with libvirt-backed vagrant
 bash test/e2e/vagrant/run-scenario.sh --scenario k8s-control-plane-bootstrap

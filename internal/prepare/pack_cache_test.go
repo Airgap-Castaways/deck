@@ -9,7 +9,7 @@ import (
 	"github.com/taedi90/deck/internal/config"
 )
 
-func TestPrepareCacheInvalidation(t *testing.T) {
+func TestPackCacheInvalidation(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -31,6 +31,7 @@ func TestPrepareCacheInvalidation(t *testing.T) {
 					ID:   "artifact-a",
 					Kind: "Packages",
 					Spec: map[string]any{
+						"action":   "download",
 						"packages": []any{"containerd-{{ .vars.pkgA }}"},
 					},
 				},
@@ -38,6 +39,7 @@ func TestPrepareCacheInvalidation(t *testing.T) {
 					ID:   "artifact-b",
 					Kind: "Packages",
 					Spec: map[string]any{
+						"action":   "download",
 						"packages": []any{"iptables-{{ .vars.pkgB }}"},
 					},
 				},
@@ -52,11 +54,11 @@ func TestPrepareCacheInvalidation(t *testing.T) {
 
 	statePath := filepath.Join(home, ".deck", "cache", "state", workflowSHA+".json")
 	if _, err := os.Stat(statePath); err != nil {
-		t.Fatalf("expected prepare cache state file: %v", err)
+		t.Fatalf("expected pack cache state file: %v", err)
 	}
-	prevState, err := loadPrepareCacheState(statePath)
+	prevState, err := loadPackCacheState(statePath)
 	if err != nil {
-		t.Fatalf("loadPrepareCacheState failed: %v", err)
+		t.Fatalf("loadPackCacheState failed: %v", err)
 	}
 
 	if len(prevState.Artifacts) != 2 {
@@ -64,7 +66,7 @@ func TestPrepareCacheInvalidation(t *testing.T) {
 	}
 
 	wf.Vars["pkgB"] = "gamma"
-	plan := ComputePrepareCachePlan(prevState, workflowBytes, wf.Vars, wf.Phases[0].Steps)
+	plan := ComputePackCachePlan(prevState, workflowBytes, wf.Vars, wf.Phases[0].Steps)
 
 	if len(plan.Artifacts) != 2 {
 		t.Fatalf("expected two plan artifacts, got %d", len(plan.Artifacts))
@@ -75,16 +77,16 @@ func TestPrepareCacheInvalidation(t *testing.T) {
 		actions[artifact.StepID] = artifact.Action
 	}
 
-	if actions["artifact-a"] != prepareCacheActionReuse {
-		t.Fatalf("artifact-a action = %s, want %s", actions["artifact-a"], prepareCacheActionReuse)
+	if actions["artifact-a"] != packCacheActionReuse {
+		t.Fatalf("artifact-a action = %s, want %s", actions["artifact-a"], packCacheActionReuse)
 	}
-	if actions["artifact-b"] != prepareCacheActionFetch {
-		t.Fatalf("artifact-b action = %s, want %s", actions["artifact-b"], prepareCacheActionFetch)
+	if actions["artifact-b"] != packCacheActionFetch {
+		t.Fatalf("artifact-b action = %s, want %s", actions["artifact-b"], packCacheActionFetch)
 	}
 }
 
-func TestRun_PrepareCacheRoleGate(t *testing.T) {
-	t.Run("apply role does not write prepare cache state", func(t *testing.T) {
+func TestRun_PackCacheRoleGate(t *testing.T) {
+	t.Run("apply role does not write pack cache state", func(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
 
@@ -100,6 +102,7 @@ func TestRun_PrepareCacheRoleGate(t *testing.T) {
 					ID:   "artifact-a",
 					Kind: "Packages",
 					Spec: map[string]any{
+						"action":   "download",
 						"packages": []any{"containerd"},
 					},
 				}},
@@ -112,11 +115,11 @@ func TestRun_PrepareCacheRoleGate(t *testing.T) {
 
 		statePath := filepath.Join(home, ".deck", "cache", "state", workflowSHA+".json")
 		if _, err := os.Stat(statePath); !os.IsNotExist(err) {
-			t.Fatalf("prepare cache state must not be written for apply role, err=%v", err)
+			t.Fatalf("pack cache state must not be written for apply role, err=%v", err)
 		}
 	})
 
-	t.Run("empty role does not touch prepare cache state", func(t *testing.T) {
+	t.Run("empty role does not touch pack cache state", func(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
 
@@ -132,6 +135,7 @@ func TestRun_PrepareCacheRoleGate(t *testing.T) {
 					ID:   "artifact-a",
 					Kind: "Packages",
 					Spec: map[string]any{
+						"action":   "download",
 						"packages": []any{"containerd"},
 					},
 				}},
@@ -144,7 +148,7 @@ func TestRun_PrepareCacheRoleGate(t *testing.T) {
 
 		statePath := filepath.Join(home, ".deck", "cache", "state", workflowSHA+".json")
 		if _, err := os.Stat(statePath); !os.IsNotExist(err) {
-			t.Fatalf("prepare cache state must not be written for empty role, err=%v", err)
+			t.Fatalf("pack cache state must not be written for empty role, err=%v", err)
 		}
 	})
 }

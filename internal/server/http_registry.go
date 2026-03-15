@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,8 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/google/go-containerregistry/pkg/v1/types"
+
+	"github.com/taedi90/deck/internal/deckignore"
 )
 
 type registryCatalogEntry struct {
@@ -44,6 +47,10 @@ type registryBlobRequest struct {
 	digest string
 }
 
+type registryTagsRequest struct {
+	repo string
+}
+
 func (h *serverHandler) handleRegistry(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -52,6 +59,14 @@ func (h *serverHandler) handleRegistry(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Docker-Distribution-API-Version", "registry/2.0")
 	if r.URL.Path == "/v2" || r.URL.Path == "/v2/" {
 		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.URL.Path == "/v2/_catalog" {
+		h.handleRegistryCatalog(w, r)
+		return
+	}
+	if req, ok := parseRegistryTagsRequest(r.URL.Path); ok {
+		h.handleRegistryTags(w, r, req)
 		return
 	}
 	if req, ok := parseRegistryManifestRequest(r.URL.Path); ok {
@@ -63,6 +78,84 @@ func (h *serverHandler) handleRegistry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNotFound)
+}
+
+func (h *serverHandler) handleRegistryCatalog(w http.ResponseWriter, r *http.Request) {
+	entries, err := h.scanRegistryCatalog()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	repos := make([]string, 0)
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		if seen[entry.repo] {
+			continue
+		}
+		seen[entry.repo] = true
+		repos = append(repos, entry.repo)
+	}
+	sort.Strings(repos)
+	body, err := json.Marshal(map[string]any{"repositories": repos})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
+}
+
+func parseRegistryTagsRequest(urlPath string) (registryTagsRequest, bool) {
+	const suffix = "/tags/list"
+	if !strings.HasPrefix(urlPath, "/v2/") || !strings.HasSuffix(urlPath, suffix) {
+		return registryTagsRequest{}, false
+	}
+	repo := strings.Trim(strings.TrimSuffix(strings.TrimPrefix(urlPath, "/v2/"), suffix), "/")
+	if repo == "" || strings.Contains(repo, "..") {
+		return registryTagsRequest{}, false
+	}
+	return registryTagsRequest{repo: repo}, true
+}
+
+func (h *serverHandler) handleRegistryTags(w http.ResponseWriter, r *http.Request, req registryTagsRequest) {
+	entries, err := h.scanRegistryCatalog()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	tags := make([]string, 0)
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		if entry.repo != req.repo || seen[entry.tag] {
+			continue
+		}
+		seen[entry.tag] = true
+		tags = append(tags, entry.tag)
+	}
+	if len(tags) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	sort.Strings(tags)
+	body, err := json.Marshal(map[string]any{"name": req.repo, "tags": tags})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
 }
 
 func parseRegistryManifestRequest(urlPath string) (registryManifestRequest, bool) {
@@ -192,46 +285,58 @@ func (h *serverHandler) resolveRegistryImage(repo, ref string) (*registryResolve
 }
 
 func (h *serverHandler) scanRegistryCatalog() ([]registryCatalogEntry, error) {
-	imagesRoot := filepath.Join(h.rootAbs, "images")
-	if _, err := os.Stat(imagesRoot); err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
+	ignore, err := deckignore.Load(h.rootAbs)
+	if err != nil {
 		return nil, err
 	}
 	entries := make([]registryCatalogEntry, 0)
-	err := filepath.WalkDir(imagesRoot, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
+	for _, imagesRoot := range []string{filepath.Join(h.rootAbs, "outputs", "images"), filepath.Join(h.rootAbs, "images")} {
+		if _, err := os.Stat(imagesRoot); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
 		}
-		if d.IsDir() || strings.ToLower(filepath.Ext(path)) != ".tar" {
-			return nil
-		}
-		manifest, err := tarball.LoadManifest(func() (io.ReadCloser, error) { return os.Open(path) })
-		if err != nil {
-			return nil
-		}
-		for _, descriptor := range manifest {
-			for _, repoTag := range descriptor.RepoTags {
-				tag, err := name.NewTag(repoTag, name.WeakValidation)
-				if err != nil {
-					continue
-				}
-				aliases := registryRepositoryAliases(tag.Repository.Name())
-				for _, alias := range aliases {
-					entries = append(entries, registryCatalogEntry{
-						repoTag: repoTag,
-						repo:    alias,
-						tag:     tag.TagStr(),
-						tarPath: path,
-					})
+		err := filepath.WalkDir(imagesRoot, func(path string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if d.IsDir() || strings.ToLower(filepath.Ext(path)) != ".tar" {
+				return nil
+			}
+			relFromRoot, err := filepath.Rel(h.rootAbs, path)
+			if err != nil {
+				return err
+			}
+			if ignore.Matches(filepath.ToSlash(relFromRoot), false) {
+				return nil
+			}
+			manifest, err := tarball.LoadManifest(func() (io.ReadCloser, error) { return os.Open(path) })
+			if err != nil {
+				return nil
+			}
+			for _, descriptor := range manifest {
+				for _, repoTag := range descriptor.RepoTags {
+					tag, err := name.NewTag(repoTag, name.WeakValidation)
+					if err != nil {
+						continue
+					}
+					aliases := registryRepositoryAliases(tag.Repository.Name())
+					for _, alias := range aliases {
+						entries = append(entries, registryCatalogEntry{
+							repoTag: repoTag,
+							repo:    alias,
+							tag:     tag.TagStr(),
+							tarPath: path,
+						})
+					}
 				}
 			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
 	}
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].repo == entries[j].repo {

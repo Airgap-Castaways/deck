@@ -27,14 +27,14 @@ func newRootCommand() *cobra.Command {
 
 	cmd.AddCommand(
 		withGroup(newInitCommand(), commandGroupCore),
-		withGroup(newValidateCommand(), commandGroupCore),
+		withGroup(newLintCommand(), commandGroupCore),
 		withGroup(newPrepareCommand(), commandGroupCore),
-		withGroup(newPlanCommand(), commandGroupCore),
+		withGroup(newBundleCommand(), commandGroupCore),
 		withGroup(newApplyCommand(), commandGroupCore),
+		withGroup(newServerCommand(), commandGroupAdditional),
+		withGroup(newPlanCommand(), commandGroupAdditional),
 		withGroup(newDoctorCommand(), commandGroupAdditional),
 		withGroup(newCompletionCommand(), commandGroupAdditional),
-		withGroup(newServerCommand(), commandGroupAdditional),
-		withGroup(newBundleCommand(), commandGroupAdditional),
 		withGroup(newCacheCommand(), commandGroupAdditional),
 		withGroup(newNodeCommand(), commandGroupAdditional),
 		withGroup(newSiteCommand(), commandGroupAdditional),

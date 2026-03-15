@@ -15,32 +15,32 @@ import (
 )
 
 const (
-	prepareCacheActionFetch = "FETCH"
-	prepareCacheActionReuse = "REUSE"
+	packCacheActionFetch = "FETCH"
+	packCacheActionReuse = "REUSE"
 )
 
 var (
-	prepareCacheTemplateExprPattern = regexp.MustCompile(`\{\{[^}]*\}\}`)
-	prepareCacheVarRefPattern       = regexp.MustCompile(`\.vars\.([A-Za-z_][A-Za-z0-9_]*)`)
+	packCacheTemplateExprPattern = regexp.MustCompile(`\{\{[^}]*\}\}`)
+	packCacheVarRefPattern       = regexp.MustCompile(`\.vars\.([A-Za-z_][A-Za-z0-9_]*)`)
 )
 
-type prepareCacheState struct {
-	Artifacts []prepareCacheArtifactState `json:"artifacts"`
+type packCacheState struct {
+	Artifacts []packCacheArtifactState `json:"artifacts"`
 }
 
-type prepareCacheArtifactState struct {
+type packCacheArtifactState struct {
 	StepID    string            `json:"step_id"`
 	Type      string            `json:"type"`
 	CacheKey  string            `json:"cache_key"`
 	InputVars map[string]string `json:"input_vars"`
 }
 
-type PrepareCachePlan struct {
-	WorkflowSHA256 string                     `json:"workflow_sha256"`
-	Artifacts      []prepareCacheArtifactPlan `json:"artifacts"`
+type PackCachePlan struct {
+	WorkflowSHA256 string                  `json:"workflow_sha256"`
+	Artifacts      []packCacheArtifactPlan `json:"artifacts"`
 }
 
-type prepareCacheArtifactPlan struct {
+type packCacheArtifactPlan struct {
 	StepID    string            `json:"step_id"`
 	Type      string            `json:"type"`
 	CacheKey  string            `json:"cache_key"`
@@ -48,23 +48,23 @@ type prepareCacheArtifactPlan struct {
 	InputVars map[string]string `json:"input_vars"`
 }
 
-func ComputePrepareCachePlan(prevState prepareCacheState, workflowBytes []byte, effectiveVars map[string]any, steps []config.Step) PrepareCachePlan {
+func ComputePackCachePlan(prevState packCacheState, workflowBytes []byte, effectiveVars map[string]any, steps []config.Step) PackCachePlan {
 	workflowSHA := computeWorkflowSHA256(workflowBytes)
-	currentArtifacts := collectPrepareCacheArtifacts(steps, effectiveVars)
-	prevByIdentity := map[string]prepareCacheArtifactState{}
+	currentArtifacts := collectPackCacheArtifacts(steps, effectiveVars)
+	prevByIdentity := map[string]packCacheArtifactState{}
 	for _, item := range prevState.Artifacts {
-		prevByIdentity[prepareCacheIdentity(item.StepID, item.Type)] = item
+		prevByIdentity[packCacheIdentity(item.StepID, item.Type)] = item
 	}
 
-	artifacts := make([]prepareCacheArtifactPlan, 0, len(currentArtifacts))
+	artifacts := make([]packCacheArtifactPlan, 0, len(currentArtifacts))
 	for _, item := range currentArtifacts {
-		action := prepareCacheActionFetch
-		if prev, ok := prevByIdentity[prepareCacheIdentity(item.StepID, item.Type)]; ok {
+		action := packCacheActionFetch
+		if prev, ok := prevByIdentity[packCacheIdentity(item.StepID, item.Type)]; ok {
 			if prev.CacheKey == item.CacheKey && equalStringMap(prev.InputVars, item.InputVars) {
-				action = prepareCacheActionReuse
+				action = packCacheActionReuse
 			}
 		}
-		artifacts = append(artifacts, prepareCacheArtifactPlan{
+		artifacts = append(artifacts, packCacheArtifactPlan{
 			StepID:    item.StepID,
 			Type:      item.Type,
 			CacheKey:  item.CacheKey,
@@ -73,26 +73,26 @@ func ComputePrepareCachePlan(prevState prepareCacheState, workflowBytes []byte, 
 		})
 	}
 
-	return PrepareCachePlan{
+	return PackCachePlan{
 		WorkflowSHA256: workflowSHA,
 		Artifacts:      artifacts,
 	}
 }
 
-func prepareCacheStateFromPlan(plan PrepareCachePlan) prepareCacheState {
-	artifacts := make([]prepareCacheArtifactState, 0, len(plan.Artifacts))
+func packCacheStateFromPlan(plan PackCachePlan) packCacheState {
+	artifacts := make([]packCacheArtifactState, 0, len(plan.Artifacts))
 	for _, item := range plan.Artifacts {
-		artifacts = append(artifacts, prepareCacheArtifactState{
+		artifacts = append(artifacts, packCacheArtifactState{
 			StepID:    item.StepID,
 			Type:      item.Type,
 			CacheKey:  item.CacheKey,
 			InputVars: cloneStringMap(item.InputVars),
 		})
 	}
-	return prepareCacheState{Artifacts: artifacts}
+	return packCacheState{Artifacts: artifacts}
 }
 
-func defaultPrepareCacheStatePath(workflowSHA string) (string, error) {
+func defaultPackCacheStatePath(workflowSHA string) (string, error) {
 	if strings.TrimSpace(workflowSHA) == "" {
 		return "", fmt.Errorf("workflow sha256 is empty")
 	}
@@ -103,41 +103,41 @@ func defaultPrepareCacheStatePath(workflowSHA string) (string, error) {
 	return filepath.Join(home, ".deck", "cache", "state", workflowSHA+".json"), nil
 }
 
-func loadPrepareCacheState(path string) (prepareCacheState, error) {
+func loadPackCacheState(path string) (packCacheState, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return prepareCacheState{Artifacts: []prepareCacheArtifactState{}}, nil
+			return packCacheState{Artifacts: []packCacheArtifactState{}}, nil
 		}
-		return prepareCacheState{}, fmt.Errorf("read prepare cache state: %w", err)
+		return packCacheState{}, fmt.Errorf("read pack cache state: %w", err)
 	}
 
-	var st prepareCacheState
+	var st packCacheState
 	if err := json.Unmarshal(raw, &st); err != nil {
-		return prepareCacheState{}, fmt.Errorf("parse prepare cache state: %w", err)
+		return packCacheState{}, fmt.Errorf("parse pack cache state: %w", err)
 	}
 	if st.Artifacts == nil {
-		st.Artifacts = []prepareCacheArtifactState{}
+		st.Artifacts = []packCacheArtifactState{}
 	}
 	return st, nil
 }
 
-func savePrepareCacheState(path string, st prepareCacheState) error {
+func savePackCacheState(path string, st packCacheState) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create prepare cache state directory: %w", err)
+		return fmt.Errorf("create pack cache state directory: %w", err)
 	}
 
 	raw, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
-		return fmt.Errorf("encode prepare cache state: %w", err)
+		return fmt.Errorf("encode pack cache state: %w", err)
 	}
 
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
-		return fmt.Errorf("write temp prepare cache state: %w", err)
+		return fmt.Errorf("write temp pack cache state: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("replace prepare cache state: %w", err)
+		return fmt.Errorf("replace pack cache state: %w", err)
 	}
 	return nil
 }
@@ -148,8 +148,8 @@ func computeWorkflowSHA256(workflowBytes []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func collectPrepareCacheArtifacts(steps []config.Step, effectiveVars map[string]any) []prepareCacheArtifactState {
-	out := make([]prepareCacheArtifactState, 0)
+func collectPackCacheArtifacts(steps []config.Step, effectiveVars map[string]any) []packCacheArtifactState {
+	out := make([]packCacheArtifactState, 0)
 	for _, step := range steps {
 		artifactType, ok := stepArtifactType(step.Kind)
 		if !ok {
@@ -163,9 +163,9 @@ func collectPrepareCacheArtifacts(steps []config.Step, effectiveVars map[string]
 				inputVars[name] = "__MISSING__"
 				continue
 			}
-			inputVars[name] = stablePrepareCacheVarValue(value)
+			inputVars[name] = stablePackCacheVarValue(value)
 		}
-		out = append(out, prepareCacheArtifactState{
+		out = append(out, packCacheArtifactState{
 			StepID:    step.ID,
 			Type:      artifactType,
 			CacheKey:  computeStepCacheKey(step),
@@ -202,8 +202,8 @@ func collectStepInputVarNames(spec map[string]any) []string {
 func collectInputVarNamesFromAny(v any, seen map[string]bool) {
 	switch tv := v.(type) {
 	case string:
-		for _, expr := range prepareCacheTemplateExprPattern.FindAllString(tv, -1) {
-			matches := prepareCacheVarRefPattern.FindAllStringSubmatch(expr, -1)
+		for _, expr := range packCacheTemplateExprPattern.FindAllString(tv, -1) {
+			matches := packCacheVarRefPattern.FindAllStringSubmatch(expr, -1)
 			for _, match := range matches {
 				if len(match) == 2 {
 					seen[match[1]] = true
@@ -233,7 +233,7 @@ func computeStepCacheKey(step config.Step) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func stablePrepareCacheVarValue(v any) string {
+func stablePackCacheVarValue(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
@@ -244,7 +244,7 @@ func stablePrepareCacheVarValue(v any) string {
 	return string(raw)
 }
 
-func prepareCacheIdentity(stepID, artifactType string) string {
+func packCacheIdentity(stepID, artifactType string) string {
 	return stepID + "\n" + artifactType
 }
 

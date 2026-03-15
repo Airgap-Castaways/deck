@@ -4,7 +4,7 @@ This tutorial shows the default `deck` path:
 
 1. create a workspace
 2. express the procedure as a workflow
-3. validate it
+3. lint it
 4. build the bundle
 5. run it locally
 
@@ -18,13 +18,18 @@ deck init --out ./demo
 
 This creates:
 
-- `./demo/workflows/prepare.yaml`
-- `./demo/workflows/apply.yaml`
+- `./demo/workflows/scenarios/prepare.yaml`
+- `./demo/workflows/scenarios/apply.yaml`
 - `./demo/workflows/vars.yaml`
+- `./demo/workflows/components/example-prepare.yaml`
+- `./demo/workflows/components/example-apply.yaml`
+- `./demo/files/`
+- `./demo/packages/`
+- `./demo/images/`
 
 ## 2. Add or edit steps
 
-`deck init` starts with empty workflow files. Put preparation work in `prepare.yaml` and target-machine work in `apply.yaml`.
+`deck init` starts with fixed entry workflows under `workflows/scenarios/` and reusable fragments under `workflows/components/`. Put preparation work in `prepare.yaml` and target-machine work in `apply.yaml`.
 
 Prefer typed steps first. The goal is to keep the procedure readable when it grows.
 
@@ -49,22 +54,23 @@ Use `vars.yaml` or inline `vars` to keep site-specific values out of the steps t
 ## 3. Validate before you package
 
 ```bash
-deck validate --file ./demo/workflows/apply.yaml
-deck validate --file ./demo/workflows/prepare.yaml
+deck lint
+deck lint --file ./demo/workflows/scenarios/apply.yaml
 ```
 
 Validation checks the workflow structure and the schema for each supported step kind.
 
 ## 4. Build an offline bundle
 
-Run `prepare` from a directory that contains `workflows/prepare.yaml`, `workflows/apply.yaml`, and `workflows/vars.yaml`.
+Run `prepare` from a directory that contains `workflows/scenarios/prepare.yaml`. `workflows/vars.yaml` and `workflows/scenarios/apply.yaml` are optional at this stage.
 
 ```bash
 cd ./demo
-deck prepare --out ./bundle.tar
+deck prepare
+deck bundle build --out ./bundle.tar
 ```
 
-The resulting bundle is designed to be the thing you carry into the site.
+`prepare` writes generated artifacts under `./demo/outputs/`, refreshes `./demo/deck`, and updates `./demo/.deck/manifest.json`. `bundle build` turns the current workspace into the bundle you carry into the site.
 
 ## 5. Apply locally at the target site
 

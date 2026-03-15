@@ -3,7 +3,6 @@ package install
 import (
 	"fmt"
 	"os"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -19,22 +18,22 @@ var (
 
 var yumEnabledTruePattern = regexp.MustCompile(`(?i)^\s*enabled\s*=\s*(1|yes|true)\s*$`)
 
-func runFileEdit(spec map[string]any) error {
+func runEditFile(spec map[string]any) error {
 	path := stringValue(spec, "path")
 	if path == "" {
-		return fmt.Errorf("%s: File action edit requires path", errCodeInstallFileEditTargetRequired)
+		return fmt.Errorf("%s: EditFile requires path", errCodeInstallEditPathMissing)
 	}
 
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	if fileBackupEnabled(spec) {
-		backupPath, err := createFileBackup(path, content)
+	if editFileBackupEnabled(spec) {
+		backupPath, err := createEditFileBackup(path, content)
 		if err != nil {
 			return fmt.Errorf("create backup %s: %w", backupPath, err)
 		}
-		if err := trimFileBackups(path, 10); err != nil {
+		if err := trimEditFileBackups(path, 10); err != nil {
 			return fmt.Errorf("trim backups after %s: %w", backupPath, err)
 		}
 	}
@@ -42,7 +41,7 @@ func runFileEdit(spec map[string]any) error {
 
 	edits, ok := spec["edits"].([]any)
 	if !ok || len(edits) == 0 {
-		return fmt.Errorf("%s: File action edit requires edits", errCodeInstallFileEditRulesRequired)
+		return fmt.Errorf("%s: EditFile requires edits", errCodeInstallEditsMissing)
 	}
 
 	for _, e := range edits {
@@ -61,11 +60,11 @@ func runFileEdit(spec map[string]any) error {
 	return os.WriteFile(path, []byte(updated), 0o644)
 }
 
-func runFileCopy(spec map[string]any) error {
+func runCopyFile(spec map[string]any) error {
 	src := stringValue(spec, "src")
 	dest := stringValue(spec, "dest")
 	if src == "" || dest == "" {
-		return fmt.Errorf("%s: File action copy requires src and dest", errCodeInstallFileCopySourceTargetRequired)
+		return fmt.Errorf("%s: CopyFile requires src and dest", errCodeInstallCopyPathMissing)
 	}
 
 	content, err := os.ReadFile(src)
@@ -75,25 +74,13 @@ func runFileCopy(spec map[string]any) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(dest, content, 0o644); err != nil {
-		return err
-	}
-	if modeRaw := stringValue(spec, "mode"); modeRaw != "" {
-		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
-		if err != nil {
-			return fmt.Errorf("invalid mode: %w", err)
-		}
-		if err := os.Chmod(dest, os.FileMode(modeVal)); err != nil {
-			return err
-		}
-	}
-	return applyFileOwnership(dest, stringValue(spec, "owner"), stringValue(spec, "group"))
+	return os.WriteFile(dest, content, 0o644)
 }
 
 func runEnsureDir(spec map[string]any) error {
 	path := stringValue(spec, "path")
 	if path == "" {
-		return fmt.Errorf("%s: Directory requires path", errCodeInstallDirectoryTargetRequired)
+		return fmt.Errorf("%s: EnsureDir requires path", errCodeInstallEnsureDirPathMis)
 	}
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		return err
@@ -107,63 +94,17 @@ func runEnsureDir(spec map[string]any) error {
 			return err
 		}
 	}
-	return applyFileOwnership(path, stringValue(spec, "owner"), stringValue(spec, "group"))
-}
-
-func applyFileOwnership(path, ownerName, groupName string) error {
-	if ownerName == "" && groupName == "" {
-		return nil
-	}
-	uid, gid, err := resolveOwnership(ownerName, groupName)
-	if err != nil {
-		return err
-	}
-	return os.Chown(path, uid, gid)
-}
-
-func resolveOwnership(ownerName, groupName string) (int, int, error) {
-	uid := -1
-	gid := -1
-	if ownerName != "" {
-		u, err := user.Lookup(ownerName)
-		if err != nil {
-			return -1, -1, err
-		}
-		parsed, err := strconv.Atoi(u.Uid)
-		if err != nil {
-			return -1, -1, err
-		}
-		uid = parsed
-		if groupName == "" {
-			parsedGID, err := strconv.Atoi(u.Gid)
-			if err != nil {
-				return -1, -1, err
-			}
-			gid = parsedGID
-		}
-	}
-	if groupName != "" {
-		g, err := user.LookupGroup(groupName)
-		if err != nil {
-			return -1, -1, err
-		}
-		parsed, err := strconv.Atoi(g.Gid)
-		if err != nil {
-			return -1, -1, err
-		}
-		gid = parsed
-	}
-	return uid, gid, nil
+	return nil
 }
 
 func runSymlink(spec map[string]any) error {
 	path := stringValue(spec, "path")
 	if path == "" {
-		return fmt.Errorf("%s: Symlink requires path", errCodeInstallSymlinkPathRequired)
+		return fmt.Errorf("%s: Symlink requires path", errCodeInstallSymlinkPathMiss)
 	}
 	target := stringValue(spec, "target")
 	if target == "" {
-		return fmt.Errorf("%s: Symlink requires target", errCodeInstallSymlinkTargetRequired)
+		return fmt.Errorf("%s: Symlink requires target", errCodeInstallSymlinkTargetMis)
 	}
 
 	if boolValue(spec, "createParent") {
@@ -209,10 +150,10 @@ func runSymlink(spec map[string]any) error {
 	return os.Symlink(target, path)
 }
 
-func runFileInstall(spec map[string]any) error {
+func runInstallFile(spec map[string]any) error {
 	path := stringValue(spec, "path")
 	if path == "" {
-		return fmt.Errorf("%s: File action install requires path", errCodeInstallFileTargetRequired)
+		return fmt.Errorf("%s: InstallFile requires path", errCodeInstallInstallFilePath)
 	}
 	content := stringValue(spec, "content")
 	if content == "" {
@@ -221,7 +162,7 @@ func runFileInstall(spec map[string]any) error {
 		}
 	}
 	if content == "" {
-		return fmt.Errorf("%s: File action install requires content", errCodeInstallFileContentSourceRequired)
+		return fmt.Errorf("%s: InstallFile requires content", errCodeInstallInstallFileInput)
 	}
 	if !strings.HasSuffix(content, "\n") {
 		content += "\n"
@@ -245,7 +186,23 @@ func runFileInstall(spec map[string]any) error {
 	return nil
 }
 
-func runRepositoryConfigure(spec map[string]any) error {
+func runTemplateFile(spec map[string]any) error {
+	path := stringValue(spec, "path")
+	if path == "" {
+		return fmt.Errorf("%s: TemplateFile requires path", errCodeInstallTemplatePathMiss)
+	}
+	body := stringValue(spec, "template")
+	if body == "" {
+		return fmt.Errorf("%s: TemplateFile requires template", errCodeInstallTemplateBodyMiss)
+	}
+	return runInstallFile(map[string]any{
+		"path":    path,
+		"content": body,
+		"mode":    stringValue(spec, "mode"),
+	})
+}
+
+func runRepoConfig(spec map[string]any) error {
 	format, err := resolveRepoConfigFormat(spec)
 	if err != nil {
 		return err
@@ -256,12 +213,12 @@ func runRepositoryConfigure(spec map[string]any) error {
 		path = repoConfigDefaultPathFunc(format)
 	}
 	if path == "" {
-		return fmt.Errorf("%s: Repository action configure requires path", errCodeInstallRepositoryFileRequired)
+		return fmt.Errorf("%s: RepoConfig requires path", errCodeInstallRepoConfigPath)
 	}
 
 	repositories, ok := spec["repositories"].([]any)
 	if !ok || len(repositories) == 0 {
-		return fmt.Errorf("repository action configure requires repositories")
+		return fmt.Errorf("RepoConfig requires repositories")
 	}
 
 	replaceExisting := boolValue(spec, "replaceExisting")
@@ -416,7 +373,7 @@ func renderAptRepositoryList(repositories []any) (string, error) {
 		lines = append(lines, line)
 	}
 	if len(lines) == 0 {
-		return "", fmt.Errorf("repository action configure requires at least one apt repository with baseurl")
+		return "", fmt.Errorf("RepoConfig requires at least one apt repository with baseurl")
 	}
 	return strings.Join(lines, "\n"), nil
 }
@@ -490,7 +447,7 @@ func renderYumRepositoryList(repositories []any) (string, error) {
 		lines = append(lines, "")
 	}
 	if len(lines) == 0 {
-		return "", fmt.Errorf("repository action configure requires at least one repository with id")
+		return "", fmt.Errorf("RepoConfig requires at least one repository with id")
 	}
 	return strings.Join(lines, "\n"), nil
 }

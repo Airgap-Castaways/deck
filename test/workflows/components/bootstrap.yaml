@@ -71,10 +71,10 @@ steps:
   - id: bootstrap-init
     apiVersion: deck/v1alpha1
     kind: Kubeadm
+    timeout: 20m
     spec:
       action: init
       mode: real
-      timeout: 20m
       configTemplate: default
       configFile: /tmp/deck/kubeadm-init.yaml
       pullImages: true
@@ -103,6 +103,7 @@ steps:
       action: fileExists
       timeout: 5m
       path: /etc/kubernetes/admin.conf
+      state: exists
       type: file
       nonEmpty: true
   - id: bootstrap-offline-guard

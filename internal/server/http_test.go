@@ -20,22 +20,28 @@ import (
 
 func TestServe_StaticReadOnly(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "files"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "outputs", "files"), 0o755); err != nil {
 		t.Fatalf("mkdir files: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "packages"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "outputs", "packages"), 0o755); err != nil {
 		t.Fatalf("mkdir packages: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "images"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "outputs", "images"), 0o755); err != nil {
 		t.Fatalf("mkdir images: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "workflows"), 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflow scenarios: %v", err)
+	}
 
 	originalBody := []byte("payload-123\n")
-	if err := os.WriteFile(filepath.Join(root, "files", "a.txt"), originalBody, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "outputs", "files", "a.txt"), originalBody, 0o644); err != nil {
 		t.Fatalf("write seed file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write workflow scenario: %v", err)
 	}
 	registryTag, err := name.NewTag("registry.k8s.io/kube-apiserver:v1.30.1", name.WeakValidation)
 	if err != nil {
@@ -45,7 +51,7 @@ func TestServe_StaticReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("random.Image: %v", err)
 	}
-	registryTarPath := filepath.Join(root, "images", "registry.k8s.io_kube-apiserver_v1.30.1.tar")
+	registryTarPath := filepath.Join(root, "outputs", "images", "registry.k8s.io_kube-apiserver_v1.30.1.tar")
 	if err := tarball.WriteToFile(registryTarPath, registryTag, registryImage); err != nil {
 		t.Fatalf("tarball.WriteToFile: %v", err)
 	}
@@ -89,7 +95,7 @@ func TestServe_StaticReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("random.Image nested: %v", err)
 	}
-	nestedTarPath := filepath.Join(root, "images", "registry.k8s.io_coredns_coredns_v1.11.1.tar")
+	nestedTarPath := filepath.Join(root, "outputs", "images", "registry.k8s.io_coredns_coredns_v1.11.1.tar")
 	if err := tarball.WriteToFile(nestedTarPath, nestedTag, nestedImage); err != nil {
 		t.Fatalf("tarball.WriteToFile nested: %v", err)
 	}
@@ -113,6 +119,30 @@ func TestServe_StaticReadOnly(t *testing.T) {
 			h.ServeHTTP(rr, req)
 			if rr.Code != http.StatusNotFound {
 				t.Fatalf("expected %s 404, got %d", route, rr.Code)
+			}
+		}
+	})
+
+	t.Run("landing page and browse pages", func(t *testing.T) {
+		for _, tc := range []struct {
+			path string
+			want string
+		}{
+			{path: "/", want: "deck server"},
+			{path: "/", want: "server health: ok"},
+			{path: "/browse/files/", want: "a.txt"},
+			{path: "/browse/workflows/", want: "scenarios"},
+			{path: "/browse/images/", want: "kube-apiserver"},
+			{path: "/browse/images/coredns/coredns/", want: "v1.11.1"},
+		} {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("expected %s 200, got %d", tc.path, rr.Code)
+			}
+			if !strings.Contains(rr.Body.String(), tc.want) {
+				t.Fatalf("expected %s body to contain %q, got %q", tc.path, tc.want, rr.Body.String())
 			}
 		}
 	})
@@ -177,6 +207,36 @@ func TestServe_StaticReadOnly(t *testing.T) {
 		if nestedRR.Code != http.StatusOK {
 			t.Fatalf("expected nested repo manifest GET 200, got %d", nestedRR.Code)
 		}
+
+		catalogReq := httptest.NewRequest(http.MethodGet, "/v2/_catalog", nil)
+		catalogRR := httptest.NewRecorder()
+		h.ServeHTTP(catalogRR, catalogReq)
+		if catalogRR.Code != http.StatusOK {
+			t.Fatalf("expected catalog GET 200, got %d", catalogRR.Code)
+		}
+		if !strings.Contains(catalogRR.Body.String(), "kube-apiserver") {
+			t.Fatalf("expected catalog body to contain repo list, got %q", catalogRR.Body.String())
+		}
+
+		tagsReq := httptest.NewRequest(http.MethodGet, "/v2/kube-apiserver/tags/list", nil)
+		tagsRR := httptest.NewRecorder()
+		h.ServeHTTP(tagsRR, tagsReq)
+		if tagsRR.Code != http.StatusOK {
+			t.Fatalf("expected tags list GET 200, got %d", tagsRR.Code)
+		}
+		if !strings.Contains(tagsRR.Body.String(), `"name":"kube-apiserver"`) || !strings.Contains(tagsRR.Body.String(), `"v1.30.1"`) {
+			t.Fatalf("expected tags list body, got %q", tagsRR.Body.String())
+		}
+
+		nestedTagsReq := httptest.NewRequest(http.MethodGet, "/v2/coredns/coredns/tags/list", nil)
+		nestedTagsRR := httptest.NewRecorder()
+		h.ServeHTTP(nestedTagsRR, nestedTagsReq)
+		if nestedTagsRR.Code != http.StatusOK {
+			t.Fatalf("expected nested tags list GET 200, got %d", nestedTagsRR.Code)
+		}
+		if !strings.Contains(nestedTagsRR.Body.String(), `"name":"coredns/coredns"`) || !strings.Contains(nestedTagsRR.Body.String(), `"v1.11.1"`) {
+			t.Fatalf("expected nested tags list body, got %q", nestedTagsRR.Body.String())
+		}
 	})
 
 	t.Run("GET HEAD parity, ETag, and If-None-Match", func(t *testing.T) {
@@ -232,9 +292,9 @@ func TestServe_StaticReadOnly(t *testing.T) {
 			body string
 			file string
 		}{
-			{path: "/files/new/file.txt", body: "file-data", file: filepath.Join(root, "files", "new", "file.txt")},
-			{path: "/packages/deb/pkg.txt", body: "pkg-data", file: filepath.Join(root, "packages", "deb", "pkg.txt")},
-			{path: "/images/manifests/app.json", body: "img-data", file: filepath.Join(root, "images", "manifests", "app.json")},
+			{path: "/files/new/file.txt", body: "file-data", file: filepath.Join(root, "outputs", "files", "new", "file.txt")},
+			{path: "/packages/deb/pkg.txt", body: "pkg-data", file: filepath.Join(root, "outputs", "packages", "deb", "pkg.txt")},
+			{path: "/images/manifests/app.json", body: "img-data", file: filepath.Join(root, "outputs", "images", "manifests", "app.json")},
 			{path: "/workflows/flow.yaml", body: "wf-data", file: filepath.Join(root, "workflows", "flow.yaml")},
 			{path: "/workflows/index.json", body: "{\"v\":1}", file: filepath.Join(root, "workflows", "index.json")},
 		} {
@@ -266,6 +326,31 @@ func TestServe_StaticReadOnly(t *testing.T) {
 			if rr.Code != http.StatusForbidden {
 				t.Fatalf("expected %s %s to be 403, got %d", tc.method, tc.path, rr.Code)
 			}
+		}
+	})
+
+	t.Run("honors deckignore for static files and deck binary", func(t *testing.T) {
+		if err := os.WriteFile(filepath.Join(root, ".deckignore"), []byte("outputs/files/\ndeck\nworkflows/scenarios/apply.yaml\n"), 0o644); err != nil {
+			t.Fatalf("write .deckignore: %v", err)
+		}
+
+		for _, tc := range []string{"/files/a.txt", "/deck", "/workflows/scenarios/apply.yaml"} {
+			req := httptest.NewRequest(http.MethodGet, tc, nil)
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+			if rr.Code != http.StatusNotFound {
+				t.Fatalf("expected %s 404, got %d", tc, rr.Code)
+			}
+		}
+
+		indexReq := httptest.NewRequest(http.MethodGet, "/workflows/index.json", nil)
+		indexRR := httptest.NewRecorder()
+		h.ServeHTTP(indexRR, indexReq)
+		if indexRR.Code != http.StatusOK {
+			t.Fatalf("expected workflow index 200, got %d", indexRR.Code)
+		}
+		if strings.Contains(indexRR.Body.String(), "apply.yaml") {
+			t.Fatalf("expected ignored workflow to be absent from index, got %q", indexRR.Body.String())
 		}
 	})
 
@@ -331,9 +416,9 @@ func TestHandlerRejectsLegacyPutUploads(t *testing.T) {
 		file string
 		body string
 	}{
-		{path: "/files/new/file.txt", file: filepath.Join(root, "files", "new", "file.txt"), body: "file-data"},
-		{path: "/packages/deb/pkg.txt", file: filepath.Join(root, "packages", "deb", "pkg.txt"), body: "pkg-data"},
-		{path: "/images/manifests/app.json", file: filepath.Join(root, "images", "manifests", "app.json"), body: "img-data"},
+		{path: "/files/new/file.txt", file: filepath.Join(root, "outputs", "files", "new", "file.txt"), body: "file-data"},
+		{path: "/packages/deb/pkg.txt", file: filepath.Join(root, "outputs", "packages", "deb", "pkg.txt"), body: "pkg-data"},
+		{path: "/images/manifests/app.json", file: filepath.Join(root, "outputs", "images", "manifests", "app.json"), body: "img-data"},
 		{path: "/workflows/flow.yaml", file: filepath.Join(root, "workflows", "flow.yaml"), body: "wf-data"},
 	} {
 		putReq := httptest.NewRequest(http.MethodPut, tc.path, strings.NewReader(tc.body))

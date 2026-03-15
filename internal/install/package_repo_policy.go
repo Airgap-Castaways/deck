@@ -110,7 +110,7 @@ func selectAPTRepoPaths(policy packageRepoPolicy) ([]string, error) {
 		filtered = append(filtered, path)
 	}
 	if len(filtered) == 0 {
-		return nil, fmt.Errorf("%s: no apt repo files remain after applying repo policy", errCodeInstallPackageSourceInvalid)
+		return nil, fmt.Errorf("%s: no apt repo files remain after applying repo policy", errCodeInstallPkgSourceInvalid)
 	}
 	return filtered, nil
 }

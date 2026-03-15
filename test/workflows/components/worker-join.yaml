@@ -7,13 +7,7 @@ steps:
     spec:
       action: download
       source:
-        bundle:
-          root: files
-          path: cluster/join.txt
-      fetch:
-        sources:
-          - type: online
-            url: http://{{ .vars.serverURL }}
+        url: http://{{ .vars.serverURL }}/files/cluster/join.txt
       output:
         path: "{{ .vars.joinFile }}"
   - id: join-worker

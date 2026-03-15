@@ -77,12 +77,12 @@ func TestE2ELayoutContracts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render prepared bundle workflows contract check failed: %v\n%s", err, string(out))
 	}
-	applyContent, err := os.ReadFile(filepath.Join(renderDir, "apply.yaml"))
+	applyContent, err := os.ReadFile(filepath.Join(renderDir, "scenarios", "control-plane-bootstrap.yaml"))
 	if err != nil {
-		t.Fatalf("read rendered apply workflow: %v", err)
+		t.Fatalf("read rendered scenario workflow: %v", err)
 	}
-	if !strings.Contains(string(applyContent), "scenarios/control-plane-bootstrap.yaml") {
-		t.Fatalf("expected rendered apply workflow to use normalized scenario name, got:\n%s", string(applyContent))
+	if !strings.Contains(string(applyContent), "../components/bootstrap.yaml") {
+		t.Fatalf("expected rendered scenario workflow to keep canonical imports, got:\n%s", string(applyContent))
 	}
 }
 

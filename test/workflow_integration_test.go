@@ -65,7 +65,7 @@ func TestWorkflowIntegrationWorkerJoin(t *testing.T) {
 		t.Fatalf("expected CLI joinFile override, got %v", got)
 	}
 	if got := wf.Vars["joinSource"]; got != "cluster-file" {
-		t.Fatalf("expected scenario var from vars.yaml, got %v", got)
+		t.Fatalf("expected scenario var from varImports, got %v", got)
 	}
 
 	out := runWorkflowApplyDryRun(t, root, workflowPath)
@@ -87,7 +87,7 @@ func TestWorkflowIntegrationNodeReset(t *testing.T) {
 	}
 
 	if got := wf.Vars["allowDestructive"]; got != "false" {
-		t.Fatalf("expected non-destructive default from vars.yaml, got %v", got)
+		t.Fatalf("expected non-destructive default from varImports, got %v", got)
 	}
 
 	out := runWorkflowApplyDryRun(t, root, workflowPath)
@@ -103,11 +103,7 @@ func TestWorkflowIntegrationNodeReset(t *testing.T) {
 
 func TestWorkflowIntegrationRejectsBrokenImports(t *testing.T) {
 	dir := t.TempDir()
-	workflowsDir := filepath.Join(dir, "workflows")
-	if err := os.MkdirAll(workflowsDir, 0o755); err != nil {
-		t.Fatalf("mkdir workflows: %v", err)
-	}
-	workflowPath := filepath.Join(workflowsDir, "broken.yaml")
+	workflowPath := filepath.Join(dir, "broken.yaml")
 	content := "role: apply\nversion: v1alpha1\nimports:\n  - missing/import.yaml\nphases:\n  - name: install\n    steps: []\n"
 	if err := os.WriteFile(workflowPath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write broken workflow: %v", err)
@@ -137,7 +133,6 @@ phases:
         apiVersion: deck/v1alpha1
         kind: File
         spec:
-          action: copy
           sourcePath: /tmp/nonexistent-join.txt
           destinationPath: /tmp/published-join.txt
       - id: bootstrap-report
@@ -163,7 +158,6 @@ phases:
         apiVersion: deck/v1alpha1
         kind: File
         spec:
-          action: download
           source:
             url: http://127.0.0.1:9/join.txt
           output:
@@ -175,7 +169,7 @@ phases:
           command: ["bash", "-lc", "test -s /tmp/deck/join.txt"]
 `)
 	err := runWorkflowApplyExpectError(t, root, workflowPath)
-	if !strings.Contains(err, "fetch-join-file") && !strings.Contains(err, "File") {
+	if !strings.Contains(err, "fetch-join-file") && !strings.Contains(err, "DownloadFile") {
 		t.Fatalf("expected join fetch failure, got %s", err)
 	}
 }

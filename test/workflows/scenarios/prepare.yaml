@@ -1,8 +1,12 @@
 role: prepare
 version: v1alpha1
-imports:
-  - prepare/download-packages-ubuntu2204.yaml
-  - prepare/download-packages-ubuntu2404.yaml
-  - prepare/download-packages-rhel9.yaml
-  - prepare/download-images.yaml
-  - prepare/download-binaries.yaml
+varImports:
+  - ../vars.yaml
+phases:
+  - name: prepare
+    imports:
+      - path: ../components/prepare/download-packages-ubuntu2204.yaml
+      - path: ../components/prepare/download-packages-ubuntu2404.yaml
+      - path: ../components/prepare/download-packages-rhel9.yaml
+      - path: ../components/prepare/download-images.yaml
+      - path: ../components/prepare/download-binaries.yaml
