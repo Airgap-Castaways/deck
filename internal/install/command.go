@@ -28,13 +28,14 @@ func runCommand(ctx context.Context, spec map[string]any) error {
 	if len(cmdArgs) == 0 {
 		return fmt.Errorf("%s: Command requires command", errCodeInstallCommandMissing)
 	}
+	timeout := parseStepTimeout(decoded.Timeout, 30*time.Second)
 
-	err = runTimedCommandWithContext(ctx, cmdArgs[0], cmdArgs[1:], parseStepTimeout(decoded.Timeout, 30*time.Second))
+	err = runTimedCommandWithContext(ctx, cmdArgs[0], cmdArgs[1:], timeout)
 	if err == nil {
 		return nil
 	}
 	if errors.Is(err, errStepCommandTimeout) {
-		return fmt.Errorf("%s: command timed out after %s", errCodeInstallCommandTimeout, parseStepTimeout(decoded.Timeout, 30*time.Second))
+		return fmt.Errorf("%s: command timed out after %s", errCodeInstallCommandTimeout, timeout)
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
