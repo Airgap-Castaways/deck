@@ -21,7 +21,7 @@ import (
 	"github.com/taedi90/deck/internal/server"
 )
 
-func executeServe(root string, addr string, apiToken string, reportMax int, auditMaxSizeMB int, auditMaxFiles int, tlsCert string, tlsKey string, tlsSelfSigned bool) error {
+func executeServe(root string, addr string, auditMaxSizeMB int, auditMaxFiles int, tlsCert string, tlsKey string, tlsSelfSigned bool) error {
 	resolvedRoot := strings.TrimSpace(root)
 	if resolvedRoot == "" {
 		resolvedRoot = "."
@@ -29,10 +29,6 @@ func executeServe(root string, addr string, apiToken string, reportMax int, audi
 	resolvedAddr := strings.TrimSpace(addr)
 	if resolvedAddr == "" {
 		resolvedAddr = ":8080"
-	}
-	resolvedToken := strings.TrimSpace(apiToken)
-	if resolvedToken == "" {
-		resolvedToken = strings.Join([]string{"deck", "site", "v1"}, "-")
 	}
 	resolvedTLSCert := strings.TrimSpace(tlsCert)
 	resolvedTLSKey := strings.TrimSpace(tlsKey)
@@ -42,9 +38,6 @@ func executeServe(root string, addr string, apiToken string, reportMax int, audi
 	}
 	if tlsSelfSigned && (resolvedTLSCert != "" || resolvedTLSKey != "") {
 		return errors.New("--tls-self-signed cannot be combined with --tls-cert/--tls-key")
-	}
-	if reportMax <= 0 {
-		return errors.New("--report-max must be > 0")
 	}
 	if auditMaxSizeMB <= 0 {
 		return errors.New("--audit-max-size-mb must be > 0")
@@ -63,7 +56,7 @@ func executeServe(root string, addr string, apiToken string, reportMax int, audi
 		}
 	}
 
-	h, err := server.NewHandler(resolvedRoot, server.HandlerOptions{ReportMax: reportMax, AuditMaxSizeMB: auditMaxSizeMB, AuditMaxFiles: auditMaxFiles, AuthToken: resolvedToken})
+	h, err := server.NewHandler(resolvedRoot, server.HandlerOptions{AuditMaxSizeMB: auditMaxSizeMB, AuditMaxFiles: auditMaxFiles})
 	if err != nil {
 		return fmt.Errorf("init server handler: %w", err)
 	}
@@ -114,65 +107,8 @@ func executeServe(root string, addr string, apiToken string, reportMax int, audi
 	}
 }
 
-func executeListScenarios(server string, output string) error {
-	if output != "text" && output != "json" {
-		return errors.New("--output must be text or json")
-	}
-
-	resolvedServer, _, err := resolveRequiredServerURL(server)
-	if err != nil {
-		return err
-	}
-	items, err := fetchScenarioIndexFromServer(resolvedServer)
-	if err != nil {
-		return err
-	}
-
-	if output == "json" {
-		enc := json.NewEncoder(os.Stdout)
-		if err := enc.Encode(items); err != nil {
-			return fmt.Errorf("server scenarios: encode output: %w", err)
-		}
-		return nil
-	}
-
-	w := bufio.NewWriter(os.Stdout)
-	for _, it := range items {
-		if _, err := fmt.Fprintln(w, it); err != nil {
-			return err
-		}
-	}
-	return w.Flush()
-}
-
-func fetchScenarioIndexFromServer(server string) ([]string, error) {
-	trimmed := strings.TrimRight(server, "/")
-	indexURL := trimmed + "/workflows/index.json"
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, indexURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("server scenarios: build request: %w", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("server scenarios: request failed: %w", err)
-	}
-	defer closeSilently(resp.Body)
-	if resp.StatusCode == http.StatusNotFound {
-		return []string{}, nil
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server scenarios: unexpected status %d", resp.StatusCode)
-	}
-
-	var items []string
-	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
-		return nil, fmt.Errorf("server scenarios: decode response: %w", err)
-	}
-	return items, nil
-}
-
 func executeHealth(server string) error {
-	resolvedServer, _, err := resolveRequiredServerURL(server)
+	resolvedServer, _, err := resolveRequiredSourceURL(server)
 	if err != nil {
 		return err
 	}

@@ -15,6 +15,37 @@ import (
 )
 
 func runWithCapturedStdout(args []string) (string, error) {
+	for _, name := range []string{"DECK_SERVER", "DECK_API_TOKEN"} {
+		oldValue, hadOldValue := os.LookupEnv(name)
+		if err := os.Setenv(name, ""); err != nil {
+			return "", err
+		}
+		defer func(name, value string, hadValue bool) {
+			if hadValue {
+				_ = os.Setenv(name, value)
+			} else {
+				_ = os.Unsetenv(name)
+			}
+		}(name, oldValue, hadOldValue)
+	}
+
+	configPath := ""
+	if os.Getenv("DECK_SERVER_CONFIG_PATH") == "" {
+		configPath = filepath.Join(os.TempDir(), "deck-test-server-config.json")
+		oldValue, hadOldValue := os.LookupEnv("DECK_SERVER_CONFIG_PATH")
+		if err := os.Setenv("DECK_SERVER_CONFIG_PATH", configPath); err != nil {
+			return "", err
+		}
+		defer func() {
+			if hadOldValue {
+				_ = os.Setenv("DECK_SERVER_CONFIG_PATH", oldValue)
+			} else {
+				_ = os.Unsetenv("DECK_SERVER_CONFIG_PATH")
+			}
+		}()
+		_ = os.Remove(configPath)
+	}
+
 	oldStdout := os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -56,6 +87,19 @@ func runDeckBinary(t *testing.T, binaryPath string, args ...string) deckBinaryRe
 	t.Helper()
 	cmd := exec.Command(binaryPath, args...)
 	cmd.Dir = filepath.Join("..", "..")
+	cmd.Env = os.Environ()
+	if os.Getenv("XDG_CONFIG_HOME") == "" {
+		cmd.Env = append(cmd.Env, "XDG_CONFIG_HOME="+filepath.Join(t.TempDir(), "config"))
+	}
+	if os.Getenv("XDG_STATE_HOME") == "" {
+		cmd.Env = append(cmd.Env, "XDG_STATE_HOME="+filepath.Join(t.TempDir(), "state"))
+	}
+	if os.Getenv("XDG_CACHE_HOME") == "" {
+		cmd.Env = append(cmd.Env, "XDG_CACHE_HOME="+filepath.Join(t.TempDir(), "cache"))
+	}
+	if os.Getenv("DECK_SERVER_CONFIG_PATH") == "" {
+		cmd.Env = append(cmd.Env, "DECK_SERVER_CONFIG_PATH="+filepath.Join(t.TempDir(), "server.json"))
+	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -152,54 +196,6 @@ func writeApplyBundleTarFixture(t *testing.T, archivePath string) {
 		{name: "bundle/workflows/", mode: 0o755},
 		{name: "bundle/workflows/scenarios/", mode: 0o755},
 		{name: "bundle/workflows/scenarios/apply.yaml", body: []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), mode: 0o644},
-		{name: "bundle/workflows/vars.yaml", body: []byte("{}\n"), mode: 0o644},
-	}
-
-	for _, entry := range entries {
-		h := &tar.Header{Name: entry.name, Mode: entry.mode}
-		if strings.HasSuffix(entry.name, "/") {
-			h.Typeflag = tar.TypeDir
-			h.Size = 0
-		} else {
-			h.Typeflag = tar.TypeReg
-			h.Size = int64(len(entry.body))
-		}
-		if err := tw.WriteHeader(h); err != nil {
-			t.Fatalf("write tar header %s: %v", entry.name, err)
-		}
-		if h.Typeflag == tar.TypeReg {
-			if _, err := tw.Write(entry.body); err != nil {
-				t.Fatalf("write tar body %s: %v", entry.name, err)
-			}
-		}
-	}
-}
-
-func writeSiteReleaseBundleTarFixture(t *testing.T, archivePath string) {
-	t.Helper()
-	workflowBody := []byte("role: apply\nversion: v1alpha1\nsteps: []\n")
-	workflowSum := sha256.Sum256(workflowBody)
-	manifest := fmt.Sprintf("{\n  \"entries\": [\n    {\"path\": %q, \"sha256\": %q, \"size\": %d}\n  ]\n}\n", "workflows/scenarios/apply.yaml", hex.EncodeToString(workflowSum[:]), len(workflowBody))
-
-	f, err := os.Create(archivePath)
-	if err != nil {
-		t.Fatalf("create archive: %v", err)
-	}
-	defer closeSilently(f)
-
-	tw := tar.NewWriter(f)
-	defer closeSilently(tw)
-
-	entries := []struct {
-		name string
-		body []byte
-		mode int64
-	}{
-		{name: "bundle/.deck/", mode: 0o755},
-		{name: "bundle/.deck/manifest.json", body: []byte(manifest), mode: 0o644},
-		{name: "bundle/workflows/", mode: 0o755},
-		{name: "bundle/workflows/scenarios/", mode: 0o755},
-		{name: "bundle/workflows/scenarios/apply.yaml", body: workflowBody, mode: 0o644},
 		{name: "bundle/workflows/vars.yaml", body: []byte("{}\n"), mode: 0o644},
 	}
 

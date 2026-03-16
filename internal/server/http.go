@@ -4,29 +4,18 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
-	"strings"
 	"time"
-
-	"github.com/taedi90/deck/internal/site/store"
 )
 
-func defaultSiteAuthTokenValue() string {
-	return strings.Join([]string{"deck", "site", "v1"}, "-")
-}
-
 type HandlerOptions struct {
-	ReportMax      int
 	AuditMaxSizeMB int
 	AuditMaxFiles  int
-	AuthToken      string
 }
 
 type serverHandler struct {
-	rootAbs   string
-	logger    *auditLogger
-	siteStore *store.Store
-	apiToken  string
-	base      http.Handler
+	rootAbs string
+	logger  *auditLogger
+	base    http.Handler
 }
 
 func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
@@ -48,16 +37,7 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("init audit logger: %w", err)
 	}
-	siteStore, err := store.New(resolvedRoot)
-	if err != nil {
-		return nil, fmt.Errorf("init site store: %w", err)
-	}
-	apiToken := strings.TrimSpace(opts.AuthToken)
-	if apiToken == "" {
-		apiToken = defaultSiteAuthTokenValue()
-	}
-
-	h := &serverHandler{rootAbs: resolvedRoot, logger: logger, siteStore: siteStore, apiToken: apiToken}
+	h := &serverHandler{rootAbs: resolvedRoot, logger: logger}
 	h.base = http.HandlerFunc(h.routeRequest)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

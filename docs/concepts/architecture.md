@@ -37,7 +37,7 @@ This separation is deliberate. The connected side resolves external dependencies
 
 `deck` is designed around manual-first operations rather than unattended reconciliation.
 
-The normal operating picture is an operator preparing a known workflow, carrying a known bundle into a constrained site, and running an explicit maintenance session. Even when site-local coordination is involved, the system is still organized around operator-controlled releases, sessions, assignments, and reports rather than an always-on controller continuously converging the environment.
+The normal operating picture is an operator preparing a known workflow, carrying a known bundle into a constrained site, and running an explicit local operation. The system is organized around reviewable workflows, explicit bundle handoff, and node-local execution rather than an always-on controller continuously converging the environment.
 
 That is why the architecture emphasizes:
 
@@ -106,7 +106,7 @@ flowchart LR
 - After the bundle crosses into the site, one node can take the server role and run `deck server`.
 - That server can distribute the `deck` binary, workflow files, prepared files, and prepared images inside the air gap through its local web or file serving path and pull-only registry support.
 - Client nodes pull what they need from the server, then run locally on each node.
-- Site-local coordination such as releases, sessions, assignments, and reports can exist around this flow, but those details are omitted from the diagram so the main offline distribution path stays easy to read.
+- The optional server can make bundle distribution easier inside the site, but execution state and run history still belong to the nodes that execute the workflow.
 
 Even here, `deck` is not acting as a central reconciliation controller. The server is a site-local distribution helper: it serves bundle content inside the air gap, but it does not take over node execution. Each node still executes locally.
 
@@ -161,7 +161,7 @@ The CLI follows the same simplification goal.
 - prepare artifacts and bundle inputs
 - build and verify the bundle
 - execute locally on the target node
-- optionally coordinate site-local distribution and reporting
+- optionally expose site-local bundle distribution helpers
 
 The intent is to avoid a tool shape where several commands appear to solve the same problem with slightly different assumptions. A smaller command model makes the default path clearer and keeps help text, examples, and documentation aligned.
 
@@ -202,19 +202,9 @@ This is intentionally a pipeline rather than three independently maintained desc
 
 Some documentation metadata is layered on top so examples and field descriptions stay useful, but the structural contract should still flow from the typed Go model into schema and then into docs.
 
-## Site-local coordination model
+## Site-local helper model
 
-When the optional site-local workflow is used, `deck` keeps coordination state in a local store rather than an external control plane.
-
-That state includes:
-
-- **releases**: imported or prepared bundle versions available at the site
-- **sessions**: maintenance windows or rollout instances tied to a release
-- **assignments**: per-node work selection for a session and action
-- **execution reports**: node-reported outcomes stored locally for inspection
-- **audit logs**: server-side lifecycle and request records
-
-This keeps coordination local to the site and consistent with the manual-first operating model.
+When a site needs a shared local source inside the air gap, `deck server` can expose prepared bundle content and audit what it serves. That helper remains secondary to the core local execution path.
 
 ## Safety and trust boundaries
 
@@ -274,7 +264,6 @@ The code layout roughly follows these boundaries:
 - `internal/prepare` and `internal/preparecli`: connected-side preparation logic
 - `internal/install`: target-side host mutation and apply behavior
 - `internal/bundle`: bundle collection, import, merge, and verify logic
-- `internal/site/store`: site-local coordination state
 - `internal/server`: optional site-local HTTP server
 - `internal/fsutil`, `internal/filemode`, `internal/hostfs`, `internal/executil`: safety-oriented helper boundaries
 
