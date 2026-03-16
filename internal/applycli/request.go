@@ -17,6 +17,7 @@ import (
 
 	"github.com/taedi90/deck/internal/bundle"
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/install"
 	"github.com/taedi90/deck/internal/validate"
 )
@@ -367,7 +368,7 @@ func extractBundleArchive(archivePath string) (string, error) {
 }
 
 func sha256FileHex(path string) (string, error) {
-	f, err := os.Open(path)
+	f, err := fsutil.Open(path)
 	if err != nil {
 		return "", err
 	}

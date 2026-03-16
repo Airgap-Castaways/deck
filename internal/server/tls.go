@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 func EnsureSelfSignedTLS(root, addr string) (string, string, error) {
@@ -78,7 +80,7 @@ func generateSelfSignedCertificate(certPath, keyPath string, hosts []string) err
 		return fmt.Errorf("create certificate: %w", err)
 	}
 
-	certOut, err := os.Create(certPath)
+	certOut, err := fsutil.Create(certPath)
 	if err != nil {
 		return fmt.Errorf("create cert file: %w", err)
 	}
@@ -87,7 +89,7 @@ func generateSelfSignedCertificate(certPath, keyPath string, hosts []string) err
 		return fmt.Errorf("encode cert pem: %w", err)
 	}
 
-	keyOut, err := os.OpenFile(keyPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	keyOut, err := fsutil.CreateWithMode(keyPath, 0o600)
 	if err != nil {
 		return fmt.Errorf("create key file: %w", err)
 	}

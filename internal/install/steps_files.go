@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -59,7 +61,7 @@ func runEditFile(spec map[string]any) error {
 		return fmt.Errorf("%s: EditFile requires path", errCodeInstallEditPathMissing)
 	}
 
-	content, err := os.ReadFile(path)
+	content, err := fsutil.ReadFile(path)
 	if err != nil {
 		return err
 	}
@@ -87,7 +89,7 @@ func runEditFile(spec map[string]any) error {
 		updated = strings.Replace(updated, match, with, 1)
 	}
 
-	return os.WriteFile(path, []byte(updated), 0o644)
+	return filemode.WriteArtifactFile(path, []byte(updated))
 }
 
 func runCopyFile(spec map[string]any) error {
@@ -101,14 +103,11 @@ func runCopyFile(spec map[string]any) error {
 		return fmt.Errorf("%s: CopyFile requires src and dest", errCodeInstallCopyPathMissing)
 	}
 
-	content, err := os.ReadFile(src)
+	content, err := fsutil.ReadFile(src)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(dest, content, 0o644)
+	return filemode.WriteArtifactFile(dest, content)
 }
 
 func runEnsureDir(spec map[string]any) error {
@@ -510,7 +509,7 @@ func backupRepoConfigPaths(patterns []string) error {
 		if info.IsDir() {
 			continue
 		}
-		content, err := os.ReadFile(path)
+		content, err := fsutil.ReadFile(path)
 		if err != nil {
 			return err
 		}
@@ -581,7 +580,7 @@ func disableYumRepoPaths(patterns []string, keepPath string) error {
 		if strings.TrimSpace(keepPath) != "" && filepath.Clean(path) == filepath.Clean(keepPath) {
 			continue
 		}
-		raw, err := os.ReadFile(path)
+		raw, err := fsutil.ReadFile(path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue

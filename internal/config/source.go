@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type workflowOrigin struct {
@@ -28,7 +29,7 @@ func loadWorkflowSource(ctx context.Context, source string) ([]byte, workflowOri
 	if err != nil {
 		return nil, workflowOrigin{}, fmt.Errorf("resolve path: %w", err)
 	}
-	b, err := os.ReadFile(abs)
+	b, err := fsutil.ReadFile(abs)
 	if err != nil {
 		return nil, workflowOrigin{}, fmt.Errorf("read workflow file: %w", err)
 	}

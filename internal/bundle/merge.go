@@ -12,6 +12,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type MergeAction struct {
@@ -53,7 +56,7 @@ func MergeArchive(archivePath, to string, dryRun bool) (MergeReport, error) {
 }
 
 func stageBundleForMerge(archivePath string) (stagedBundle, func(), error) {
-	src, err := os.Open(archivePath)
+	src, err := fsutil.Open(archivePath)
 	if err != nil {
 		return stagedBundle{}, nil, fmt.Errorf("open bundle archive: %w", err)
 	}
@@ -163,7 +166,7 @@ func stageTarFile(stageDir, rel string, reader io.Reader) (stagedFile, error) {
 		return stagedFile{}, fmt.Errorf("create merge staging parent: %w", err)
 	}
 
-	out, err := os.Create(targetPath)
+	out, err := fsutil.Create(targetPath)
 	if err != nil {
 		return stagedFile{}, fmt.Errorf("create merge staging file: %w", err)
 	}
@@ -274,7 +277,7 @@ func planLocalPath(root, relPath, digest string) (string, string, error) {
 }
 
 func copyStagedFile(targetPath string, staged stagedFile) error {
-	in, err := os.Open(staged.tempPath)
+	in, err := fsutil.Open(staged.tempPath)
 	if err != nil {
 		return fmt.Errorf("open staged file %s: %w", staged.tempPath, err)
 	}
@@ -284,7 +287,7 @@ func copyStagedFile(targetPath string, staged stagedFile) error {
 		return fmt.Errorf("create destination parent for %s: %w", targetPath, err)
 	}
 
-	out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	out, err := fsutil.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open destination %s: %w", targetPath, err)
 	}
@@ -299,7 +302,7 @@ func copyStagedFile(targetPath string, staged stagedFile) error {
 }
 
 func readLocalWorkflowIndex(indexPath string) ([]string, bool, error) {
-	raw, err := os.ReadFile(indexPath)
+	raw, err := fsutil.ReadFile(indexPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, false, nil
@@ -322,10 +325,10 @@ func writeLocalWorkflowIndex(indexPath string, items []string) error {
 		return fmt.Errorf("encode workflows/index.json: %w", err)
 	}
 	raw = append(raw, '\n')
-	if err := os.MkdirAll(filepath.Dir(indexPath), 0o755); err != nil {
+	if err := filemode.EnsureParentArtifactDir(indexPath); err != nil {
 		return fmt.Errorf("create workflows index directory: %w", err)
 	}
-	if err := os.WriteFile(indexPath, raw, 0o644); err != nil {
+	if err := filemode.WriteArtifactFile(indexPath, raw); err != nil {
 		return fmt.Errorf("write workflows/index.json: %w", err)
 	}
 	return nil

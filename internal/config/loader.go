@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type LoadOptions struct {
@@ -189,7 +190,7 @@ func loadComponentImportSource(ctx context.Context, origin workflowOrigin, impor
 			return nil, workflowOrigin{}, err
 		}
 		abs := filepath.Join(componentsRoot, filepath.FromSlash(ref))
-		b, err := os.ReadFile(abs)
+		b, err := fsutil.ReadFile(abs)
 		if err != nil {
 			return nil, workflowOrigin{}, fmt.Errorf("read workflow file: %w", err)
 		}

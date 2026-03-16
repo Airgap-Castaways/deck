@@ -10,10 +10,13 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 func writeFileIfChanged(path string, content []byte, mode os.FileMode) error {
-	existing, err := os.ReadFile(path)
+	existing, err := fsutil.ReadFile(path)
 	if err == nil && bytes.Equal(existing, content) {
 		return nil
 	}
@@ -35,7 +38,7 @@ func createEditFileBackup(path string, content []byte) (string, error) {
 	backupPath := base
 	for i := 0; i < 5; i++ {
 		if _, err := os.Stat(backupPath); os.IsNotExist(err) {
-			if err := os.WriteFile(backupPath, content, 0o644); err != nil {
+			if err := filemode.WriteArtifactFile(backupPath, content); err != nil {
 				return backupPath, err
 			}
 			return backupPath, nil

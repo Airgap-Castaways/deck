@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taedi90/deck/internal/executil"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -77,7 +78,7 @@ func runTimedCommandWithContext(parent context.Context, name string, args []stri
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := executil.CommandContext(ctx, name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
@@ -110,7 +111,7 @@ func runCommandOutputWithContext(parent context.Context, cmdArgs []string, timeo
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
+	cmd := executil.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
 	output, err := cmd.CombinedOutput()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		if parent.Err() != nil {

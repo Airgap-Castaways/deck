@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/fetch"
+	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -94,7 +95,7 @@ func runFileDownload(ctx context.Context, bundleRoot string, spec map[string]any
 		return outPath, nil
 	}
 
-	f, err := os.Create(target)
+	f, err := fsutil.Create(target)
 	if err != nil {
 		return "", fmt.Errorf("create output file: %w", err)
 	}
@@ -203,7 +204,7 @@ func resolveSourceBytesFromSpec(ctx context.Context, spec prepareFileDownloadSpe
 		return nil, fmt.Errorf("%s: source.path %s not found in configured fetch sources", errCodeArtifactSourceNotFound, sourcePath)
 	}
 
-	raw, err := os.ReadFile(sourcePath)
+	raw, err := fsutil.ReadFile(sourcePath)
 	if err == nil {
 		return raw, nil
 	}
@@ -211,7 +212,7 @@ func resolveSourceBytesFromSpec(ctx context.Context, spec prepareFileDownloadSpe
 }
 
 func verifyFileSHA256(path, expected string) error {
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read downloaded file for checksum: %w", err)
 	}
@@ -244,7 +245,7 @@ func inferDownloadFileName(sourcePath, sourceURL string) string {
 }
 
 func fileSHA256(path string) (string, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if err != nil {
 		return "", err
 	}

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/deckignore"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type browseEntry struct {
@@ -117,15 +118,14 @@ func (h *serverHandler) listBrowseEntries(category, relPath string) ([]browseEnt
 	if category == "files" || category == "packages" {
 		baseDir = filepath.ToSlash(filepath.Join(serverOutputsDir, category))
 	}
-	fsPath := filepath.Join(h.rootAbs, filepath.FromSlash(baseDir), filepath.FromSlash(relPath))
-	info, err := os.Stat(fsPath)
+	info, _, err := fsutil.StatUnder(h.rootAbs, filepath.FromSlash(baseDir), filepath.FromSlash(relPath))
 	if err != nil {
 		return nil, "", err
 	}
 	if !info.IsDir() {
 		return nil, "", os.ErrNotExist
 	}
-	list, err := os.ReadDir(fsPath)
+	list, _, err := fsutil.ReadDirUnder(h.rootAbs, filepath.FromSlash(baseDir), filepath.FromSlash(relPath))
 	if err != nil {
 		return nil, "", err
 	}

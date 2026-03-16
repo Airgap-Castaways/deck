@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/workflowexec"
 	deckschemas "github.com/taedi90/deck/schemas"
 )
@@ -40,7 +41,7 @@ func File(path string) error {
 	if path == "" {
 		return fmt.Errorf("file path is empty")
 	}
-	content, err := os.ReadFile(path)
+	content, err := fsutil.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read workflow file: %w", err)
 	}
@@ -182,7 +183,7 @@ func lintLocalEntrypoint(path string, inheritedVars map[string]any, visiting map
 	}
 	visiting[absPath] = true
 
-	content, err := os.ReadFile(absPath)
+	content, err := fsutil.ReadFile(absPath)
 	if err != nil {
 		return nil, withWorkflowName(absPath, fmt.Errorf("read workflow file: %w", err))
 	}

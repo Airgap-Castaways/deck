@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type SourceConfig struct {
@@ -47,7 +48,7 @@ func ResolveBytes(ctx context.Context, relPath string, sources []SourceConfig, o
 				continue
 			}
 			candidate := filepath.Join(base, filepath.FromSlash(relPath))
-			raw, err := os.ReadFile(candidate)
+			raw, err := fsutil.ReadFile(candidate)
 			if err == nil {
 				return raw, nil
 			}

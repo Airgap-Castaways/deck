@@ -4,11 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/taedi90/deck/internal/executil"
 )
 
 func newServerCommand() *cobra.Command {
@@ -252,7 +253,7 @@ func executeServerUp(opts serverUpOptions) error {
 
 func executeServerDown(unit string) error {
 	resolvedUnit := normalizeServerUnitName(unit)
-	cmd := exec.Command("systemctl", "stop", resolvedUnit)
+	cmd := executil.Command("systemctl", "stop", resolvedUnit)
 	raw, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(raw))
@@ -296,7 +297,7 @@ func runServerDaemon(opts serverUpOptions) error {
 	if opts.tlsSelfSigned {
 		args = append(args, "--tls-self-signed")
 	}
-	cmd := exec.Command("systemd-run", args...)
+	cmd := executil.Command("systemd-run", args...)
 	raw, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(raw))
@@ -335,10 +336,10 @@ func validateServerUpDaemonMode(opts serverUpOptions) error {
 	if !opts.daemon {
 		return nil
 	}
-	if _, err := exec.LookPath("systemd-run"); err != nil {
+	if _, err := executil.LookPath("systemd-run"); err != nil {
 		return errors.New("server up: systemd-run not found")
 	}
-	if _, err := exec.LookPath("systemctl"); err != nil {
+	if _, err := executil.LookPath("systemctl"); err != nil {
 		return errors.New("server up: systemctl not found")
 	}
 	if strings.TrimSpace(opts.unit) == "" {

@@ -8,6 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type serverDefaults struct {
@@ -85,7 +88,7 @@ func loadServerDefaults() (serverDefaults, error) {
 	if err != nil {
 		return serverDefaults{}, err
 	}
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return serverDefaults{}, nil
@@ -112,10 +115,7 @@ func saveServerDefaults(defaults serverDefaults) error {
 	if err != nil {
 		return fmt.Errorf("encode server defaults: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create server defaults dir: %w", err)
-	}
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
+	if err := filemode.WritePrivateFile(path, raw); err != nil {
 		return fmt.Errorf("write server defaults: %w", err)
 	}
 	return nil

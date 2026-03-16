@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/schemadoc"
 )
 
@@ -27,7 +28,7 @@ func repoRoot() (string, error) {
 
 func readSchema(path string) (schemaDoc, error) {
 	var out schemaDoc
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if err != nil {
 		return out, err
 	}
@@ -38,7 +39,7 @@ func readSchema(path string) (schemaDoc, error) {
 }
 
 func readSchemaMap(path string) (map[string]any, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +100,7 @@ func loadToolSchemas(dir string) ([]toolSchemaDoc, error) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".schema.json") {
 			continue
 		}
-		raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		raw, err := fsutil.ReadFile(filepath.Join(dir, entry.Name()))
 		if err != nil {
 			return nil, err
 		}

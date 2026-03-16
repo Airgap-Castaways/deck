@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/taedi90/deck/internal/executil"
+	"github.com/taedi90/deck/internal/fsutil"
 	ctrllogs "github.com/taedi90/deck/internal/logs"
 	"github.com/taedi90/deck/internal/server"
 )
@@ -264,7 +266,7 @@ func resolveLogsFilePath(root string, path string) (string, error) {
 }
 
 func readLogsFile(path string) ([]ctrllogs.LogRecord, error) {
-	f, err := os.Open(path)
+	f, err := fsutil.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("logs: open log file: %w", err)
 	}
@@ -295,7 +297,7 @@ func readControlLogsJournal(unit string, tail int, since time.Duration) ([]ctrll
 	if since > 0 {
 		args = append(args, "--since", formatJournalSince(since))
 	}
-	raw, err := exec.Command("journalctl", args...).CombinedOutput()
+	raw, err := executil.Command("journalctl", args...).CombinedOutput()
 	if err != nil {
 		return nil, classifyJournalctlError(err, strings.TrimSpace(string(raw)))
 	}

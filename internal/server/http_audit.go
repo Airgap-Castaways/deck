@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type auditLogger struct {
@@ -41,7 +44,7 @@ type statusRecorder struct {
 
 func newAuditLogger(root string, opts auditLoggerOptions) (*auditLogger, error) {
 	logPath := filepath.Join(root, ".deck", "logs", "server-audit.log")
-	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+	if err := filemode.EnsureParentPrivateDir(logPath); err != nil {
 		return nil, fmt.Errorf("create audit log directory: %w", err)
 	}
 	if opts.maxSizeBytes <= 0 {
@@ -50,7 +53,7 @@ func newAuditLogger(root string, opts auditLoggerOptions) (*auditLogger, error) 
 	if opts.maxFiles <= 0 {
 		opts.maxFiles = defaultAuditMaxFiles
 	}
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := fsutil.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, filemode.PrivateFileMode)
 	if err != nil {
 		return nil, fmt.Errorf("open audit log file: %w", err)
 	}
@@ -106,7 +109,7 @@ func (a *auditLogger) rotateLocked() error {
 			firstErr = err
 		}
 	}
-	f, err := os.OpenFile(a.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := fsutil.OpenFile(a.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, filemode.PrivateFileMode)
 	if err != nil {
 		if firstErr != nil {
 			return fmt.Errorf("%v; reopen audit log: %w", firstErr, err)

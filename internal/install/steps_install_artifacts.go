@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -195,7 +196,7 @@ func installArtifactFile(sourcePath string, installSpec installArtifactInstallSp
 	if strings.TrimSpace(installSpec.Path) == "" {
 		return fmt.Errorf("%s: install.path is required", errCodeInstallArtifactSource)
 	}
-	raw, err := os.ReadFile(sourcePath)
+	raw, err := fsutil.ReadFile(sourcePath)
 	if err != nil {
 		return fmt.Errorf("read artifact source: %w", err)
 	}
@@ -243,7 +244,7 @@ func extractArtifactTarGz(sourcePath string, extractSpec installArtifactExtractS
 		}
 	}
 
-	f, err := os.Open(sourcePath)
+	f, err := fsutil.Open(sourcePath)
 	if err != nil {
 		return fmt.Errorf("open archive: %w", err)
 	}

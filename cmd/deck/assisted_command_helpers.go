@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/nodeid"
 	sitestore "github.com/taedi90/deck/internal/site/store"
 )
@@ -202,7 +203,7 @@ func persistAssistedExecutionReport(ctx assistedExecutionContext, action, status
 
 func writeAssistedReportFile(sessionID, nodeID, action string, report sitestore.ExecutionReport) (string, error) {
 	reportDir := filepath.Join(assistedDataRoot(), "reports", sessionID, nodeID)
-	if err := os.MkdirAll(reportDir, 0o755); err != nil {
+	if err := filemode.EnsurePrivateDir(reportDir); err != nil {
 		return "", fmt.Errorf("create local assisted report dir: %w", err)
 	}
 	name := fmt.Sprintf("%s-%s.json", action, time.Now().UTC().Format("20060102T150405Z"))
@@ -211,7 +212,7 @@ func writeAssistedReportFile(sessionID, nodeID, action string, report sitestore.
 	if err != nil {
 		return "", fmt.Errorf("encode assisted execution report: %w", err)
 	}
-	if err := os.WriteFile(path, raw, 0o644); err != nil {
+	if err := filemode.WritePrivateFile(path, raw); err != nil {
 		return "", fmt.Errorf("write local assisted report: %w", err)
 	}
 	return path, nil
@@ -342,10 +343,10 @@ func writeAssistedBundleFile(config assistedExecutionConfig, releaseID, bundleRo
 		return err
 	}
 	absPath := filepath.Join(bundleRoot, clean)
-	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+	if err := filemode.EnsureParentArtifactDir(absPath); err != nil {
 		return fmt.Errorf("create release bundle path: %w", err)
 	}
-	if err := os.WriteFile(absPath, raw, 0o644); err != nil {
+	if err := filemode.WriteArtifactFile(absPath, raw); err != nil {
 		return fmt.Errorf("write release bundle file: %w", err)
 	}
 	return nil

@@ -3,9 +3,11 @@ package install
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 func runSysctl(spec map[string]any) error {
@@ -27,10 +29,7 @@ func runSysctl(spec map[string]any) error {
 		lines = append(lines, fmt.Sprintf("%s=%v", k, v))
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+	if err := filemode.WriteArtifactFile(path, []byte(strings.Join(lines, "\n")+"\n")); err != nil {
 		return err
 	}
 	if boolValue(spec, "apply") {
@@ -176,7 +175,7 @@ func runSwap(spec map[string]any) error {
 		if fstabPath == "" {
 			fstabPath = "/etc/fstab"
 		}
-		content, err := os.ReadFile(fstabPath)
+		content, err := fsutil.ReadFile(fstabPath)
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil
@@ -201,7 +200,7 @@ func runSwap(spec map[string]any) error {
 			if !strings.HasSuffix(updated, "\n") {
 				updated += "\n"
 			}
-			if err := os.WriteFile(fstabPath, []byte(updated), 0o644); err != nil {
+			if err := filemode.WriteArtifactFile(fstabPath, []byte(updated)); err != nil {
 				return err
 			}
 		}
@@ -230,10 +229,7 @@ func runKernelModule(spec map[string]any) error {
 		if persistFile == "" {
 			persistFile = "/etc/modules-load.d/k8s.conf"
 		}
-		if err := os.MkdirAll(filepath.Dir(persistFile), 0o755); err != nil {
-			return err
-		}
-		raw, err := os.ReadFile(persistFile)
+		raw, err := fsutil.ReadFile(persistFile)
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
@@ -251,7 +247,7 @@ func runKernelModule(spec map[string]any) error {
 				content += "\n"
 			}
 			content += name + "\n"
-			if err := os.WriteFile(persistFile, []byte(content), 0o644); err != nil {
+			if err := filemode.WriteArtifactFile(persistFile, []byte(content)); err != nil {
 				return err
 			}
 		}
@@ -286,7 +282,7 @@ func runSysctlApply(spec map[string]any) error {
 }
 
 func swapActive() (bool, error) {
-	raw, err := os.ReadFile("/proc/swaps")
+	raw, err := fsutil.ReadFile("/proc/swaps")
 	if err != nil {
 		return false, err
 	}
@@ -295,7 +291,7 @@ func swapActive() (bool, error) {
 }
 
 func kernelModuleLoaded(name string) (bool, error) {
-	raw, err := os.ReadFile("/proc/modules")
+	raw, err := fsutil.ReadFile("/proc/modules")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil

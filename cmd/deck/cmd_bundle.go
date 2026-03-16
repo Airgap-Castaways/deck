@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/bundle"
+	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/workspacepaths"
 )
 
@@ -35,7 +36,7 @@ func executeInit(output string) error {
 
 	dirs := initTemplateDirs(resolvedOutput)
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := filemode.EnsureArtifactDir(dir); err != nil {
 			return fmt.Errorf("init: create directory %s: %w", dir, err)
 		}
 	}
@@ -46,7 +47,7 @@ func executeInit(output string) error {
 		return err
 	}
 	for path, body := range templates {
-		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		if err := filemode.WriteArtifactFile(path, []byte(body)); err != nil {
 			return fmt.Errorf("init: write %s: %w", path, err)
 		}
 	}
@@ -111,7 +112,7 @@ func ensureFileWithDefault(path string, content string) error {
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("init: stat target path %s: %w", path, err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := filemode.WriteArtifactFile(path, []byte(content)); err != nil {
 		return fmt.Errorf("init: write %s: %w", path, err)
 	}
 	return nil

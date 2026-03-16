@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/taedi90/deck/internal/executil"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -106,7 +107,7 @@ func waitConditionMet(ctx context.Context, action string, spec waitSpec) (bool, 
 		if name == "" {
 			return false, fmt.Errorf("wait action serviceActive requires name")
 		}
-		err := exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", name).Run()
+		err := executil.CommandContext(ctx, "systemctl", "is-active", "--quiet", name).Run()
 		if err == nil {
 			return true, nil
 		}
@@ -119,7 +120,7 @@ func waitConditionMet(ctx context.Context, action string, spec waitSpec) (bool, 
 		if len(cmd) == 0 {
 			return false, fmt.Errorf("wait action commandSuccess requires command")
 		}
-		err := exec.CommandContext(ctx, cmd[0], cmd[1:]...).Run()
+		err := executil.CommandContext(ctx, cmd[0], cmd[1:]...).Run()
 		if err == nil {
 			return true, nil
 		}

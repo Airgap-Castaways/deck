@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/deckignore"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 func CollectArchive(bundleRoot, outputPath string) error {
@@ -33,7 +34,7 @@ func CollectArchive(bundleRoot, outputPath string) error {
 		return err
 	}
 
-	out, err := os.Create(absOut)
+	out, err := fsutil.Create(absOut)
 	if err != nil {
 		return fmt.Errorf("create output archive: %w", err)
 	}
@@ -105,7 +106,7 @@ func addPathToArchive(tw *tar.Writer, root string, path string, outPath string, 
 		if err := tw.WriteHeader(header); err != nil {
 			return err
 		}
-		f, err := os.Open(current)
+		f, err := fsutil.Open(current)
 		if err != nil {
 			return err
 		}
@@ -141,7 +142,7 @@ func addFileToArchive(tw *tar.Writer, root string, path string, outPath string, 
 	if err := tw.WriteHeader(header); err != nil {
 		return err
 	}
-	f, err := os.Open(path)
+	f, err := fsutil.Open(path)
 	if err != nil {
 		return err
 	}

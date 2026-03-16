@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type ManifestFile struct {
@@ -106,7 +108,7 @@ func verifyTarManifest(archivePath string) error {
 }
 
 func loadManifestEntriesFromDir(bundleRoot string) ([]ManifestEntry, map[string]struct{}, error) {
-	raw, err := os.ReadFile(filepath.Join(bundleRoot, filepath.FromSlash(manifestRelativePath)))
+	raw, err := fsutil.ReadFile(filepath.Join(bundleRoot, filepath.FromSlash(manifestRelativePath)))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil, fmt.Errorf("E_MANIFEST_MISSING: %s", filepath.Join(bundleRoot, filepath.FromSlash(manifestRelativePath)))
@@ -186,7 +188,7 @@ func normalizeManifestEntryPath(raw string) (string, error) {
 }
 
 func fileDigest(filePath string) (int64, string, error) {
-	f, err := os.Open(filePath)
+	f, err := fsutil.Open(filePath)
 	if err != nil {
 		return 0, "", err
 	}
@@ -202,7 +204,7 @@ func fileDigest(filePath string) (int64, string, error) {
 }
 
 func scanTarBundle(archivePath string) ([]byte, map[string]tarFileInfo, map[string]struct{}, error) {
-	src, err := os.Open(archivePath)
+	src, err := fsutil.Open(archivePath)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("open bundle archive: %w", err)
 	}
@@ -234,10 +236,13 @@ func scanTarBundle(archivePath string) ([]byte, map[string]tarFileInfo, map[stri
 		case tar.TypeDir:
 			addTarPathDirectories(dirs, rel)
 		case tar.TypeReg:
+			if hdr.Size < 0 || hdr.Size > maxBundleArchiveEntrySize {
+				return nil, nil, nil, fmt.Errorf("E_BUNDLE_INTEGRITY: archive entry too large: %s", rel)
+			}
 			addTarPathDirectories(dirs, rel)
 			h := sha256.New()
 			if rel == manifestRelativePath {
-				raw, readErr := io.ReadAll(io.TeeReader(tr, h))
+				raw, readErr := io.ReadAll(io.TeeReader(io.LimitReader(tr, hdr.Size), h))
 				if readErr != nil {
 					return nil, nil, nil, fmt.Errorf("read manifest from archive: %w", readErr)
 				}
@@ -245,7 +250,7 @@ func scanTarBundle(archivePath string) ([]byte, map[string]tarFileInfo, map[stri
 				continue
 			}
 
-			size, copyErr := io.Copy(h, tr)
+			size, copyErr := io.CopyN(h, tr, hdr.Size)
 			if copyErr != nil {
 				return nil, nil, nil, fmt.Errorf("read archive entry %s: %w", rel, copyErr)
 			}
@@ -261,7 +266,7 @@ func scanTarBundle(archivePath string) ([]byte, map[string]tarFileInfo, map[stri
 }
 
 func readManifestFromTar(archivePath string) ([]byte, error) {
-	src, err := os.Open(archivePath)
+	src, err := fsutil.Open(archivePath)
 	if err != nil {
 		return nil, fmt.Errorf("open bundle archive: %w", err)
 	}

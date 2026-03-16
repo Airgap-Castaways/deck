@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/prepare"
 	"github.com/taedi90/deck/internal/workspacepaths"
 )
@@ -118,7 +119,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("resolve deck binary path: %w", err)
 	}
-	binaryBytes, err := os.ReadFile(execPath)
+	binaryBytes, err := fsutil.ReadFile(execPath)
 	if err != nil {
 		return fmt.Errorf("read deck binary: %w", err)
 	}
@@ -223,7 +224,7 @@ func buildPreparedManifest(bundleRoot string) (preparedManifest, error) {
 			if d.IsDir() {
 				return nil
 			}
-			raw, err := os.ReadFile(path)
+			raw, err := fsutil.ReadFile(path)
 			if err != nil {
 				return err
 			}

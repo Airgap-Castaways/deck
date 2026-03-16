@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/deckignore"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 const serverOutputsDir = "outputs"
@@ -31,7 +32,7 @@ func (h *serverHandler) handleReleaseBundleRead(w http.ResponseWriter, r *http.R
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	data, err := os.ReadFile(targetPath)
+	data, _, err := fsutil.ReadFileUnder(h.rootAbs, strings.TrimPrefix(targetPath, h.rootAbs+string(os.PathSeparator)))
 	if err != nil {
 		if os.IsNotExist(err) {
 			w.WriteHeader(http.StatusNotFound)
@@ -160,7 +161,7 @@ func (h *serverHandler) handleStatic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := os.ReadFile(targetPath)
+	data, _, err := fsutil.ReadFileUnder(h.rootAbs, strings.TrimPrefix(targetPath, h.rootAbs+string(os.PathSeparator)))
 	if err != nil {
 		if os.IsNotExist(err) && category == "workflows" && relPath == "index.json" {
 			data, err = buildWorkflowIndex(h.rootAbs)
@@ -245,8 +246,7 @@ func (h *serverHandler) resolveCategoryPath(urlPath string) (string, string, str
 		if ignore.Matches("deck", false) {
 			return "", "", "", http.StatusNotFound
 		}
-		targetPath := filepath.Join(h.rootAbs, "deck")
-		resolvedTarget, err := filepath.Abs(targetPath)
+		resolvedTarget, err := fsutil.ResolveUnder(h.rootAbs, "deck")
 		if err != nil {
 			return "", "", "", http.StatusForbidden
 		}
@@ -283,18 +283,12 @@ func (h *serverHandler) resolveCategoryPath(urlPath string) (string, string, str
 
 	baseDir := category
 	if category == "files" || category == "packages" || category == "images" {
-		preferred := filepath.Join(h.rootAbs, serverOutputsDir, category, filepath.FromSlash(cleanRel))
-		if _, err := os.Stat(preferred); err == nil {
+		if _, _, err := fsutil.StatUnder(h.rootAbs, serverOutputsDir, category, filepath.FromSlash(cleanRel)); err == nil {
 			baseDir = filepath.ToSlash(filepath.Join(serverOutputsDir, category))
 		}
 	}
-	targetPath := filepath.Join(h.rootAbs, filepath.FromSlash(baseDir), filepath.FromSlash(cleanRel))
-	resolvedTarget, err := filepath.Abs(targetPath)
+	resolvedTarget, err := fsutil.ResolveUnder(h.rootAbs, filepath.FromSlash(baseDir), filepath.FromSlash(cleanRel))
 	if err != nil {
-		return "", "", "", http.StatusForbidden
-	}
-	rootPrefix := h.rootAbs + string(os.PathSeparator)
-	if resolvedTarget != h.rootAbs && !strings.HasPrefix(resolvedTarget, rootPrefix) {
 		return "", "", "", http.StatusForbidden
 	}
 

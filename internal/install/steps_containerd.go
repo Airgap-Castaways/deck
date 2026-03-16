@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 func runContainerdConfig(ctx context.Context, spec map[string]any) error {
@@ -20,7 +22,7 @@ func runContainerdConfig(ctx context.Context, spec map[string]any) error {
 		return err
 	}
 
-	content, err := os.ReadFile(path)
+	content, err := fsutil.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err

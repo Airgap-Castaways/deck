@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type State struct {
@@ -20,7 +22,7 @@ type State struct {
 }
 
 func LoadState(path string) (*State, error) {
-	content, err := os.ReadFile(path)
+	content, err := fsutil.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &State{CompletedSteps: []string{}}, nil
@@ -45,7 +47,7 @@ func LoadState(path string) (*State, error) {
 }
 
 func SaveState(path string, st *State) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := filemode.EnsureParentPrivateDir(path); err != nil {
 		return fmt.Errorf("create state directory: %w", err)
 	}
 
@@ -55,7 +57,7 @@ func SaveState(path string, st *State) error {
 	}
 
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+	if err := filemode.WritePrivateFile(tmp, raw); err != nil {
 		return fmt.Errorf("write temp state file: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {

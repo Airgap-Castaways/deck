@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type packageCacheMeta struct {
@@ -437,8 +440,8 @@ func writePackagePlaceholders(bundleRoot, dir string, packages []string) []strin
 		filename := fmt.Sprintf("%s.txt", pkg)
 		rel := filepath.ToSlash(filepath.Join(dir, filename))
 		target := filepath.Join(bundleRoot, rel)
-		_ = os.MkdirAll(filepath.Dir(target), 0o755)
-		_ = os.WriteFile(target, []byte(fmt.Sprintf("package=%s\n", pkg)), 0o644)
+		_ = filemode.EnsureParentArtifactDir(target)
+		_ = filemode.WriteArtifactFile(target, []byte(fmt.Sprintf("package=%s\n", pkg)))
 		files = append(files, rel)
 	}
 	return files
@@ -490,7 +493,7 @@ func tryReusePackageArtifacts(bundleRoot, rootRel string, packages []string, opt
 		return nil, false, nil
 	}
 	metaPath := packageMetaFileAbs(bundleRoot, rootRel)
-	raw, err := os.ReadFile(metaPath)
+	raw, err := fsutil.ReadFile(metaPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, false, nil
@@ -529,14 +532,14 @@ func writePackageArtifactsMeta(bundleRoot, rootRel string, packages, files []str
 		Files:    normalizeStrings(files),
 	}
 	metaPath := packageMetaFileAbs(bundleRoot, rootRel)
-	if err := os.MkdirAll(filepath.Dir(metaPath), 0o755); err != nil {
+	if err := filemode.EnsureParentArtifactDir(metaPath); err != nil {
 		return err
 	}
 	raw, err := json.Marshal(meta)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(metaPath, raw, 0o644)
+	return filemode.WriteArtifactFile(metaPath, raw)
 }
 
 func detectRuntime(runner CommandRunner, preferred string) (string, error) {
