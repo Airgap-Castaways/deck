@@ -162,7 +162,7 @@ func shouldStageForMerge(rel string) bool {
 
 func stageTarFile(stageDir, rel string, reader io.Reader) (stagedFile, error) {
 	targetPath := filepath.Join(stageDir, filepath.FromSlash(rel))
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+	if err := filemode.EnsureParentDir(targetPath, filemode.PrivateState); err != nil {
 		return stagedFile{}, fmt.Errorf("create merge staging parent: %w", err)
 	}
 
@@ -298,7 +298,7 @@ func copyStagedFile(root fsutil.Root, relPath string, staged stagedFile) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+	if err := filemode.EnsureParentDir(targetPath, filemode.PublishedArtifact); err != nil {
 		return fmt.Errorf("create destination parent for %s: %w", targetPath, err)
 	}
 

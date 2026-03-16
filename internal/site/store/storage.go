@@ -70,7 +70,7 @@ func listJSONFiles(dir string) ([]string, error) {
 }
 
 func copyDir(srcDir, dstDir string) error {
-	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+	if err := filemode.EnsureDir(dstDir, filemode.PrivateState); err != nil {
 		return fmt.Errorf("create destination directory: %w", err)
 	}
 	entries, err := os.ReadDir(srcDir)
@@ -104,6 +104,9 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	}
 	defer func() { _ = in.Close() }()
 
+	if err := filemode.EnsureParentDir(dst, filemode.PrivateState); err != nil {
+		return fmt.Errorf("create destination file %q: %w", dst, err)
+	}
 	out, err := fsutil.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 	if err != nil {
 		return fmt.Errorf("create destination file %q: %w", dst, err)

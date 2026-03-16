@@ -1,6 +1,10 @@
 package store
 
-import "regexp"
+import (
+	"regexp"
+
+	"github.com/taedi90/deck/internal/fsutil"
+)
 
 var (
 	recordIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
@@ -8,7 +12,7 @@ var (
 )
 
 type Store struct {
-	root string
+	root fsutil.SiteRoot
 }
 
 type Release struct {

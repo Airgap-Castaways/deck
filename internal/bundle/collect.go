@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/deckignore"
+	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
 )
 
@@ -25,7 +26,7 @@ func CollectArchive(bundleRoot, outputPath string) error {
 	if _, err := os.Stat(absRoot); err != nil {
 		return fmt.Errorf("bundle root not found: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(absOut), 0o755); err != nil {
+	if err := filemode.EnsureParentArtifactDir(absOut); err != nil {
 		return fmt.Errorf("create output parent: %w", err)
 	}
 
@@ -72,11 +73,12 @@ func addPathToArchive(tw *tar.Writer, root string, path string, outPath string, 
 	if !info.IsDir() {
 		return addFileToArchive(tw, root, path, outPath, ignore)
 	}
+	rootFS, err := fsutil.NewRoot(root)
+	if err != nil {
+		return err
+	}
 
-	return filepath.WalkDir(path, func(current string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
+	return rootFS.WalkFiles(func(current string, d os.DirEntry) error {
 		if sameFilePath(current, outPath) {
 			return nil
 		}
@@ -122,7 +124,7 @@ func addPathToArchive(tw *tar.Writer, root string, path string, outPath string, 
 			return err
 		}
 		return nil
-	})
+	}, strings.TrimPrefix(filepath.ToSlash(strings.TrimPrefix(path, root)), "/"))
 }
 
 func addFileToArchive(tw *tar.Writer, root string, path string, outPath string, ignore deckignore.Matcher) error {

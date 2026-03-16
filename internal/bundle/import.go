@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
 )
 
@@ -26,7 +27,7 @@ func ImportArchive(archivePath, destRoot string) error {
 	}
 	defer func() { _ = src.Close() }()
 
-	if err := os.MkdirAll(destRoot, 0o755); err != nil {
+	if err := filemode.EnsureDir(destRoot, filemode.PublishedArtifact); err != nil {
 		return fmt.Errorf("create import destination: %w", err)
 	}
 
@@ -74,14 +75,17 @@ func ImportArchive(archivePath, destRoot string) error {
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, mode); err != nil {
+			if err := filemode.EnsureDir(target, filemode.PublishedArtifact); err != nil {
 				return fmt.Errorf("create import directory: %w", err)
+			}
+			if err := os.Chmod(target, mode); err != nil {
+				return fmt.Errorf("chmod import directory: %w", err)
 			}
 		case tar.TypeReg:
 			if hdr.Size < 0 || hdr.Size > maxBundleArchiveEntrySize {
 				return fmt.Errorf("archive entry too large: %s", hdr.Name)
 			}
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			if err := filemode.EnsureParentDir(target, filemode.PublishedArtifact); err != nil {
 				return fmt.Errorf("create import parent directory: %w", err)
 			}
 			f, err := fsutil.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)

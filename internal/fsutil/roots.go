@@ -11,12 +11,51 @@ type Root struct {
 	abs string
 }
 
+type (
+	BundleRoot   struct{ Root }
+	PreparedRoot struct{ Root }
+	StateRoot    struct{ Root }
+	SiteRoot     struct{ Root }
+)
+
 func NewRoot(path string) (Root, error) {
 	abs, err := filepath.Abs(strings.TrimSpace(path))
 	if err != nil {
 		return Root{}, fmt.Errorf("resolve root path: %w", err)
 	}
 	return Root{abs: abs}, nil
+}
+
+func NewBundleRoot(path string) (BundleRoot, error) {
+	root, err := NewRoot(path)
+	if err != nil {
+		return BundleRoot{}, err
+	}
+	return BundleRoot{Root: root}, nil
+}
+
+func NewPreparedRoot(path string) (PreparedRoot, error) {
+	root, err := NewRoot(path)
+	if err != nil {
+		return PreparedRoot{}, err
+	}
+	return PreparedRoot{Root: root}, nil
+}
+
+func NewStateRoot(path string) (StateRoot, error) {
+	root, err := NewRoot(path)
+	if err != nil {
+		return StateRoot{}, err
+	}
+	return StateRoot{Root: root}, nil
+}
+
+func NewSiteRoot(path string) (SiteRoot, error) {
+	root, err := NewRoot(path)
+	if err != nil {
+		return SiteRoot{}, err
+	}
+	return SiteRoot{Root: root}, nil
 }
 
 func (r Root) Abs() string {

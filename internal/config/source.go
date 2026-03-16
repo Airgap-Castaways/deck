@@ -29,7 +29,11 @@ func loadWorkflowSource(ctx context.Context, source string) ([]byte, workflowOri
 	if err != nil {
 		return nil, workflowOrigin{}, fmt.Errorf("resolve path: %w", err)
 	}
-	b, err := fsutil.ReadFile(abs)
+	root, err := fsutil.NewRoot(filepath.Dir(abs))
+	if err != nil {
+		return nil, workflowOrigin{}, err
+	}
+	b, _, err := root.ReadFile(filepath.Base(abs))
 	if err != nil {
 		return nil, workflowOrigin{}, fmt.Errorf("read workflow file: %w", err)
 	}

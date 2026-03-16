@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/taedi90/deck/internal/filemode"
 )
 
 var copyDirFunc = copyDir
@@ -40,7 +42,7 @@ func (s *Store) ImportRelease(release Release, importedBundlePath string) error 
 		return fmt.Errorf("check release bundle path: %w", err)
 	}
 
-	if err := os.MkdirAll(s.releasesDir(), 0o755); err != nil {
+	if err := filemode.EnsureDir(s.releasesDir(), filemode.PrivateState); err != nil {
 		return fmt.Errorf("create releases directory: %w", err)
 	}
 	tmpDir, err := os.MkdirTemp(s.releasesDir(), release.ID+".tmp-")

@@ -17,6 +17,7 @@ import (
 
 	"github.com/taedi90/deck/internal/bundle"
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/install"
 	"github.com/taedi90/deck/internal/validate"
@@ -310,7 +311,11 @@ func resolveBundleCandidate(candidate string, strict bool) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve bundle path: %w", err)
 	}
-	info, err := os.Stat(resolved)
+	bundleRoot, err := fsutil.NewBundleRoot(resolved)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(bundleRoot.Abs())
 	if err != nil {
 		if os.IsNotExist(err) && !strict {
 			return "", nil
@@ -321,11 +326,11 @@ func resolveBundleCandidate(candidate string, strict bool) (string, error) {
 		return "", fmt.Errorf("stat bundle path: %w", err)
 	}
 	if info.IsDir() {
-		if hasWorkflowDir(resolved) {
-			return resolved, nil
+		if hasWorkflowDir(bundleRoot.Abs()) {
+			return bundleRoot.Abs(), nil
 		}
 		if strict {
-			return "", fmt.Errorf("bundle directory must contain workflows/: %s", resolved)
+			return "", fmt.Errorf("bundle directory must contain workflows/: %s", bundleRoot.Abs())
 		}
 		return "", nil
 	}
@@ -335,7 +340,7 @@ func resolveBundleCandidate(candidate string, strict bool) (string, error) {
 		}
 		return "", nil
 	}
-	return extractBundleArchive(resolved)
+	return extractBundleArchive(bundleRoot.Abs())
 }
 
 func extractBundleArchive(archivePath string) (string, error) {
@@ -348,23 +353,26 @@ func extractBundleArchive(archivePath string) (string, error) {
 		return "", fmt.Errorf("resolve user home directory: %w", err)
 	}
 	extractRoot := filepath.Join(home, ".deck", "extract", sum)
-	bundleRoot := filepath.Join(extractRoot, "bundle")
-	if hasWorkflowDir(bundleRoot) {
-		return bundleRoot, nil
+	bundleRoot, err := fsutil.NewBundleRoot(filepath.Join(extractRoot, "bundle"))
+	if err != nil {
+		return "", err
+	}
+	if hasWorkflowDir(bundleRoot.Abs()) {
+		return bundleRoot.Abs(), nil
 	}
 	if err := os.RemoveAll(extractRoot); err != nil {
 		return "", fmt.Errorf("reset extract cache: %w", err)
 	}
-	if err := os.MkdirAll(extractRoot, 0o755); err != nil {
+	if err := filemode.EnsureDir(extractRoot, filemode.PrivateState); err != nil {
 		return "", fmt.Errorf("create extract cache directory: %w", err)
 	}
 	if err := bundle.ImportArchive(archivePath, extractRoot); err != nil {
 		return "", err
 	}
-	if !hasWorkflowDir(bundleRoot) {
-		return "", fmt.Errorf("extracted bundle missing workflows/: %s", bundleRoot)
+	if !hasWorkflowDir(bundleRoot.Abs()) {
+		return "", fmt.Errorf("extracted bundle missing workflows/: %s", bundleRoot.Abs())
 	}
-	return bundleRoot, nil
+	return bundleRoot.Abs(), nil
 }
 
 func sha256FileHex(path string) (string, error) {
@@ -393,11 +401,21 @@ func DiscoverApplyWorkflow(ctx context.Context, bundleRoot string) (string, erro
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	workflowDir := filepath.Join(bundleRoot, "workflows")
-	if !hasWorkflowDir(bundleRoot) {
+	root, err := fsutil.NewBundleRoot(bundleRoot)
+	if err != nil {
+		return "", err
+	}
+	workflowDir, err := root.Resolve("workflows")
+	if err != nil {
+		return "", err
+	}
+	if !hasWorkflowDir(root.Abs()) {
 		return "", fmt.Errorf("workflow directory not found: %s", workflowDir)
 	}
-	preferred := filepath.Join(bundleRoot, "workflows", "scenarios", "apply.yaml")
+	preferred, err := root.Resolve("workflows", "scenarios", "apply.yaml")
+	if err != nil {
+		return "", err
+	}
 	if info, err := os.Stat(preferred); err == nil && !info.IsDir() {
 		wf, loadErr := config.Load(ctx, preferred)
 		if loadErr != nil {
