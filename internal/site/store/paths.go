@@ -1,19 +1,25 @@
 package store
 
-import "path/filepath"
+func (s *Store) mustResolve(segments ...string) string {
+	path, err := s.root.Resolve(segments...)
+	if err != nil {
+		panic(err)
+	}
+	return path
+}
 
 func (s *Store) siteDir() string {
-	return filepath.Join(s.root, ".deck", "site")
+	return s.mustResolve(".deck", "site")
 }
 
 func (s *Store) releasesDir() string {
-	return filepath.Join(s.siteDir(), "releases")
+	return s.mustResolve(".deck", "site", "releases")
 }
 
 func (s *Store) releaseDir(releaseID string) string {
-	return filepath.Join(s.releasesDir(), releaseID)
+	return s.mustResolve(".deck", "site", "releases", releaseID)
 }
 
 func (s *Store) sessionDir(sessionID string) string {
-	return filepath.Join(s.siteDir(), "sessions", sessionID)
+	return s.mustResolve(".deck", "site", "sessions", sessionID)
 }

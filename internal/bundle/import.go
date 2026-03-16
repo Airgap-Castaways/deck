@@ -8,22 +8,26 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 const (
 	errCodeBundleImportTraversal = "E_BUNDLE_IMPORT_PATH_TRAVERSAL"
 	errCodeBundleImportType      = "E_BUNDLE_IMPORT_UNSUPPORTED_TYPE"
 	errCodeBundleImportPrefix    = "E_BUNDLE_IMPORT_INVALID_PREFIX"
+	maxBundleArchiveEntrySize    = 1 << 30
 )
 
 func ImportArchive(archivePath, destRoot string) error {
-	src, err := os.Open(archivePath)
+	src, err := fsutil.Open(archivePath)
 	if err != nil {
 		return fmt.Errorf("open bundle archive: %w", err)
 	}
 	defer func() { _ = src.Close() }()
 
-	if err := os.MkdirAll(destRoot, 0o755); err != nil {
+	if err := filemode.EnsureDir(destRoot, filemode.PublishedArtifact); err != nil {
 		return fmt.Errorf("create import destination: %w", err)
 	}
 
@@ -67,21 +71,28 @@ func ImportArchive(archivePath, destRoot string) error {
 		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return fmt.Errorf("%s: %s", errCodeBundleImportTraversal, hdr.Name)
 		}
+		mode := os.FileMode(hdr.Mode & 0o777)
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)); err != nil {
+			if err := filemode.EnsureDir(target, filemode.PublishedArtifact); err != nil {
 				return fmt.Errorf("create import directory: %w", err)
 			}
+			if err := os.Chmod(target, mode); err != nil {
+				return fmt.Errorf("chmod import directory: %w", err)
+			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			if hdr.Size < 0 || hdr.Size > maxBundleArchiveEntrySize {
+				return fmt.Errorf("archive entry too large: %s", hdr.Name)
+			}
+			if err := filemode.EnsureParentDir(target, filemode.PublishedArtifact); err != nil {
 				return fmt.Errorf("create import parent directory: %w", err)
 			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode))
+			f, err := fsutil.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 			if err != nil {
 				return fmt.Errorf("create import file: %w", err)
 			}
-			if _, err := io.Copy(f, tr); err != nil {
+			if _, err := io.CopyN(f, tr, hdr.Size); err != nil {
 				_ = f.Close()
 				return fmt.Errorf("write import file: %w", err)
 			}

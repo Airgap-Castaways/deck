@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"time"
 
+	"github.com/taedi90/deck/internal/executil"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -106,11 +106,11 @@ func waitConditionMet(ctx context.Context, action string, spec waitSpec) (bool, 
 		if name == "" {
 			return false, fmt.Errorf("wait action serviceActive requires name")
 		}
-		err := exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", name).Run()
+		err := executil.RunSystemctl(ctx, "is-active", "--quiet", name)
 		if err == nil {
 			return true, nil
 		}
-		if _, ok := err.(*exec.ExitError); ok {
+		if executil.IsExitError(err) {
 			return false, nil
 		}
 		return false, err
@@ -119,11 +119,11 @@ func waitConditionMet(ctx context.Context, action string, spec waitSpec) (bool, 
 		if len(cmd) == 0 {
 			return false, fmt.Errorf("wait action commandSuccess requires command")
 		}
-		err := exec.CommandContext(ctx, cmd[0], cmd[1:]...).Run()
+		err := executil.RunWorkflowCommand(ctx, cmd[0], cmd[1:]...)
 		if err == nil {
 			return true, nil
 		}
-		if _, ok := err.(*exec.ExitError); ok {
+		if executil.IsExitError(err) {
 			return false, nil
 		}
 		return false, err
@@ -202,11 +202,12 @@ func waitPathConditionMet(path, state, pathType string, nonEmpty bool) (bool, er
 
 func waitPathExpectedCondition(path, state, pathType string, nonEmpty bool) string {
 	condition := "exist"
-	if state == "absent" {
+	switch {
+	case state == "absent":
 		condition = "be absent"
-	} else if pathType == "file" {
+	case pathType == "file":
 		condition = "exist as a file"
-	} else if pathType == "dir" {
+	case pathType == "dir":
 		condition = "exist as a directory"
 	}
 	if nonEmpty {

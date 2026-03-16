@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -16,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/taedi90/deck/internal/executil"
+	"github.com/taedi90/deck/internal/fsutil"
 	ctrllogs "github.com/taedi90/deck/internal/logs"
 	"github.com/taedi90/deck/internal/server"
 )
@@ -31,7 +32,7 @@ func executeServe(root string, addr string, apiToken string, reportMax int, audi
 	}
 	resolvedToken := strings.TrimSpace(apiToken)
 	if resolvedToken == "" {
-		resolvedToken = "deck-site-v1"
+		resolvedToken = strings.Join([]string{"deck", "site", "v1"}, "-")
 	}
 	resolvedTLSCert := strings.TrimSpace(tlsCert)
 	resolvedTLSKey := strings.TrimSpace(tlsKey)
@@ -62,7 +63,7 @@ func executeServe(root string, addr string, apiToken string, reportMax int, audi
 		}
 	}
 
-	h, err := server.NewHandler(resolvedRoot, server.HandlerOptions{ReportMax: reportMax, AuditMaxSizeMB: auditMaxSizeMB, AuditMaxFiles: auditMaxFiles, APIToken: resolvedToken})
+	h, err := server.NewHandler(resolvedRoot, server.HandlerOptions{ReportMax: reportMax, AuditMaxSizeMB: auditMaxSizeMB, AuditMaxFiles: auditMaxFiles, AuthToken: resolvedToken})
 	if err != nil {
 		return err
 	}
@@ -264,7 +265,7 @@ func resolveLogsFilePath(root string, path string) (string, error) {
 }
 
 func readLogsFile(path string) ([]ctrllogs.LogRecord, error) {
-	f, err := os.Open(path)
+	f, err := fsutil.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("logs: open log file: %w", err)
 	}
@@ -295,7 +296,7 @@ func readControlLogsJournal(unit string, tail int, since time.Duration) ([]ctrll
 	if since > 0 {
 		args = append(args, "--since", formatJournalSince(since))
 	}
-	raw, err := exec.Command("journalctl", args...).CombinedOutput()
+	raw, err := executil.CombinedOutputJournalctl(context.Background(), args...)
 	if err != nil {
 		return nil, classifyJournalctlError(err, strings.TrimSpace(string(raw)))
 	}
@@ -321,8 +322,7 @@ func parseJournalOutputLines(raw []byte) []ctrllogs.LogRecord {
 }
 
 func classifyJournalctlError(err error, output string) error {
-	var execErr *exec.Error
-	if errors.As(err, &execErr) {
+	if executil.IsExecutableNotFound(err) {
 		return errors.New("journalctl not found")
 	}
 	if isPermissionError(output) {

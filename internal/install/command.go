@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
+	"github.com/taedi90/deck/internal/executil"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -37,8 +37,7 @@ func runCommand(ctx context.Context, spec map[string]any) error {
 	if errors.Is(err, errStepCommandTimeout) {
 		return fmt.Errorf("%s: command timed out after %s", errCodeInstallCommandTimeout, timeout)
 	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if executil.IsExitError(err) {
 		return fmt.Errorf("%s: command exited non-zero: %w", errCodeInstallCommandFailed, err)
 	}
 	return err
@@ -77,10 +76,7 @@ func runTimedCommandWithContext(parent context.Context, name string, args []stri
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
+	err := executil.RunWorkflowCommandWithIO(ctx, os.Stdout, os.Stderr, name, args...)
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		if parent.Err() != nil {
 			return parent.Err()
@@ -110,8 +106,7 @@ func runCommandOutputWithContext(parent context.Context, cmdArgs []string, timeo
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
-	output, err := cmd.CombinedOutput()
+	output, err := executil.CombinedOutputWorkflowCommand(ctx, cmdArgs[0], cmdArgs[1:]...)
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		if parent.Err() != nil {
 			return "", parent.Err()

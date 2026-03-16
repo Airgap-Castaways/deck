@@ -1,14 +1,16 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/taedi90/deck/internal/executil"
 )
 
 func newServerCommand() *cobra.Command {
@@ -175,7 +177,7 @@ func executeServerSet(rawURL string, apiToken string) error {
 	if err := validateServerURL(resolved); err != nil {
 		return err
 	}
-	if err := saveServerDefaults(serverDefaults{URL: resolved, APIToken: strings.TrimSpace(apiToken)}); err != nil {
+	if err := saveServerDefaults(serverDefaults{URL: resolved, AuthToken: strings.TrimSpace(apiToken)}); err != nil {
 		return err
 	}
 	if strings.TrimSpace(apiToken) == "" {
@@ -189,7 +191,7 @@ func executeServerShow() error {
 	if err != nil {
 		return err
 	}
-	apiToken, apiTokenSource, err := resolveServerAPIToken("")
+	apiToken, apiTokenSource, err := resolveServerAuthToken("")
 	if err != nil {
 		return err
 	}
@@ -252,8 +254,7 @@ func executeServerUp(opts serverUpOptions) error {
 
 func executeServerDown(unit string) error {
 	resolvedUnit := normalizeServerUnitName(unit)
-	cmd := exec.Command("systemctl", "stop", resolvedUnit)
-	raw, err := cmd.CombinedOutput()
+	raw, err := executil.CombinedOutputSystemctl(context.Background(), "stop", resolvedUnit)
 	if err != nil {
 		msg := strings.TrimSpace(string(raw))
 		if msg == "" {
@@ -296,8 +297,7 @@ func runServerDaemon(opts serverUpOptions) error {
 	if opts.tlsSelfSigned {
 		args = append(args, "--tls-self-signed")
 	}
-	cmd := exec.Command("systemd-run", args...)
-	raw, err := cmd.CombinedOutput()
+	raw, err := executil.CombinedOutputSystemdRun(context.Background(), args...)
 	if err != nil {
 		msg := strings.TrimSpace(string(raw))
 		if msg == "" {
@@ -335,10 +335,10 @@ func validateServerUpDaemonMode(opts serverUpOptions) error {
 	if !opts.daemon {
 		return nil
 	}
-	if _, err := exec.LookPath("systemd-run"); err != nil {
+	if _, err := executil.LookPathSystemdRun(); err != nil {
 		return errors.New("server up: systemd-run not found")
 	}
-	if _, err := exec.LookPath("systemctl"); err != nil {
+	if _, err := executil.LookPathSystemctl(); err != nil {
 		return errors.New("server up: systemctl not found")
 	}
 	if strings.TrimSpace(opts.unit) == "" {

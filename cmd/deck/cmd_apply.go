@@ -17,6 +17,7 @@ import (
 
 	"github.com/taedi90/deck/internal/applycli"
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/install"
 	"github.com/taedi90/deck/internal/validate"
 )
@@ -271,9 +272,9 @@ func executeDoctor(ctx context.Context, workflowPath string, varOverrides map[st
 	checkByName := map[string]*doctorCheck{}
 	addCheck := func(c doctorCheck) {
 		if existing, ok := checkByName[c.Name]; ok {
-			usedBy := append(existing.UsedBy, c.UsedBy...)
-			sort.Strings(usedBy)
-			existing.UsedBy = dedupeStrings(usedBy)
+			existing.UsedBy = append(existing.UsedBy, c.UsedBy...)
+			sort.Strings(existing.UsedBy)
+			existing.UsedBy = dedupeStrings(existing.UsedBy)
 			if existing.Status == "passed" && c.Status == "failed" {
 				existing.Status = "failed"
 				existing.Message = c.Message
@@ -322,14 +323,11 @@ func executeDoctor(ctx context.Context, workflowPath string, varOverrides map[st
 		}
 	}
 
-	if err := os.MkdirAll(filepath.Dir(resolvedOut), 0o755); err != nil {
-		return fmt.Errorf("create report parent dir: %w", err)
-	}
 	raw, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode doctor report: %w", err)
 	}
-	if err := os.WriteFile(resolvedOut, raw, 0o644); err != nil {
+	if err := filemode.WritePrivateFile(resolvedOut, raw); err != nil {
 		return fmt.Errorf("write doctor report: %w", err)
 	}
 

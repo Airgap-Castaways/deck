@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/executil"
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -30,14 +32,11 @@ type CommandRunner interface {
 type osCommandRunner struct{}
 
 func (o osCommandRunner) Run(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return executil.RunWorkflowCommandWithIO(ctx, os.Stdout, os.Stderr, name, args...)
 }
 
 func (o osCommandRunner) LookPath(file string) (string, error) {
-	return exec.LookPath(file)
+	return executil.LookPathWorkflowBinary(file)
 }
 
 const (
@@ -70,7 +69,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 		bundleRoot = "./bundle"
 	}
 
-	if err := os.MkdirAll(bundleRoot, 0o755); err != nil {
+	if err := filemode.EnsureDir(bundleRoot, filemode.PublishedArtifact); err != nil {
 		return fmt.Errorf("create bundle root: %w", err)
 	}
 
@@ -264,7 +263,7 @@ func boolValue(v map[string]any, key string) bool {
 
 func fileManifestEntry(bundleRoot, rel string) (manifestEntry, error) {
 	abs := filepath.Join(bundleRoot, rel)
-	content, err := os.ReadFile(abs)
+	content, err := fsutil.ReadFile(abs)
 	if err != nil {
 		return manifestEntry{}, fmt.Errorf("read artifact for manifest: %w", err)
 	}
@@ -283,7 +282,7 @@ func fileManifestEntry(bundleRoot, rel string) (manifestEntry, error) {
 }
 
 func writeManifest(path string, entries []manifestEntry) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := filemode.EnsureParentPrivateDir(path); err != nil {
 		return fmt.Errorf("create manifest directory: %w", err)
 	}
 
@@ -292,7 +291,7 @@ func writeManifest(path string, entries []manifestEntry) error {
 		return fmt.Errorf("encode manifest: %w", err)
 	}
 
-	if err := os.WriteFile(path, payload, 0o644); err != nil {
+	if err := filemode.WritePrivateFile(path, payload); err != nil {
 		return fmt.Errorf("write manifest: %w", err)
 	}
 	return nil

@@ -18,6 +18,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 
 	"github.com/taedi90/deck/internal/deckignore"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type registryCatalogEntry struct {
@@ -311,9 +312,9 @@ func (h *serverHandler) scanRegistryCatalog() ([]registryCatalogEntry, error) {
 			if ignore.Matches(filepath.ToSlash(relFromRoot), false) {
 				return nil
 			}
-			manifest, err := tarball.LoadManifest(func() (io.ReadCloser, error) { return os.Open(path) })
-			if err != nil {
-				return nil
+			manifest, loadErr := tarball.LoadManifest(func() (io.ReadCloser, error) { return fsutil.Open(path) })
+			if loadErr != nil {
+				return fmt.Errorf("load image manifest %s: %w", path, loadErr)
 			}
 			for _, descriptor := range manifest {
 				for _, repoTag := range descriptor.RepoTags {

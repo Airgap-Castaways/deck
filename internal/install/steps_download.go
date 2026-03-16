@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/taedi90/deck/internal/fetch"
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -87,7 +89,7 @@ func runFileDownload(ctx context.Context, bundleRoot string, spec map[string]any
 	}
 
 	target := filepath.Join(bundleRoot, outPath)
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+	if err := filemode.EnsureParentDir(target, filemode.PublishedArtifact); err != nil {
 		return "", fmt.Errorf("create output directory: %w", err)
 	}
 
@@ -99,7 +101,7 @@ func runFileDownload(ctx context.Context, bundleRoot string, spec map[string]any
 		return outPath, nil
 	}
 
-	f, err := os.Create(target)
+	f, err := fsutil.Create(target)
 	if err != nil {
 		return "", fmt.Errorf("create output file: %w", err)
 	}
@@ -209,7 +211,7 @@ func resolveSourceBytesFromSpec(ctx context.Context, spec fileDownloadSpec, sour
 		return nil, fmt.Errorf("%s: source.path %s not found in configured fetch sources", errCodeInstallSourceNotFound, sourcePath)
 	}
 
-	raw, err := os.ReadFile(sourcePath)
+	raw, err := fsutil.ReadFile(sourcePath)
 	if err == nil {
 		return raw, nil
 	}
@@ -217,7 +219,7 @@ func resolveSourceBytesFromSpec(ctx context.Context, spec fileDownloadSpec, sour
 }
 
 func verifyFileSHA256(path, expected string) error {
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read downloaded file for checksum: %w", err)
 	}
@@ -253,9 +255,9 @@ func canReuseDownloadFile(ctx context.Context, spec fileDownloadSpec, target str
 	if sourcePath == "" {
 		return false, nil
 	}
-	raw, err := resolveSourceBytesFromSpec(ctx, spec, sourcePath)
-	if err != nil {
-		return false, nil
+	raw, resolveErr := resolveSourceBytesFromSpec(ctx, spec, sourcePath)
+	if resolveErr != nil {
+		return false, resolveErr
 	}
 	targetSHA, err := fileSHA256(target)
 	if err != nil {
@@ -266,7 +268,7 @@ func canReuseDownloadFile(ctx context.Context, spec fileDownloadSpec, target str
 }
 
 func fileSHA256(path string) (string, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if err != nil {
 		return "", err
 	}

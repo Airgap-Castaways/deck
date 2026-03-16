@@ -9,6 +9,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
+	"github.com/taedi90/deck/internal/hostfs"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -58,13 +61,17 @@ func runEditFile(spec map[string]any) error {
 	if path == "" {
 		return fmt.Errorf("%s: EditFile requires path", errCodeInstallEditPathMissing)
 	}
+	hostPath, err := hostfs.NewHostPath(path)
+	if err != nil {
+		return err
+	}
 
-	content, err := os.ReadFile(path)
+	content, err := hostPath.ReadFile()
 	if err != nil {
 		return err
 	}
 	if editFileBackupEnabledValue(decoded.Backup) {
-		backupPath, err := createEditFileBackup(path, content)
+		backupPath, err := createEditFileBackup(hostPath.Abs(), content)
 		if err != nil {
 			return fmt.Errorf("create backup %s: %w", backupPath, err)
 		}
@@ -87,7 +94,7 @@ func runEditFile(spec map[string]any) error {
 		updated = strings.Replace(updated, match, with, 1)
 	}
 
-	return os.WriteFile(path, []byte(updated), 0o644)
+	return hostPath.WriteFile([]byte(updated), filemode.PublishedArtifact)
 }
 
 func runCopyFile(spec map[string]any) error {
@@ -101,14 +108,19 @@ func runCopyFile(spec map[string]any) error {
 		return fmt.Errorf("%s: CopyFile requires src and dest", errCodeInstallCopyPathMissing)
 	}
 
-	content, err := os.ReadFile(src)
+	srcPath, err := hostfs.NewHostPath(src)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	destPath, err := hostfs.NewHostPath(dest)
+	if err != nil {
 		return err
 	}
-	return os.WriteFile(dest, content, 0o644)
+	content, err := srcPath.ReadFile()
+	if err != nil {
+		return err
+	}
+	return destPath.WriteFile(content, filemode.PublishedArtifact)
 }
 
 func runEnsureDir(spec map[string]any) error {
@@ -116,7 +128,11 @@ func runEnsureDir(spec map[string]any) error {
 	if path == "" {
 		return fmt.Errorf("%s: EnsureDir requires path", errCodeInstallEnsureDirPathMis)
 	}
-	if err := os.MkdirAll(path, 0o755); err != nil {
+	hostPath, err := hostfs.NewHostPath(path)
+	if err != nil {
+		return err
+	}
+	if err := hostPath.EnsureDir(filemode.PublishedArtifact); err != nil {
 		return err
 	}
 	if modeRaw := stringValue(spec, "mode"); modeRaw != "" {
@@ -141,8 +157,12 @@ func runSymlink(spec map[string]any) error {
 		return fmt.Errorf("%s: Symlink requires target", errCodeInstallSymlinkTargetMis)
 	}
 
+	pathRef, err := hostfs.NewHostPath(path)
+	if err != nil {
+		return err
+	}
 	if boolValue(spec, "createParent") {
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := pathRef.EnsureParentDir(filemode.PublishedArtifact); err != nil {
 			return err
 		}
 	}
@@ -156,9 +176,9 @@ func runSymlink(spec map[string]any) error {
 		}
 	}
 
-	if info, err := os.Lstat(path); err == nil {
+	if info, err := pathRef.Lstat(); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
-			currentTarget, readErr := os.Readlink(path)
+			currentTarget, readErr := pathRef.Readlink()
 			if readErr != nil {
 				return readErr
 			}
@@ -174,14 +194,14 @@ func runSymlink(spec map[string]any) error {
 			return fmt.Errorf("destination is a directory and cannot be replaced: %s", path)
 		}
 
-		if removeErr := os.Remove(path); removeErr != nil {
+		if removeErr := pathRef.Remove(); removeErr != nil {
 			return removeErr
 		}
 	} else if !os.IsNotExist(err) {
 		return err
 	}
 
-	return os.Symlink(target, path)
+	return pathRef.Symlink(target)
 }
 
 func runWriteFile(spec map[string]any) error {
@@ -192,6 +212,10 @@ func runWriteFile(spec map[string]any) error {
 	path := strings.TrimSpace(decoded.Path)
 	if path == "" {
 		return fmt.Errorf("%s: WriteFile requires path", errCodeInstallInstallFilePath)
+	}
+	hostPath, err := hostfs.NewHostPath(path)
+	if err != nil {
+		return err
 	}
 	content := decoded.Content
 	if content == "" {
@@ -206,10 +230,7 @@ func runWriteFile(spec map[string]any) error {
 		content += "\n"
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	if err := writeFileIfChanged(path, []byte(content), 0o644); err != nil {
+	if err := hostfs.WriteFileIfChanged(hostPath, []byte(content), 0o644); err != nil {
 		return err
 	}
 	if modeRaw := strings.TrimSpace(decoded.Mode); modeRaw != "" {
@@ -217,7 +238,7 @@ func runWriteFile(spec map[string]any) error {
 		if err != nil {
 			return fmt.Errorf("invalid mode: %w", err)
 		}
-		if err := os.Chmod(path, os.FileMode(modeVal)); err != nil {
+		if err := hostPath.Chmod(os.FileMode(modeVal)); err != nil {
 			return err
 		}
 	}
@@ -299,7 +320,11 @@ func runRepoConfig(spec map[string]any) error {
 	if !strings.HasSuffix(content, "\n") {
 		content += "\n"
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	hostPath, err := hostfs.NewHostPath(path)
+	if err != nil {
+		return err
+	}
+	if err := hostPath.EnsureParentDir(filemode.PublishedArtifact); err != nil {
 		return err
 	}
 	if err := writeFileIfChanged(path, []byte(content), 0o644); err != nil {
@@ -510,7 +535,7 @@ func backupRepoConfigPaths(patterns []string) error {
 		if info.IsDir() {
 			continue
 		}
-		content, err := os.ReadFile(path)
+		content, err := fsutil.ReadFile(path)
 		if err != nil {
 			return err
 		}
@@ -581,7 +606,7 @@ func disableYumRepoPaths(patterns []string, keepPath string) error {
 		if strings.TrimSpace(keepPath) != "" && filepath.Clean(path) == filepath.Clean(keepPath) {
 			continue
 		}
-		raw, err := os.ReadFile(path)
+		raw, err := fsutil.ReadFile(path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue

@@ -13,6 +13,9 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
+	"github.com/taedi90/deck/internal/hostfs"
 	"github.com/taedi90/deck/internal/prepare"
 	"github.com/taedi90/deck/internal/workspacepaths"
 )
@@ -64,17 +67,25 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("resolve --root: %w", err)
 	}
+	preparedRoot, err := fsutil.NewPreparedRoot(resolvedPreparedRootAbs)
+	if err != nil {
+		return err
+	}
+	preparedHostPath, err := hostfs.NewHostPath(preparedRoot.Abs())
+	if err != nil {
+		return err
+	}
 
 	if opts.DryRun {
 		for _, line := range []string{
 			fmt.Sprintf("PREPARE_WORKFLOW=%s", filepath.ToSlash(prepareWorkflowPath)),
 			fmt.Sprintf("WORKFLOW_INCLUDE=%s", filepath.ToSlash(prepareWorkflowPath)),
-			fmt.Sprintf("PREPARED_ROOT=%s", filepath.ToSlash(resolvedPreparedRootAbs)),
-			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(resolvedPreparedRootAbs, "packages"))),
-			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(resolvedPreparedRootAbs, "images"))),
-			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(resolvedPreparedRootAbs, "files"))),
-			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(filepath.Dir(resolvedPreparedRootAbs), "deck"))),
-			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(filepath.Dir(resolvedPreparedRootAbs), ".deck", "manifest.json"))),
+			fmt.Sprintf("PREPARED_ROOT=%s", filepath.ToSlash(preparedRoot.Abs())),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(preparedRoot.Abs(), "packages"))),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(preparedRoot.Abs(), "images"))),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(preparedRoot.Abs(), "files"))),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(filepath.Dir(preparedRoot.Abs()), "deck"))),
+			fmt.Sprintf("WRITE=%s", filepath.ToSlash(filepath.Join(filepath.Dir(preparedRoot.Abs()), ".deck", "manifest.json"))),
 		} {
 			if err := printLine(opts.Stdout, line); err != nil {
 				return err
@@ -94,11 +105,11 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	if opts.Clean {
-		if err := os.RemoveAll(resolvedPreparedRootAbs); err != nil {
+		if err := preparedHostPath.RemoveAll(); err != nil {
 			return fmt.Errorf("reset prepared root: %w", err)
 		}
 	}
-	if err := os.MkdirAll(resolvedPreparedRootAbs, 0o755); err != nil {
+	if err := preparedHostPath.EnsureDir(filemode.PublishedArtifact); err != nil {
 		return fmt.Errorf("create prepared root: %w", err)
 	}
 
@@ -110,7 +121,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("prepare workflow role must be prepare: %s", prepareWorkflowPath)
 	}
 
-	if err := prepare.Run(ctx, prepareWorkflow, prepare.RunOptions{BundleRoot: resolvedPreparedRootAbs, ForceRedownload: opts.Refresh}); err != nil {
+	if err := prepare.Run(ctx, prepareWorkflow, prepare.RunOptions{BundleRoot: preparedRoot.Abs(), ForceRedownload: opts.Refresh}); err != nil {
 		return err
 	}
 
@@ -118,16 +129,16 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("resolve deck binary path: %w", err)
 	}
-	binaryBytes, err := os.ReadFile(execPath)
+	binaryBytes, err := fsutil.ReadFile(execPath)
 	if err != nil {
 		return fmt.Errorf("read deck binary: %w", err)
 	}
-	workspaceRoot := filepath.Dir(resolvedPreparedRootAbs)
+	workspaceRoot := filepath.Dir(preparedRoot.Abs())
 	if err := writeBytes(filepath.Join(workspaceRoot, "deck"), binaryBytes, 0o755); err != nil {
 		return err
 	}
 
-	manifest, err := buildPreparedManifest(resolvedPreparedRootAbs)
+	manifest, err := buildPreparedManifest(preparedRoot)
 	if err != nil {
 		return err
 	}
@@ -135,7 +146,7 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	return printLine(opts.Stdout, fmt.Sprintf("prepare: ok (%s)", resolvedPreparedRootAbs))
+	return printLine(opts.Stdout, fmt.Sprintf("prepare: ok (%s)", preparedRoot.Abs()))
 }
 
 func printLine(w io.Writer, line string) error {
@@ -196,34 +207,31 @@ func resolveOptionalVarsWorkflowPath(workflowRootPath string) (string, error) {
 }
 
 func writeBytes(path string, data []byte, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create parent directory for %s: %w", path, err)
+	hostPath, err := hostfs.NewHostPath(path)
+	if err != nil {
+		return err
 	}
-	if err := os.WriteFile(path, data, mode); err != nil {
+	if err := hostPath.WriteFileMode(data, mode); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
 }
 
-func buildPreparedManifest(bundleRoot string) (preparedManifest, error) {
+func buildPreparedManifest(bundleRoot fsutil.PreparedRoot) (preparedManifest, error) {
 	entries := make([]preparedManifestEntry, 0)
-	workspaceRoot := filepath.Dir(bundleRoot)
+	workspaceRoot := filepath.Dir(bundleRoot.Abs())
 	for _, root := range []string{"packages", "images", "files"} {
-		rootPath := filepath.Join(bundleRoot, root)
-		if _, err := os.Stat(rootPath); err != nil {
+		if _, _, err := bundleRoot.Stat(root); err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
 			return preparedManifest{}, err
 		}
-		if err := filepath.WalkDir(rootPath, func(path string, d os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
+		if err := bundleRoot.WalkFiles(func(path string, d os.DirEntry) error {
 			if d.IsDir() {
 				return nil
 			}
-			raw, err := os.ReadFile(path)
+			raw, err := fsutil.ReadFile(path)
 			if err != nil {
 				return err
 			}
@@ -238,7 +246,7 @@ func buildPreparedManifest(bundleRoot string) (preparedManifest, error) {
 			sum := sha256.Sum256(raw)
 			entries = append(entries, preparedManifestEntry{Path: filepath.ToSlash(rel), SHA256: hex.EncodeToString(sum[:]), Size: info.Size()})
 			return nil
-		}); err != nil {
+		}, root); err != nil {
 			return preparedManifest{}, err
 		}
 	}

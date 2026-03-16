@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 
-	jsonschema "github.com/invopop/jsonschema"
+	"github.com/invopop/jsonschema"
+
+	"github.com/taedi90/deck/internal/filemode"
 )
 
 func writeFile(path string, content []byte) {
-	if err := os.WriteFile(path, content, 0o644); err != nil {
+	if err := filemode.WriteArtifactFile(path, content); err != nil {
 		fail(err)
 	}
 }

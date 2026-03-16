@@ -8,11 +8,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 func readJSON[T any](path string) (T, bool, error) {
 	var zero T
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return zero, false, nil
@@ -27,7 +30,7 @@ func readJSON[T any](path string) (T, bool, error) {
 }
 
 func writeAtomicJSON(path string, value any) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := filemode.EnsureParentPrivateDir(path); err != nil {
 		return fmt.Errorf("create directory: %w", err)
 	}
 	raw, err := json.MarshalIndent(value, "", "  ")
@@ -35,7 +38,7 @@ func writeAtomicJSON(path string, value any) error {
 		return fmt.Errorf("encode json: %w", err)
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+	if err := filemode.WritePrivateFile(tmp, raw); err != nil {
 		return fmt.Errorf("write temp json: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
@@ -67,7 +70,7 @@ func listJSONFiles(dir string) ([]string, error) {
 }
 
 func copyDir(srcDir, dstDir string) error {
-	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+	if err := filemode.EnsureDir(dstDir, filemode.PrivateState); err != nil {
 		return fmt.Errorf("create destination directory: %w", err)
 	}
 	entries, err := os.ReadDir(srcDir)
@@ -95,13 +98,16 @@ func copyDir(srcDir, dstDir string) error {
 }
 
 func copyFile(src, dst string, mode os.FileMode) error {
-	in, err := os.Open(src)
+	in, err := fsutil.Open(src)
 	if err != nil {
 		return fmt.Errorf("open source file %q: %w", src, err)
 	}
 	defer func() { _ = in.Close() }()
 
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err := filemode.EnsureParentDir(dst, filemode.PrivateState); err != nil {
+		return fmt.Errorf("create destination file %q: %w", dst, err)
+	}
+	out, err := fsutil.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 	if err != nil {
 		return fmt.Errorf("create destination file %q: %w", dst, err)
 	}

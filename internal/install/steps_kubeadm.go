@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -70,11 +71,8 @@ func runKubeadmInitStub(spec kubeadmInitSpec) error {
 	if joinFile == "" {
 		return fmt.Errorf("%s: KubeadmInit requires outputJoinFile", errCodeInstallInitJoinMissing)
 	}
-	if err := os.MkdirAll(filepath.Dir(joinFile), 0o755); err != nil {
-		return err
-	}
 	content := "kubeadm join 10.0.0.10:6443 --token dummy.token --discovery-token-ca-cert-hash sha256:dummy\n"
-	return os.WriteFile(joinFile, []byte(content), 0o644)
+	return filemode.WritePrivateFile(joinFile, []byte(content))
 }
 
 func runKubeadmJoin(ctx context.Context, spec map[string]any) error {
@@ -138,10 +136,7 @@ func runKubeadmInitReal(parent context.Context, spec kubeadmInitSpec) error {
 		if !strings.HasSuffix(configBody, "\n") {
 			configBody += "\n"
 		}
-		if err := os.MkdirAll(filepath.Dir(configFile), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(configFile, []byte(configBody), 0o644); err != nil {
+		if err := filemode.WritePrivateFile(configFile, []byte(configBody)); err != nil {
 			return err
 		}
 	}
@@ -206,10 +201,7 @@ func runKubeadmInitReal(parent context.Context, spec kubeadmInitSpec) error {
 		return fmt.Errorf("%s: empty kubeadm join command output", errCodeInstallInitFailed)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(joinFile), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(joinFile, []byte(joinCmd+"\n"), 0o644)
+	return filemode.WritePrivateFile(joinFile, []byte(joinCmd+"\n"))
 }
 
 func resolveKubeadmAdvertiseAddress(ctx context.Context, spec kubeadmInitSpec, configTemplate string, timeout time.Duration) (string, error) {
@@ -305,7 +297,7 @@ func runKubeadmJoinReal(ctx context.Context, spec kubeadmJoinSpec) error {
 	if joinFile == "" {
 		return fmt.Errorf("%s: KubeadmJoin requires joinFile", errCodeInstallJoinPathMissing)
 	}
-	raw, err := os.ReadFile(joinFile)
+	raw, err := fsutil.ReadFile(joinFile)
 	if err != nil {
 		return fmt.Errorf("%s: join file not found: %w", errCodeInstallJoinFileMissing, err)
 	}

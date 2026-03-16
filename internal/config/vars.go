@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, error) {
@@ -19,7 +21,11 @@ func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, e
 		} else {
 			varsPath = filepath.Join(filepath.Dir(origin.localPath), "vars.yaml")
 		}
-		b, err := os.ReadFile(varsPath)
+		root, err := fsutil.NewRoot(filepath.Dir(varsPath))
+		if err != nil {
+			return nil, err
+		}
+		b, _, err := root.ReadFile(filepath.Base(varsPath))
 		if err != nil {
 			if os.IsNotExist(err) {
 				return map[string]any{}, nil

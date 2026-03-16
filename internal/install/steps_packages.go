@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/taedi90/deck/internal/executil"
 )
 
 func runInstallPackages(ctx context.Context, spec map[string]any) error {
@@ -38,9 +39,9 @@ func runInstallPackages(ctx context.Context, spec map[string]any) error {
 	}
 
 	installer := ""
-	if _, err := exec.LookPath("apt-get"); err == nil {
+	if _, err := executil.LookPathAptGet(); err == nil {
 		installer = "apt-get"
-	} else if _, err := exec.LookPath("dnf"); err == nil {
+	} else if _, err := executil.LookPathDnf(); err == nil {
 		installer = "dnf"
 	}
 	if installer == "" {

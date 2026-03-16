@@ -12,6 +12,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type MergeAction struct {
@@ -53,7 +56,7 @@ func MergeArchive(archivePath, to string, dryRun bool) (MergeReport, error) {
 }
 
 func stageBundleForMerge(archivePath string) (stagedBundle, func(), error) {
-	src, err := os.Open(archivePath)
+	src, err := fsutil.Open(archivePath)
 	if err != nil {
 		return stagedBundle{}, nil, fmt.Errorf("open bundle archive: %w", err)
 	}
@@ -159,11 +162,11 @@ func shouldStageForMerge(rel string) bool {
 
 func stageTarFile(stageDir, rel string, reader io.Reader) (stagedFile, error) {
 	targetPath := filepath.Join(stageDir, filepath.FromSlash(rel))
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+	if err := filemode.EnsureParentDir(targetPath, filemode.PrivateState); err != nil {
 		return stagedFile{}, fmt.Errorf("create merge staging parent: %w", err)
 	}
 
-	out, err := os.Create(targetPath)
+	out, err := fsutil.Create(targetPath)
 	if err != nil {
 		return stagedFile{}, fmt.Errorf("create merge staging file: %w", err)
 	}
@@ -194,13 +197,17 @@ func mergeArchiveToLocal(bundleData stagedBundle, root string, dryRun bool) (Mer
 	if err != nil {
 		return MergeReport{}, fmt.Errorf("resolve merge destination: %w", err)
 	}
+	destRoot, err := fsutil.NewRoot(resolvedRoot)
+	if err != nil {
+		return MergeReport{}, err
+	}
 
 	report := MergeReport{Destination: resolvedRoot, DryRun: dryRun}
 	planned := map[string]struct{}{}
 
 	for _, entry := range bundleData.manifestEntries {
 		staged := bundleData.artifacts[entry.Path]
-		action, reason, planErr := planLocalPath(resolvedRoot, entry.Path, staged.digest)
+		action, reason, planErr := planLocalPath(destRoot, entry.Path, staged.digest)
 		if planErr != nil {
 			return MergeReport{}, planErr
 		}
@@ -209,20 +216,20 @@ func mergeArchiveToLocal(bundleData stagedBundle, root string, dryRun bool) (Mer
 		if dryRun || action == "skip" {
 			continue
 		}
-		if err := copyStagedFile(filepath.Join(resolvedRoot, filepath.FromSlash(entry.Path)), staged); err != nil {
+		if err := copyStagedFile(destRoot, entry.Path, staged); err != nil {
 			return MergeReport{}, err
 		}
 	}
 
 	if _, ok := planned["files/deck"]; !ok {
 		staged := bundleData.artifacts["files/deck"]
-		action, reason, planErr := planLocalPath(resolvedRoot, "files/deck", staged.digest)
+		action, reason, planErr := planLocalPath(destRoot, "files/deck", staged.digest)
 		if planErr != nil {
 			return MergeReport{}, planErr
 		}
 		report.Actions = append(report.Actions, MergeAction{Path: "files/deck", Action: action, Reason: reason})
 		if !dryRun && action != "skip" {
-			if err := copyStagedFile(filepath.Join(resolvedRoot, "files", "deck"), staged); err != nil {
+			if err := copyStagedFile(destRoot, "files/deck", staged); err != nil {
 				return MergeReport{}, err
 			}
 		}
@@ -234,12 +241,16 @@ func mergeArchiveToLocal(bundleData stagedBundle, root string, dryRun bool) (Mer
 		if dryRun {
 			continue
 		}
-		if err := copyStagedFile(filepath.Join(resolvedRoot, filepath.FromSlash(workflowPath)), bundleData.workflows[workflowPath]); err != nil {
+		if err := copyStagedFile(destRoot, workflowPath, bundleData.workflows[workflowPath]); err != nil {
 			return MergeReport{}, err
 		}
 	}
 
-	existingIndex, exists, err := readLocalWorkflowIndex(filepath.Join(resolvedRoot, "workflows", "index.json"))
+	indexPath, err := destRoot.Resolve("workflows", "index.json")
+	if err != nil {
+		return MergeReport{}, err
+	}
+	existingIndex, exists, err := readLocalWorkflowIndex(indexPath)
 	if err != nil {
 		return MergeReport{}, err
 	}
@@ -250,7 +261,7 @@ func mergeArchiveToLocal(bundleData stagedBundle, root string, dryRun bool) (Mer
 	}
 	report.Actions = append(report.Actions, MergeAction{Path: "workflows/index.json", Action: indexAction, Reason: "workflow index sync"})
 	if !dryRun {
-		if err := writeLocalWorkflowIndex(filepath.Join(resolvedRoot, "workflows", "index.json"), mergedIndex); err != nil {
+		if err := writeLocalWorkflowIndex(indexPath, mergedIndex); err != nil {
 			return MergeReport{}, err
 		}
 	}
@@ -258,8 +269,11 @@ func mergeArchiveToLocal(bundleData stagedBundle, root string, dryRun bool) (Mer
 	return report, nil
 }
 
-func planLocalPath(root, relPath, digest string) (string, string, error) {
-	targetPath := filepath.Join(root, filepath.FromSlash(relPath))
+func planLocalPath(root fsutil.Root, relPath, digest string) (string, string, error) {
+	targetPath, err := root.Resolve(filepath.FromSlash(relPath))
+	if err != nil {
+		return "", "", err
+	}
 	_, actualDigest, err := fileDigest(targetPath)
 	if err == nil {
 		if strings.EqualFold(actualDigest, digest) {
@@ -273,18 +287,22 @@ func planLocalPath(root, relPath, digest string) (string, string, error) {
 	return "", "", fmt.Errorf("read destination %s: %w", relPath, err)
 }
 
-func copyStagedFile(targetPath string, staged stagedFile) error {
-	in, err := os.Open(staged.tempPath)
+func copyStagedFile(root fsutil.Root, relPath string, staged stagedFile) error {
+	in, err := fsutil.Open(staged.tempPath)
 	if err != nil {
 		return fmt.Errorf("open staged file %s: %w", staged.tempPath, err)
 	}
 	defer func() { _ = in.Close() }()
 
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+	targetPath, err := root.Resolve(filepath.FromSlash(relPath))
+	if err != nil {
+		return err
+	}
+	if err := filemode.EnsureParentDir(targetPath, filemode.PublishedArtifact); err != nil {
 		return fmt.Errorf("create destination parent for %s: %w", targetPath, err)
 	}
 
-	out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	out, err := fsutil.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open destination %s: %w", targetPath, err)
 	}
@@ -299,7 +317,7 @@ func copyStagedFile(targetPath string, staged stagedFile) error {
 }
 
 func readLocalWorkflowIndex(indexPath string) ([]string, bool, error) {
-	raw, err := os.ReadFile(indexPath)
+	raw, err := fsutil.ReadFile(indexPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, false, nil
@@ -322,10 +340,10 @@ func writeLocalWorkflowIndex(indexPath string, items []string) error {
 		return fmt.Errorf("encode workflows/index.json: %w", err)
 	}
 	raw = append(raw, '\n')
-	if err := os.MkdirAll(filepath.Dir(indexPath), 0o755); err != nil {
+	if err := filemode.EnsureParentArtifactDir(indexPath); err != nil {
 		return fmt.Errorf("create workflows index directory: %w", err)
 	}
-	if err := os.WriteFile(indexPath, raw, 0o644); err != nil {
+	if err := filemode.WriteArtifactFile(indexPath, raw); err != nil {
 		return fmt.Errorf("write workflows/index.json: %w", err)
 	}
 	return nil

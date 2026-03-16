@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type packageCacheMeta struct {
@@ -135,7 +138,7 @@ func runContainerPackageRepoBuild(
 			return nil, err
 		}
 	}
-	if err := os.MkdirAll(outAbs, 0o755); err != nil {
+	if err := filemode.EnsureDir(outAbs, filemode.PublishedArtifact); err != nil {
 		return nil, err
 	}
 
@@ -191,7 +194,7 @@ func runContainerPackageDownloadAll(ctx context.Context, runner CommandRunner, b
 			return nil, err
 		}
 	}
-	if err := os.MkdirAll(outAbs, 0o755); err != nil {
+	if err := filemode.EnsureDir(outAbs, filemode.PublishedArtifact); err != nil {
 		return nil, err
 	}
 
@@ -403,7 +406,7 @@ func preparePackageCacheMounts(family string, cacheKey string) ([]packageCacheMo
 	root := filepath.Join(home, ".deck", "cache", "packages", cacheKey)
 	if strings.TrimSpace(family) == "rhel" {
 		dnfRoot := filepath.Join(root, "dnf")
-		if err := os.MkdirAll(dnfRoot, 0o755); err != nil {
+		if err := filemode.EnsureDir(dnfRoot, filemode.PublishedArtifact); err != nil {
 			return nil, err
 		}
 		return []packageCacheMount{{host: dnfRoot, container: "/var/cache/dnf"}}, nil
@@ -412,7 +415,7 @@ func preparePackageCacheMounts(family string, cacheKey string) ([]packageCacheMo
 	archives := filepath.Join(root, "apt", "archives")
 	lists := filepath.Join(root, "apt", "lists")
 	for _, dir := range []string{archives, filepath.Join(archives, "partial"), lists, filepath.Join(lists, "partial")} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := filemode.EnsureDir(dir, filemode.PublishedArtifact); err != nil {
 			return nil, err
 		}
 	}
@@ -437,8 +440,8 @@ func writePackagePlaceholders(bundleRoot, dir string, packages []string) []strin
 		filename := fmt.Sprintf("%s.txt", pkg)
 		rel := filepath.ToSlash(filepath.Join(dir, filename))
 		target := filepath.Join(bundleRoot, rel)
-		_ = os.MkdirAll(filepath.Dir(target), 0o755)
-		_ = os.WriteFile(target, []byte(fmt.Sprintf("package=%s\n", pkg)), 0o644)
+		_ = filemode.EnsureParentArtifactDir(target)
+		_ = filemode.WriteArtifactFile(target, []byte(fmt.Sprintf("package=%s\n", pkg)))
 		files = append(files, rel)
 	}
 	return files
@@ -490,7 +493,7 @@ func tryReusePackageArtifacts(bundleRoot, rootRel string, packages []string, opt
 		return nil, false, nil
 	}
 	metaPath := packageMetaFileAbs(bundleRoot, rootRel)
-	raw, err := os.ReadFile(metaPath)
+	raw, err := fsutil.ReadFile(metaPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, false, nil
@@ -498,8 +501,8 @@ func tryReusePackageArtifacts(bundleRoot, rootRel string, packages []string, opt
 		return nil, false, err
 	}
 	var meta packageCacheMeta
-	if err := json.Unmarshal(raw, &meta); err != nil {
-		return nil, false, nil
+	if decodeErr := json.Unmarshal(raw, &meta); decodeErr != nil {
+		return nil, false, fmt.Errorf("decode package cache metadata: %w", decodeErr)
 	}
 	want := normalizeStrings(packages)
 	got := normalizeStrings(meta.Packages)
@@ -513,7 +516,10 @@ func tryReusePackageArtifacts(bundleRoot, rootRel string, packages []string, opt
 	for _, rel := range files {
 		abs := filepath.Join(bundleRoot, filepath.FromSlash(rel))
 		info, statErr := os.Stat(abs)
-		if statErr != nil || info.Size() == 0 {
+		if statErr != nil {
+			return nil, false, fmt.Errorf("stat cached package artifact %s: %w", abs, statErr)
+		}
+		if info.Size() == 0 {
 			return nil, false, nil
 		}
 	}
@@ -526,14 +532,14 @@ func writePackageArtifactsMeta(bundleRoot, rootRel string, packages, files []str
 		Files:    normalizeStrings(files),
 	}
 	metaPath := packageMetaFileAbs(bundleRoot, rootRel)
-	if err := os.MkdirAll(filepath.Dir(metaPath), 0o755); err != nil {
+	if err := filemode.EnsureParentArtifactDir(metaPath); err != nil {
 		return err
 	}
 	raw, err := json.Marshal(meta)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(metaPath, raw, 0o644)
+	return filemode.WriteArtifactFile(metaPath, raw)
 }
 
 func detectRuntime(runner CommandRunner, preferred string) (string, error) {

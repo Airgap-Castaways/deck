@@ -9,6 +9,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 func runContainerdConfig(ctx context.Context, spec map[string]any) error {
@@ -16,11 +19,11 @@ func runContainerdConfig(ctx context.Context, spec map[string]any) error {
 	if path == "" {
 		path = "/etc/containerd/config.toml"
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := filemode.EnsureParentDir(path, filemode.PublishedArtifact); err != nil {
 		return err
 	}
 
-	content, err := os.ReadFile(path)
+	content, err := fsutil.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err
@@ -122,7 +125,7 @@ func writeContainerdRegistryHosts(configTomlPath string, spec map[string]any) er
 		}
 
 		hostsPath := filepath.Join(configPath, registry, "hosts.toml")
-		if err := os.MkdirAll(filepath.Dir(hostsPath), 0o755); err != nil {
+		if err := filemode.EnsureParentDir(hostsPath, filemode.PublishedArtifact); err != nil {
 			return err
 		}
 

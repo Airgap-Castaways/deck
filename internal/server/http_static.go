@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/deckignore"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 const serverOutputsDir = "outputs"
@@ -31,7 +32,12 @@ func (h *serverHandler) handleReleaseBundleRead(w http.ResponseWriter, r *http.R
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	data, err := os.ReadFile(targetPath)
+	root, err := fsutil.NewRoot(h.rootAbs)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	data, _, err := root.ReadFile(strings.TrimPrefix(targetPath, h.rootAbs+string(os.PathSeparator)))
 	if err != nil {
 		if os.IsNotExist(err) {
 			w.WriteHeader(http.StatusNotFound)
@@ -52,7 +58,7 @@ func (h *serverHandler) handleReleaseBundleRead(w http.ResponseWriter, r *http.R
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	writeResponseBody(w, data)
 }
 
 func buildWorkflowIndex(root string) ([]byte, error) {
@@ -160,7 +166,12 @@ func (h *serverHandler) handleStatic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := os.ReadFile(targetPath)
+	root, err := fsutil.NewRoot(h.rootAbs)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	data, _, err := root.ReadFile(strings.TrimPrefix(targetPath, h.rootAbs+string(os.PathSeparator)))
 	if err != nil {
 		if os.IsNotExist(err) && category == "workflows" && relPath == "index.json" {
 			data, err = buildWorkflowIndex(h.rootAbs)
@@ -190,7 +201,7 @@ func (h *serverHandler) handleStatic(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	writeResponseBody(w, data)
 }
 
 func setStaticHeaders(h http.Header, category, relPath, etag string, size int, data []byte) {
@@ -245,8 +256,11 @@ func (h *serverHandler) resolveCategoryPath(urlPath string) (string, string, str
 		if ignore.Matches("deck", false) {
 			return "", "", "", http.StatusNotFound
 		}
-		targetPath := filepath.Join(h.rootAbs, "deck")
-		resolvedTarget, err := filepath.Abs(targetPath)
+		root, err := fsutil.NewRoot(h.rootAbs)
+		if err != nil {
+			return "", "", "", http.StatusInternalServerError
+		}
+		resolvedTarget, err := root.Resolve("deck")
 		if err != nil {
 			return "", "", "", http.StatusForbidden
 		}
@@ -283,18 +297,20 @@ func (h *serverHandler) resolveCategoryPath(urlPath string) (string, string, str
 
 	baseDir := category
 	if category == "files" || category == "packages" || category == "images" {
-		preferred := filepath.Join(h.rootAbs, serverOutputsDir, category, filepath.FromSlash(cleanRel))
-		if _, err := os.Stat(preferred); err == nil {
+		root, err := fsutil.NewRoot(h.rootAbs)
+		if err != nil {
+			return "", "", "", http.StatusInternalServerError
+		}
+		if _, _, err := root.Stat(serverOutputsDir, category, filepath.FromSlash(cleanRel)); err == nil {
 			baseDir = filepath.ToSlash(filepath.Join(serverOutputsDir, category))
 		}
 	}
-	targetPath := filepath.Join(h.rootAbs, filepath.FromSlash(baseDir), filepath.FromSlash(cleanRel))
-	resolvedTarget, err := filepath.Abs(targetPath)
+	root, err := fsutil.NewRoot(h.rootAbs)
 	if err != nil {
-		return "", "", "", http.StatusForbidden
+		return "", "", "", http.StatusInternalServerError
 	}
-	rootPrefix := h.rootAbs + string(os.PathSeparator)
-	if resolvedTarget != h.rootAbs && !strings.HasPrefix(resolvedTarget, rootPrefix) {
+	resolvedTarget, err := root.Resolve(filepath.FromSlash(baseDir), filepath.FromSlash(cleanRel))
+	if err != nil {
 		return "", "", "", http.StatusForbidden
 	}
 

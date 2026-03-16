@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 const (
@@ -104,7 +106,7 @@ func defaultPackCacheStatePath(workflowSHA string) (string, error) {
 }
 
 func loadPackCacheState(path string) (packCacheState, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return packCacheState{Artifacts: []packCacheArtifactState{}}, nil
@@ -123,7 +125,7 @@ func loadPackCacheState(path string) (packCacheState, error) {
 }
 
 func savePackCacheState(path string, st packCacheState) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := filemode.EnsureParentPrivateDir(path); err != nil {
 		return fmt.Errorf("create pack cache state directory: %w", err)
 	}
 
@@ -133,7 +135,7 @@ func savePackCacheState(path string, st packCacheState) error {
 	}
 
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+	if err := filemode.WritePrivateFile(tmp, raw); err != nil {
 		return fmt.Errorf("write temp pack cache state: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {

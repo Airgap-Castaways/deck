@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/deckignore"
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 func CollectArchive(bundleRoot, outputPath string) error {
@@ -24,7 +26,7 @@ func CollectArchive(bundleRoot, outputPath string) error {
 	if _, err := os.Stat(absRoot); err != nil {
 		return fmt.Errorf("bundle root not found: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(absOut), 0o755); err != nil {
+	if err := filemode.EnsureParentArtifactDir(absOut); err != nil {
 		return fmt.Errorf("create output parent: %w", err)
 	}
 
@@ -32,8 +34,12 @@ func CollectArchive(bundleRoot, outputPath string) error {
 	if err != nil {
 		return err
 	}
+	root, err := fsutil.NewRoot(absRoot)
+	if err != nil {
+		return err
+	}
 
-	out, err := os.Create(absOut)
+	out, err := fsutil.Create(absOut)
 	if err != nil {
 		return fmt.Errorf("create output archive: %w", err)
 	}
@@ -43,7 +49,10 @@ func CollectArchive(bundleRoot, outputPath string) error {
 	defer func() { _ = tw.Close() }()
 
 	for _, rel := range []string{"deck", "workflows", "outputs", ".deck/manifest.json"} {
-		path := filepath.Join(absRoot, filepath.FromSlash(rel))
+		path, err := root.Resolve(filepath.FromSlash(rel))
+		if err != nil {
+			return err
+		}
 		if err := addPathToArchive(tw, absRoot, path, absOut, ignoreMatcher); err != nil {
 			return fmt.Errorf("build archive: %w", err)
 		}
@@ -64,11 +73,12 @@ func addPathToArchive(tw *tar.Writer, root string, path string, outPath string, 
 	if !info.IsDir() {
 		return addFileToArchive(tw, root, path, outPath, ignore)
 	}
+	rootFS, err := fsutil.NewRoot(root)
+	if err != nil {
+		return err
+	}
 
-	return filepath.WalkDir(path, func(current string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
+	return rootFS.WalkFiles(func(current string, d os.DirEntry) error {
 		if sameFilePath(current, outPath) {
 			return nil
 		}
@@ -105,7 +115,7 @@ func addPathToArchive(tw *tar.Writer, root string, path string, outPath string, 
 		if err := tw.WriteHeader(header); err != nil {
 			return err
 		}
-		f, err := os.Open(current)
+		f, err := fsutil.Open(current)
 		if err != nil {
 			return err
 		}
@@ -114,7 +124,7 @@ func addPathToArchive(tw *tar.Writer, root string, path string, outPath string, 
 			return err
 		}
 		return nil
-	})
+	}, strings.TrimPrefix(filepath.ToSlash(strings.TrimPrefix(path, root)), "/"))
 }
 
 func addFileToArchive(tw *tar.Writer, root string, path string, outPath string, ignore deckignore.Matcher) error {
@@ -141,7 +151,7 @@ func addFileToArchive(tw *tar.Writer, root string, path string, outPath string, 
 	if err := tw.WriteHeader(header); err != nil {
 		return err
 	}
-	f, err := os.Open(path)
+	f, err := fsutil.Open(path)
 	if err != nil {
 		return err
 	}

@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/hostfs"
 )
 
 type packageRepoPolicy struct {
@@ -52,16 +55,21 @@ func prepareAPTRepoSelection(policy packageRepoPolicy) (aptRepoSelection, error)
 	cleanup := func() { _ = os.RemoveAll(tmpRoot) }
 	mainFile := filepath.Join(tmpRoot, "sources.list")
 	partsDir := filepath.Join(tmpRoot, "sources.list.d")
-	if err := os.MkdirAll(partsDir, 0o755); err != nil {
+	if err := filemode.EnsureArtifactDir(partsDir); err != nil {
 		cleanup()
 		return aptRepoSelection{}, err
 	}
-	if err := os.WriteFile(mainFile, nil, 0o644); err != nil {
+	if err := filemode.WriteArtifactFile(mainFile, nil); err != nil {
 		cleanup()
 		return aptRepoSelection{}, err
 	}
 	for _, path := range selected {
-		raw, err := os.ReadFile(path)
+		hostPath, err := hostfs.NewHostPath(path)
+		if err != nil {
+			cleanup()
+			return aptRepoSelection{}, err
+		}
+		raw, err := hostPath.ReadFile()
 		if err != nil {
 			cleanup()
 			return aptRepoSelection{}, err
@@ -72,7 +80,7 @@ func prepareAPTRepoSelection(policy packageRepoPolicy) (aptRepoSelection, error)
 			dest = filepath.Dir(mainFile)
 			name = filepath.Base(mainFile)
 		}
-		if err := os.WriteFile(filepath.Join(dest, name), raw, 0o644); err != nil {
+		if err := filemode.WriteArtifactFile(filepath.Join(dest, name), raw); err != nil {
 			cleanup()
 			return aptRepoSelection{}, err
 		}

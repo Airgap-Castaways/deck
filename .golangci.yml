@@ -7,13 +7,58 @@ run:
 linters:
   default: none
   enable:
+    - gocritic
+    - gosec
     - errcheck
     - govet
     - bodyclose
     - ineffassign
     - misspell
+    - nilerr
     - staticcheck
     - unused
+  exclusions:
+    rules:
+      # Tests intentionally exercise shelling out, temp fixture layout, and dynamic
+      # file handling. Keep these noisy patterns excluded at the test boundary.
+      - path: '.*_test\.go'
+        linters:
+          - gosec
+        text: 'G(204|301|302|304|306)'
+      # HostPath is the explicit host-mutation trust boundary. G703 should end here
+      # instead of being spread across install feature code.
+      - path: 'internal/hostfs/host_path\.go'
+        linters:
+          - gosec
+        text: 'G703'
+      # Template rendering is centralized; this write helper is the single response
+      # sink that gosec still flags conservatively for G705.
+      - path: 'internal/server/http_response\.go'
+        linters:
+          - gosec
+        text: 'G705'
+      # WalkDir-based traversal is intentionally isolated in one reviewed helper so
+      # G122 does not appear throughout bundle and prepare feature code.
+      - path: 'internal/fsutil/walk\.go'
+        linters:
+          - gosec
+        text: 'G122'
+      # Command execution is localized to executil. Keep G204 at the reviewed
+      # capability/workflow boundary rather than feature packages.
+      - path: 'internal/executil/(system|workflow)\.go'
+        linters:
+          - gosec
+        text: 'G204'
+      # Dynamic file access is centralized in these low-level helpers, so the path-
+      # sensitive G304 signal stays helper-local and does not leak into features.
+      - path: 'internal/fsutil/safe_paths\.go'
+        linters:
+          - gosec
+        text: 'G304'
+      - path: 'internal/filemode/filemode\.go'
+        linters:
+          - gosec
+        text: 'G304'
 
 formatters:
   enable:

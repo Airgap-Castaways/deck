@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 const (
@@ -157,7 +159,7 @@ func normalizePaths(paths Paths) Paths {
 }
 
 func readNodeID(path string) (string, bool, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", false, nil
@@ -173,10 +175,7 @@ func readNodeID(path string) (string, bool, error) {
 }
 
 func writeNodeID(path string, id string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(id+"\n"), 0o644)
+	return filemode.WritePrivateFile(path, []byte(id+"\n"))
 }
 
 func generateNodeID() (string, error) {

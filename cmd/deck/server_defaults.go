@@ -8,11 +8,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/fsutil"
 )
 
 type serverDefaults struct {
-	URL      string `json:"url"`
-	APIToken string `json:"apiToken,omitempty"`
+	URL       string `json:"url"`
+	AuthToken string `json:"authToken,omitempty"`
 }
 
 func serverDefaultsPath() (string, error) {
@@ -52,7 +55,7 @@ func resolveServerURL(explicit string) (string, string, error) {
 	return defaults.URL, "config", nil
 }
 
-func resolveServerAPIToken(explicit string) (string, string, error) {
+func resolveServerAuthToken(explicit string) (string, string, error) {
 	if trimmed := strings.TrimSpace(explicit); trimmed != "" {
 		return trimmed, "flag", nil
 	}
@@ -63,10 +66,10 @@ func resolveServerAPIToken(explicit string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	if strings.TrimSpace(defaults.APIToken) == "" {
+	if strings.TrimSpace(defaults.AuthToken) == "" {
 		return "", "", nil
 	}
-	return defaults.APIToken, "config", nil
+	return defaults.AuthToken, "config", nil
 }
 
 func resolveRequiredServerURL(explicit string) (string, string, error) {
@@ -85,19 +88,23 @@ func loadServerDefaults() (serverDefaults, error) {
 	if err != nil {
 		return serverDefaults{}, err
 	}
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return serverDefaults{}, nil
 		}
 		return serverDefaults{}, fmt.Errorf("read server defaults: %w", err)
 	}
-	defaults := serverDefaults{}
-	if err := json.Unmarshal(raw, &defaults); err != nil {
+	disk := map[string]string{}
+	if err := json.Unmarshal(raw, &disk); err != nil {
 		return serverDefaults{}, fmt.Errorf("decode server defaults: %w", err)
 	}
+	defaults := serverDefaults{URL: disk["url"], AuthToken: disk["authToken"]}
+	if defaults.AuthToken == "" {
+		defaults.AuthToken = disk["apiToken"]
+	}
 	defaults.URL = strings.TrimRight(strings.TrimSpace(defaults.URL), "/")
-	defaults.APIToken = strings.TrimSpace(defaults.APIToken)
+	defaults.AuthToken = strings.TrimSpace(defaults.AuthToken)
 	return defaults, nil
 }
 
@@ -107,15 +114,16 @@ func saveServerDefaults(defaults serverDefaults) error {
 		return err
 	}
 	defaults.URL = strings.TrimRight(strings.TrimSpace(defaults.URL), "/")
-	defaults.APIToken = strings.TrimSpace(defaults.APIToken)
-	raw, err := json.MarshalIndent(defaults, "", "  ")
+	defaults.AuthToken = strings.TrimSpace(defaults.AuthToken)
+	payload := map[string]string{"url": defaults.URL}
+	if defaults.AuthToken != "" {
+		payload["authToken"] = defaults.AuthToken
+	}
+	raw, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode server defaults: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create server defaults dir: %w", err)
-	}
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
+	if err := filemode.WritePrivateFile(path, raw); err != nil {
 		return fmt.Errorf("write server defaults: %w", err)
 	}
 	return nil
