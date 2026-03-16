@@ -78,6 +78,7 @@ func newAskAuthSetCommand() *cobra.Command {
 	var provider string
 	var model string
 	var endpoint string
+	var logLevel string
 	cmd := &cobra.Command{
 		Use:   "set",
 		Short: "Save ask api key and default provider/model",
@@ -100,12 +101,16 @@ func newAskAuthSetCommand() *cobra.Command {
 			if value := strings.TrimSpace(endpoint); value != "" {
 				updated.Endpoint = value
 			}
+			if value := strings.TrimSpace(logLevel); value != "" {
+				updated.LogLevel = value
+			}
 			changed := settings.Provider != updated.Provider ||
 				settings.Model != updated.Model ||
 				settings.APIKey != updated.APIKey ||
-				settings.Endpoint != updated.Endpoint
+				settings.Endpoint != updated.Endpoint ||
+				settings.LogLevel != updated.LogLevel
 			if !changed {
-				return fmt.Errorf("ask auth set requires at least one of --api-key, --provider, --model, or --endpoint")
+				return fmt.Errorf("ask auth set requires at least one of --api-key, --provider, --model, --endpoint, or --log-level")
 			}
 			if err := askconfig.SaveStored(updated); err != nil {
 				return err
@@ -117,6 +122,7 @@ func newAskAuthSetCommand() *cobra.Command {
 	cmd.Flags().StringVar(&provider, "provider", "", "save the default ask provider")
 	cmd.Flags().StringVar(&model, "model", "", "save the default ask model")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "save the default ask provider endpoint")
+	cmd.Flags().StringVar(&logLevel, "log-level", "", "save the ask terminal log level (basic, debug, trace)")
 	return cmd
 }
 
@@ -146,6 +152,9 @@ func newAskAuthShowCommand() *cobra.Command {
 				return err
 			}
 			if err := stdoutPrintf("endpointSource=%s\n", effective.EndpointSource); err != nil {
+				return err
+			}
+			if err := stdoutPrintf("logLevel=%s\n", effective.LogLevel); err != nil {
 				return err
 			}
 			if err := stdoutPrintf("mcpEnabled=%t\n", effective.MCP.Enabled); err != nil {

@@ -45,6 +45,12 @@ OpenAI-compatible provider support currently targets:
 
 You can override `provider`, `model`, and `endpoint` per run, or save defaults with `ask auth set`.
 
+`ask.logLevel` controls terminal diagnostics on stderr:
+
+- `basic`: route and provider summary
+- `debug`: `basic` plus the user command and MCP/LSP events
+- `trace`: `debug` plus classifier/route system prompts and user prompts
+
 These commands are additive. They do not replace the default local execution path.
 
 ## Shell completion
@@ -103,6 +109,7 @@ Optional ask augmentation config example:
   "ask": {
     "provider": "openai",
     "model": "gpt-5.4",
+    "logLevel": "trace",
     "mcp": {
       "enabled": true,
       "servers": [
@@ -132,6 +139,7 @@ Optional ask augmentation config example:
 - `--source` controls whether `--scenario` resolves from the local workspace or the saved remote source.
 - workspace-local metadata stays under `./.deck/`, while user-global config, state, cache, and run history use standard XDG locations.
 - `ask` workspace context lives under `./.deck/ask/`, while saved ask auth/defaults live under `~/.config/deck/config.json` as the top-level `ask` object.
+- `ask auth set --log-level trace` is the quickest way to see the effective `deck ask` command, MCP/LSP events, and prompt text in terminal logs.
 - optional augmentation config can be defined under `ask.mcp` and `ask.lsp` in the same config file.
 - optional MCP and LSP augmentation is disabled by default and degrades gracefully when configured tools are unavailable.
 - phase imports resolve from `workflows/components/` using component-relative paths

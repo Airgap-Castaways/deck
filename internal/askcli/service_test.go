@@ -1,6 +1,7 @@
 package askcli
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"testing"
@@ -30,7 +31,13 @@ func TestClassifyWithLLMRetriesMalformedJSON(t *testing.T) {
 		"not-json",
 		`{"route":"explain","confidence":0.9,"reason":"analyze existing scenario","target":{"kind":"scenario","path":"workflows/scenarios/apply.yaml","name":"apply"},"generationAllowed":false}`,
 	}}
-	decision, err := classifyWithLLM(context.Background(), client, askconfig.EffectiveSettings{Settings: askconfig.Settings{Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}}, "explain apply", false, askretrieve.WorkspaceSummary{HasWorkflowTree: true})
+	decision, err := classifyWithLLM(
+		context.Background(),
+		client,
+		askconfig.EffectiveSettings{Settings: askconfig.Settings{Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}},
+		classifierSystemPrompt(),
+		classifierUserPrompt("explain apply", false, askretrieve.WorkspaceSummary{HasWorkflowTree: true}),
+	)
 	if err != nil {
 		t.Fatalf("classify with llm: %v", err)
 	}
@@ -73,6 +80,54 @@ func TestLocalExplainDescribesScenarioStructure(t *testing.T) {
 	for _, want := range []string{"role \"apply\"", "bootstrap, verify", "bootstrap.yaml", "Command step", "Related component available: workflows/components/bootstrap.yaml"} {
 		if !strings.Contains(answer, want) {
 			t.Fatalf("expected %q in answer, got %q", want, answer)
+		}
+	}
+}
+
+func TestRenderAskLogsAtDebugLevel(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := render(&stdout, &stderr, runResult{
+		Route:         askintent.RouteExplain,
+		Summary:       "explained",
+		Answer:        "answer",
+		Reason:        "reason",
+		ConfigSource:  askconfig.EffectiveSettings{Settings: askconfig.Settings{Provider: "openai", Model: "gpt-5.4", LogLevel: "debug"}, APIKeySource: "env"},
+		UserCommand:   `deck ask "explain apply"`,
+		AugmentEvents: []string{"mcp:context7 call get-library-docs ok", "lsp yaml command available"},
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	logText := stderr.String()
+	for _, want := range []string{"deck ask command=deck ask \"explain apply\"", "deck ask mcp=mcp:context7 call get-library-docs ok", "deck ask lsp=lsp yaml command available"} {
+		if !strings.Contains(logText, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, logText)
+		}
+	}
+	if strings.Contains(logText, "system-prompt") {
+		t.Fatalf("debug level should not print prompts: %q", logText)
+	}
+}
+
+func TestRenderAskLogsAtTraceLevel(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	err := render(&stdout, &stderr, runResult{
+		Route:        askintent.RouteExplain,
+		Summary:      "explained",
+		Answer:       "answer",
+		Reason:       "reason",
+		ConfigSource: askconfig.EffectiveSettings{Settings: askconfig.Settings{Provider: "openai", Model: "gpt-5.4", LogLevel: "trace"}, APIKeySource: "env"},
+		PromptTraces: []promptTrace{{Label: "explain", SystemPrompt: "system text", UserPrompt: "user text"}},
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	logText := stderr.String()
+	for _, want := range []string{"deck ask explain system-prompt:\nsystem text", "deck ask explain user-prompt:\nuser text"} {
+		if !strings.Contains(logText, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, logText)
 		}
 	}
 }

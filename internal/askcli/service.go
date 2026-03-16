@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -59,7 +60,15 @@ type runResult struct {
 	Chunks        []askretrieve.Chunk
 	DroppedChunks []string
 	AugmentEvents []string
+	UserCommand   string
+	PromptTraces  []promptTrace
 	ConfigSource  askconfig.EffectiveSettings
+}
+
+type promptTrace struct {
+	Label        string
+	SystemPrompt string
+	UserPrompt   string
 }
 
 func Execute(ctx context.Context, opts Options, client askprovider.Client) error {
@@ -100,8 +109,10 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 	decision := heuristic
 	classifierLLM := false
+	classifierSystem := classifierSystemPrompt()
+	classifierUser := classifierUserPrompt(requestText, opts.Review, workspace)
 	if canUseLLM(effective) {
-		classified, classifyErr := classifyWithLLM(ctx, client, effective, requestText, opts.Review, workspace)
+		classified, classifyErr := classifyWithLLM(ctx, client, effective, classifierSystem, classifierUser)
 		if classifyErr == nil {
 			decision = classified
 			classifierLLM = true
@@ -123,6 +134,10 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		ConfigSource:  effective,
 		ClassifierLLM: classifierLLM,
 		AugmentEvents: append(mcpEvents, lspEvents...),
+		UserCommand:   renderUserCommand(opts),
+	}
+	if canUseLLM(effective) {
+		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "classifier", SystemPrompt: classifierSystem, UserPrompt: classifierUser})
 	}
 
 	if decision.LLMPolicy == askintent.LLMRequired && !canUseLLM(effective) {
@@ -135,7 +150,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			return fmt.Errorf("route %s requires model access; configure provider credentials first", decision.Route)
 		}
 		attempts := generationAttempts(opts.MaxIterations, decision, requestText)
-		gen, lintSummary, retriesUsed, genErr := generateWithValidation(ctx, client, askprovider.Request{
+		generationRequest := askprovider.Request{
 			Kind:         "generate",
 			Provider:     effective.Provider,
 			Model:        effective.Model,
@@ -144,7 +159,9 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval),
 			Prompt:       generationUserPrompt(workspace, state, requestText, strings.TrimSpace(opts.FromPath), decision.Route),
 			MaxRetries:   attempts,
-		}, resolvedRoot, attempts)
+		}
+		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "generation", SystemPrompt: generationRequest.SystemPrompt, UserPrompt: generationRequest.Prompt})
+		gen, lintSummary, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts)
 		if genErr != nil {
 			return genErr
 		}
@@ -172,6 +189,8 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			result.ReviewLines = append(result.ReviewLines, findingsToLines(result.LocalFindings)...)
 		}
 		if canUseLLM(effective) {
+			systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, requestText)
+			result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
 			info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText)
 			if infoErr == nil {
 				result.LLMUsed = true
@@ -223,15 +242,15 @@ func canUseLLM(cfg askconfig.EffectiveSettings) bool {
 	return !askconfig.NeedsAPIKey(cfg.Provider) || strings.TrimSpace(cfg.APIKey) != ""
 }
 
-func classifyWithLLM(ctx context.Context, client askprovider.Client, cfg askconfig.EffectiveSettings, prompt string, reviewFlag bool, workspace askretrieve.WorkspaceSummary) (askintent.Decision, error) {
+func classifyWithLLM(ctx context.Context, client askprovider.Client, cfg askconfig.EffectiveSettings, systemPrompt string, userPrompt string) (askintent.Decision, error) {
 	request := askprovider.Request{
 		Kind:         "classify",
 		Provider:     cfg.Provider,
 		Model:        cfg.Model,
 		APIKey:       cfg.APIKey,
 		Endpoint:     cfg.Endpoint,
-		SystemPrompt: classifierSystemPrompt(),
-		Prompt:       classifierUserPrompt(prompt, reviewFlag, workspace),
+		SystemPrompt: systemPrompt,
+		Prompt:       userPrompt,
 		MaxRetries:   1,
 	}
 	var parsed askcontract.ClassificationResponse
@@ -1062,15 +1081,61 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 			return err
 		}
 	}
-	if _, err := fmt.Fprintf(stderr, "deck ask route=%s reason=%s target=%s classifierLlmUsed=%t llmUsed=%t retries=%d termination=%s\n", result.Route, result.Reason, result.Target.Path, result.ClassifierLLM, result.LLMUsed, result.RetriesUsed, result.Termination); err != nil {
-		return err
-	}
-	if result.ConfigSource.APIKeySource != "unset" {
-		if _, err := fmt.Fprintf(stderr, "deck ask using provider=%s model=%s endpoint=%s apiKeySource=%s\n", result.ConfigSource.Provider, result.ConfigSource.Model, result.ConfigSource.Endpoint, result.ConfigSource.APIKeySource); err != nil {
+	if shouldLogAsk(result.ConfigSource.LogLevel, "basic") {
+		if _, err := fmt.Fprintf(stderr, "deck ask route=%s reason=%s target=%s classifierLlmUsed=%t llmUsed=%t retries=%d termination=%s\n", result.Route, result.Reason, result.Target.Path, result.ClassifierLLM, result.LLMUsed, result.RetriesUsed, result.Termination); err != nil {
 			return err
+		}
+		if result.ConfigSource.APIKeySource != "unset" {
+			if _, err := fmt.Fprintf(stderr, "deck ask using provider=%s model=%s endpoint=%s apiKeySource=%s logLevel=%s\n", result.ConfigSource.Provider, result.ConfigSource.Model, result.ConfigSource.Endpoint, result.ConfigSource.APIKeySource, result.ConfigSource.LogLevel); err != nil {
+				return err
+			}
+		}
+	}
+	if shouldLogAsk(result.ConfigSource.LogLevel, "debug") {
+		if _, err := fmt.Fprintf(stderr, "deck ask command=%s\n", result.UserCommand); err != nil {
+			return err
+		}
+		for _, event := range result.AugmentEvents {
+			prefix := "augment"
+			if strings.HasPrefix(event, "mcp:") {
+				prefix = "mcp"
+			} else if strings.HasPrefix(event, "lsp") {
+				prefix = "lsp"
+			}
+			if _, err := fmt.Fprintf(stderr, "deck ask %s=%s\n", prefix, event); err != nil {
+				return err
+			}
+		}
+	}
+	if shouldLogAsk(result.ConfigSource.LogLevel, "trace") {
+		for _, trace := range result.PromptTraces {
+			if _, err := fmt.Fprintf(stderr, "deck ask %s system-prompt:\n%s\n", trace.Label, strings.TrimSpace(trace.SystemPrompt)); err != nil {
+				return err
+			}
+			if _, err := fmt.Fprintf(stderr, "deck ask %s user-prompt:\n%s\n", trace.Label, strings.TrimSpace(trace.UserPrompt)); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+func shouldLogAsk(current string, required string) bool {
+	levels := map[string]int{"basic": 1, "debug": 2, "trace": 3}
+	current = askconfigLogLevel(current)
+	required = askconfigLogLevel(required)
+	return levels[current] >= levels[required]
+}
+
+func askconfigLogLevel(level string) string {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "debug":
+		return "debug"
+	case "trace":
+		return "trace"
+	default:
+		return "basic"
+	}
 }
 
 func validateGeneratedPath(path string) error {
@@ -1278,6 +1343,35 @@ func loadRequestText(prompt string, fromPath string) (string, error) {
 		return fromText, nil
 	}
 	return prompt + "\n\nAttached request details:\n" + fromText, nil
+}
+
+func renderUserCommand(opts Options) string {
+	parts := []string{"deck", "ask"}
+	if opts.Write {
+		parts = append(parts, "--write")
+	}
+	if opts.Review {
+		parts = append(parts, "--review")
+	}
+	if opts.MaxIterations > 0 {
+		parts = append(parts, "--max-iterations", fmt.Sprintf("%d", opts.MaxIterations))
+	}
+	if strings.TrimSpace(opts.FromPath) != "" {
+		parts = append(parts, "--from", strings.TrimSpace(opts.FromPath))
+	}
+	if strings.TrimSpace(opts.Provider) != "" {
+		parts = append(parts, "--provider", strings.TrimSpace(opts.Provider))
+	}
+	if strings.TrimSpace(opts.Model) != "" {
+		parts = append(parts, "--model", strings.TrimSpace(opts.Model))
+	}
+	if strings.TrimSpace(opts.Endpoint) != "" {
+		parts = append(parts, "--endpoint", strings.TrimSpace(opts.Endpoint))
+	}
+	if strings.TrimSpace(opts.Prompt) != "" {
+		parts = append(parts, strconv.Quote(strings.TrimSpace(opts.Prompt)))
+	}
+	return strings.Join(parts, " ")
 }
 
 func isVarsPath(path string) bool {

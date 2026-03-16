@@ -9,7 +9,7 @@ import (
 
 func TestSaveStoredAndLoadStored(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	settings := Settings{Provider: "openrouter", Model: "anthropic/claude-3.5-sonnet", APIKey: "secret-token", Endpoint: "https://example.invalid/v1", MCP: MCP{Enabled: true, Servers: []MCPServer{{Name: "web-search", Command: "node", Args: []string{"mcp.js"}}}}, LSP: LSP{Enabled: true, YAML: LSPEntry{Command: "yaml-language-server", Args: []string{"--stdio"}}}}
+	settings := Settings{Provider: "openrouter", Model: "anthropic/claude-3.5-sonnet", APIKey: "secret-token", Endpoint: "https://example.invalid/v1", LogLevel: "trace", MCP: MCP{Enabled: true, Servers: []MCPServer{{Name: "web-search", Command: "node", Args: []string{"mcp.js"}}}}, LSP: LSP{Enabled: true, YAML: LSPEntry{Command: "yaml-language-server", Args: []string{"--stdio"}}}}
 	if err := SaveStored(settings); err != nil {
 		t.Fatalf("save stored: %v", err)
 	}
@@ -70,6 +70,17 @@ func TestResolveEffectivePrecedence(t *testing.T) {
 	}
 	if !effective.LSP.Enabled || effective.LSP.YAML.Command != "yaml-language-server" {
 		t.Fatalf("expected stored lsp config in effective settings: %#v", effective)
+	}
+	if effective.LogLevel != "basic" {
+		t.Fatalf("expected default log level to be basic, got %#v", effective)
+	}
+}
+
+func TestNormalizeLogLevel(t *testing.T) {
+	for input, want := range map[string]string{"": "basic", "basic": "basic", "DEBUG": "debug", "trace": "trace", "loud": "basic"} {
+		if got := normalizeLogLevel(input); got != want {
+			t.Fatalf("normalizeLogLevel(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 

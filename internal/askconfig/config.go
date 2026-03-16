@@ -26,6 +26,7 @@ type Settings struct {
 	Model    string `json:"model,omitempty"`
 	APIKey   string `json:"apiKey,omitempty"`
 	Endpoint string `json:"endpoint,omitempty"`
+	LogLevel string `json:"logLevel,omitempty"`
 	MCP      MCP    `json:"mcp,omitempty"`
 	LSP      LSP    `json:"lsp,omitempty"`
 }
@@ -141,6 +142,7 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 			Model:    defaultModel,
 			APIKey:   "",
 			Endpoint: "",
+			LogLevel: "basic",
 			MCP:      stored.MCP,
 			LSP:      stored.LSP,
 		},
@@ -164,6 +166,9 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 	if stored.Endpoint != "" {
 		effective.Endpoint = stored.Endpoint
 		effective.EndpointSource = "config"
+	}
+	if stored.LogLevel != "" {
+		effective.LogLevel = stored.LogLevel
 	}
 	if value := strings.TrimSpace(os.Getenv(envEndpoint)); value != "" {
 		effective.Endpoint = value
@@ -226,6 +231,7 @@ func normalize(settings Settings) Settings {
 	settings.Model = strings.TrimSpace(settings.Model)
 	settings.APIKey = strings.TrimSpace(settings.APIKey)
 	settings.Endpoint = strings.TrimSpace(settings.Endpoint)
+	settings.LogLevel = normalizeLogLevel(settings.LogLevel)
 	for i := range settings.MCP.Servers {
 		settings.MCP.Servers[i].Name = strings.TrimSpace(settings.MCP.Servers[i].Name)
 		settings.MCP.Servers[i].Command = strings.TrimSpace(settings.MCP.Servers[i].Command)
@@ -246,6 +252,19 @@ func normalize(settings Settings) Settings {
 	}
 	settings.LSP.YAML.Args = trimmedLSP
 	return settings
+}
+
+func normalizeLogLevel(level string) string {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "", "basic":
+		return "basic"
+	case "debug":
+		return "debug"
+	case "trace":
+		return "trace"
+	default:
+		return "basic"
+	}
 }
 
 func normalizeProvider(provider string) string {

@@ -31,7 +31,7 @@ func (m *mockAskClient) Generate(_ context.Context, _ askprovider.Request) (askp
 
 func TestAskAuthCommands(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	out, err := runWithCapturedStdout([]string{"ask", "auth", "set", "--provider", "openrouter", "--model", "anthropic/claude-3.5-sonnet", "--endpoint", "https://openrouter.ai/api/v1", "--api-key", "secret-token"})
+	out, err := runWithCapturedStdout([]string{"ask", "auth", "set", "--provider", "openrouter", "--model", "anthropic/claude-3.5-sonnet", "--endpoint", "https://openrouter.ai/api/v1", "--api-key", "secret-token", "--log-level", "debug"})
 	if err != nil {
 		t.Fatalf("auth set: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestAskAuthCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("auth show: %v", err)
 	}
-	for _, want := range []string{"provider=openrouter", "model=anthropic/claude-3.5-sonnet", "endpoint=https://openrouter.ai/api/v1", "endpointSource=config", "mcpEnabled=false", "lspEnabled=false", "apiKey=secr****oken", "apiKeySource=config"} {
+	for _, want := range []string{"provider=openrouter", "model=anthropic/claude-3.5-sonnet", "endpoint=https://openrouter.ai/api/v1", "endpointSource=config", "logLevel=debug", "mcpEnabled=false", "lspEnabled=false", "apiKey=secr****oken", "apiKeySource=config"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in auth show output, got %q", want, out)
 		}
@@ -62,6 +62,7 @@ func TestAskAuthShowIncludesStoredAugmentSettings(t *testing.T) {
 		Provider: "openai",
 		Model:    "gpt-5.4",
 		APIKey:   "secret-token",
+		LogLevel: "trace",
 		MCP:      askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{{Name: "context7", Command: "context7-mcp"}}},
 		LSP:      askconfig.LSP{Enabled: true, YAML: askconfig.LSPEntry{Command: "yaml-language-server", Args: []string{"--stdio"}}},
 	}); err != nil {
@@ -71,7 +72,7 @@ func TestAskAuthShowIncludesStoredAugmentSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("auth show: %v", err)
 	}
-	for _, want := range []string{"mcpEnabled=true", "lspEnabled=true"} {
+	for _, want := range []string{"logLevel=trace", "mcpEnabled=true", "lspEnabled=true"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in auth show output, got %q", want, out)
 		}
