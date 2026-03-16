@@ -315,9 +315,25 @@ func registerScenarioNameCompletion(cmd *cobra.Command, flagName, sourceFlagName
 			}
 		}
 
-		candidates := map[string]bool{}
-		if resolvedSource == scenarioSourceLocal || resolvedSource == scenarioSourceAll {
-			if entries, err := discoverLocalScenarioEntries(localRoot); err == nil {
+		items := completeScenarioNames(resolvedSource, localRoot, toComplete)
+		return items, cobra.ShellCompDirectiveNoFileComp
+	})
+}
+
+func completeScenarioNames(source, localRoot, toComplete string) []string {
+	candidates := map[string]bool{}
+	if source == scenarioSourceLocal || source == scenarioSourceAll {
+		if entries, err := discoverLocalScenarioEntries(localRoot); err == nil {
+			for _, entry := range entries {
+				if strings.HasPrefix(entry.Name, toComplete) {
+					candidates[entry.Name] = true
+				}
+			}
+		}
+	}
+	if source == scenarioSourceServer || source == scenarioSourceAll {
+		if serverURL, _, err := resolveSourceURL(""); err == nil && strings.TrimSpace(serverURL) != "" {
+			if entries, err := discoverServerScenarioEntries(serverURL); err == nil {
 				for _, entry := range entries {
 					if strings.HasPrefix(entry.Name, toComplete) {
 						candidates[entry.Name] = true
@@ -325,23 +341,11 @@ func registerScenarioNameCompletion(cmd *cobra.Command, flagName, sourceFlagName
 				}
 			}
 		}
-		if resolvedSource == scenarioSourceServer || resolvedSource == scenarioSourceAll {
-			if serverURL, _, err := resolveSourceURL(""); err == nil && strings.TrimSpace(serverURL) != "" {
-				if entries, err := discoverServerScenarioEntries(serverURL); err == nil {
-					for _, entry := range entries {
-						if strings.HasPrefix(entry.Name, toComplete) {
-							candidates[entry.Name] = true
-						}
-					}
-				}
-			}
-		}
-
-		items := make([]string, 0, len(candidates))
-		for item := range candidates {
-			items = append(items, item)
-		}
-		sort.Strings(items)
-		return items, cobra.ShellCompDirectiveNoFileComp
-	})
+	}
+	items := make([]string, 0, len(candidates))
+	for item := range candidates {
+		items = append(items, item)
+	}
+	sort.Strings(items)
+	return items
 }
