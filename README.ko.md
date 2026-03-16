@@ -1,8 +1,6 @@
 # deck
 
-<div style="float: right; margin-left: 10px;">
-  <img src="assets/logo.png" width="120">
-</div>
+<img align="right" src="assets/logo.png" width="120" alt="logo">
 
 [English README](./README.md) | [문서 홈](./docs/README.md)
 
