@@ -1,6 +1,6 @@
 # Why deck
 
-`deck` started from a narrow but recurring operational problem: air-gapped Linux and Kubernetes maintenance where internet access could not be assumed, SSH was not always available, and the procedures had already grown beyond what a long shell script could comfortably carry.
+`deck` started from a narrow but recurring operational problem: air-gapped Linux maintenance work where internet access could not be assumed, SSH was not always available, and the procedures had already grown beyond what a long shell script could comfortably carry.
 
 Shell remains the easiest thing to run almost anywhere, but it stops being easy to trust once a procedure becomes large. Review turns into reverse-engineering. Reuse turns into copy-paste. The important question - what is this procedure trying to do? - gets buried under implementation details.
 
@@ -21,7 +21,7 @@ In practice, a few specific problems kept repeating:
 
 - packaging and transferring dependency-heavy automation runtimes could be harder than packaging the actual procedure
 - some environments were restrictive enough that SSH could not be treated as the default execution path
-- Kubernetes installation and maintenance often required local image, package, or file distribution before the main workflow could succeed
+- some environments required local image, package, or file distribution before the main workflow could succeed
 - the fallback was usually a growing collection of shell scripts that were easy to start with and hard to maintain later
 
 None of this makes existing tools wrong. It just means their default shape was often a poor fit for the environments `deck` was meant to serve.
@@ -58,6 +58,7 @@ The project aims to sit somewhere between a shell script and a larger automation
 - **Readable**: workflows should make intent visible without forcing the reader through implementation noise
 - **Manual-first**: the tool is designed for explicit operator-driven maintenance sessions, not unattended reconciliation
 - **Small surface area**: typed steps and CLI commands are intentionally kept simple so the common path stays obvious
+- **Single-binary by default**: on the site side, the normal operating model is built around the `deck` binary and the bundle contents rather than a larger installed runtime
 
 That last point matters. `deck` deliberately avoids creating too many equivalent ways to express the same operational task. Once a tool allows the same thing to be modeled in several overlapping shapes, the cost shows up everywhere: in reviews, in examples, in docs, and in day-to-day operator hesitation.
 

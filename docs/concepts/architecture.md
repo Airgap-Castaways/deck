@@ -108,7 +108,7 @@ flowchart LR
 - Client nodes pull what they need from the server, then run locally on each node.
 - Site-local coordination such as releases, sessions, assignments, and reports can exist around this flow, but those details are omitted from the diagram so the main offline distribution path stays easy to read.
 
-Even here, `deck` is not acting as a central reconciliation controller. The server only helps distribute prepared bundle content inside the site. Each node still executes locally.
+Even here, `deck` is not acting as a central reconciliation controller. The server is a site-local distribution helper: it serves bundle content inside the air gap, but it does not take over node execution. Each node still executes locally.
 
 ## Why the bundle is the handoff unit
 
@@ -120,6 +120,8 @@ It carries:
 - workflow files
 - prepared outputs such as packages, images, and files
 - the manifest used for integrity checks
+
+Each part is there for a reason: the binary provides the runner, the workflow provides the intent, the prepared outputs provide the offline inputs, and the manifest provides the integrity contract for what was transferred.
 
 Using a bundle as the handoff unit avoids implicit runtime dependencies. If the site needs it, it should be in the bundle or intentionally provided by the local environment.
 
@@ -283,8 +285,10 @@ The exact package layout may continue to evolve, but the architectural direction
 New capabilities should follow the same shape.
 
 - prefer adding a typed step over expanding `Command` usage
+- prefer extending an existing noun family before introducing a new top-level step kind
 - keep runtime side effects in focused helper boundaries
 - keep prepare-side network work out of apply-side host mutation paths
+- avoid expanding override and composition rules unless the added flexibility is clearly worth the extra operator complexity
 - document workflow and schema changes together
 - keep the default path local-first even when optional server features expand
 
