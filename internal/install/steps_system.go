@@ -8,6 +8,7 @@ import (
 
 	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
+	"github.com/taedi90/deck/internal/hostfs"
 )
 
 func runSysctl(spec map[string]any) error {
@@ -17,6 +18,10 @@ func runSysctl(spec map[string]any) error {
 	}
 	if path == "" {
 		return fmt.Errorf("%s: Sysctl requires writeFile or dest", errCodeInstallSysctlPathMiss)
+	}
+	hostPath, err := hostfs.NewHostPath(path)
+	if err != nil {
+		return err
 	}
 
 	values, ok := spec["values"].(map[string]any)
@@ -29,7 +34,7 @@ func runSysctl(spec map[string]any) error {
 		lines = append(lines, fmt.Sprintf("%s=%v", k, v))
 	}
 
-	if err := filemode.WriteArtifactFile(path, []byte(strings.Join(lines, "\n")+"\n")); err != nil {
+	if err := hostPath.WriteFile([]byte(strings.Join(lines, "\n")+"\n"), filemode.PublishedArtifact); err != nil {
 		return err
 	}
 	if boolValue(spec, "apply") {
@@ -175,7 +180,11 @@ func runSwap(spec map[string]any) error {
 		if fstabPath == "" {
 			fstabPath = "/etc/fstab"
 		}
-		content, err := fsutil.ReadFile(fstabPath)
+		fstabRef, err := hostfs.NewHostPath(fstabPath)
+		if err != nil {
+			return err
+		}
+		content, err := fstabRef.ReadFile()
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil
@@ -200,7 +209,7 @@ func runSwap(spec map[string]any) error {
 			if !strings.HasSuffix(updated, "\n") {
 				updated += "\n"
 			}
-			if err := filemode.WriteArtifactFile(fstabPath, []byte(updated)); err != nil {
+			if err := fstabRef.WriteFile([]byte(updated), filemode.PublishedArtifact); err != nil {
 				return err
 			}
 		}
@@ -229,7 +238,11 @@ func runKernelModule(spec map[string]any) error {
 		if persistFile == "" {
 			persistFile = "/etc/modules-load.d/k8s.conf"
 		}
-		raw, err := fsutil.ReadFile(persistFile)
+		persistRef, err := hostfs.NewHostPath(persistFile)
+		if err != nil {
+			return err
+		}
+		raw, err := persistRef.ReadFile()
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
@@ -247,7 +260,7 @@ func runKernelModule(spec map[string]any) error {
 				content += "\n"
 			}
 			content += name + "\n"
-			if err := filemode.WriteArtifactFile(persistFile, []byte(content)); err != nil {
+			if err := persistRef.WriteFile([]byte(content), filemode.PublishedArtifact); err != nil {
 				return err
 			}
 		}

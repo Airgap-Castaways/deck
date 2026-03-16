@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
 )
 
@@ -31,7 +32,7 @@ func EnsureSelfSignedTLS(root, addr string) (string, string, error) {
 		return "", "", fmt.Errorf("E_SERVER_TLS_PARTIAL_FILES: cert/key must both exist or both be absent")
 	}
 
-	if err := os.MkdirAll(tlsDir, 0o755); err != nil {
+	if err := filemode.EnsureDir(tlsDir, filemode.PrivateState); err != nil {
 		return "", "", fmt.Errorf("create tls directory: %w", err)
 	}
 

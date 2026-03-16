@@ -1,7 +1,6 @@
 package install
 
 import (
-	"bytes"
 	crand "crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -12,18 +11,15 @@ import (
 	"time"
 
 	"github.com/taedi90/deck/internal/filemode"
-	"github.com/taedi90/deck/internal/fsutil"
+	"github.com/taedi90/deck/internal/hostfs"
 )
 
 func writeFileIfChanged(path string, content []byte, mode os.FileMode) error {
-	existing, err := fsutil.ReadFile(path)
-	if err == nil && bytes.Equal(existing, content) {
-		return nil
-	}
-	if err != nil && !os.IsNotExist(err) {
+	hostPath, err := hostfs.NewHostPath(path)
+	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, content, mode)
+	return hostfs.WriteFileIfChanged(hostPath, content, mode)
 }
 
 func editFileBackupEnabledValue(backup *bool) bool {
@@ -37,7 +33,11 @@ func createEditFileBackup(path string, content []byte) (string, error) {
 	base := path + ".bak-" + time.Now().UTC().Format("20060102T150405Z")
 	backupPath := base
 	for i := 0; i < 5; i++ {
-		if _, err := os.Stat(backupPath); os.IsNotExist(err) {
+		hostPath, err := hostfs.NewHostPath(backupPath)
+		if err != nil {
+			return backupPath, err
+		}
+		if _, err := hostPath.Stat(); os.IsNotExist(err) {
 			if err := filemode.WriteArtifactFile(backupPath, content); err != nil {
 				return backupPath, err
 			}

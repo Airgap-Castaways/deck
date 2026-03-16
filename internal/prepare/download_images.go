@@ -11,6 +11,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+
+	"github.com/taedi90/deck/internal/filemode"
 )
 
 var (
@@ -50,7 +52,7 @@ func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string
 	for _, img := range images {
 		rel := filepath.ToSlash(filepath.Join(dir, sanitizeImageName(img)+".tar"))
 		target := filepath.Join(bundleRoot, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		if err := filemode.EnsureParentDir(target, filemode.PublishedArtifact); err != nil {
 			return nil, err
 		}
 		if !opts.ForceRedownload {

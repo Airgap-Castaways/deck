@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/fetch"
+	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
@@ -83,7 +84,7 @@ func runFileDownload(ctx context.Context, bundleRoot string, spec map[string]any
 	}
 
 	target := filepath.Join(bundleRoot, outPath)
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+	if err := filemode.EnsureParentDir(target, filemode.PublishedArtifact); err != nil {
 		return "", fmt.Errorf("create output directory: %w", err)
 	}
 

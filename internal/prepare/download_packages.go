@@ -138,7 +138,7 @@ func runContainerPackageRepoBuild(
 			return nil, err
 		}
 	}
-	if err := os.MkdirAll(outAbs, 0o755); err != nil {
+	if err := filemode.EnsureDir(outAbs, filemode.PublishedArtifact); err != nil {
 		return nil, err
 	}
 
@@ -194,7 +194,7 @@ func runContainerPackageDownloadAll(ctx context.Context, runner CommandRunner, b
 			return nil, err
 		}
 	}
-	if err := os.MkdirAll(outAbs, 0o755); err != nil {
+	if err := filemode.EnsureDir(outAbs, filemode.PublishedArtifact); err != nil {
 		return nil, err
 	}
 
@@ -406,7 +406,7 @@ func preparePackageCacheMounts(family string, cacheKey string) ([]packageCacheMo
 	root := filepath.Join(home, ".deck", "cache", "packages", cacheKey)
 	if strings.TrimSpace(family) == "rhel" {
 		dnfRoot := filepath.Join(root, "dnf")
-		if err := os.MkdirAll(dnfRoot, 0o755); err != nil {
+		if err := filemode.EnsureDir(dnfRoot, filemode.PublishedArtifact); err != nil {
 			return nil, err
 		}
 		return []packageCacheMount{{host: dnfRoot, container: "/var/cache/dnf"}}, nil
@@ -415,7 +415,7 @@ func preparePackageCacheMounts(family string, cacheKey string) ([]packageCacheMo
 	archives := filepath.Join(root, "apt", "archives")
 	lists := filepath.Join(root, "apt", "lists")
 	for _, dir := range []string{archives, filepath.Join(archives, "partial"), lists, filepath.Join(lists, "partial")} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := filemode.EnsureDir(dir, filemode.PublishedArtifact); err != nil {
 			return nil, err
 		}
 	}

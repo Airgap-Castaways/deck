@@ -11,7 +11,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
+	"github.com/taedi90/deck/internal/hostfs"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -182,7 +184,11 @@ func shouldSkipInstallArtifact(skip *installArtifactSkipSpec) bool {
 	if skip == nil || strings.TrimSpace(skip.Path) == "" {
 		return false
 	}
-	info, err := os.Stat(skip.Path)
+	hostPath, err := hostfs.NewHostPath(skip.Path)
+	if err != nil {
+		return false
+	}
+	info, err := hostPath.Stat()
 	if err != nil {
 		return false
 	}
@@ -196,14 +202,15 @@ func installArtifactFile(sourcePath string, installSpec installArtifactInstallSp
 	if strings.TrimSpace(installSpec.Path) == "" {
 		return fmt.Errorf("%s: install.path is required", errCodeInstallArtifactSource)
 	}
+	installPath, err := hostfs.NewHostPath(installSpec.Path)
+	if err != nil {
+		return err
+	}
 	raw, err := fsutil.ReadFile(sourcePath)
 	if err != nil {
 		return fmt.Errorf("read artifact source: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(installSpec.Path), 0o755); err != nil {
-		return fmt.Errorf("create install directory: %w", err)
-	}
-	if err := writeFileIfChanged(installSpec.Path, raw, 0o644); err != nil {
+	if err := hostfs.WriteFileIfChanged(installPath, raw, filemode.ArtifactFileMode); err != nil {
 		return fmt.Errorf("write installed artifact: %w", err)
 	}
 	if strings.TrimSpace(installSpec.Mode) != "" {
@@ -211,7 +218,7 @@ func installArtifactFile(sourcePath string, installSpec installArtifactInstallSp
 		if err != nil {
 			return fmt.Errorf("invalid install mode: %w", err)
 		}
-		if err := os.Chmod(installSpec.Path, os.FileMode(modeVal)); err != nil {
+		if err := installPath.Chmod(os.FileMode(modeVal)); err != nil {
 			return fmt.Errorf("apply install mode: %w", err)
 		}
 	}
@@ -223,7 +230,7 @@ func extractArtifactTarGz(sourcePath string, extractSpec installArtifactExtractS
 	if destination == "" {
 		return fmt.Errorf("%s: extract.destination is required", errCodeInstallArtifactSource)
 	}
-	if err := os.MkdirAll(destination, 0o755); err != nil {
+	if err := filemode.EnsureDir(destination, filemode.PublishedArtifact); err != nil {
 		return fmt.Errorf("create extract destination: %w", err)
 	}
 
@@ -285,11 +292,14 @@ func extractArtifactTarGz(sourcePath string, extractSpec installArtifactExtractS
 			if mode == 0 {
 				mode = 0o755
 			}
-			if err := os.MkdirAll(targetPath, mode); err != nil {
+			if err := filemode.EnsureDir(targetPath, filemode.PublishedArtifact); err != nil {
 				return fmt.Errorf("create archive directory: %w", err)
 			}
+			if err := os.Chmod(targetPath, mode); err != nil {
+				return fmt.Errorf("apply archive directory mode: %w", err)
+			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+			if err := filemode.EnsureParentDir(targetPath, filemode.PublishedArtifact); err != nil {
 				return fmt.Errorf("create archive file directory: %w", err)
 			}
 			content, err := io.ReadAll(tarReader)

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/filemode"
-	"github.com/taedi90/deck/internal/fsutil"
+	"github.com/taedi90/deck/internal/hostfs"
 )
 
 type packageRepoPolicy struct {
@@ -64,7 +64,12 @@ func prepareAPTRepoSelection(policy packageRepoPolicy) (aptRepoSelection, error)
 		return aptRepoSelection{}, err
 	}
 	for _, path := range selected {
-		raw, err := fsutil.ReadFile(path)
+		hostPath, err := hostfs.NewHostPath(path)
+		if err != nil {
+			cleanup()
+			return aptRepoSelection{}, err
+		}
+		raw, err := hostPath.ReadFile()
 		if err != nil {
 			cleanup()
 			return aptRepoSelection{}, err
