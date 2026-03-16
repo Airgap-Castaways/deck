@@ -51,7 +51,7 @@ That is why the architecture emphasizes:
 The simplest `deck` workflow is just `prepare -> bundle -> apply`.
 
 ```mermaid
-flowchart TD
+flowchart LR
     subgraph Online[Connected environment]
         A[Prepare artifacts]
         B[Build bundle]
@@ -79,7 +79,7 @@ For multi-node work, the core shape is still `prepare -> bundle -> apply`. The d
 In practice, that server can act as a local web or file server for the `deck` binary, workflows, and prepared files, and it can also expose a pull-only container registry for prepared images. That keeps the overall model the same while making offline distribution easier inside the site.
 
 ```mermaid
-flowchart TD
+flowchart LR
     subgraph Online[Connected environment]
         A[Prepare artifacts]
         B[Build bundle]
@@ -88,9 +88,11 @@ flowchart TD
     B --> C[Transfer bundle]
     subgraph Offline[Air-gapped site]
         subgraph ServerNode[Server node]
+            direction TB
             D[Run server]
         end
         subgraph ClientNodes[Client nodes]
+            direction TB
             E[Pull deck]
             F[Apply]
             E --> F
