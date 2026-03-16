@@ -30,7 +30,11 @@ func newBundleVerifyCommand() *cobra.Command {
 		Short: "Verify bundle manifest integrity",
 		Args:  bundleSinglePathArgs("bundle verify accepts a single <path>"),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return executeBundleVerify(cmdFlagValue(cmd, "file"), args)
+			file, err := cmdFlagValue(cmd, "file")
+			if err != nil {
+				return err
+			}
+			return executeBundleVerify(file, args)
 		},
 	}
 	cmd.Flags().String("file", "", "bundle path (directory or bundle.tar)")
@@ -43,7 +47,15 @@ func newBundleBuildCommand() *cobra.Command {
 		Short: "Archive deck, workflows, outputs, and manifest",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeBundleBuild(cmdFlagValue(cmd, "root"), cmdFlagValue(cmd, "out"))
+			root, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			out, err := cmdFlagValue(cmd, "out")
+			if err != nil {
+				return err
+			}
+			return executeBundleBuild(root, out)
 		},
 	}
 	cmd.Flags().String("root", ".", "workspace root containing deck, workflows, outputs, and .deck/manifest.json")

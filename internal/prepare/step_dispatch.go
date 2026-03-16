@@ -32,7 +32,7 @@ func runPrepareStep(ctx context.Context, runner CommandRunner, bundleRoot, kind 
 		}
 		return files, map[string]any{"artifacts": files}, nil
 	case "Checks":
-		outputs, err := runCheckHost(runner, rendered)
+		outputs, err := runChecks(runner, rendered, resolveChecksRuntime(opts))
 		if err != nil {
 			return nil, nil, err
 		}

@@ -9,28 +9,43 @@ import (
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
-var (
-	readFileFn = os.ReadFile
-	goosFn     = func() string { return runtime.GOOS }
-	goarchFn   = func() string { return runtime.GOARCH }
-)
+type checksRuntime struct {
+	readHostFile  func(string) ([]byte, error)
+	currentGOOS   func() string
+	currentGOARCH func() string
+}
 
-type checkHostSpec struct {
+func defaultChecksRuntime() checksRuntime {
+	return checksRuntime{
+		readHostFile:  os.ReadFile,
+		currentGOOS:   func() string { return runtime.GOOS },
+		currentGOARCH: func() string { return runtime.GOARCH },
+	}
+}
+
+func resolveChecksRuntime(opts RunOptions) checksRuntime {
+	if opts.checksRuntime.readHostFile == nil || opts.checksRuntime.currentGOOS == nil || opts.checksRuntime.currentGOARCH == nil {
+		return defaultChecksRuntime()
+	}
+	return opts.checksRuntime
+}
+
+type checksSpec struct {
 	Checks   []string `json:"checks"`
 	Binaries []string `json:"binaries"`
 	FailFast *bool    `json:"failFast"`
 }
 
-func runCheckHost(runner CommandRunner, spec map[string]any) (map[string]any, error) {
-	decoded, err := workflowexec.DecodeSpec[checkHostSpec](spec)
+func runChecks(runner CommandRunner, spec map[string]any, deps checksRuntime) (map[string]any, error) {
+	decoded, err := workflowexec.DecodeSpec[checksSpec](spec)
 	if err != nil {
 		return nil, fmt.Errorf("decode Checks spec: %w", err)
 	}
 	checks := decoded.Checks
 	if len(checks) == 0 {
-		return nil, fmt.Errorf("%s: CheckHost requires checks", errCodePrepareCheckHostFailed)
+		return nil, fmt.Errorf("%s: Checks requires checks", errCodePrepareChecksFailed)
 	}
-	host := detectHostFacts()
+	host := detectHostFacts(deps)
 
 	failFast := true
 	if decoded.FailFast != nil {
@@ -41,7 +56,7 @@ func runCheckHost(runner CommandRunner, spec map[string]any) (map[string]any, er
 	fail := func(name, reason string) error {
 		failed = append(failed, name+":"+reason)
 		if failFast {
-			return fmt.Errorf("%s: %s", errCodePrepareCheckHostFailed, strings.Join(failed, ", "))
+			return fmt.Errorf("%s: %s", errCodePrepareChecksFailed, strings.Join(failed, ", "))
 		}
 		return nil
 	}
@@ -49,20 +64,20 @@ func runCheckHost(runner CommandRunner, spec map[string]any) (map[string]any, er
 	for _, chk := range checks {
 		switch chk {
 		case "os":
-			if goosFn() != "linux" {
+			if deps.currentGOOS() != "linux" {
 				if err := fail("os", "expected linux"); err != nil {
 					return nil, err
 				}
 			}
 		case "arch":
-			arch := goarchFn()
+			arch := deps.currentGOARCH()
 			if arch != "amd64" && arch != "arm64" {
 				if err := fail("arch", "expected amd64 or arm64"); err != nil {
 					return nil, err
 				}
 			}
 		case "kernelModules":
-			raw, err := readFileFn("/proc/modules")
+			raw, err := deps.readHostFile("/proc/modules")
 			if err != nil {
 				if err := fail("kernelModules", "cannot read /proc/modules"); err != nil {
 					return nil, err
@@ -76,7 +91,7 @@ func runCheckHost(runner CommandRunner, spec map[string]any) (map[string]any, er
 				}
 			}
 		case "swap":
-			raw, err := readFileFn("/proc/swaps")
+			raw, err := deps.readHostFile("/proc/swaps")
 			if err != nil {
 				if err := fail("swap", "cannot read /proc/swaps"); err != nil {
 					return nil, err
@@ -116,11 +131,11 @@ func runCheckHost(runner CommandRunner, spec map[string]any) (map[string]any, er
 	}
 
 	if len(failed) > 0 {
-		return map[string]any{"passed": false, "failedChecks": failed, "host": host}, fmt.Errorf("%s: %s", errCodePrepareCheckHostFailed, strings.Join(failed, ", "))
+		return map[string]any{"passed": false, "failedChecks": failed, "host": host}, fmt.Errorf("%s: %s", errCodePrepareChecksFailed, strings.Join(failed, ", "))
 	}
 	return map[string]any{"passed": true, "failedChecks": []string{}, "host": host}, nil
 }
 
-func detectHostFacts() map[string]any {
-	return workflowexec.DetectHostFacts(goosFn(), goarchFn(), readFileFn)
+func detectHostFacts(deps checksRuntime) map[string]any {
+	return workflowexec.DetectHostFacts(deps.currentGOOS(), deps.currentGOARCH(), deps.readHostFile)
 }

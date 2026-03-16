@@ -42,8 +42,12 @@ func (s *Store) SaveExecutionReport(sessionID string, report ExecutionReport) er
 		report.AssignmentID = resolved.ID
 	}
 
+	sessionDir, err := s.sessionDir(sessionID)
+	if err != nil {
+		return err
+	}
 	identity := reportIdentityKey(report)
-	path := filepath.Join(s.sessionDir(sessionID), "reports", report.NodeID, identity+".json")
+	path := filepath.Join(sessionDir, "reports", report.NodeID, identity+".json")
 	existing, found, err := readJSON[ExecutionReport](path)
 	if err != nil {
 		return err
@@ -62,7 +66,11 @@ func (s *Store) ListExecutionReports(sessionID, nodeID string) ([]ExecutionRepor
 		return nil, err
 	}
 
-	reportsDir := filepath.Join(s.sessionDir(sessionID), "reports", nodeID)
+	sessionDir, err := s.sessionDir(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	reportsDir := filepath.Join(sessionDir, "reports", nodeID)
 	files, err := listJSONFiles(reportsDir)
 	if err != nil {
 		return nil, err

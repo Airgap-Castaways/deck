@@ -1,12 +1,20 @@
 package main
 
-func toolSchemaDefinitions() map[string]map[string]any {
+func toolSchemaDefinitions() (map[string]map[string]any, error) {
+	fileSchema, err := generateFileToolSchema()
+	if err != nil {
+		return nil, err
+	}
+	waitSchema, err := generateWaitToolSchema()
+	if err != nil {
+		return nil, err
+	}
 	return map[string]map[string]any{
 		"artifacts.schema.json":     generateArtifactsToolSchema(),
 		"command.schema.json":       generateCommandToolSchema(),
 		"containerd.schema.json":    generateContainerdToolSchema(),
 		"directory.schema.json":     generateDirectoryToolSchema(),
-		"file.schema.json":          generateFileToolSchema(),
+		"file.schema.json":          fileSchema,
 		"image.schema.json":         generateImageToolSchema(),
 		"checks.schema.json":        generateChecksToolSchema(),
 		"kernel-module.schema.json": generateKernelModuleToolSchema(),
@@ -19,6 +27,6 @@ func toolSchemaDefinitions() map[string]map[string]any {
 		"symlink.schema.json":       generateSymlinkToolSchema(),
 		"sysctl.schema.json":        generateSysctlToolSchema(),
 		"systemd-unit.schema.json":  generateSystemdUnitToolSchema(),
-		"wait.schema.json":          generateWaitToolSchema(),
-	}
+		"wait.schema.json":          waitSchema,
+	}, nil
 }

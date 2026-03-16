@@ -24,7 +24,7 @@ import (
 )
 
 func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
-	stubImageDownload(t)
+	imageOps := stubImageDownloadOps()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("hello-download-file"))
@@ -76,7 +76,7 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 		},
 	}
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, imageDownloadOps: imageOps}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -136,7 +136,7 @@ func TestRun_NoPreparePhase(t *testing.T) {
 }
 
 func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
-	stubImageDownload(t)
+	imageOps := stubImageDownloadOps()
 
 	bundle := t.TempDir()
 	r := &fakeRunner{}
@@ -172,7 +172,7 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 		}},
 	}
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r, imageDownloadOps: imageOps}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -184,28 +184,18 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 	}
 }
 
-func stubImageDownload(t *testing.T) {
-	t.Helper()
-
-	oldParse := parseImageReferenceFn
-	oldFetch := remoteImageFetchFn
-	oldWrite := tarballWriteToFileFn
-
-	parseImageReferenceFn = func(v string) (name.Reference, error) {
-		return name.ParseReference(v, name.WeakValidation)
+func stubImageDownloadOps() imageDownloadOps {
+	return imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte("image"), 0o644)
+		},
 	}
-	remoteImageFetchFn = func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
-		return empty.Image, nil
-	}
-	tarballWriteToFileFn = func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
-		return os.WriteFile(path, []byte("image"), 0o644)
-	}
-
-	t.Cleanup(func() {
-		parseImageReferenceFn = oldParse
-		remoteImageFetchFn = oldFetch
-		tarballWriteToFileFn = oldWrite
-	})
 }
 
 func TestRun_PackagesContainerBackend(t *testing.T) {
@@ -775,28 +765,22 @@ func TestRun_ChecksStep(t *testing.T) {
 			}},
 		}
 
-		oldRead := readFileFn
-		oldGOOS := goosFn
-		oldGOARCH := goarchFn
-		readFileFn = func(path string) ([]byte, error) {
-			switch path {
-			case "/etc/os-release":
-				return []byte("ID=ubuntu\nID_LIKE=debian\nVERSION=\"24.04 LTS\"\nVERSION_ID=\"24.04\"\n"), nil
-			case "/proc/sys/kernel/osrelease":
-				return []byte("6.8.0-test\n"), nil
-			default:
-				return os.ReadFile(path)
-			}
+		checkRuntime := checksRuntime{
+			readHostFile: func(path string) ([]byte, error) {
+				switch path {
+				case "/etc/os-release":
+					return []byte("ID=ubuntu\nID_LIKE=debian\nVERSION=\"24.04 LTS\"\nVERSION_ID=\"24.04\"\n"), nil
+				case "/proc/sys/kernel/osrelease":
+					return []byte("6.8.0-test\n"), nil
+				default:
+					return os.ReadFile(path)
+				}
+			},
+			currentGOOS:   func() string { return "linux" },
+			currentGOARCH: func() string { return "arm64" },
 		}
-		goosFn = func() string { return "linux" }
-		goarchFn = func() string { return "arm64" }
-		defer func() {
-			readFileFn = oldRead
-			goosFn = oldGOOS
-			goarchFn = oldGOARCH
-		}()
 
-		if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}}); err != nil {
+		if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}, checksRuntime: checkRuntime}); err != nil {
 			t.Fatalf("expected checkhost pass, got %v", err)
 		}
 	})
@@ -819,28 +803,22 @@ func TestRun_ChecksStep(t *testing.T) {
 			}},
 		}
 
-		oldRead := readFileFn
-		oldGOOS := goosFn
-		oldGOARCH := goarchFn
-		readFileFn = func(path string) ([]byte, error) {
-			switch path {
-			case "/proc/swaps":
-				return []byte("Filename\tType\tSize\tUsed\tPriority\n/dev/sda file 1 0 -2\n"), nil
-			case "/proc/modules":
-				return []byte("overlay 1 0 - Live 0x0\n"), nil
-			default:
-				return os.ReadFile(path)
-			}
+		checkRuntime := checksRuntime{
+			readHostFile: func(path string) ([]byte, error) {
+				switch path {
+				case "/proc/swaps":
+					return []byte("Filename\tType\tSize\tUsed\tPriority\n/dev/sda file 1 0 -2\n"), nil
+				case "/proc/modules":
+					return []byte("overlay 1 0 - Live 0x0\n"), nil
+				default:
+					return os.ReadFile(path)
+				}
+			},
+			currentGOOS:   func() string { return "darwin" },
+			currentGOARCH: func() string { return "386" },
 		}
-		goosFn = func() string { return "darwin" }
-		goarchFn = func() string { return "386" }
-		defer func() {
-			readFileFn = oldRead
-			goosFn = oldGOOS
-			goarchFn = oldGOARCH
-		}()
 
-		err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &noRuntimeRunner{}})
+		err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &noRuntimeRunner{}, checksRuntime: checkRuntime})
 		if err == nil {
 			t.Fatalf("expected checkhost failure")
 		}

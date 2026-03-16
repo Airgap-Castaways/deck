@@ -2,39 +2,38 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	"os"
 
 	"github.com/invopop/jsonschema"
 
 	"github.com/taedi90/deck/internal/filemode"
 )
 
-func writeFile(path string, content []byte) {
+func writeFile(path string, content []byte) error {
 	if err := filemode.WriteArtifactFile(path, content); err != nil {
-		fail(err)
+		return err
 	}
+	return nil
 }
 
-func writeJSONFile(path string, value map[string]any) {
+func writeJSONFile(path string, value map[string]any) error {
 	raw, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
-		fail(err)
+		return err
 	}
 	raw = append(raw, '\n')
-	writeFile(path, raw)
+	return writeFile(path, raw)
 }
 
-func schemaToMap(schema *jsonschema.Schema) map[string]any {
+func schemaToMap(schema *jsonschema.Schema) (map[string]any, error) {
 	raw, err := json.Marshal(schema)
 	if err != nil {
-		fail(err)
+		return nil, err
 	}
 	out := map[string]any{}
 	if err := json.Unmarshal(raw, &out); err != nil {
-		fail(err)
+		return nil, err
 	}
-	return out
+	return out, nil
 }
 
 func propertyMap(node map[string]any) map[string]any {
@@ -67,9 +66,4 @@ func toAnySlice(values []string) []any {
 		out = append(out, value)
 	}
 	return out
-}
-
-func fail(err error) {
-	fmt.Fprintln(os.Stderr, err)
-	os.Exit(1)
 }

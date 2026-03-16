@@ -6,9 +6,12 @@ import (
 	"github.com/taedi90/deck/internal/schemamodel"
 )
 
-func generateFileToolSchema() map[string]any {
+func generateFileToolSchema() (map[string]any, error) {
 	reflector := jsonschema.Reflector{DoNotReference: true, ExpandedStruct: true}
-	root := schemaToMap(reflector.Reflect(&schemamodel.FileStepDocument{}))
+	root, err := schemaToMap(reflector.Reflect(&schemamodel.FileStepDocument{}))
+	if err != nil {
+		return nil, err
+	}
 	root["$schema"] = "https://json-schema.org/draft/2020-12/schema"
 	root["$id"] = "https://deck.local/schemas/tools/file.schema.json"
 	root["title"] = "FileStep"
@@ -33,12 +36,15 @@ func generateFileToolSchema() map[string]any {
 	})
 	patchFileSpec(props["spec"])
 
-	return root
+	return root, nil
 }
 
-func generateWaitToolSchema() map[string]any {
+func generateWaitToolSchema() (map[string]any, error) {
 	reflector := jsonschema.Reflector{DoNotReference: true, ExpandedStruct: true}
-	root := schemaToMap(reflector.Reflect(&schemamodel.WaitStepDocument{}))
+	root, err := schemaToMap(reflector.Reflect(&schemamodel.WaitStepDocument{}))
+	if err != nil {
+		return nil, err
+	}
 	root["$schema"] = "https://json-schema.org/draft/2020-12/schema"
 	root["$id"] = "https://deck.local/schemas/tools/wait.schema.json"
 	root["title"] = "WaitStep"
@@ -63,7 +69,7 @@ func generateWaitToolSchema() map[string]any {
 	})
 	patchWaitSpec(props["spec"])
 
-	return root
+	return root, nil
 }
 
 func patchFileSpec(node any) {

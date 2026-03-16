@@ -21,9 +21,9 @@ const (
 type Source string
 
 const (
-	SourceOperator      Source = "operator"
-	SourceGenerated     Source = "generated"
-	SourceGeneratedInit Source = "generated-new"
+	SourceOperator     Source = "operator"
+	SourceGenerated    Source = "generated"
+	SourceGeneratedNew Source = "generated-new"
 )
 
 type Paths struct {
@@ -32,13 +32,13 @@ type Paths struct {
 }
 
 type Result struct {
-	ID               string
-	Source           Source
-	Hostname         string
-	OperatorID       string
-	GeneratedID      string
-	Mismatch         bool
-	GeneratedCreated bool
+	ID             string
+	Source         Source
+	Hostname       string
+	OperatorID     string
+	GeneratedID    string
+	Mismatch       bool
+	GeneratedIDNew bool
 }
 
 var nodeIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
@@ -64,7 +64,9 @@ func Resolve(paths Paths) (Result, error) {
 		OperatorID:  operatorID,
 		GeneratedID: generatedID,
 	}
-	result.Hostname, _ = os.Hostname()
+	if hostname, err := os.Hostname(); err == nil {
+		result.Hostname = hostname
+	}
 
 	if operatorExists {
 		result.ID = operatorID
@@ -91,8 +93,8 @@ func Resolve(paths Paths) (Result, error) {
 
 	result.ID = generatedID
 	result.GeneratedID = generatedID
-	result.Source = SourceGeneratedInit
-	result.GeneratedCreated = true
+	result.Source = SourceGeneratedNew
+	result.GeneratedIDNew = true
 	return result, nil
 }
 
@@ -118,7 +120,7 @@ func Init(paths Paths) (Result, error) {
 		return Result{}, err
 	}
 	if !generatedExists {
-		result.GeneratedCreated = true
+		result.GeneratedIDNew = true
 	}
 	return result, nil
 }

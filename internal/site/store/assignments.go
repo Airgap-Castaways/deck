@@ -34,7 +34,11 @@ func (s *Store) SaveAssignment(sessionID string, assignment Assignment) error {
 		return err
 	}
 
-	path := filepath.Join(s.sessionDir(sessionID), "assignments", assignment.ID+".json")
+	sessionDir, err := s.sessionDir(sessionID)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(sessionDir, "assignments", assignment.ID+".json")
 	return writeAtomicJSON(path, assignment)
 }
 
@@ -83,7 +87,11 @@ func (s *Store) ResolveAssignment(sessionID, nodeID, role string) (Assignment, e
 }
 
 func (s *Store) listAssignments(sessionID string) ([]Assignment, error) {
-	assignmentsDir := filepath.Join(s.sessionDir(sessionID), "assignments")
+	sessionDir, err := s.sessionDir(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	assignmentsDir := filepath.Join(sessionDir, "assignments")
 	files, err := listJSONFiles(assignmentsDir)
 	if err != nil {
 		return nil, err

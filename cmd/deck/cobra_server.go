@@ -43,7 +43,11 @@ func newServerSetCommand() *cobra.Command {
 		Short: "Save the default server profile",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return executeServerSet(args[0], cmdFlagValue(cmd, "api-token"))
+			apiToken, err := cmdFlagValue(cmd, "api-token")
+			if err != nil {
+				return err
+			}
+			return executeServerSet(args[0], apiToken)
 		},
 	}
 	cmd.Flags().String("api-token", "", "default API token for assisted site APIs")
@@ -80,18 +84,62 @@ func newServerUpCommand() *cobra.Command {
 		Short: "Start the local bundle server",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			root, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			addr, err := cmdFlagValue(cmd, "addr")
+			if err != nil {
+				return err
+			}
+			apiToken, err := cmdFlagValue(cmd, "api-token")
+			if err != nil {
+				return err
+			}
+			reportMax, err := cmdFlagIntValue(cmd, "report-max")
+			if err != nil {
+				return err
+			}
+			auditMaxSize, err := cmdFlagIntValue(cmd, "audit-max-size-mb")
+			if err != nil {
+				return err
+			}
+			auditMaxFiles, err := cmdFlagIntValue(cmd, "audit-max-files")
+			if err != nil {
+				return err
+			}
+			tlsCert, err := cmdFlagValue(cmd, "tls-cert")
+			if err != nil {
+				return err
+			}
+			tlsKey, err := cmdFlagValue(cmd, "tls-key")
+			if err != nil {
+				return err
+			}
+			tlsSelfSigned, err := cmdFlagBoolValue(cmd, "tls-self-signed")
+			if err != nil {
+				return err
+			}
+			daemon, err := cmdFlagBoolValue(cmd, "daemon")
+			if err != nil {
+				return err
+			}
+			unit, err := cmdFlagValue(cmd, "unit")
+			if err != nil {
+				return err
+			}
 			return executeServerUp(serverUpOptions{
-				root:          cmdFlagValue(cmd, "root"),
-				addr:          cmdFlagValue(cmd, "addr"),
-				apiToken:      cmdFlagValue(cmd, "api-token"),
-				reportMax:     cmdFlagIntValue(cmd, "report-max"),
-				auditMaxSize:  cmdFlagIntValue(cmd, "audit-max-size-mb"),
-				auditMaxFiles: cmdFlagIntValue(cmd, "audit-max-files"),
-				tlsCert:       cmdFlagValue(cmd, "tls-cert"),
-				tlsKey:        cmdFlagValue(cmd, "tls-key"),
-				tlsSelfSigned: cmdFlagBoolValue(cmd, "tls-self-signed"),
-				daemon:        cmdFlagBoolValue(cmd, "daemon"),
-				unit:          cmdFlagValue(cmd, "unit"),
+				root:          root,
+				addr:          addr,
+				apiToken:      apiToken,
+				reportMax:     reportMax,
+				auditMaxSize:  auditMaxSize,
+				auditMaxFiles: auditMaxFiles,
+				tlsCert:       tlsCert,
+				tlsKey:        tlsKey,
+				tlsSelfSigned: tlsSelfSigned,
+				daemon:        daemon,
+				unit:          unit,
 			})
 		},
 	}
@@ -114,7 +162,15 @@ func newServerScenariosCommand() *cobra.Command {
 		Use:   "scenarios",
 		Short: "List available scenarios from a server",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeListScenarios(cmdFlagValue(cmd, "server"), cmdFlagValue(cmd, "output"))
+			server, err := cmdFlagValue(cmd, "server")
+			if err != nil {
+				return err
+			}
+			output, err := cmdFlagValue(cmd, "output")
+			if err != nil {
+				return err
+			}
+			return executeListScenarios(server, output)
 		},
 	}
 	cmd.Flags().SetInterspersed(false)
@@ -129,7 +185,11 @@ func newServerDownCommand() *cobra.Command {
 		Short: "Stop the local server daemon",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeServerDown(cmdFlagValue(cmd, "unit"))
+			unit, err := cmdFlagValue(cmd, "unit")
+			if err != nil {
+				return err
+			}
+			return executeServerDown(unit)
 		},
 	}
 	cmd.Flags().String("unit", "deck-server", "systemd unit name to stop")
@@ -142,7 +202,11 @@ func newServerHealthCommand() *cobra.Command {
 		Short: "Probe the configured or explicit server",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeHealth(cmdFlagValue(cmd, "server"))
+			server, err := cmdFlagValue(cmd, "server")
+			if err != nil {
+				return err
+			}
+			return executeHealth(server)
 		},
 	}
 	cmd.Flags().String("server", "", "server base URL (defaults to saved server)")
@@ -155,13 +219,27 @@ func newServerLogsCommand() *cobra.Command {
 		Short: "Read local server audit logs from file or journal",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeLogs(
-				cmdFlagValue(cmd, "root"),
-				cmdFlagValue(cmd, "source"),
-				cmdFlagValue(cmd, "path"),
-				cmdFlagValue(cmd, "unit"),
-				cmdFlagValue(cmd, "output"),
-			)
+			root, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			source, err := cmdFlagValue(cmd, "source")
+			if err != nil {
+				return err
+			}
+			path, err := cmdFlagValue(cmd, "path")
+			if err != nil {
+				return err
+			}
+			unit, err := cmdFlagValue(cmd, "unit")
+			if err != nil {
+				return err
+			}
+			output, err := cmdFlagValue(cmd, "output")
+			if err != nil {
+				return err
+			}
+			return executeLogs(root, source, path, unit, output)
 		},
 	}
 	cmd.Flags().String("root", ".", "serve root directory")

@@ -114,8 +114,7 @@ func TestImportReleaseCleansPartialArtifactsOnCopyFailure(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 
-	originalCopyDir := copyDirFunc
-	copyDirFunc = func(srcDir, dstDir string) error {
+	copyDirFn := func(srcDir, dstDir string) error {
 		if err := os.MkdirAll(dstDir, 0o755); err != nil {
 			return err
 		}
@@ -124,11 +123,8 @@ func TestImportReleaseCleansPartialArtifactsOnCopyFailure(t *testing.T) {
 		}
 		return fmt.Errorf("forced copy failure")
 	}
-	defer func() {
-		copyDirFunc = originalCopyDir
-	}()
 
-	err = st.ImportRelease(Release{ID: "release-partial"}, importedBundle)
+	err = st.importReleaseWithCopyDir(Release{ID: "release-partial"}, importedBundle, copyDirFn)
 	if err == nil {
 		t.Fatalf("expected import failure")
 	}

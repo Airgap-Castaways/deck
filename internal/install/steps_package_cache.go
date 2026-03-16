@@ -9,9 +9,11 @@ import (
 
 const defaultPackageCacheTimeout = 2 * time.Minute
 
-var packageCacheRunTimedCommand = runTimedCommand
-
 func runPackageCache(spec map[string]any) error {
+	return runPackageCacheWithRunner(spec, runTimedCommand)
+}
+
+func runPackageCacheWithRunner(spec map[string]any, runner func(name string, args []string, timeout time.Duration) error) error {
 	manager, err := resolvePackageCacheManager(spec)
 	if err != nil {
 		return err
@@ -29,7 +31,7 @@ func runPackageCache(spec map[string]any) error {
 		update,
 		packageRepoPolicyFromSpec(spec),
 		commandTimeoutWithDefault(spec, defaultPackageCacheTimeout),
-		packageCacheRunTimedCommand,
+		runner,
 		"package cache refresh",
 	)
 }
@@ -75,7 +77,7 @@ func runPackageCacheCommands(
 		if err == nil {
 			return nil
 		}
-		if errors.Is(err, errStepCommandTimeout) {
+		if errors.Is(err, ErrStepCommandTimeout) {
 			return fmt.Errorf("%s timed out: %w", timeoutContext, err)
 		}
 		return err

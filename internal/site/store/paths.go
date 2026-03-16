@@ -1,25 +1,27 @@
 package store
 
-func (s *Store) mustResolve(segments ...string) string {
+import "fmt"
+
+func (s *Store) resolve(segments ...string) (string, error) {
 	path, err := s.root.Resolve(segments...)
 	if err != nil {
-		panic(err)
+		return "", fmt.Errorf("resolve site path: %w", err)
 	}
-	return path
+	return path, nil
 }
 
-func (s *Store) siteDir() string {
-	return s.mustResolve(".deck", "site")
+func (s *Store) siteDir() (string, error) {
+	return s.resolve(".deck", "site")
 }
 
-func (s *Store) releasesDir() string {
-	return s.mustResolve(".deck", "site", "releases")
+func (s *Store) releasesDir() (string, error) {
+	return s.resolve(".deck", "site", "releases")
 }
 
-func (s *Store) releaseDir(releaseID string) string {
-	return s.mustResolve(".deck", "site", "releases", releaseID)
+func (s *Store) releaseDir(releaseID string) (string, error) {
+	return s.resolve(".deck", "site", "releases", releaseID)
 }
 
-func (s *Store) sessionDir(sessionID string) string {
-	return s.mustResolve(".deck", "site", "sessions", sessionID)
+func (s *Store) sessionDir(sessionID string) (string, error) {
+	return s.resolve(".deck", "site", "sessions", sessionID)
 }

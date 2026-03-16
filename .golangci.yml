@@ -8,12 +8,15 @@ linters:
   default: none
   enable:
     - gocritic
+    - gochecknoinits
     - gosec
+    - errname
     - errcheck
     - govet
     - bodyclose
     - ineffassign
     - misspell
+    - nakedret
     - nilerr
     - staticcheck
     - unused

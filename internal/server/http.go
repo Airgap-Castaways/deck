@@ -46,7 +46,7 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 
 	logger, err := newAuditLogger(resolvedRoot, auditLoggerOptions{maxSizeBytes: int64(auditMaxSizeMB) * 1024 * 1024, maxFiles: auditMaxFiles})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("init audit logger: %w", err)
 	}
 	siteStore, err := store.New(resolvedRoot)
 	if err != nil {
