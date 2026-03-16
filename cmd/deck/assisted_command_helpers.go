@@ -236,8 +236,7 @@ func uploadAssistedExecutionReport(config assistedExecutionConfig, report sitest
 	}
 	defer closeSilently(resp.Body)
 	if resp.StatusCode != http.StatusAccepted {
-		body, _ := io.ReadAll(resp.Body)
-		msg := strings.TrimSpace(string(body))
+		msg := responseStatusMessage(resp)
 		if msg == "" {
 			msg = http.StatusText(resp.StatusCode)
 		}
@@ -259,8 +258,7 @@ func fetchAssistedSession(config assistedExecutionConfig, sessionID string) (sit
 	}
 	defer closeSilently(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return sitestore.Session{}, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return sitestore.Session{}, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, responseStatusMessage(resp))
 	}
 	out := sitestore.Session{}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -282,15 +280,17 @@ func fetchAssistedAssignment(config assistedExecutionConfig, sessionID, nodeID, 
 	}
 	defer closeSilently(resp.Body)
 	if resp.StatusCode == http.StatusNotFound {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return sitestore.Assignment{}, false, fmt.Errorf("read 404 assignment response: %w", err)
+		}
 		if strings.Contains(string(body), "no assignment matched") {
 			return sitestore.Assignment{}, false, nil
 		}
 		return sitestore.Assignment{}, false, fmt.Errorf("unexpected status 404: %s", strings.TrimSpace(string(body)))
 	}
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return sitestore.Assignment{}, false, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return sitestore.Assignment{}, false, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, responseStatusMessage(resp))
 	}
 	assignment := sitestore.Assignment{}
 	if err := json.NewDecoder(resp.Body).Decode(&assignment); err != nil {
@@ -365,14 +365,25 @@ func fetchAssistedReleaseBundleFile(config assistedExecutionConfig, releaseID, r
 	}
 	defer closeSilently(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("release bundle fetch %q failed: status %d: %s", relPath, resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("release bundle fetch %q failed: status %d: %s", relPath, resp.StatusCode, responseStatusMessage(resp))
 	}
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read release bundle response: %w", err)
 	}
 	return raw, nil
+}
+
+func responseStatusMessage(resp *http.Response) string {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Sprintf("%s (read body: %v)", http.StatusText(resp.StatusCode), err)
+	}
+	msg := strings.TrimSpace(string(body))
+	if msg == "" {
+		return http.StatusText(resp.StatusCode)
+	}
+	return msg
 }
 
 func assistedDataRoot() string {

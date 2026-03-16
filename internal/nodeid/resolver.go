@@ -64,7 +64,9 @@ func Resolve(paths Paths) (Result, error) {
 		OperatorID:  operatorID,
 		GeneratedID: generatedID,
 	}
-	result.Hostname, _ = os.Hostname()
+	if hostname, err := os.Hostname(); err == nil {
+		result.Hostname = hostname
+	}
 
 	if operatorExists {
 		result.ID = operatorID

@@ -14,49 +14,51 @@ type ActionContract struct {
 	Roles   map[string]bool
 }
 
-var stepContracts = map[string]StepContract{
-	"Checks":    simpleStep("checks.schema.json", setOf("prepare"), setOf("passed", "failedChecks")),
-	"Artifacts": simpleStep("artifacts.schema.json", setOf("apply"), nil),
-	"Packages": familyStep("packages.schema.json", setOf("prepare", "apply"), map[string]ActionContract{
-		"download": {Outputs: setOf("artifacts"), Roles: setOf("prepare")},
-		"install":  {Outputs: nil, Roles: setOf("apply")},
-	}),
-	"Directory":    simpleStep("directory.schema.json", setOf("apply"), setOf("path")),
-	"Symlink":      simpleStep("symlink.schema.json", setOf("apply"), setOf("path")),
-	"SystemdUnit":  simpleStep("systemd-unit.schema.json", setOf("apply"), setOf("path")),
-	"Containerd":   simpleStep("containerd.schema.json", setOf("apply"), setOf("path")),
-	"PackageCache": simpleStep("package-cache.schema.json", setOf("apply"), nil),
-	"Swap":         simpleStep("swap.schema.json", setOf("apply"), nil),
-	"KernelModule": simpleStep("kernel-module.schema.json", setOf("apply"), setOf("name", "names")),
-	"Command":      simpleStep("command.schema.json", setOf("apply"), nil),
-	"Service":      simpleStep("service.schema.json", setOf("apply"), setOf("name")),
-	"Sysctl":       simpleStep("sysctl.schema.json", setOf("apply"), nil),
-	"File": familyStep("file.schema.json", setOf("prepare", "apply"), map[string]ActionContract{
-		"download": {Outputs: setOf("path", "artifacts"), Roles: setOf("prepare", "apply")},
-		"write":    {Outputs: setOf("path"), Roles: setOf("apply")},
-		"copy":     {Outputs: setOf("dest"), Roles: setOf("apply")},
-		"edit":     {Outputs: setOf("path"), Roles: setOf("apply")},
-	}),
-	"Repository": familyStep("repository.schema.json", setOf("apply"), map[string]ActionContract{
-		"configure": {Outputs: setOf("path"), Roles: setOf("apply")},
-	}),
-	"Image": familyStep("image.schema.json", setOf("prepare", "apply"), map[string]ActionContract{
-		"download": {Outputs: setOf("artifacts"), Roles: setOf("prepare")},
-		"verify":   {Outputs: nil, Roles: setOf("apply")},
-	}),
-	"Wait": familyStep("wait.schema.json", setOf("apply"), map[string]ActionContract{
-		"serviceActive":  {Outputs: nil, Roles: setOf("apply")},
-		"commandSuccess": {Outputs: nil, Roles: setOf("apply")},
-		"fileExists":     {Outputs: nil, Roles: setOf("apply")},
-		"fileAbsent":     {Outputs: nil, Roles: setOf("apply")},
-		"tcpPortClosed":  {Outputs: nil, Roles: setOf("apply")},
-		"tcpPortOpen":    {Outputs: nil, Roles: setOf("apply")},
-	}),
-	"Kubeadm": familyStep("kubeadm.schema.json", setOf("apply"), map[string]ActionContract{
-		"init":  {Outputs: setOf("joinFile"), Roles: setOf("apply")},
-		"join":  {Outputs: nil, Roles: setOf("apply")},
-		"reset": {Outputs: nil, Roles: setOf("apply")},
-	}),
+func stepContracts() map[string]StepContract {
+	return map[string]StepContract{
+		"Checks":    simpleStep("checks.schema.json", setOf("prepare"), setOf("passed", "failedChecks")),
+		"Artifacts": simpleStep("artifacts.schema.json", setOf("apply"), nil),
+		"Packages": familyStep("packages.schema.json", setOf("prepare", "apply"), map[string]ActionContract{
+			"download": {Outputs: setOf("artifacts"), Roles: setOf("prepare")},
+			"install":  {Outputs: nil, Roles: setOf("apply")},
+		}),
+		"Directory":    simpleStep("directory.schema.json", setOf("apply"), setOf("path")),
+		"Symlink":      simpleStep("symlink.schema.json", setOf("apply"), setOf("path")),
+		"SystemdUnit":  simpleStep("systemd-unit.schema.json", setOf("apply"), setOf("path")),
+		"Containerd":   simpleStep("containerd.schema.json", setOf("apply"), setOf("path")),
+		"PackageCache": simpleStep("package-cache.schema.json", setOf("apply"), nil),
+		"Swap":         simpleStep("swap.schema.json", setOf("apply"), nil),
+		"KernelModule": simpleStep("kernel-module.schema.json", setOf("apply"), setOf("name", "names")),
+		"Command":      simpleStep("command.schema.json", setOf("apply"), nil),
+		"Service":      simpleStep("service.schema.json", setOf("apply"), setOf("name")),
+		"Sysctl":       simpleStep("sysctl.schema.json", setOf("apply"), nil),
+		"File": familyStep("file.schema.json", setOf("prepare", "apply"), map[string]ActionContract{
+			"download": {Outputs: setOf("path", "artifacts"), Roles: setOf("prepare", "apply")},
+			"write":    {Outputs: setOf("path"), Roles: setOf("apply")},
+			"copy":     {Outputs: setOf("dest"), Roles: setOf("apply")},
+			"edit":     {Outputs: setOf("path"), Roles: setOf("apply")},
+		}),
+		"Repository": familyStep("repository.schema.json", setOf("apply"), map[string]ActionContract{
+			"configure": {Outputs: setOf("path"), Roles: setOf("apply")},
+		}),
+		"Image": familyStep("image.schema.json", setOf("prepare", "apply"), map[string]ActionContract{
+			"download": {Outputs: setOf("artifacts"), Roles: setOf("prepare")},
+			"verify":   {Outputs: nil, Roles: setOf("apply")},
+		}),
+		"Wait": familyStep("wait.schema.json", setOf("apply"), map[string]ActionContract{
+			"serviceActive":  {Outputs: nil, Roles: setOf("apply")},
+			"commandSuccess": {Outputs: nil, Roles: setOf("apply")},
+			"fileExists":     {Outputs: nil, Roles: setOf("apply")},
+			"fileAbsent":     {Outputs: nil, Roles: setOf("apply")},
+			"tcpPortClosed":  {Outputs: nil, Roles: setOf("apply")},
+			"tcpPortOpen":    {Outputs: nil, Roles: setOf("apply")},
+		}),
+		"Kubeadm": familyStep("kubeadm.schema.json", setOf("apply"), map[string]ActionContract{
+			"init":  {Outputs: setOf("joinFile"), Roles: setOf("apply")},
+			"join":  {Outputs: nil, Roles: setOf("apply")},
+			"reset": {Outputs: nil, Roles: setOf("apply")},
+		}),
+	}
 }
 
 func simpleStep(schema string, roles map[string]bool, outputs map[string]bool) StepContract {
@@ -68,7 +70,7 @@ func familyStep(schema string, roles map[string]bool, actions map[string]ActionC
 }
 
 func StepSchemaFile(kind string) (string, bool) {
-	contract, ok := stepContracts[kind]
+	contract, ok := stepContracts()[kind]
 	if !ok || contract.SchemaFile == "" {
 		return "", false
 	}
@@ -76,8 +78,9 @@ func StepSchemaFile(kind string) (string, bool) {
 }
 
 func StepKinds() []string {
-	kinds := make([]string, 0, len(stepContracts))
-	for kind := range stepContracts {
+	contracts := stepContracts()
+	kinds := make([]string, 0, len(contracts))
+	for kind := range contracts {
 		kinds = append(kinds, kind)
 	}
 	sort.Strings(kinds)
@@ -85,7 +88,7 @@ func StepKinds() []string {
 }
 
 func StepAllowedForRole(role, kind string, spec map[string]any) bool {
-	contract, ok := stepContracts[kind]
+	contract, ok := stepContracts()[kind]
 	if !ok {
 		return false
 	}
@@ -117,7 +120,7 @@ func StepAllowedForRole(role, kind string, spec map[string]any) bool {
 }
 
 func StepHasOutput(kind string, spec map[string]any, output string) bool {
-	contract, ok := stepContracts[kind]
+	contract, ok := stepContracts()[kind]
 	if !ok {
 		return false
 	}

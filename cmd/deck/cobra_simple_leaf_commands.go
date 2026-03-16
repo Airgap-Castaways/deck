@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -123,25 +124,42 @@ func newNodeAssignmentShowCommand() *cobra.Command {
 }
 
 func cmdFlagValue(cmd *cobra.Command, name string) string {
-	value, err := cmd.Flags().GetString(name)
-	if err != nil {
-		panic(fmt.Sprintf("internal CLI wiring error: string flag %q not registered on %q: %v", name, cmd.CommandPath(), err))
+	flag := cmd.Flags().Lookup(name)
+	if flag == nil {
+		reportFlagWiringError(cmd, "string", name, fmt.Errorf("flag not registered"))
+		return ""
 	}
-	return value
+	return flag.Value.String()
 }
 
 func cmdFlagIntValue(cmd *cobra.Command, name string) int {
-	value, err := cmd.Flags().GetInt(name)
+	flag := cmd.Flags().Lookup(name)
+	if flag == nil {
+		reportFlagWiringError(cmd, "int", name, fmt.Errorf("flag not registered"))
+		return 0
+	}
+	value, err := strconv.Atoi(flag.Value.String())
 	if err != nil {
-		panic(fmt.Sprintf("internal CLI wiring error: int flag %q not registered on %q: %v", name, cmd.CommandPath(), err))
+		reportFlagWiringError(cmd, "int", name, err)
+		return 0
 	}
 	return value
 }
 
 func cmdFlagBoolValue(cmd *cobra.Command, name string) bool {
-	value, err := cmd.Flags().GetBool(name)
+	flag := cmd.Flags().Lookup(name)
+	if flag == nil {
+		reportFlagWiringError(cmd, "bool", name, fmt.Errorf("flag not registered"))
+		return false
+	}
+	value, err := strconv.ParseBool(flag.Value.String())
 	if err != nil {
-		panic(fmt.Sprintf("internal CLI wiring error: bool flag %q not registered on %q: %v", name, cmd.CommandPath(), err))
+		reportFlagWiringError(cmd, "bool", name, err)
+		return false
 	}
 	return value
+}
+
+func reportFlagWiringError(cmd *cobra.Command, kind, name string, err error) {
+	cmd.PrintErrf("internal CLI wiring error: %s flag %q on %q: %v\n", kind, name, cmd.CommandPath(), err)
 }

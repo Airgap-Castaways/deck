@@ -23,6 +23,7 @@ type RunOptions struct {
 	CommandRunner    CommandRunner
 	ForceRedownload  bool
 	imageDownloadOps imageDownloadOps
+	checksRuntime    checksRuntime
 }
 
 type CommandRunner interface {

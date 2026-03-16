@@ -765,28 +765,22 @@ func TestRun_ChecksStep(t *testing.T) {
 			}},
 		}
 
-		oldRead := readHostFile
-		oldGOOS := currentGOOS
-		oldGOARCH := currentGOARCH
-		readHostFile = func(path string) ([]byte, error) {
-			switch path {
-			case "/etc/os-release":
-				return []byte("ID=ubuntu\nID_LIKE=debian\nVERSION=\"24.04 LTS\"\nVERSION_ID=\"24.04\"\n"), nil
-			case "/proc/sys/kernel/osrelease":
-				return []byte("6.8.0-test\n"), nil
-			default:
-				return os.ReadFile(path)
-			}
+		checkRuntime := checksRuntime{
+			readHostFile: func(path string) ([]byte, error) {
+				switch path {
+				case "/etc/os-release":
+					return []byte("ID=ubuntu\nID_LIKE=debian\nVERSION=\"24.04 LTS\"\nVERSION_ID=\"24.04\"\n"), nil
+				case "/proc/sys/kernel/osrelease":
+					return []byte("6.8.0-test\n"), nil
+				default:
+					return os.ReadFile(path)
+				}
+			},
+			currentGOOS:   func() string { return "linux" },
+			currentGOARCH: func() string { return "arm64" },
 		}
-		currentGOOS = func() string { return "linux" }
-		currentGOARCH = func() string { return "arm64" }
-		defer func() {
-			readHostFile = oldRead
-			currentGOOS = oldGOOS
-			currentGOARCH = oldGOARCH
-		}()
 
-		if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}}); err != nil {
+		if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}, checksRuntime: checkRuntime}); err != nil {
 			t.Fatalf("expected checkhost pass, got %v", err)
 		}
 	})
@@ -809,28 +803,22 @@ func TestRun_ChecksStep(t *testing.T) {
 			}},
 		}
 
-		oldRead := readHostFile
-		oldGOOS := currentGOOS
-		oldGOARCH := currentGOARCH
-		readHostFile = func(path string) ([]byte, error) {
-			switch path {
-			case "/proc/swaps":
-				return []byte("Filename\tType\tSize\tUsed\tPriority\n/dev/sda file 1 0 -2\n"), nil
-			case "/proc/modules":
-				return []byte("overlay 1 0 - Live 0x0\n"), nil
-			default:
-				return os.ReadFile(path)
-			}
+		checkRuntime := checksRuntime{
+			readHostFile: func(path string) ([]byte, error) {
+				switch path {
+				case "/proc/swaps":
+					return []byte("Filename\tType\tSize\tUsed\tPriority\n/dev/sda file 1 0 -2\n"), nil
+				case "/proc/modules":
+					return []byte("overlay 1 0 - Live 0x0\n"), nil
+				default:
+					return os.ReadFile(path)
+				}
+			},
+			currentGOOS:   func() string { return "darwin" },
+			currentGOARCH: func() string { return "386" },
 		}
-		currentGOOS = func() string { return "darwin" }
-		currentGOARCH = func() string { return "386" }
-		defer func() {
-			readHostFile = oldRead
-			currentGOOS = oldGOOS
-			currentGOARCH = oldGOARCH
-		}()
 
-		err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &noRuntimeRunner{}})
+		err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &noRuntimeRunner{}, checksRuntime: checkRuntime})
 		if err == nil {
 			t.Fatalf("expected checkhost failure")
 		}

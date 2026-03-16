@@ -9,11 +9,26 @@ import (
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
-var (
-	readHostFile  = os.ReadFile
-	currentGOOS   = func() string { return runtime.GOOS }
-	currentGOARCH = func() string { return runtime.GOARCH }
-)
+type checksRuntime struct {
+	readHostFile  func(string) ([]byte, error)
+	currentGOOS   func() string
+	currentGOARCH func() string
+}
+
+func defaultChecksRuntime() checksRuntime {
+	return checksRuntime{
+		readHostFile:  os.ReadFile,
+		currentGOOS:   func() string { return runtime.GOOS },
+		currentGOARCH: func() string { return runtime.GOARCH },
+	}
+}
+
+func resolveChecksRuntime(opts RunOptions) checksRuntime {
+	if opts.checksRuntime.readHostFile == nil || opts.checksRuntime.currentGOOS == nil || opts.checksRuntime.currentGOARCH == nil {
+		return defaultChecksRuntime()
+	}
+	return opts.checksRuntime
+}
 
 type checksSpec struct {
 	Checks   []string `json:"checks"`
@@ -21,7 +36,7 @@ type checksSpec struct {
 	FailFast *bool    `json:"failFast"`
 }
 
-func runChecks(runner CommandRunner, spec map[string]any) (map[string]any, error) {
+func runChecks(runner CommandRunner, spec map[string]any, deps checksRuntime) (map[string]any, error) {
 	decoded, err := workflowexec.DecodeSpec[checksSpec](spec)
 	if err != nil {
 		return nil, fmt.Errorf("decode Checks spec: %w", err)
@@ -30,7 +45,7 @@ func runChecks(runner CommandRunner, spec map[string]any) (map[string]any, error
 	if len(checks) == 0 {
 		return nil, fmt.Errorf("%s: Checks requires checks", errCodePrepareChecksFailed)
 	}
-	host := detectHostFacts()
+	host := detectHostFacts(deps)
 
 	failFast := true
 	if decoded.FailFast != nil {
@@ -49,20 +64,20 @@ func runChecks(runner CommandRunner, spec map[string]any) (map[string]any, error
 	for _, chk := range checks {
 		switch chk {
 		case "os":
-			if currentGOOS() != "linux" {
+			if deps.currentGOOS() != "linux" {
 				if err := fail("os", "expected linux"); err != nil {
 					return nil, err
 				}
 			}
 		case "arch":
-			arch := currentGOARCH()
+			arch := deps.currentGOARCH()
 			if arch != "amd64" && arch != "arm64" {
 				if err := fail("arch", "expected amd64 or arm64"); err != nil {
 					return nil, err
 				}
 			}
 		case "kernelModules":
-			raw, err := readHostFile("/proc/modules")
+			raw, err := deps.readHostFile("/proc/modules")
 			if err != nil {
 				if err := fail("kernelModules", "cannot read /proc/modules"); err != nil {
 					return nil, err
@@ -76,7 +91,7 @@ func runChecks(runner CommandRunner, spec map[string]any) (map[string]any, error
 				}
 			}
 		case "swap":
-			raw, err := readHostFile("/proc/swaps")
+			raw, err := deps.readHostFile("/proc/swaps")
 			if err != nil {
 				if err := fail("swap", "cannot read /proc/swaps"); err != nil {
 					return nil, err
@@ -121,6 +136,6 @@ func runChecks(runner CommandRunner, spec map[string]any) (map[string]any, error
 	return map[string]any{"passed": true, "failedChecks": []string{}, "host": host}, nil
 }
 
-func detectHostFacts() map[string]any {
-	return workflowexec.DetectHostFacts(currentGOOS(), currentGOARCH(), readHostFile)
+func detectHostFacts(deps checksRuntime) map[string]any {
+	return workflowexec.DetectHostFacts(deps.currentGOOS(), deps.currentGOARCH(), deps.readHostFile)
 }
