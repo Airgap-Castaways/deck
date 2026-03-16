@@ -154,6 +154,39 @@ This is why the command tree stays intentionally small and role-oriented rather 
 
 The intent is to reduce operator hesitation and avoid a tool shape where several commands appear to solve the same problem with slightly different assumptions. A smaller command model makes the default path clearer and helps keep help text, examples, and documentation aligned.
 
+## Simplicity as a usability strategy
+
+`deck` treats simplicity as a usability feature, not just an implementation preference.
+
+In air-gapped operations, predictability usually matters more than configurability. The project therefore tries to narrow the number of primary concepts an operator has to keep in mind at once.
+
+That simplification shows up in several places.
+
+- **Standard scaffold shape**: `deck init` creates a fixed project layout so workflows, bundle inputs, and docs start from one recognizable structure rather than many equally valid layouts.
+- **Fewer variable-definition paths**: variable definitions are intentionally encouraged toward central files such as `vars.yaml` instead of being spread across many places with layered overrides.
+- **Limited override surface**: `deck` tries to avoid too many precedence rules because operators should be able to tell where a final value came from without tracing through many levels of indirection.
+- **Restricted component coupling**: components are intentionally kept from turning into a free-form dependency graph with cross-imports and arbitrary variable passing. That reduces hidden coupling and makes a workflow tree easier to reason about.
+- **One obvious main path**: the common case should have one recommended structure for authoring, preparing, bundling, and applying rather than several parallel patterns.
+
+The same principle applies to workflow composition. `deck` prefers conventions over project-local creativity when that creativity would make examples harder to follow, reviews harder to perform, or operational outcomes harder to predict.
+
+This is a deliberate tradeoff. Some flexibility is left on the table in exchange for a smaller mental model, clearer documentation, and fewer situations where operators need to ask which of several valid shapes they should choose.
+
+## Schema and documentation pipeline
+
+`deck` treats Go model definitions as the primary source of truth for workflow and step structure.
+
+From that typed model, the project derives two other layers:
+
+- **JSON Schema** as the machine-readable contract used for validation and tooling
+- **Markdown reference pages** as the human-readable documentation layer
+
+This is intentionally a pipeline rather than three independently maintained descriptions of the same shape.
+
+The goal is to reduce drift between implementation, validation, and documentation. When a typed step changes, the preferred direction is to update the Go model first, regenerate the machine-readable schema, and then regenerate the user-facing documentation from that contract and its metadata.
+
+In practice, some documentation metadata is layered on top so examples and field descriptions stay useful, but the structural contract should still flow from the typed Go model into schema and then into docs.
+
 ## Local-first execution model
 
 `deck` is designed so the default execution path is local.
