@@ -1,0 +1,419 @@
+package askcli
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	lspaugment "github.com/taedi90/deck/internal/askaugment/lsp"
+	mcpaugment "github.com/taedi90/deck/internal/askaugment/mcp"
+	"github.com/taedi90/deck/internal/askconfig"
+	"github.com/taedi90/deck/internal/askcontract"
+	"github.com/taedi90/deck/internal/askhooks"
+	"github.com/taedi90/deck/internal/askintent"
+	"github.com/taedi90/deck/internal/askprovider"
+	"github.com/taedi90/deck/internal/askretrieve"
+	"github.com/taedi90/deck/internal/askreview"
+	"github.com/taedi90/deck/internal/askstate"
+	"github.com/taedi90/deck/internal/validate"
+)
+
+func Execute(ctx context.Context, opts Options, client askprovider.Client) error {
+	if client == nil {
+		return fmt.Errorf("ask backend is not configured")
+	}
+	hooks := askhooks.Default()
+	resolvedRoot, err := filepath.Abs(strings.TrimSpace(opts.Root))
+	if err != nil {
+		return fmt.Errorf("resolve workspace root: %w", err)
+	}
+	requestText, err := loadRequestText(resolvedRoot, strings.TrimSpace(opts.Prompt), strings.TrimSpace(opts.FromPath))
+	if err != nil {
+		return err
+	}
+	requestText = strings.TrimSpace(hooks.PreClassify(requestText))
+	if requestText == "" && !opts.Review {
+		return fmt.Errorf("ask request is required")
+	}
+	state, err := askstate.Load(resolvedRoot)
+	if err != nil {
+		return err
+	}
+	workspace, err := askretrieve.InspectWorkspace(resolvedRoot)
+	if err != nil {
+		return err
+	}
+	heuristic := hooks.PostClassify(askintent.Classify(askintent.Input{
+		Prompt:          requestText,
+		WriteFlag:       opts.Write,
+		ReviewFlag:      opts.Review,
+		HasWorkflowTree: workspace.HasWorkflowTree,
+		HasPrepare:      workspace.HasPrepare,
+		HasApply:        workspace.HasApply,
+	}))
+	effective, err := askconfig.ResolveEffective(askconfig.Settings{Provider: opts.Provider, Model: opts.Model, Endpoint: opts.Endpoint})
+	if err != nil {
+		return err
+	}
+	logger := newAskLogger(opts.Stderr, effective.LogLevel)
+	logger.logf("basic", "deck ask phase=request routeCandidate=%s write=%t review=%t\n", heuristic.Route, opts.Write, opts.Review)
+	logger.logf("basic", "deck ask using provider=%s model=%s endpoint=%s apiKeySource=%s logLevel=%s\n", effective.Provider, effective.Model, effective.Endpoint, effective.APIKeySource, effective.LogLevel)
+	logger.logf("debug", "deck ask command=%s\n", renderUserCommand(opts))
+	logger.logf("trace", "deck ask user-request:\n%s\n", strings.TrimSpace(requestText))
+
+	decision := heuristic
+	classifierLLM := false
+	classifierSystem := classifierSystemPrompt()
+	classifierUser := classifierUserPrompt(requestText, opts.Review, workspace)
+	if canUseLLM(effective) {
+		logger.logf("debug", "deck ask phase=classify provider=%s model=%s\n", effective.Provider, effective.Model)
+		classified, classifyErr := classifyWithLLM(ctx, client, effective, classifierSystem, classifierUser, logger)
+		if classifyErr == nil {
+			decision = classified
+			classifierLLM = true
+			logger.logf("basic", "deck ask phase=classify-complete route=%s confidence=%.2f reason=%s\n", decision.Route, decision.Confidence, decision.Reason)
+		} else {
+			logger.logf("debug", "deck ask phase=classify-fallback error=%v\n", classifyErr)
+		}
+	} else {
+		logger.logf("debug", "deck ask phase=classify-skip reason=no-llm-credentials\n")
+	}
+	if opts.Write && !decision.AllowGeneration && heuristic.AllowGeneration {
+		logger.logf("debug", "deck ask phase=classify-override from=%s to=%s reason=write-flag\n", decision.Route, heuristic.Route)
+		decision = heuristic
+		decision.Reason = "write flag overrides non-generation classification"
+	}
+
+	mcpChunks, mcpEvents := mcpaugment.Gather(ctx, effective.MCP, decision.Route, requestText)
+	lspChunks, lspEvents := lspaugment.Gather(ctx, effective.LSP, decision.Target, workspace)
+	externalChunks := append(append([]askretrieve.Chunk{}, mcpChunks...), lspChunks...)
+	retrieval := askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, externalChunks)
+	result := runResult{
+		Route:         decision.Route,
+		Target:        decision.Target,
+		Confidence:    decision.Confidence,
+		Reason:        decision.Reason,
+		RetriesUsed:   0,
+		Chunks:        retrieval.Chunks,
+		DroppedChunks: retrieval.Dropped,
+		ConfigSource:  effective,
+		ClassifierLLM: classifierLLM,
+		AugmentEvents: append(mcpEvents, lspEvents...),
+		UserCommand:   renderUserCommand(opts),
+	}
+	if canUseLLM(effective) {
+		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "classifier", SystemPrompt: classifierSystem, UserPrompt: classifierUser})
+	}
+
+	logger.logf("debug", "deck ask phase=augment-start mcp=%t lsp=%t\n", effective.MCP.Enabled, effective.LSP.Enabled)
+	for _, event := range result.AugmentEvents {
+		prefix := "augment"
+		if strings.HasPrefix(event, "mcp:") {
+			prefix = "mcp"
+		} else if strings.HasPrefix(event, "lsp") {
+			prefix = "lsp"
+		}
+		logger.logf("debug", "deck ask %s=%s\n", prefix, event)
+	}
+	logger.logf("debug", "deck ask phase=retrieval chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
+
+	if decision.LLMPolicy == askintent.LLMRequired && !canUseLLM(effective) {
+		return fmt.Errorf("missing ask api key for provider %q; set %s or run `deck ask auth set --api-key ...`", effective.Provider, "DECK_ASK_API_KEY")
+	}
+
+	switch decision.Route {
+	case askintent.RouteDraft, askintent.RouteRefine:
+		if !canUseLLM(effective) {
+			return fmt.Errorf("route %s requires model access; configure provider credentials first", decision.Route)
+		}
+		attempts := generationAttempts(opts.MaxIterations, decision, requestText)
+		generationRequest := askprovider.Request{
+			Kind:         "generate",
+			Provider:     effective.Provider,
+			Model:        effective.Model,
+			APIKey:       effective.APIKey,
+			Endpoint:     effective.Endpoint,
+			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval),
+			Prompt:       generationUserPrompt(workspace, state, requestText, strings.TrimSpace(opts.FromPath), decision.Route),
+			MaxRetries:   attempts,
+		}
+		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "generation", SystemPrompt: generationRequest.SystemPrompt, UserPrompt: generationRequest.Prompt})
+		logger.logf("basic", "deck ask phase=generation-start route=%s attempts=%d\n", decision.Route, attempts)
+		gen, lintSummary, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts, logger)
+		if genErr != nil {
+			return genErr
+		}
+		logger.logf("basic", "deck ask phase=generation-complete files=%d lint=%s\n", len(gen.Files), lintSummary)
+		result.LLMUsed = true
+		result.RetriesUsed = retriesUsed
+		result.Files = gen.Files
+		result.Summary = gen.Summary
+		result.ReviewLines = append(result.ReviewLines, gen.Review...)
+		result.LintSummary = lintSummary
+		result.LocalFindings = localFindings(result.Files)
+		if opts.Write {
+			if err := writeFiles(resolvedRoot, result.Files); err != nil {
+				return err
+			}
+			result.WroteFiles = true
+		}
+		if retriesUsed > 0 {
+			result.Termination = "generated-after-repair"
+		} else {
+			result.Termination = "generated"
+		}
+	default:
+		if decision.Route == askintent.RouteReview {
+			result.LocalFindings = askreview.Workspace(resolvedRoot)
+			result.ReviewLines = append(result.ReviewLines, findingsToLines(result.LocalFindings)...)
+		}
+		if canUseLLM(effective) {
+			systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, requestText)
+			result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
+			logger.logf("basic", "deck ask phase=answer-start route=%s\n", decision.Route)
+			info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)
+			if infoErr == nil {
+				result.LLMUsed = true
+				result.Summary = info.Summary
+				result.Answer = info.Answer
+				result.ReviewLines = append(result.ReviewLines, info.Suggestions...)
+				result.ReviewLines = append(result.ReviewLines, info.Findings...)
+				result.ReviewLines = append(result.ReviewLines, info.SuggestedChange...)
+				logger.logf("basic", "deck ask phase=answer-complete route=%s\n", decision.Route)
+			} else {
+				result.ReviewLines = append(result.ReviewLines, "LLM response failed; using local fallback: "+infoErr.Error())
+				logger.logf("debug", "deck ask phase=answer-fallback error=%v\n", infoErr)
+				applyLocalFallback(&result, resolvedRoot, workspace, requestText)
+			}
+		} else {
+			applyLocalFallback(&result, resolvedRoot, workspace, requestText)
+		}
+		if result.Termination == "" {
+			result.Termination = "answered"
+		}
+	}
+
+	if err := askstate.Save(resolvedRoot, askstate.Context{
+		LastMode:            string(result.Route),
+		LastRoute:           string(result.Route),
+		LastConfidence:      result.Confidence,
+		LastReason:          result.Reason,
+		LastTargetKind:      result.Target.Kind,
+		LastTargetPath:      result.Target.Path,
+		LastTargetName:      result.Target.Name,
+		LastPrompt:          strings.TrimSpace(requestText),
+		LastFiles:           filePaths(result.Files),
+		LastLint:            result.LintSummary,
+		LastLLMUsed:         result.LLMUsed,
+		LastClassifierLLM:   result.ClassifierLLM,
+		LastChunkIDs:        chunkIDs(result.Chunks),
+		LastDroppedChunkIDs: append([]string(nil), result.DroppedChunks...),
+		LastAugmentEvents:   append([]string(nil), result.AugmentEvents...),
+		LastMCPChunkIDs:     chunkIDsBySource(result.Chunks, "mcp"),
+		LastLSPChunkIDs:     chunkIDsBySource(result.Chunks, "lsp"),
+		LastRetries:         result.RetriesUsed,
+		LastTermination:     result.Termination,
+	}, requestText, resultToMarkdown(result)); err != nil {
+		return err
+	}
+
+	return render(opts.Stdout, opts.Stderr, result)
+}
+
+func canUseLLM(cfg askconfig.EffectiveSettings) bool {
+	return !askconfig.NeedsAPIKey(cfg.Provider) || strings.TrimSpace(cfg.APIKey) != ""
+}
+
+func classifyWithLLM(ctx context.Context, client askprovider.Client, cfg askconfig.EffectiveSettings, systemPrompt string, userPrompt string, logger askLogger) (askintent.Decision, error) {
+	logger.prompt("classifier", systemPrompt, userPrompt)
+	request := askprovider.Request{
+		Kind:         "classify",
+		Provider:     cfg.Provider,
+		Model:        cfg.Model,
+		APIKey:       cfg.APIKey,
+		Endpoint:     cfg.Endpoint,
+		SystemPrompt: systemPrompt,
+		Prompt:       userPrompt,
+		MaxRetries:   1,
+	}
+	var parsed askcontract.ClassificationResponse
+	for attempt := 0; attempt < 2; attempt++ {
+		resp, err := client.Generate(ctx, request)
+		if err != nil {
+			return askintent.Decision{}, err
+		}
+		logger.response("classifier", resp.Content)
+		parsed, err = askcontract.ParseClassification(resp.Content)
+		if err == nil {
+			break
+		}
+		if attempt == 1 {
+			return askintent.Decision{}, err
+		}
+	}
+	route := askintent.ParseRoute(parsed.Route)
+	decision := routeDefaults(route)
+	decision.Confidence = parsed.Confidence
+	if decision.Confidence == 0 {
+		decision.Confidence = 0.6
+	}
+	if strings.TrimSpace(parsed.Reason) != "" {
+		decision.Reason = parsed.Reason
+	}
+	decision.Target = askintent.Target{Kind: parsed.Target.Kind, Path: parsed.Target.Path, Name: parsed.Target.Name}
+	if decision.Target.Kind == "" {
+		decision.Target = askintent.Target{Kind: "workspace"}
+	}
+	if parsed.GenerationAllowed != nil && !*parsed.GenerationAllowed {
+		decision.AllowGeneration = false
+		decision.AllowRetry = false
+		decision.RequiresLint = false
+		decision.LLMPolicy = askintent.LLMOptional
+	}
+	return decision, nil
+}
+
+func routeDefaults(route askintent.Route) askintent.Decision {
+	switch route {
+	case askintent.RouteDraft:
+		return askintent.Decision{Route: route, Confidence: 0.8, Reason: "draft route", Target: askintent.Target{Kind: "workspace"}, AllowGeneration: true, AllowRetry: true, RequiresLint: true, LLMPolicy: askintent.LLMRequired}
+	case askintent.RouteRefine:
+		return askintent.Decision{Route: route, Confidence: 0.8, Reason: "refine route", Target: askintent.Target{Kind: "workspace"}, AllowGeneration: true, AllowRetry: true, RequiresLint: true, LLMPolicy: askintent.LLMRequired}
+	case askintent.RouteReview:
+		return askintent.Decision{Route: route, Confidence: 0.75, Reason: "review route", Target: askintent.Target{Kind: "workspace"}, AllowGeneration: false, AllowRetry: false, RequiresLint: false, LLMPolicy: askintent.LLMOptional}
+	case askintent.RouteExplain:
+		return askintent.Decision{Route: route, Confidence: 0.75, Reason: "explain route", Target: askintent.Target{Kind: "workspace"}, AllowGeneration: false, AllowRetry: false, RequiresLint: false, LLMPolicy: askintent.LLMOptional}
+	case askintent.RouteQuestion:
+		return askintent.Decision{Route: route, Confidence: 0.75, Reason: "question route", Target: askintent.Target{Kind: "workspace"}, AllowGeneration: false, AllowRetry: false, RequiresLint: false, LLMPolicy: askintent.LLMOptional}
+	default:
+		return askintent.Decision{Route: askintent.RouteClarify, Confidence: 0.8, Reason: "clarify route", Target: askintent.Target{Kind: "unknown"}, AllowGeneration: false, AllowRetry: false, RequiresLint: false, LLMPolicy: askintent.LLMOptional}
+	}
+}
+
+func answerWithLLM(ctx context.Context, client askprovider.Client, cfg askconfig.EffectiveSettings, decision askintent.Decision, retrieval askretrieve.RetrievalResult, prompt string, logger askLogger) (askcontract.InfoResponse, error) {
+	systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, prompt)
+	logger.prompt(string(decision.Route), systemPrompt, userPrompt)
+	resp, err := client.Generate(ctx, askprovider.Request{
+		Kind:         string(decision.Route),
+		Provider:     cfg.Provider,
+		Model:        cfg.Model,
+		APIKey:       cfg.APIKey,
+		Endpoint:     cfg.Endpoint,
+		SystemPrompt: systemPrompt,
+		Prompt:       userPrompt,
+		MaxRetries:   1,
+	})
+	if err != nil {
+		return askcontract.InfoResponse{}, err
+	}
+	logger.response(string(decision.Route), resp.Content)
+	return askcontract.ParseInfo(resp.Content), nil
+}
+
+func generationAttempts(requested int, decision askintent.Decision, prompt string) int {
+	if !decision.AllowRetry {
+		return 1
+	}
+	if !requestSpecificEnough(prompt) {
+		return 1
+	}
+	if requested > 0 {
+		return requested
+	}
+	return 2
+}
+
+func generateWithValidation(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, attempts int, logger askLogger) (askcontract.GenerationResponse, string, int, error) {
+	var lastValidation string
+	for attempt := 1; attempt <= attempts; attempt++ {
+		currentPrompt := req.Prompt
+		if attempt > 1 && lastValidation != "" {
+			currentPrompt += "\n\nLocal validation failed. Fix the response and return full JSON again. Errors:\n" + lastValidation
+		}
+		logger.logf("basic", "deck ask phase=generation-attempt attempt=%d/%d\n", attempt, attempts)
+		logger.prompt("generation", req.SystemPrompt, currentPrompt)
+		resp, err := client.Generate(ctx, askprovider.Request{
+			Kind:         req.Kind,
+			Provider:     req.Provider,
+			Model:        req.Model,
+			APIKey:       req.APIKey,
+			Endpoint:     req.Endpoint,
+			SystemPrompt: req.SystemPrompt,
+			Prompt:       currentPrompt,
+			MaxRetries:   1,
+		})
+		if err != nil {
+			return askcontract.GenerationResponse{}, lastValidation, attempt - 1, err
+		}
+		logger.response("generation", resp.Content)
+		gen, err := askcontract.ParseGeneration(resp.Content)
+		if err != nil {
+			lastValidation = err.Error()
+			logger.logf("debug", "deck ask phase=generation-parse-error error=%s\n", lastValidation)
+			return askcontract.GenerationResponse{}, lastValidation, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
+		}
+		lintSummary, err := validateGeneration(root, gen)
+		if err == nil {
+			return gen, lintSummary, attempt - 1, nil
+		}
+		lastValidation = err.Error()
+		logger.logf("debug", "deck ask phase=generation-validation-error error=%s\n", lastValidation)
+		if !repairableValidationError(lastValidation) {
+			return askcontract.GenerationResponse{}, lastValidation, attempt - 1, fmt.Errorf("ask generation stopped without repair: %s", lastValidation)
+		}
+	}
+	if lastValidation == "" {
+		lastValidation = "generation failed without a parseable response"
+	}
+	return askcontract.GenerationResponse{}, lastValidation, attempts - 1, fmt.Errorf("ask generation did not validate after %d attempts: %s", attempts, lastValidation)
+}
+
+func repairableValidationError(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	if message == "" {
+		return false
+	}
+	nonRepairable := []string{
+		"response did not include any files",
+		"generated file path is empty",
+		"generated file path is not allowed",
+		"generated file path escapes workspace",
+	}
+	for _, token := range nonRepairable {
+		if strings.Contains(message, token) {
+			return false
+		}
+	}
+	return true
+}
+
+func validateGeneration(root string, gen askcontract.GenerationResponse) (string, error) {
+	if len(gen.Files) == 0 {
+		return "", fmt.Errorf("response did not include any files")
+	}
+	staged, err := stageWorkspace(root, gen.Files)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = os.RemoveAll(staged) }()
+	paths := make([]string, 0, len(gen.Files))
+	for _, file := range gen.Files {
+		if err := validateGeneratedFile(staged, file); err != nil {
+			return "", err
+		}
+		paths = append(paths, file.Path)
+	}
+	entrypoints := scenarioPaths(staged, paths)
+	validated := make([]string, 0, len(entrypoints))
+	for _, path := range entrypoints {
+		files, err := validate.Entrypoint(path)
+		if err != nil {
+			return "", err
+		}
+		validated = append(validated, files...)
+	}
+	validated = dedupe(validated)
+	return fmt.Sprintf("lint ok (%d workflows)", len(validated)), nil
+}
