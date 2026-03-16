@@ -51,8 +51,8 @@ func TestListScenarios(t *testing.T) {
 		}))
 		defer srv.Close()
 		t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "server.json"))
-		if _, err := runWithCapturedStdout([]string{"server", "set", srv.URL}); err != nil {
-			t.Fatalf("server set failed: %v", err)
+		if _, err := runWithCapturedStdout([]string{"source", "set", srv.URL}); err != nil {
+			t.Fatalf("source set failed: %v", err)
 		}
 
 		out, err := runWithCapturedStdout([]string{"list", "--source", "server"})
@@ -66,7 +66,7 @@ func TestListScenarios(t *testing.T) {
 		}
 	})
 
-	t.Run("all without saved server falls back to local only", func(t *testing.T) {
+	t.Run("all without saved source falls back to local only", func(t *testing.T) {
 		root := t.TempDir()
 		if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
 			t.Fatalf("mkdir scenarios: %v", err)

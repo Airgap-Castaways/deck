@@ -28,7 +28,7 @@ func TestRunUsageShowsTopLevelAxes(t *testing.T) {
 			}
 
 			msg := res.stdout
-			for _, cmd := range []string{"init", "list", "lint", "prepare", "bundle", "plan", "apply", "server", "completion", "cache"} {
+			for _, cmd := range []string{"init", "list", "lint", "prepare", "bundle", "plan", "apply", "source", "server", "completion", "cache"} {
 				if !strings.Contains(msg, cmd) {
 					t.Fatalf("usage must include %q, got %q", cmd, msg)
 				}
@@ -47,7 +47,7 @@ func TestRunUsageShowsTopLevelAxes(t *testing.T) {
 					t.Fatalf("core commands must keep registration order: %q appeared after %q in %q", coreCommands[i], coreCommands[i+1], msg)
 				}
 			}
-			additionalCommands := []string{"server", "completion", "cache"}
+			additionalCommands := []string{"source", "server", "completion", "cache"}
 			for i := 0; i < len(additionalCommands)-1; i++ {
 				if strings.Index(msg, additionalCommands[i]) > strings.Index(msg, additionalCommands[i+1]) {
 					t.Fatalf("additional commands must keep registration order: %q appeared after %q in %q", additionalCommands[i], additionalCommands[i+1], msg)
@@ -179,6 +179,7 @@ func TestNestedHelpRoutesToStdout(t *testing.T) {
 		want string
 	}{
 		{args: []string{"help", "prepare"}, want: "deck prepare [flags]"},
+		{args: []string{"source", "--help"}, want: "deck source [command]"},
 		{args: []string{"server", "--help"}, want: "deck server [command]"},
 	}
 

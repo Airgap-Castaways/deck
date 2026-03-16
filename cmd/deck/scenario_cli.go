@@ -29,7 +29,7 @@ type scenarioEntry struct {
 func newListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List available scenarios from local workflows or a saved server",
+		Short: "List available scenarios from local workflows or the saved remote source",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			source, err := cmdFlagValue(cmd, "source")
@@ -92,7 +92,7 @@ func discoverScenarioEntries(source string) ([]scenarioEntry, error) {
 	}
 
 	if source == scenarioSourceServer || source == scenarioSourceAll {
-		serverURL, _, err := resolveServerURL("")
+		serverURL, _, err := resolveSourceURL("")
 		if err != nil {
 			if source != scenarioSourceAll {
 				return nil, err
@@ -107,7 +107,7 @@ func discoverScenarioEntries(source string) ([]scenarioEntry, error) {
 				entries = append(entries, serverEntries...)
 			}
 		} else if source == scenarioSourceServer {
-			return nil, errors.New("saved server is required; set one with \"deck server set <url>\"")
+			return nil, errors.New("saved source is required; set one with \"deck source set <url>\"")
 		}
 	}
 
@@ -224,7 +224,7 @@ func resolveScenarioWorkflowReference(source, scenario string, localRoot string)
 		return "", err
 	}
 	if resolvedSource == scenarioSourceServer {
-		serverURL, _, err := resolveRequiredServerURL("")
+		serverURL, _, err := resolveRequiredSourceURL("")
 		if err != nil {
 			return "", err
 		}
@@ -326,7 +326,7 @@ func registerScenarioNameCompletion(cmd *cobra.Command, flagName, sourceFlagName
 			}
 		}
 		if resolvedSource == scenarioSourceServer || resolvedSource == scenarioSourceAll {
-			if serverURL, _, err := resolveServerURL(""); err == nil && strings.TrimSpace(serverURL) != "" {
+			if serverURL, _, err := resolveSourceURL(""); err == nil && strings.TrimSpace(serverURL) != "" {
 				if entries, err := discoverServerScenarioEntries(serverURL); err == nil {
 					for _, entry := range entries {
 						if strings.HasPrefix(entry.Name, toComplete) {

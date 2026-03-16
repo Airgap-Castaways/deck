@@ -74,47 +74,47 @@ func TestHealth(t *testing.T) {
 	})
 }
 
-func TestServerDefaultCommands(t *testing.T) {
+func TestSourceDefaultCommands(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "server.json")
 	t.Setenv("DECK_SERVER_CONFIG_PATH", configPath)
 
-	out, err := runWithCapturedStdout([]string{"server", "show"})
+	out, err := runWithCapturedStdout([]string{"source", "show"})
 	if err != nil {
-		t.Fatalf("server show failed: %v", err)
+		t.Fatalf("source show failed: %v", err)
 	}
-	if out != "server=\nsource=none\n" {
-		t.Fatalf("unexpected empty server show output: %q", out)
+	if out != "source=\norigin=none\n" {
+		t.Fatalf("unexpected empty source show output: %q", out)
 	}
 
-	out, err = runWithCapturedStdout([]string{"server", "set", "http://127.0.0.1:8080/"})
+	out, err = runWithCapturedStdout([]string{"source", "set", "http://127.0.0.1:8080/"})
 	if err != nil {
-		t.Fatalf("server set failed: %v", err)
+		t.Fatalf("source set failed: %v", err)
 	}
-	if out != "server default set: http://127.0.0.1:8080\n" {
-		t.Fatalf("unexpected server set output: %q", out)
+	if out != "source default set: http://127.0.0.1:8080\n" {
+		t.Fatalf("unexpected source set output: %q", out)
 	}
 
-	out, err = runWithCapturedStdout([]string{"server", "show"})
+	out, err = runWithCapturedStdout([]string{"source", "show"})
 	if err != nil {
-		t.Fatalf("server show after set failed: %v", err)
+		t.Fatalf("source show after set failed: %v", err)
 	}
-	if out != "server=http://127.0.0.1:8080\nsource=config\n" {
-		t.Fatalf("unexpected saved server show output: %q", out)
+	if out != "source=http://127.0.0.1:8080\norigin=config\n" {
+		t.Fatalf("unexpected saved source show output: %q", out)
 	}
 
-	out, err = runWithCapturedStdout([]string{"server", "unset"})
+	out, err = runWithCapturedStdout([]string{"source", "unset"})
 	if err != nil {
-		t.Fatalf("server unset failed: %v", err)
+		t.Fatalf("source unset failed: %v", err)
 	}
-	if out != "server default cleared\n" {
-		t.Fatalf("unexpected server unset output: %q", out)
+	if out != "source default cleared\n" {
+		t.Fatalf("unexpected source unset output: %q", out)
 	}
 	if _, statErr := os.Stat(configPath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected config file removal, got %v", statErr)
 	}
 }
 
-func TestServerDefaultsReadLegacyHomePath(t *testing.T) {
+func TestSourceDefaultsReadLegacyHomePath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
@@ -126,12 +126,12 @@ func TestServerDefaultsReadLegacyHomePath(t *testing.T) {
 		t.Fatalf("write legacy server defaults: %v", err)
 	}
 
-	resolved, source, err := resolveServerURL("")
+	resolved, source, err := resolveSourceURL("")
 	if err != nil {
-		t.Fatalf("resolveServerURL failed: %v", err)
+		t.Fatalf("resolveSourceURL failed: %v", err)
 	}
 	if resolved != "http://127.0.0.1:9090" || source != "config" {
-		t.Fatalf("unexpected legacy server defaults resolution: resolved=%q source=%q", resolved, source)
+		t.Fatalf("unexpected legacy source defaults resolution: resolved=%q source=%q", resolved, source)
 	}
 }
 
@@ -146,8 +146,8 @@ func TestHealthUsesSavedDefaultServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if _, err := runWithCapturedStdout([]string{"server", "set", srv.URL}); err != nil {
-		t.Fatalf("server set failed: %v", err)
+	if _, err := runWithCapturedStdout([]string{"source", "set", srv.URL}); err != nil {
+		t.Fatalf("source set failed: %v", err)
 	}
 
 	out, err := runWithCapturedStdout([]string{"server", "health"})
@@ -276,19 +276,19 @@ func TestCache(t *testing.T) {
 }
 
 func TestRunServerAuditRotationFlagValidation(t *testing.T) {
-	err := executeServe("./bundle", ":8080", "deck-site-v1", 200, 0, 10, "", "", false)
+	err := executeServe("./bundle", ":8080", 0, 10, "", "", false)
 	if err == nil || !strings.Contains(err.Error(), "--audit-max-size-mb must be > 0") {
 		t.Fatalf("expected audit max size validation error, got %v", err)
 	}
 
-	err = executeServe("./bundle", ":8080", "deck-site-v1", 200, 50, 0, "", "", false)
+	err = executeServe("./bundle", ":8080", 50, 0, "", "", false)
 	if err == nil || !strings.Contains(err.Error(), "--audit-max-files must be > 0") {
 		t.Fatalf("expected audit max files validation error, got %v", err)
 	}
 }
 
 func TestRunLegacyTopLevelCommandsAreRemoved(t *testing.T) {
-	for _, cmd := range []string{"run", "resume", "diagnose", "agent", "workflow", "control", "strategy", "source", "service", "serve", "health", "logs"} {
+	for _, cmd := range []string{"run", "resume", "diagnose", "agent", "workflow", "control", "strategy", "service", "serve", "health", "logs"} {
 		t.Run(cmd, func(t *testing.T) {
 			err := run([]string{cmd})
 			if err == nil {
@@ -313,13 +313,13 @@ func TestLegacyServiceSurfaceRemoved(t *testing.T) {
 	}
 }
 
-func TestLegacySourceSurfaceRemoved(t *testing.T) {
-	err := run([]string{"source"})
-	if err == nil {
-		t.Fatalf("expected unknown command error")
+func TestSourceUsage(t *testing.T) {
+	out, err := runWithCapturedStdout([]string{"source"})
+	if err != nil {
+		t.Fatalf("expected help output, got %v", err)
 	}
-	if !strings.Contains(err.Error(), `unknown command "source" for "deck"`) {
-		t.Fatalf("unexpected error: %q", err.Error())
+	if !strings.Contains(out, "deck source [command]") {
+		t.Fatalf("unexpected output: %q", out)
 	}
 }
 

@@ -139,11 +139,11 @@ func TestCLIContractUsesSingleErrorLineWithoutAutoUsage(t *testing.T) {
 func TestCLIContractHelpTokenIsNotHijackedFromFlagValues(t *testing.T) {
 	t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "server.json"))
 
-	out, err := runWithCapturedStdout([]string{"server", "set", "http://127.0.0.1:8080/help"})
+	out, err := runWithCapturedStdout([]string{"source", "set", "http://127.0.0.1:8080/help"})
 	if err != nil {
-		t.Fatalf("expected server set success, got %v", err)
+		t.Fatalf("expected source set success, got %v", err)
 	}
-	if !strings.Contains(out, "server default set: http://127.0.0.1:8080/help") {
+	if !strings.Contains(out, "source default set: http://127.0.0.1:8080/help") {
 		t.Fatalf("unexpected output: %q", out)
 	}
 }

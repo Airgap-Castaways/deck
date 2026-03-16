@@ -11,10 +11,6 @@ func (h *serverHandler) routeRequest(w http.ResponseWriter, r *http.Request) {
 		h.handleHealthz(w, r)
 	case r.URL.Path == "/":
 		h.handleLanding(w, r)
-	case strings.HasPrefix(r.URL.Path, "/api/site/v1/"):
-		h.handleSiteAPI(w, r)
-	case strings.HasPrefix(r.URL.Path, "/site/releases/"):
-		h.handleReleaseBundleRead(w, r)
 	case r.URL.Path == "/v2" || r.URL.Path == "/v2/" || strings.HasPrefix(r.URL.Path, "/v2/"):
 		h.handleRegistry(w, r)
 	case strings.HasPrefix(r.URL.Path, "/browse"):

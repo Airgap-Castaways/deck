@@ -7,7 +7,7 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 ## Default local flow
 
 - `init`: create starter workflow files under `workflows/`
-- `list`: list available scenarios from the local workspace or a saved server
+- `list`: list available scenarios from the local workspace or the saved remote source
 - `completion`: generate shell completion for bash, zsh, fish, and PowerShell
 - `lint`: validate a workflow file or workspace against the workflow and step schemas
 - `prepare`: gather artifacts into `outputs/`, refresh the local `deck` binary, and write `.deck/manifest.json`
@@ -16,12 +16,12 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 
 ## Optional site-local helpers
 
+- `source set`: save the default remote source URL used for server-backed scenario lookup
+- `source show`: show the effective default remote source URL
+- `source unset`: clear the saved default remote source URL
 - `server up`: expose a prepared bundle root over HTTP inside the air gap when a shared local source is useful
 - `server down`: stop a daemonized local server started with `deck server up -d`
-- `server set`: save the default server URL used for server-backed scenario lookup
-- `server show`: show the saved default server URL
-- `server unset`: clear the saved default server URL
-- `server health`: check `/healthz` on an explicit or saved server
+- `server health`: check `/healthz` on an explicit or saved source URL
 - `server logs`: read local server audit logs from file or journal
 
 These commands are additive. They do not replace the default local execution path.
@@ -62,7 +62,7 @@ deck apply --scenario apply --source local
 Optional site-local helper example:
 
 ```bash
-deck server set http://127.0.0.1:8080
+deck source set http://127.0.0.1:8080
 deck list --source server
 deck server up --root ./bundle --addr :8080
 deck server health --server http://127.0.0.1:8080
@@ -74,7 +74,7 @@ deck plan --scenario apply --source server
 - `prepare` expects a workflow tree rooted at `workflows/` with entrypoints under `workflows/scenarios/`.
 - scenario entrypoints live under `workflows/scenarios/`
 - `plan` and `apply` accept `--scenario` for named scenarios and `--workflow` for an explicit path or URL.
-- `--source` controls whether `--scenario` resolves from the local workspace or the saved server.
+- `--source` controls whether `--scenario` resolves from the local workspace or the saved remote source.
 - workspace-local metadata stays under `./.deck/`, while user-global config, state, cache, and run history use standard XDG locations.
 - phase imports resolve from `workflows/components/` using component-relative paths
 - `apply` runs all phases by default when phases are used; `--phase` narrows execution to one phase.

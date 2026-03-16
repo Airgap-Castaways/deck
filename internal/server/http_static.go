@@ -18,49 +18,6 @@ import (
 
 const serverOutputsDir = "outputs"
 
-func (h *serverHandler) handleReleaseBundleRead(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	releaseID, relPath, targetPath, status := h.resolveReleaseBundlePath(r.URL.Path)
-	if status != 0 {
-		w.WriteHeader(status)
-		return
-	}
-	if _, found, err := h.siteStore.GetRelease(releaseID); err != nil || !found {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	root, err := fsutil.NewRoot(h.rootAbs)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	data, _, err := root.ReadFile(strings.TrimPrefix(targetPath, h.rootAbs+string(os.PathSeparator)))
-	if err != nil {
-		if os.IsNotExist(err) {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	hash := sha256.Sum256(data)
-	etag := fmt.Sprintf("\"sha256:%s\"", hex.EncodeToString(hash[:]))
-	setStaticHeaders(w.Header(), "site-release-bundle", relPath, etag, len(data), data)
-	if matchETag(r.Header.Get("If-None-Match"), etag) {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	if r.Method == http.MethodHead {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	writeResponseBody(w, data)
-}
-
 func buildWorkflowIndex(root string) ([]byte, error) {
 	ignore, err := deckignore.Load(root)
 	if err != nil {
@@ -108,50 +65,6 @@ func buildWorkflowIndex(root string) ([]byte, error) {
 		quoted = append(quoted, strconv.Quote(item))
 	}
 	return []byte("[" + strings.Join(quoted, ",") + "]"), nil
-}
-
-func (h *serverHandler) resolveReleaseBundlePath(urlPath string) (string, string, string, int) {
-	const prefix = "/site/releases/"
-	if !strings.HasPrefix(urlPath, prefix) {
-		return "", "", "", http.StatusNotFound
-	}
-	rest := strings.TrimPrefix(urlPath, prefix)
-	parts := strings.SplitN(rest, "/bundle/", 2)
-	if len(parts) != 2 {
-		return "", "", "", http.StatusNotFound
-	}
-	releaseID := strings.TrimSpace(parts[0])
-	relPath := strings.TrimSpace(parts[1])
-	if releaseID == "" || relPath == "" {
-		return "", "", "", http.StatusNotFound
-	}
-	if strings.Contains(relPath, "\\") {
-		return "", "", "", http.StatusForbidden
-	}
-	for _, segment := range strings.Split(relPath, "/") {
-		if segment == ".." {
-			return "", "", "", http.StatusForbidden
-		}
-	}
-	cleanRel := strings.TrimPrefix(path.Clean("/"+relPath), "/")
-	if cleanRel == "." || cleanRel == "" {
-		return "", "", "", http.StatusNotFound
-	}
-	bundleRoot := filepath.Join(h.rootAbs, ".deck", "site", "releases", releaseID, "bundle")
-	targetPath := filepath.Join(bundleRoot, filepath.FromSlash(cleanRel))
-	resolvedTarget, err := filepath.Abs(targetPath)
-	if err != nil {
-		return "", "", "", http.StatusForbidden
-	}
-	resolvedBundleRoot, err := filepath.Abs(bundleRoot)
-	if err != nil {
-		return "", "", "", http.StatusForbidden
-	}
-	rootPrefix := resolvedBundleRoot + string(os.PathSeparator)
-	if resolvedTarget != resolvedBundleRoot && !strings.HasPrefix(resolvedTarget, rootPrefix) {
-		return "", "", "", http.StatusForbidden
-	}
-	return releaseID, cleanRel, resolvedTarget, 0
 }
 
 func (h *serverHandler) handleStatic(w http.ResponseWriter, r *http.Request) {

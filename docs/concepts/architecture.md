@@ -37,7 +37,7 @@ This separation is deliberate. The connected side resolves external dependencies
 
 `deck` is designed around manual-first operations rather than unattended reconciliation.
 
-The normal operating picture is an operator preparing a known workflow, carrying a known bundle into a constrained site, and running an explicit maintenance session. Even when site-local coordination is involved, the system is still organized around operator-controlled releases, sessions, assignments, and reports rather than an always-on controller continuously converging the environment.
+The normal operating picture is an operator preparing a known workflow, carrying a known bundle into a constrained site, and running an explicit local operation. The system is organized around reviewable workflows, explicit bundle handoff, and node-local execution rather than an always-on controller continuously converging the environment.
 
 That is why the architecture emphasizes:
 
@@ -106,7 +106,7 @@ flowchart LR
 - After the bundle crosses into the site, one node can take the server role and run `deck server`.
 - That server can distribute the `deck` binary, workflow files, prepared files, and prepared images inside the air gap through its local web or file serving path and pull-only registry support.
 - Client nodes pull what they need from the server, then run locally on each node.
-- Site-local coordination such as releases, sessions, assignments, and reports can exist around this flow, but those details are omitted from the diagram so the main offline distribution path stays easy to read.
+- The optional server can make bundle distribution easier inside the site, but execution state and run history still belong to the nodes that execute the workflow.
 
 Even here, `deck` is not acting as a central reconciliation controller. The server is a site-local distribution helper: it serves bundle content inside the air gap, but it does not take over node execution. Each node still executes locally.
 
