@@ -19,9 +19,10 @@ import (
 )
 
 type RunOptions struct {
-	BundleRoot      string
-	CommandRunner   CommandRunner
-	ForceRedownload bool
+	BundleRoot       string
+	CommandRunner    CommandRunner
+	ForceRedownload  bool
+	imageDownloadOps imageDownloadOps
 }
 
 type CommandRunner interface {

@@ -17,8 +17,6 @@ import (
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
-var installArtifactsDetectHostFacts = detectHostFacts
-
 type installArtifactsSpec struct {
 	Fetch     installArtifactsFetchSpec `json:"fetch"`
 	Artifacts []installArtifactItemSpec `json:"artifacts"`
@@ -71,6 +69,10 @@ type installArtifactExtractSpec struct {
 }
 
 func runInstallArtifacts(ctx context.Context, spec map[string]any) error {
+	return runInstallArtifactsWithHostFactDetector(ctx, spec, detectHostFacts)
+}
+
+func runInstallArtifactsWithHostFactDetector(ctx context.Context, spec map[string]any, hostFactDetector func() map[string]any) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -83,7 +85,7 @@ func runInstallArtifacts(ctx context.Context, spec map[string]any) error {
 		return fmt.Errorf("%s: InstallArtifacts requires at least one artifact", errCodeInstallArtifactsMissing)
 	}
 
-	arch, err := installArtifactsHostArch()
+	arch, err := installArtifactsHostArch(hostFactDetector)
 	if err != nil {
 		return err
 	}
@@ -136,8 +138,8 @@ func runInstallArtifacts(ctx context.Context, spec map[string]any) error {
 	return nil
 }
 
-func installArtifactsHostArch() (string, error) {
-	facts := installArtifactsDetectHostFacts()
+func installArtifactsHostArch(hostFactDetector func() map[string]any) (string, error) {
+	facts := hostFactDetector()
 	rawArch, _ := facts["arch"].(string)
 	arch := strings.ToLower(strings.TrimSpace(rawArch))
 	switch arch {

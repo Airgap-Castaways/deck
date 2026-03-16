@@ -9,9 +9,12 @@ import (
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
-func generateWorkflowSchema() map[string]any {
+func generateWorkflowSchema() (map[string]any, error) {
 	reflector := jsonschema.Reflector{DoNotReference: true, ExpandedStruct: true}
-	root := schemaToMap(reflector.Reflect(&schemamodel.WorkflowDocument{}))
+	root, err := schemaToMap(reflector.Reflect(&schemamodel.WorkflowDocument{}))
+	if err != nil {
+		return nil, err
+	}
 	root["$schema"] = "https://json-schema.org/draft/2020-12/schema"
 	root["$id"] = "https://deck.local/schemas/deck-workflow.schema.json"
 	root["title"] = "DeckWorkflow"
@@ -29,16 +32,21 @@ func generateWorkflowSchema() map[string]any {
 		map[string]any{"required": []any{"steps"}},
 	}
 
+	phases, err := phaseSchema()
+	if err != nil {
+		return nil, err
+	}
+
 	props := propertyMap(root)
 	setMap(props, "role", map[string]any{"type": "string", "enum": []any{"prepare", "apply"}})
 	setMap(props, "version", map[string]any{"type": "string", "const": "v1alpha1"})
 	mergeMap(props, "vars", map[string]any{"type": "object", "additionalProperties": true, "default": map[string]any{}})
 	mergeMap(props, "artifacts", map[string]any{"description": "Declarative prepare artifact inventory. Prefer this over legacy prepare download steps in new role: prepare workflows."})
 	setMap(props, "steps", map[string]any{"type": "array", "minItems": 1, "items": stepBaseSchema()})
-	setMap(props, "phases", map[string]any{"type": "array", "minItems": 1, "items": phaseSchema()})
+	setMap(props, "phases", map[string]any{"type": "array", "minItems": 1, "items": phases})
 	patchArtifactsSchema(props["artifacts"])
 
-	return root
+	return root, nil
 }
 
 func generateComponentFragmentSchema() map[string]any {
@@ -57,9 +65,12 @@ func generateComponentFragmentSchema() map[string]any {
 	return root
 }
 
-func generateToolDefinitionSchema() map[string]any {
+func generateToolDefinitionSchema() (map[string]any, error) {
 	reflector := jsonschema.Reflector{DoNotReference: true, ExpandedStruct: true}
-	root := schemaToMap(reflector.Reflect(&schemamodel.ToolDefinitionDocument{}))
+	root, err := schemaToMap(reflector.Reflect(&schemamodel.ToolDefinitionDocument{}))
+	if err != nil {
+		return nil, err
+	}
 	root["$schema"] = "https://json-schema.org/draft/2020-12/schema"
 	root["$id"] = "https://deck.local/schemas/deck-tooldefinition.schema.json"
 	root["title"] = "DeckToolDefinition"
@@ -74,12 +85,15 @@ func generateToolDefinitionSchema() map[string]any {
 	patchToolDefinitionMetadata(props["metadata"])
 	patchToolDefinitionSpec(props["spec"])
 
-	return root
+	return root, nil
 }
 
-func phaseSchema() map[string]any {
+func phaseSchema() (map[string]any, error) {
 	reflector := jsonschema.Reflector{DoNotReference: true, ExpandedStruct: true}
-	phase := schemaToMap(reflector.Reflect(&schemamodel.WorkflowPhase{}))
+	phase, err := schemaToMap(reflector.Reflect(&schemamodel.WorkflowPhase{}))
+	if err != nil {
+		return nil, err
+	}
 	phase["type"] = "object"
 	phase["additionalProperties"] = false
 	phase["required"] = []any{"name"}
@@ -91,7 +105,7 @@ func phaseSchema() map[string]any {
 	setMap(props, "name", map[string]any{"type": "string", "minLength": 1})
 	setMap(props, "imports", map[string]any{"type": "array", "minItems": 1, "items": workflowImportSchema()})
 	setMap(props, "steps", map[string]any{"type": "array", "items": stepBaseSchema()})
-	return phase
+	return phase, nil
 }
 
 func workflowImportSchema() map[string]any {

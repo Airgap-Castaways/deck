@@ -2368,9 +2368,7 @@ func TestInstallArtifactsStep_InstallsSingleFileWithMode(t *testing.T) {
 	}
 	target := filepath.Join(dir, "usr", "bin", "kubelet")
 
-	origDetect := installArtifactsDetectHostFacts
-	t.Cleanup(func() { installArtifactsDetectHostFacts = origDetect })
-	installArtifactsDetectHostFacts = func() map[string]any {
+	hostFactDetector := func() map[string]any {
 		return map[string]any{"arch": "amd64"}
 	}
 
@@ -2384,7 +2382,7 @@ func TestInstallArtifactsStep_InstallsSingleFileWithMode(t *testing.T) {
 		}},
 	}
 
-	if err := runInstallArtifacts(context.Background(), spec); err != nil {
+	if err := runInstallArtifactsWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
 		t.Fatalf("runInstallArtifacts failed: %v", err)
 	}
 
@@ -2412,9 +2410,7 @@ func TestInstallArtifactsStep_ExtractsTarGzArtifact(t *testing.T) {
 	}
 	destination := filepath.Join(dir, "usr", "bin")
 
-	origDetect := installArtifactsDetectHostFacts
-	t.Cleanup(func() { installArtifactsDetectHostFacts = origDetect })
-	installArtifactsDetectHostFacts = func() map[string]any {
+	hostFactDetector := func() map[string]any {
 		return map[string]any{"arch": "amd64"}
 	}
 
@@ -2428,7 +2424,7 @@ func TestInstallArtifactsStep_ExtractsTarGzArtifact(t *testing.T) {
 		}},
 	}
 
-	if err := runInstallArtifacts(context.Background(), spec); err != nil {
+	if err := runInstallArtifactsWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
 		t.Fatalf("runInstallArtifacts failed: %v", err)
 	}
 
@@ -2461,10 +2457,7 @@ func TestInstallArtifactsStep_SelectsSourceByArchitecture(t *testing.T) {
 	}
 	target := filepath.Join(dir, "usr", "bin", "kubeadm")
 
-	origDetect := installArtifactsDetectHostFacts
-	t.Cleanup(func() { installArtifactsDetectHostFacts = origDetect })
-
-	installArtifactsDetectHostFacts = func() map[string]any {
+	hostFactDetector := func() map[string]any {
 		return map[string]any{"arch": "amd64"}
 	}
 	spec := map[string]any{
@@ -2476,7 +2469,7 @@ func TestInstallArtifactsStep_SelectsSourceByArchitecture(t *testing.T) {
 			"install": map[string]any{"path": target, "mode": "0755"},
 		}},
 	}
-	if err := runInstallArtifacts(context.Background(), spec); err != nil {
+	if err := runInstallArtifactsWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
 		t.Fatalf("runInstallArtifacts amd64 failed: %v", err)
 	}
 	raw, err := os.ReadFile(target)
@@ -2487,10 +2480,10 @@ func TestInstallArtifactsStep_SelectsSourceByArchitecture(t *testing.T) {
 		t.Fatalf("expected amd64 artifact, got %q", string(raw))
 	}
 
-	installArtifactsDetectHostFacts = func() map[string]any {
+	hostFactDetector = func() map[string]any {
 		return map[string]any{"arch": "arm64"}
 	}
-	if err := runInstallArtifacts(context.Background(), spec); err != nil {
+	if err := runInstallArtifactsWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
 		t.Fatalf("runInstallArtifacts arm64 failed: %v", err)
 	}
 	raw, err = os.ReadFile(target)
@@ -2516,9 +2509,7 @@ func TestInstallArtifactsStep_SkipIfPresentExecutable(t *testing.T) {
 		t.Fatalf("write existing executable: %v", err)
 	}
 
-	origDetect := installArtifactsDetectHostFacts
-	t.Cleanup(func() { installArtifactsDetectHostFacts = origDetect })
-	installArtifactsDetectHostFacts = func() map[string]any {
+	hostFactDetector := func() map[string]any {
 		return map[string]any{"arch": "amd64"}
 	}
 
@@ -2533,7 +2524,7 @@ func TestInstallArtifactsStep_SkipIfPresentExecutable(t *testing.T) {
 		}},
 	}
 
-	if err := runInstallArtifacts(context.Background(), spec); err != nil {
+	if err := runInstallArtifactsWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
 		t.Fatalf("runInstallArtifacts failed: %v", err)
 	}
 	raw, err := os.ReadFile(target)
@@ -2919,17 +2910,14 @@ func TestRepoConfigStep(t *testing.T) {
 
 func TestPackageCacheStep(t *testing.T) {
 	t.Run("apt clean only", func(t *testing.T) {
-		origRun := packageCacheRunTimedCommand
-		t.Cleanup(func() { packageCacheRunTimedCommand = origRun })
-
 		calls := make([]string, 0)
-		packageCacheRunTimedCommand = func(name string, args []string, timeout time.Duration) error {
+		runner := func(name string, args []string, timeout time.Duration) error {
 			calls = append(calls, name+" "+strings.Join(args, " "))
 			return nil
 		}
 
 		spec := map[string]any{"manager": "apt", "clean": true}
-		if err := runPackageCache(spec); err != nil {
+		if err := runPackageCacheWithRunner(spec, runner); err != nil {
 			t.Fatalf("runPackageCache failed: %v", err)
 		}
 
@@ -2939,17 +2927,14 @@ func TestPackageCacheStep(t *testing.T) {
 	})
 
 	t.Run("apt clean plus update ordering", func(t *testing.T) {
-		origRun := packageCacheRunTimedCommand
-		t.Cleanup(func() { packageCacheRunTimedCommand = origRun })
-
 		calls := make([]string, 0)
-		packageCacheRunTimedCommand = func(name string, args []string, timeout time.Duration) error {
+		runner := func(name string, args []string, timeout time.Duration) error {
 			calls = append(calls, name+" "+strings.Join(args, " "))
 			return nil
 		}
 
 		spec := map[string]any{"manager": "apt", "clean": true, "update": true}
-		if err := runPackageCache(spec); err != nil {
+		if err := runPackageCacheWithRunner(spec, runner); err != nil {
 			t.Fatalf("runPackageCache failed: %v", err)
 		}
 
@@ -2959,17 +2944,14 @@ func TestPackageCacheStep(t *testing.T) {
 	})
 
 	t.Run("dnf clean only", func(t *testing.T) {
-		origRun := packageCacheRunTimedCommand
-		t.Cleanup(func() { packageCacheRunTimedCommand = origRun })
-
 		calls := make([]string, 0)
-		packageCacheRunTimedCommand = func(name string, args []string, timeout time.Duration) error {
+		runner := func(name string, args []string, timeout time.Duration) error {
 			calls = append(calls, name+" "+strings.Join(args, " "))
 			return nil
 		}
 
 		spec := map[string]any{"manager": "dnf", "clean": true}
-		if err := runPackageCache(spec); err != nil {
+		if err := runPackageCacheWithRunner(spec, runner); err != nil {
 			t.Fatalf("runPackageCache failed: %v", err)
 		}
 
@@ -2979,17 +2961,14 @@ func TestPackageCacheStep(t *testing.T) {
 	})
 
 	t.Run("dnf update uses makecache behavior", func(t *testing.T) {
-		origRun := packageCacheRunTimedCommand
-		t.Cleanup(func() { packageCacheRunTimedCommand = origRun })
-
 		calls := make([]string, 0)
-		packageCacheRunTimedCommand = func(name string, args []string, timeout time.Duration) error {
+		runner := func(name string, args []string, timeout time.Duration) error {
 			calls = append(calls, name+" "+strings.Join(args, " "))
 			return nil
 		}
 
 		spec := map[string]any{"manager": "dnf", "update": true}
-		if err := runPackageCache(spec); err != nil {
+		if err := runPackageCacheWithRunner(spec, runner); err != nil {
 			t.Fatalf("runPackageCache failed: %v", err)
 		}
 
@@ -3004,15 +2983,11 @@ func TestPackageCacheStep(t *testing.T) {
 	})
 
 	t.Run("auto manager resolves using host facts", func(t *testing.T) {
-		origRun := packageCacheRunTimedCommand
 		origDetect := repoConfigDetectHostFacts
-		t.Cleanup(func() {
-			packageCacheRunTimedCommand = origRun
-			repoConfigDetectHostFacts = origDetect
-		})
+		t.Cleanup(func() { repoConfigDetectHostFacts = origDetect })
 
 		calls := make([]string, 0)
-		packageCacheRunTimedCommand = func(name string, args []string, timeout time.Duration) error {
+		runner := func(name string, args []string, timeout time.Duration) error {
 			calls = append(calls, name+" "+strings.Join(args, " "))
 			return nil
 		}
@@ -3021,7 +2996,7 @@ func TestPackageCacheStep(t *testing.T) {
 		}
 
 		spec := map[string]any{"manager": "auto", "update": true}
-		if err := runPackageCache(spec); err != nil {
+		if err := runPackageCacheWithRunner(spec, runner); err != nil {
 			t.Fatalf("runPackageCache failed: %v", err)
 		}
 

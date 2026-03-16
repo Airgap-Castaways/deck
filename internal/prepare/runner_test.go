@@ -24,7 +24,7 @@ import (
 )
 
 func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
-	stubImageDownload(t)
+	imageOps := stubImageDownloadOps()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("hello-download-file"))
@@ -76,7 +76,7 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 		},
 	}
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, imageDownloadOps: imageOps}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -136,7 +136,7 @@ func TestRun_NoPreparePhase(t *testing.T) {
 }
 
 func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
-	stubImageDownload(t)
+	imageOps := stubImageDownloadOps()
 
 	bundle := t.TempDir()
 	r := &fakeRunner{}
@@ -172,7 +172,7 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 		}},
 	}
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r, imageDownloadOps: imageOps}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -184,28 +184,18 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 	}
 }
 
-func stubImageDownload(t *testing.T) {
-	t.Helper()
-
-	oldParse := parseImageReferenceFn
-	oldFetch := remoteImageFetchFn
-	oldWrite := tarballWriteToFileFn
-
-	parseImageReferenceFn = func(v string) (name.Reference, error) {
-		return name.ParseReference(v, name.WeakValidation)
+func stubImageDownloadOps() imageDownloadOps {
+	return imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte("image"), 0o644)
+		},
 	}
-	remoteImageFetchFn = func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
-		return empty.Image, nil
-	}
-	tarballWriteToFileFn = func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
-		return os.WriteFile(path, []byte("image"), 0o644)
-	}
-
-	t.Cleanup(func() {
-		parseImageReferenceFn = oldParse
-		remoteImageFetchFn = oldFetch
-		tarballWriteToFileFn = oldWrite
-	})
 }
 
 func TestRun_PackagesContainerBackend(t *testing.T) {

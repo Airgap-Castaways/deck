@@ -14,6 +14,7 @@
 ## Guides
 
 - `concepts/why-deck.md`: the problem deck solves and how it approaches it
+- `development/go-style-guide.md`: Go coding conventions for the `deck` repository
 - `tutorials/quick-start.md`: create, lint, prepare, and run a workflow
 - `tutorials/offline-kubernetes.md`: deck for offline Kubernetes maintenance
 

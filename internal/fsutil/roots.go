@@ -2,6 +2,7 @@ package fsutil
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,12 +12,13 @@ type Root struct {
 	abs string
 }
 
-type (
-	BundleRoot   struct{ Root }
-	PreparedRoot struct{ Root }
-	StateRoot    struct{ Root }
-	SiteRoot     struct{ Root }
-)
+type BundleRoot struct{ root Root }
+
+type PreparedRoot struct{ root Root }
+
+type StateRoot struct{ root Root }
+
+type SiteRoot struct{ root Root }
 
 func NewRoot(path string) (Root, error) {
 	abs, err := filepath.Abs(strings.TrimSpace(path))
@@ -31,7 +33,7 @@ func NewBundleRoot(path string) (BundleRoot, error) {
 	if err != nil {
 		return BundleRoot{}, err
 	}
-	return BundleRoot{Root: root}, nil
+	return BundleRoot{root: root}, nil
 }
 
 func NewPreparedRoot(path string) (PreparedRoot, error) {
@@ -39,7 +41,7 @@ func NewPreparedRoot(path string) (PreparedRoot, error) {
 	if err != nil {
 		return PreparedRoot{}, err
 	}
-	return PreparedRoot{Root: root}, nil
+	return PreparedRoot{root: root}, nil
 }
 
 func NewStateRoot(path string) (StateRoot, error) {
@@ -47,7 +49,7 @@ func NewStateRoot(path string) (StateRoot, error) {
 	if err != nil {
 		return StateRoot{}, err
 	}
-	return StateRoot{Root: root}, nil
+	return StateRoot{root: root}, nil
 }
 
 func NewSiteRoot(path string) (SiteRoot, error) {
@@ -55,7 +57,7 @@ func NewSiteRoot(path string) (SiteRoot, error) {
 	if err != nil {
 		return SiteRoot{}, err
 	}
-	return SiteRoot{Root: root}, nil
+	return SiteRoot{root: root}, nil
 }
 
 func (r Root) Abs() string {
@@ -112,4 +114,146 @@ func (r Root) OpenFile(flag int, mode os.FileMode, segments ...string) (*os.File
 		return nil, path, err
 	}
 	return f, path, nil
+}
+
+func (r BundleRoot) Abs() string { return r.root.Abs() }
+
+func (r BundleRoot) Resolve(segments ...string) (string, error) { return r.root.Resolve(segments...) }
+
+func (r BundleRoot) ReadFile(segments ...string) ([]byte, string, error) {
+	return r.root.ReadFile(segments...)
+}
+
+func (r BundleRoot) Stat(segments ...string) (os.FileInfo, string, error) {
+	return r.root.Stat(segments...)
+}
+
+func (r BundleRoot) ReadDir(segments ...string) ([]os.DirEntry, string, error) {
+	return r.root.ReadDir(segments...)
+}
+
+func (r BundleRoot) Open(segments ...string) (*os.File, string, error) {
+	return r.root.Open(segments...)
+}
+
+func (r BundleRoot) Create(segments ...string) (*os.File, string, error) {
+	return r.root.Create(segments...)
+}
+
+func (r BundleRoot) OpenFile(flag int, mode os.FileMode, segments ...string) (*os.File, string, error) {
+	return r.root.OpenFile(flag, mode, segments...)
+}
+
+func (r BundleRoot) WalkDir(fn fs.WalkDirFunc, segments ...string) error {
+	return r.root.WalkDir(fn, segments...)
+}
+
+func (r BundleRoot) WalkFiles(fn func(path string, d os.DirEntry) error, segments ...string) error {
+	return r.root.WalkFiles(fn, segments...)
+}
+
+func (r PreparedRoot) Abs() string { return r.root.Abs() }
+
+func (r PreparedRoot) Resolve(segments ...string) (string, error) { return r.root.Resolve(segments...) }
+
+func (r PreparedRoot) ReadFile(segments ...string) ([]byte, string, error) {
+	return r.root.ReadFile(segments...)
+}
+
+func (r PreparedRoot) Stat(segments ...string) (os.FileInfo, string, error) {
+	return r.root.Stat(segments...)
+}
+
+func (r PreparedRoot) ReadDir(segments ...string) ([]os.DirEntry, string, error) {
+	return r.root.ReadDir(segments...)
+}
+
+func (r PreparedRoot) Open(segments ...string) (*os.File, string, error) {
+	return r.root.Open(segments...)
+}
+
+func (r PreparedRoot) Create(segments ...string) (*os.File, string, error) {
+	return r.root.Create(segments...)
+}
+
+func (r PreparedRoot) OpenFile(flag int, mode os.FileMode, segments ...string) (*os.File, string, error) {
+	return r.root.OpenFile(flag, mode, segments...)
+}
+
+func (r PreparedRoot) WalkDir(fn fs.WalkDirFunc, segments ...string) error {
+	return r.root.WalkDir(fn, segments...)
+}
+
+func (r PreparedRoot) WalkFiles(fn func(path string, d os.DirEntry) error, segments ...string) error {
+	return r.root.WalkFiles(fn, segments...)
+}
+
+func (r StateRoot) Abs() string { return r.root.Abs() }
+
+func (r StateRoot) Resolve(segments ...string) (string, error) { return r.root.Resolve(segments...) }
+
+func (r StateRoot) ReadFile(segments ...string) ([]byte, string, error) {
+	return r.root.ReadFile(segments...)
+}
+
+func (r StateRoot) Stat(segments ...string) (os.FileInfo, string, error) {
+	return r.root.Stat(segments...)
+}
+
+func (r StateRoot) ReadDir(segments ...string) ([]os.DirEntry, string, error) {
+	return r.root.ReadDir(segments...)
+}
+
+func (r StateRoot) Open(segments ...string) (*os.File, string, error) {
+	return r.root.Open(segments...)
+}
+
+func (r StateRoot) Create(segments ...string) (*os.File, string, error) {
+	return r.root.Create(segments...)
+}
+
+func (r StateRoot) OpenFile(flag int, mode os.FileMode, segments ...string) (*os.File, string, error) {
+	return r.root.OpenFile(flag, mode, segments...)
+}
+
+func (r StateRoot) WalkDir(fn fs.WalkDirFunc, segments ...string) error {
+	return r.root.WalkDir(fn, segments...)
+}
+
+func (r StateRoot) WalkFiles(fn func(path string, d os.DirEntry) error, segments ...string) error {
+	return r.root.WalkFiles(fn, segments...)
+}
+
+func (r SiteRoot) Abs() string { return r.root.Abs() }
+
+func (r SiteRoot) Resolve(segments ...string) (string, error) { return r.root.Resolve(segments...) }
+
+func (r SiteRoot) ReadFile(segments ...string) ([]byte, string, error) {
+	return r.root.ReadFile(segments...)
+}
+
+func (r SiteRoot) Stat(segments ...string) (os.FileInfo, string, error) {
+	return r.root.Stat(segments...)
+}
+
+func (r SiteRoot) ReadDir(segments ...string) ([]os.DirEntry, string, error) {
+	return r.root.ReadDir(segments...)
+}
+
+func (r SiteRoot) Open(segments ...string) (*os.File, string, error) { return r.root.Open(segments...) }
+
+func (r SiteRoot) Create(segments ...string) (*os.File, string, error) {
+	return r.root.Create(segments...)
+}
+
+func (r SiteRoot) OpenFile(flag int, mode os.FileMode, segments ...string) (*os.File, string, error) {
+	return r.root.OpenFile(flag, mode, segments...)
+}
+
+func (r SiteRoot) WalkDir(fn fs.WalkDirFunc, segments ...string) error {
+	return r.root.WalkDir(fn, segments...)
+}
+
+func (r SiteRoot) WalkFiles(fn func(path string, d os.DirEntry) error, segments ...string) error {
+	return r.root.WalkFiles(fn, segments...)
 }

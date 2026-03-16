@@ -21,7 +21,11 @@ func (s *Store) CreateSession(session Session) error {
 		session.Status = "open"
 	}
 
-	path := filepath.Join(s.sessionDir(session.ID), "session.json")
+	sessionDir, err := s.sessionDir(session.ID)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(sessionDir, "session.json")
 	if _, err := os.Stat(path); err == nil {
 		return alreadyExistsError("session %q already exists", session.ID)
 	} else if !os.IsNotExist(err) {
@@ -34,11 +38,19 @@ func (s *Store) GetSession(sessionID string) (Session, bool, error) {
 	if err := validateRecordID(sessionID, "session id"); err != nil {
 		return Session{}, false, err
 	}
-	return readJSON[Session](filepath.Join(s.sessionDir(sessionID), "session.json"))
+	sessionDir, err := s.sessionDir(sessionID)
+	if err != nil {
+		return Session{}, false, err
+	}
+	return readJSON[Session](filepath.Join(sessionDir, "session.json"))
 }
 
 func (s *Store) ListSessions() ([]Session, error) {
-	entries, err := os.ReadDir(filepath.Join(s.siteDir(), "sessions"))
+	siteDir, err := s.siteDir()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(filepath.Join(siteDir, "sessions"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []Session{}, nil
@@ -78,7 +90,11 @@ func (s *Store) CloseSession(sessionID, closedAt string) (Session, error) {
 	session.Status = "closed"
 	session.ClosedAt = strings.TrimSpace(closedAt)
 
-	path := filepath.Join(s.sessionDir(sessionID), "session.json")
+	sessionDir, err := s.sessionDir(sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	path := filepath.Join(sessionDir, "session.json")
 	if err := writeAtomicJSON(path, session); err != nil {
 		return Session{}, err
 	}

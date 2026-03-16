@@ -14,7 +14,11 @@ func (s *Store) ListNodes(sessionID string) ([]Node, error) {
 	}
 	seen := map[string]Node{}
 
-	assignmentsDir := filepath.Join(s.sessionDir(sessionID), "assignments")
+	sessionDir, err := s.sessionDir(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	assignmentsDir := filepath.Join(sessionDir, "assignments")
 	assignmentFiles, err := listJSONFiles(assignmentsDir)
 	if err != nil {
 		return nil, err
@@ -32,7 +36,7 @@ func (s *Store) ListNodes(sessionID string) ([]Node, error) {
 		}
 	}
 
-	reportsRoot := filepath.Join(s.sessionDir(sessionID), "reports")
+	reportsRoot := filepath.Join(sessionDir, "reports")
 	reportNodeDirs, err := os.ReadDir(reportsRoot)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read session reports directory: %w", err)

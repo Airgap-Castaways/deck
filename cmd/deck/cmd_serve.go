@@ -59,13 +59,13 @@ func executeServe(root string, addr string, apiToken string, reportMax int, audi
 		var err error
 		certPath, keyPath, err = server.EnsureSelfSignedTLS(resolvedRoot, resolvedAddr)
 		if err != nil {
-			return err
+			return fmt.Errorf("ensure self-signed tls: %w", err)
 		}
 	}
 
 	h, err := server.NewHandler(resolvedRoot, server.HandlerOptions{ReportMax: reportMax, AuditMaxSizeMB: auditMaxSizeMB, AuditMaxFiles: auditMaxFiles, AuthToken: resolvedToken})
 	if err != nil {
-		return err
+		return fmt.Errorf("init server handler: %w", err)
 	}
 	httpServer := &http.Server{
 		Addr:              resolvedAddr,
@@ -103,12 +103,12 @@ func executeServe(root string, addr string, apiToken string, reportMax int, audi
 		}
 		err := <-errCh
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
+			return fmt.Errorf("serve: %w", err)
 		}
 		return nil
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			return err
+			return fmt.Errorf("serve: %w", err)
 		}
 		return nil
 	}

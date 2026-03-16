@@ -8,14 +8,16 @@ import (
 	"time"
 )
 
-var workflowHTTPClient = &http.Client{Timeout: 10 * time.Second}
+func newWorkflowHTTPClient() *http.Client {
+	return &http.Client{Timeout: 10 * time.Second}
+}
 
 func getRequiredHTTP(ctx context.Context, rawURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get workflow url: %w", err)
 	}
-	resp, err := workflowHTTPClient.Do(req)
+	resp, err := newWorkflowHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("get workflow url: %w", err)
 	}
@@ -37,7 +39,7 @@ func getOptionalHTTP(ctx context.Context, rawURL string) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, fmt.Errorf("get vars url: %w", err)
 	}
-	resp, err := workflowHTTPClient.Do(req)
+	resp, err := newWorkflowHTTPClient().Do(req)
 	if err != nil {
 		return nil, false, fmt.Errorf("get vars url: %w", err)
 	}

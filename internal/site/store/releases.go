@@ -10,9 +10,11 @@ import (
 	"github.com/taedi90/deck/internal/filemode"
 )
 
-var copyDirFunc = copyDir
-
 func (s *Store) ImportRelease(release Release, importedBundlePath string) error {
+	return s.importReleaseWithCopyDir(release, importedBundlePath, copyDir)
+}
+
+func (s *Store) importReleaseWithCopyDir(release Release, importedBundlePath string, copyDirFn func(string, string) error) error {
 	if err := validateRecordID(release.ID, "release id"); err != nil {
 		return err
 	}
@@ -27,7 +29,10 @@ func (s *Store) ImportRelease(release Release, importedBundlePath string) error 
 		return fmt.Errorf("imported bundle path must be a directory")
 	}
 
-	releaseDir := s.releaseDir(release.ID)
+	releaseDir, err := s.releaseDir(release.ID)
+	if err != nil {
+		return err
+	}
 	manifestPath := filepath.Join(releaseDir, "manifest.json")
 	bundlePath := filepath.Join(releaseDir, "bundle")
 
@@ -42,10 +47,14 @@ func (s *Store) ImportRelease(release Release, importedBundlePath string) error 
 		return fmt.Errorf("check release bundle path: %w", err)
 	}
 
-	if err := filemode.EnsureDir(s.releasesDir(), filemode.PrivateState); err != nil {
+	releasesDir, err := s.releasesDir()
+	if err != nil {
+		return err
+	}
+	if err := filemode.EnsureDir(releasesDir, filemode.PrivateState); err != nil {
 		return fmt.Errorf("create releases directory: %w", err)
 	}
-	tmpDir, err := os.MkdirTemp(s.releasesDir(), release.ID+".tmp-")
+	tmpDir, err := os.MkdirTemp(releasesDir, release.ID+".tmp-")
 	if err != nil {
 		return fmt.Errorf("create temporary release directory: %w", err)
 	}
@@ -58,7 +67,7 @@ func (s *Store) ImportRelease(release Release, importedBundlePath string) error 
 
 	tmpBundlePath := filepath.Join(tmpDir, "bundle")
 	tmpManifestPath := filepath.Join(tmpDir, "manifest.json")
-	if err := copyDirFunc(importedBundlePath, tmpBundlePath); err != nil {
+	if err := copyDirFn(importedBundlePath, tmpBundlePath); err != nil {
 		return fmt.Errorf("copy release bundle: %w", err)
 	}
 	if err := writeAtomicJSON(tmpManifestPath, release); err != nil {
@@ -75,11 +84,19 @@ func (s *Store) GetRelease(releaseID string) (Release, bool, error) {
 	if err := validateRecordID(releaseID, "release id"); err != nil {
 		return Release{}, false, err
 	}
-	return readJSON[Release](filepath.Join(s.releaseDir(releaseID), "manifest.json"))
+	releaseDir, err := s.releaseDir(releaseID)
+	if err != nil {
+		return Release{}, false, err
+	}
+	return readJSON[Release](filepath.Join(releaseDir, "manifest.json"))
 }
 
 func (s *Store) ListReleases() ([]Release, error) {
-	entries, err := os.ReadDir(s.releasesDir())
+	releasesDir, err := s.releasesDir()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(releasesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []Release{}, nil
