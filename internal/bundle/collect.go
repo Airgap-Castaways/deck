@@ -33,6 +33,10 @@ func CollectArchive(bundleRoot, outputPath string) error {
 	if err != nil {
 		return err
 	}
+	root, err := fsutil.NewRoot(absRoot)
+	if err != nil {
+		return err
+	}
 
 	out, err := fsutil.Create(absOut)
 	if err != nil {
@@ -44,7 +48,10 @@ func CollectArchive(bundleRoot, outputPath string) error {
 	defer func() { _ = tw.Close() }()
 
 	for _, rel := range []string{"deck", "workflows", "outputs", ".deck/manifest.json"} {
-		path := filepath.Join(absRoot, filepath.FromSlash(rel))
+		path, err := root.Resolve(filepath.FromSlash(rel))
+		if err != nil {
+			return err
+		}
 		if err := addPathToArchive(tw, absRoot, path, absOut, ignoreMatcher); err != nil {
 			return fmt.Errorf("build archive: %w", err)
 		}

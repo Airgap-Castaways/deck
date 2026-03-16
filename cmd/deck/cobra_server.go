@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -253,8 +254,7 @@ func executeServerUp(opts serverUpOptions) error {
 
 func executeServerDown(unit string) error {
 	resolvedUnit := normalizeServerUnitName(unit)
-	cmd := executil.Command("systemctl", "stop", resolvedUnit)
-	raw, err := cmd.CombinedOutput()
+	raw, err := executil.CombinedOutput(context.Background(), executil.CmdSystemctl, "stop", resolvedUnit)
 	if err != nil {
 		msg := strings.TrimSpace(string(raw))
 		if msg == "" {
@@ -297,8 +297,7 @@ func runServerDaemon(opts serverUpOptions) error {
 	if opts.tlsSelfSigned {
 		args = append(args, "--tls-self-signed")
 	}
-	cmd := executil.Command("systemd-run", args...)
-	raw, err := cmd.CombinedOutput()
+	raw, err := executil.CombinedOutput(context.Background(), executil.CmdSystemdRun, args...)
 	if err != nil {
 		msg := strings.TrimSpace(string(raw))
 		if msg == "" {
@@ -336,10 +335,10 @@ func validateServerUpDaemonMode(opts serverUpOptions) error {
 	if !opts.daemon {
 		return nil
 	}
-	if _, err := executil.LookPath("systemd-run"); err != nil {
+	if _, err := executil.LookPath(executil.CmdSystemdRun); err != nil {
 		return errors.New("server up: systemd-run not found")
 	}
-	if _, err := executil.LookPath("systemctl"); err != nil {
+	if _, err := executil.LookPath(executil.CmdSystemctl); err != nil {
 		return errors.New("server up: systemctl not found")
 	}
 	if strings.TrimSpace(opts.unit) == "" {

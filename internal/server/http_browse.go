@@ -114,18 +114,22 @@ func (h *serverHandler) listBrowseEntries(category, relPath string) ([]browseEnt
 	if err != nil {
 		return nil, "", err
 	}
+	root, err := fsutil.NewRoot(h.rootAbs)
+	if err != nil {
+		return nil, "", err
+	}
 	baseDir := category
 	if category == "files" || category == "packages" {
 		baseDir = filepath.ToSlash(filepath.Join(serverOutputsDir, category))
 	}
-	info, _, err := fsutil.StatUnder(h.rootAbs, filepath.FromSlash(baseDir), filepath.FromSlash(relPath))
+	info, _, err := root.Stat(filepath.FromSlash(baseDir), filepath.FromSlash(relPath))
 	if err != nil {
 		return nil, "", err
 	}
 	if !info.IsDir() {
 		return nil, "", os.ErrNotExist
 	}
-	list, _, err := fsutil.ReadDirUnder(h.rootAbs, filepath.FromSlash(baseDir), filepath.FromSlash(relPath))
+	list, _, err := root.ReadDir(filepath.FromSlash(baseDir), filepath.FromSlash(relPath))
 	if err != nil {
 		return nil, "", err
 	}

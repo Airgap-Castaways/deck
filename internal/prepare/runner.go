@@ -32,14 +32,11 @@ type CommandRunner interface {
 type osCommandRunner struct{}
 
 func (o osCommandRunner) Run(ctx context.Context, name string, args ...string) error {
-	cmd := executil.CommandContext(ctx, name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return executil.RunWorkflowCommandWithIO(ctx, os.Stdout, os.Stderr, name, args...)
 }
 
 func (o osCommandRunner) LookPath(file string) (string, error) {
-	return executil.LookPath(file)
+	return executil.LookPathWorkflowBinary(file)
 }
 
 const (

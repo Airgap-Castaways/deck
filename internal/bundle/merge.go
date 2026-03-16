@@ -197,13 +197,17 @@ func mergeArchiveToLocal(bundleData stagedBundle, root string, dryRun bool) (Mer
 	if err != nil {
 		return MergeReport{}, fmt.Errorf("resolve merge destination: %w", err)
 	}
+	destRoot, err := fsutil.NewRoot(resolvedRoot)
+	if err != nil {
+		return MergeReport{}, err
+	}
 
 	report := MergeReport{Destination: resolvedRoot, DryRun: dryRun}
 	planned := map[string]struct{}{}
 
 	for _, entry := range bundleData.manifestEntries {
 		staged := bundleData.artifacts[entry.Path]
-		action, reason, planErr := planLocalPath(resolvedRoot, entry.Path, staged.digest)
+		action, reason, planErr := planLocalPath(destRoot, entry.Path, staged.digest)
 		if planErr != nil {
 			return MergeReport{}, planErr
 		}
@@ -212,20 +216,20 @@ func mergeArchiveToLocal(bundleData stagedBundle, root string, dryRun bool) (Mer
 		if dryRun || action == "skip" {
 			continue
 		}
-		if err := copyStagedFile(filepath.Join(resolvedRoot, filepath.FromSlash(entry.Path)), staged); err != nil {
+		if err := copyStagedFile(destRoot, entry.Path, staged); err != nil {
 			return MergeReport{}, err
 		}
 	}
 
 	if _, ok := planned["files/deck"]; !ok {
 		staged := bundleData.artifacts["files/deck"]
-		action, reason, planErr := planLocalPath(resolvedRoot, "files/deck", staged.digest)
+		action, reason, planErr := planLocalPath(destRoot, "files/deck", staged.digest)
 		if planErr != nil {
 			return MergeReport{}, planErr
 		}
 		report.Actions = append(report.Actions, MergeAction{Path: "files/deck", Action: action, Reason: reason})
 		if !dryRun && action != "skip" {
-			if err := copyStagedFile(filepath.Join(resolvedRoot, "files", "deck"), staged); err != nil {
+			if err := copyStagedFile(destRoot, "files/deck", staged); err != nil {
 				return MergeReport{}, err
 			}
 		}
@@ -237,12 +241,16 @@ func mergeArchiveToLocal(bundleData stagedBundle, root string, dryRun bool) (Mer
 		if dryRun {
 			continue
 		}
-		if err := copyStagedFile(filepath.Join(resolvedRoot, filepath.FromSlash(workflowPath)), bundleData.workflows[workflowPath]); err != nil {
+		if err := copyStagedFile(destRoot, workflowPath, bundleData.workflows[workflowPath]); err != nil {
 			return MergeReport{}, err
 		}
 	}
 
-	existingIndex, exists, err := readLocalWorkflowIndex(filepath.Join(resolvedRoot, "workflows", "index.json"))
+	indexPath, err := destRoot.Resolve("workflows", "index.json")
+	if err != nil {
+		return MergeReport{}, err
+	}
+	existingIndex, exists, err := readLocalWorkflowIndex(indexPath)
 	if err != nil {
 		return MergeReport{}, err
 	}
@@ -253,7 +261,7 @@ func mergeArchiveToLocal(bundleData stagedBundle, root string, dryRun bool) (Mer
 	}
 	report.Actions = append(report.Actions, MergeAction{Path: "workflows/index.json", Action: indexAction, Reason: "workflow index sync"})
 	if !dryRun {
-		if err := writeLocalWorkflowIndex(filepath.Join(resolvedRoot, "workflows", "index.json"), mergedIndex); err != nil {
+		if err := writeLocalWorkflowIndex(indexPath, mergedIndex); err != nil {
 			return MergeReport{}, err
 		}
 	}
@@ -261,8 +269,11 @@ func mergeArchiveToLocal(bundleData stagedBundle, root string, dryRun bool) (Mer
 	return report, nil
 }
 
-func planLocalPath(root, relPath, digest string) (string, string, error) {
-	targetPath := filepath.Join(root, filepath.FromSlash(relPath))
+func planLocalPath(root fsutil.Root, relPath, digest string) (string, string, error) {
+	targetPath, err := root.Resolve(filepath.FromSlash(relPath))
+	if err != nil {
+		return "", "", err
+	}
 	_, actualDigest, err := fileDigest(targetPath)
 	if err == nil {
 		if strings.EqualFold(actualDigest, digest) {
@@ -276,13 +287,17 @@ func planLocalPath(root, relPath, digest string) (string, string, error) {
 	return "", "", fmt.Errorf("read destination %s: %w", relPath, err)
 }
 
-func copyStagedFile(targetPath string, staged stagedFile) error {
+func copyStagedFile(root fsutil.Root, relPath string, staged stagedFile) error {
 	in, err := fsutil.Open(staged.tempPath)
 	if err != nil {
 		return fmt.Errorf("open staged file %s: %w", staged.tempPath, err)
 	}
 	defer func() { _ = in.Close() }()
 
+	targetPath, err := root.Resolve(filepath.FromSlash(relPath))
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return fmt.Errorf("create destination parent for %s: %w", targetPath, err)
 	}

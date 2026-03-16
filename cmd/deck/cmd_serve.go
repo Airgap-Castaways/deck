@@ -297,7 +297,7 @@ func readControlLogsJournal(unit string, tail int, since time.Duration) ([]ctrll
 	if since > 0 {
 		args = append(args, "--since", formatJournalSince(since))
 	}
-	raw, err := executil.Command("journalctl", args...).CombinedOutput()
+	raw, err := executil.CombinedOutput(context.Background(), executil.CmdJournalctl, args...)
 	if err != nil {
 		return nil, classifyJournalctlError(err, strings.TrimSpace(string(raw)))
 	}

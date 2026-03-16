@@ -32,7 +32,12 @@ func (h *serverHandler) handleReleaseBundleRead(w http.ResponseWriter, r *http.R
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	data, _, err := fsutil.ReadFileUnder(h.rootAbs, strings.TrimPrefix(targetPath, h.rootAbs+string(os.PathSeparator)))
+	root, err := fsutil.NewRoot(h.rootAbs)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	data, _, err := root.ReadFile(strings.TrimPrefix(targetPath, h.rootAbs+string(os.PathSeparator)))
 	if err != nil {
 		if os.IsNotExist(err) {
 			w.WriteHeader(http.StatusNotFound)
@@ -161,7 +166,12 @@ func (h *serverHandler) handleStatic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, _, err := fsutil.ReadFileUnder(h.rootAbs, strings.TrimPrefix(targetPath, h.rootAbs+string(os.PathSeparator)))
+	root, err := fsutil.NewRoot(h.rootAbs)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	data, _, err := root.ReadFile(strings.TrimPrefix(targetPath, h.rootAbs+string(os.PathSeparator)))
 	if err != nil {
 		if os.IsNotExist(err) && category == "workflows" && relPath == "index.json" {
 			data, err = buildWorkflowIndex(h.rootAbs)
@@ -246,7 +256,11 @@ func (h *serverHandler) resolveCategoryPath(urlPath string) (string, string, str
 		if ignore.Matches("deck", false) {
 			return "", "", "", http.StatusNotFound
 		}
-		resolvedTarget, err := fsutil.ResolveUnder(h.rootAbs, "deck")
+		root, err := fsutil.NewRoot(h.rootAbs)
+		if err != nil {
+			return "", "", "", http.StatusInternalServerError
+		}
+		resolvedTarget, err := root.Resolve("deck")
 		if err != nil {
 			return "", "", "", http.StatusForbidden
 		}
@@ -283,11 +297,19 @@ func (h *serverHandler) resolveCategoryPath(urlPath string) (string, string, str
 
 	baseDir := category
 	if category == "files" || category == "packages" || category == "images" {
-		if _, _, err := fsutil.StatUnder(h.rootAbs, serverOutputsDir, category, filepath.FromSlash(cleanRel)); err == nil {
+		root, err := fsutil.NewRoot(h.rootAbs)
+		if err != nil {
+			return "", "", "", http.StatusInternalServerError
+		}
+		if _, _, err := root.Stat(serverOutputsDir, category, filepath.FromSlash(cleanRel)); err == nil {
 			baseDir = filepath.ToSlash(filepath.Join(serverOutputsDir, category))
 		}
 	}
-	resolvedTarget, err := fsutil.ResolveUnder(h.rootAbs, filepath.FromSlash(baseDir), filepath.FromSlash(cleanRel))
+	root, err := fsutil.NewRoot(h.rootAbs)
+	if err != nil {
+		return "", "", "", http.StatusInternalServerError
+	}
+	resolvedTarget, err := root.Resolve(filepath.FromSlash(baseDir), filepath.FromSlash(cleanRel))
 	if err != nil {
 		return "", "", "", http.StatusForbidden
 	}

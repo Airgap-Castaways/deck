@@ -78,10 +78,7 @@ func runTimedCommandWithContext(parent context.Context, name string, args []stri
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
-	cmd := executil.CommandContext(ctx, name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
+	err := executil.RunWorkflowCommandWithIO(ctx, os.Stdout, os.Stderr, name, args...)
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		if parent.Err() != nil {
 			return parent.Err()
@@ -111,8 +108,7 @@ func runCommandOutputWithContext(parent context.Context, cmdArgs []string, timeo
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
-	cmd := executil.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
-	output, err := cmd.CombinedOutput()
+	output, err := executil.CombinedOutputWorkflowCommand(ctx, cmdArgs[0], cmdArgs[1:]...)
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		if parent.Err() != nil {
 			return "", parent.Err()
