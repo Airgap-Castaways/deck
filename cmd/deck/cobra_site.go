@@ -68,12 +68,23 @@ func newSiteReleaseImportCommand() *cobra.Command {
 		Short: "Import a bundle archive as a release",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeSiteReleaseImport(
-				cmdFlagValue(cmd, "root"),
-				cmdFlagValue(cmd, "id"),
-				cmdFlagValue(cmd, "bundle"),
-				cmdFlagValue(cmd, "created-at"),
-			)
+			root, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			id, err := cmdFlagValue(cmd, "id")
+			if err != nil {
+				return err
+			}
+			bundle, err := cmdFlagValue(cmd, "bundle")
+			if err != nil {
+				return err
+			}
+			createdAt, err := cmdFlagValue(cmd, "created-at")
+			if err != nil {
+				return err
+			}
+			return executeSiteReleaseImport(root, id, bundle, createdAt)
 		},
 	}
 	cmd.Flags().String("root", ".", "site server root")
@@ -89,10 +100,15 @@ func newSiteReleaseListCommand() *cobra.Command {
 		Short: "List stored releases",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeSiteReleaseList(
-				cmdFlagValue(cmd, "root"),
-				cmdFlagValue(cmd, "output"),
-			)
+			root, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			output, err := cmdFlagValue(cmd, "output")
+			if err != nil {
+				return err
+			}
+			return executeSiteReleaseList(root, output)
 		},
 	}
 	cmd.Flags().String("root", ".", "site server root")
@@ -106,12 +122,23 @@ func newSiteSessionCreateCommand() *cobra.Command {
 		Short: "Create a new session for a release",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeSiteSessionCreate(
-				cmdFlagValue(cmd, "root"),
-				cmdFlagValue(cmd, "id"),
-				cmdFlagValue(cmd, "release"),
-				cmdFlagValue(cmd, "started-at"),
-			)
+			root, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			id, err := cmdFlagValue(cmd, "id")
+			if err != nil {
+				return err
+			}
+			release, err := cmdFlagValue(cmd, "release")
+			if err != nil {
+				return err
+			}
+			startedAt, err := cmdFlagValue(cmd, "started-at")
+			if err != nil {
+				return err
+			}
+			return executeSiteSessionCreate(root, id, release, startedAt)
 		},
 	}
 	cmd.Flags().String("root", ".", "site server root")
@@ -127,11 +154,19 @@ func newSiteSessionCloseCommand() *cobra.Command {
 		Short: "Close an existing session",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeSiteSessionClose(
-				cmdFlagValue(cmd, "root"),
-				cmdFlagValue(cmd, "id"),
-				cmdFlagValue(cmd, "closed-at"),
-			)
+			root, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			id, err := cmdFlagValue(cmd, "id")
+			if err != nil {
+				return err
+			}
+			closedAt, err := cmdFlagValue(cmd, "closed-at")
+			if err != nil {
+				return err
+			}
+			return executeSiteSessionClose(root, id, closedAt)
 		},
 	}
 	cmd.Flags().String("root", ".", "site server root")
@@ -146,13 +181,27 @@ func newSiteAssignRoleCommand() *cobra.Command {
 		Short: "Assign a workflow to a role for a session",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeSiteAssignRole(
-				cmdFlagValue(cmd, "root"),
-				cmdFlagValue(cmd, "session"),
-				cmdFlagValue(cmd, "assignment"),
-				cmdFlagValue(cmd, "role"),
-				cmdFlagValue(cmd, "workflow"),
-			)
+			root, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			session, err := cmdFlagValue(cmd, "session")
+			if err != nil {
+				return err
+			}
+			assignment, err := cmdFlagValue(cmd, "assignment")
+			if err != nil {
+				return err
+			}
+			role, err := cmdFlagValue(cmd, "role")
+			if err != nil {
+				return err
+			}
+			workflow, err := cmdFlagValue(cmd, "workflow")
+			if err != nil {
+				return err
+			}
+			return executeSiteAssignRole(root, session, assignment, role, workflow)
 		},
 	}
 	cmd.Flags().String("root", ".", "site server root")
@@ -169,14 +218,31 @@ func newSiteAssignNodeCommand() *cobra.Command {
 		Short: "Override assignment for a specific node",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeSiteAssignNode(
-				cmdFlagValue(cmd, "root"),
-				cmdFlagValue(cmd, "session"),
-				cmdFlagValue(cmd, "assignment"),
-				cmdFlagValue(cmd, "node"),
-				cmdFlagValue(cmd, "role"),
-				cmdFlagValue(cmd, "workflow"),
-			)
+			root, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			session, err := cmdFlagValue(cmd, "session")
+			if err != nil {
+				return err
+			}
+			assignment, err := cmdFlagValue(cmd, "assignment")
+			if err != nil {
+				return err
+			}
+			node, err := cmdFlagValue(cmd, "node")
+			if err != nil {
+				return err
+			}
+			role, err := cmdFlagValue(cmd, "role")
+			if err != nil {
+				return err
+			}
+			workflow, err := cmdFlagValue(cmd, "workflow")
+			if err != nil {
+				return err
+			}
+			return executeSiteAssignNode(root, session, assignment, node, role, workflow)
 		},
 	}
 	cmd.Flags().String("root", ".", "site server root")
@@ -194,10 +260,15 @@ func newSiteStatusCommand() *cobra.Command {
 		Short: "Show release and session status summaries",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeSiteStatus(
-				cmdFlagValue(cmd, "root"),
-				cmdFlagValue(cmd, "output"),
-			)
+			root, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			output, err := cmdFlagValue(cmd, "output")
+			if err != nil {
+				return err
+			}
+			return executeSiteStatus(root, output)
 		},
 	}
 	cmd.Flags().String("root", ".", "site server root")

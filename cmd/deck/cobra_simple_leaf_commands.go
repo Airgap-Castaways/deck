@@ -17,7 +17,15 @@ func newLintCommand() *cobra.Command {
 			if len(args) == 1 {
 				scenario = args[0]
 			}
-			return executeLint(cmd.Context(), cmdFlagValue(cmd, "root"), cmdFlagValue(cmd, "file"), scenario)
+			root, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			file, err := cmdFlagValue(cmd, "file")
+			if err != nil {
+				return err
+			}
+			return executeLint(cmd.Context(), root, file, scenario)
 		},
 	}
 	cmd.Flags().String("root", ".", "workspace root containing workflows/")
@@ -31,7 +39,11 @@ func newInitCommand() *cobra.Command {
 		Short: "Scaffold starter deck files",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeInit(cmdFlagValue(cmd, "out"))
+			out, err := cmdFlagValue(cmd, "out")
+			if err != nil {
+				return err
+			}
+			return executeInit(out)
 		},
 	}
 	cmd.Flags().String("out", ".", "output directory")
@@ -45,7 +57,11 @@ func newCacheListCommand() *cobra.Command {
 		Short: "Show cached files",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeCacheList(cmdFlagValue(cmd, "output"))
+			output, err := cmdFlagValue(cmd, "output")
+			if err != nil {
+				return err
+			}
+			return executeCacheList(output)
 		},
 	}
 	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
@@ -57,7 +73,15 @@ func newCacheCleanCommand() *cobra.Command {
 		Use:   "clean",
 		Short: "Delete cached entries, optionally by age",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeCacheClean(cmdFlagValue(cmd, "older-than"), cmdFlagBoolValue(cmd, "dry-run"))
+			olderThan, err := cmdFlagValue(cmd, "older-than")
+			if err != nil {
+				return err
+			}
+			dryRun, err := cmdFlagBoolValue(cmd, "dry-run")
+			if err != nil {
+				return err
+			}
+			return executeCacheClean(olderThan, dryRun)
 		},
 	}
 	cmd.Flags().SetInterspersed(false)
@@ -108,12 +132,23 @@ func newNodeAssignmentShowCommand() *cobra.Command {
 		Short: "Show the resolved site assignment for the current node id",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return executeNodeAssignmentShow(
-				cmdFlagValue(cmd, "root"),
-				cmdFlagValue(cmd, "session"),
-				cmdFlagValue(cmd, "action"),
-				cmdFlagValue(cmd, "output"),
-			)
+			root, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			session, err := cmdFlagValue(cmd, "session")
+			if err != nil {
+				return err
+			}
+			action, err := cmdFlagValue(cmd, "action")
+			if err != nil {
+				return err
+			}
+			output, err := cmdFlagValue(cmd, "output")
+			if err != nil {
+				return err
+			}
+			return executeNodeAssignmentShow(root, session, action, output)
 		},
 	}
 	cmd.Flags().String("root", ".", "site server root")
@@ -123,43 +158,38 @@ func newNodeAssignmentShowCommand() *cobra.Command {
 	return cmd
 }
 
-func cmdFlagValue(cmd *cobra.Command, name string) string {
+func cmdFlagValue(cmd *cobra.Command, name string) (string, error) {
 	flag := cmd.Flags().Lookup(name)
 	if flag == nil {
-		reportFlagWiringError(cmd, "string", name, fmt.Errorf("flag not registered"))
-		return ""
+		return "", flagWiringError(cmd, "string", name, fmt.Errorf("flag not registered"))
 	}
-	return flag.Value.String()
+	return flag.Value.String(), nil
 }
 
-func cmdFlagIntValue(cmd *cobra.Command, name string) int {
+func cmdFlagIntValue(cmd *cobra.Command, name string) (int, error) {
 	flag := cmd.Flags().Lookup(name)
 	if flag == nil {
-		reportFlagWiringError(cmd, "int", name, fmt.Errorf("flag not registered"))
-		return 0
+		return 0, flagWiringError(cmd, "int", name, fmt.Errorf("flag not registered"))
 	}
 	value, err := strconv.Atoi(flag.Value.String())
 	if err != nil {
-		reportFlagWiringError(cmd, "int", name, err)
-		return 0
+		return 0, flagWiringError(cmd, "int", name, err)
 	}
-	return value
+	return value, nil
 }
 
-func cmdFlagBoolValue(cmd *cobra.Command, name string) bool {
+func cmdFlagBoolValue(cmd *cobra.Command, name string) (bool, error) {
 	flag := cmd.Flags().Lookup(name)
 	if flag == nil {
-		reportFlagWiringError(cmd, "bool", name, fmt.Errorf("flag not registered"))
-		return false
+		return false, flagWiringError(cmd, "bool", name, fmt.Errorf("flag not registered"))
 	}
 	value, err := strconv.ParseBool(flag.Value.String())
 	if err != nil {
-		reportFlagWiringError(cmd, "bool", name, err)
-		return false
+		return false, flagWiringError(cmd, "bool", name, err)
 	}
-	return value
+	return value, nil
 }
 
-func reportFlagWiringError(cmd *cobra.Command, kind, name string, err error) {
-	cmd.PrintErrf("internal CLI wiring error: %s flag %q on %q: %v\n", kind, name, cmd.CommandPath(), err)
+func flagWiringError(cmd *cobra.Command, kind, name string, err error) error {
+	return fmt.Errorf("internal CLI wiring error: %s flag %q on %q: %w", kind, name, cmd.CommandPath(), err)
 }

@@ -22,11 +22,27 @@ func newPrepareCommand() *cobra.Command {
 		Short: "Prepare bundle contents under outputs/",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			preparedRoot, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			dryRun, err := cmdFlagBoolValue(cmd, "dry-run")
+			if err != nil {
+				return err
+			}
+			refresh, err := cmdFlagBoolValue(cmd, "refresh")
+			if err != nil {
+				return err
+			}
+			clean, err := cmdFlagBoolValue(cmd, "clean")
+			if err != nil {
+				return err
+			}
 			return runPrepareWithOptions(cmd, prepareOptions{
-				preparedRoot: cmdFlagValue(cmd, "root"),
-				dryRun:       cmdFlagBoolValue(cmd, "dry-run"),
-				refresh:      cmdFlagBoolValue(cmd, "refresh"),
-				clean:        cmdFlagBoolValue(cmd, "clean"),
+				preparedRoot: preparedRoot,
+				dryRun:       dryRun,
+				refresh:      refresh,
+				clean:        clean,
 				varOverrides: vars.AsMap(),
 			})
 		},

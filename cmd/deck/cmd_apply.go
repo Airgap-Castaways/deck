@@ -39,13 +39,37 @@ func newPlanCommand() *cobra.Command {
 		Aliases: []string{"diff"},
 		Short:   "Show the planned apply step execution",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			workflowPath, err := cmdFlagValue(cmd, "file")
+			if err != nil {
+				return err
+			}
+			server, err := cmdFlagValue(cmd, "server")
+			if err != nil {
+				return err
+			}
+			session, err := cmdFlagValue(cmd, "session")
+			if err != nil {
+				return err
+			}
+			apiToken, err := cmdFlagValue(cmd, "api-token")
+			if err != nil {
+				return err
+			}
+			selectedPhase, err := cmdFlagValue(cmd, "phase")
+			if err != nil {
+				return err
+			}
+			output, err := cmdFlagValue(cmd, "output")
+			if err != nil {
+				return err
+			}
 			return runDiffWithOptions(cmd.Context(), diffOptions{
-				workflowPath:  cmdFlagValue(cmd, "file"),
-				server:        cmdFlagValue(cmd, "server"),
-				session:       cmdFlagValue(cmd, "session"),
-				apiToken:      cmdFlagValue(cmd, "api-token"),
-				selectedPhase: cmdFlagValue(cmd, "phase"),
-				output:        cmdFlagValue(cmd, "output"),
+				workflowPath:  workflowPath,
+				server:        server,
+				session:       session,
+				apiToken:      apiToken,
+				selectedPhase: selectedPhase,
+				output:        output,
 				varOverrides:  vars.AsMap(),
 			})
 		},
@@ -211,12 +235,32 @@ func newDoctorCommand() *cobra.Command {
 		Use:   "doctor",
 		Short: "Check referenced artifact inputs before apply",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			workflowPath, err := cmdFlagValue(cmd, "file")
+			if err != nil {
+				return err
+			}
+			server, err := cmdFlagValue(cmd, "server")
+			if err != nil {
+				return err
+			}
+			session, err := cmdFlagValue(cmd, "session")
+			if err != nil {
+				return err
+			}
+			apiToken, err := cmdFlagValue(cmd, "api-token")
+			if err != nil {
+				return err
+			}
+			outPath, err := cmdFlagValue(cmd, "out")
+			if err != nil {
+				return err
+			}
 			return runDoctorWithOptions(cmd.Context(), doctorOptions{
-				workflowPath: cmdFlagValue(cmd, "file"),
-				server:       cmdFlagValue(cmd, "server"),
-				session:      cmdFlagValue(cmd, "session"),
-				apiToken:     cmdFlagValue(cmd, "api-token"),
-				outPath:      cmdFlagValue(cmd, "out"),
+				workflowPath: workflowPath,
+				server:       server,
+				session:      session,
+				apiToken:     apiToken,
+				outPath:      outPath,
 				varOverrides: vars.AsMap(),
 			})
 		},
@@ -447,14 +491,42 @@ func newApplyCommand() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			workflowPath, err := cmdFlagValue(cmd, "file")
+			if err != nil {
+				return err
+			}
+			server, err := cmdFlagValue(cmd, "server")
+			if err != nil {
+				return err
+			}
+			session, err := cmdFlagValue(cmd, "session")
+			if err != nil {
+				return err
+			}
+			apiToken, err := cmdFlagValue(cmd, "api-token")
+			if err != nil {
+				return err
+			}
+			selectedPhase, err := cmdFlagValue(cmd, "phase")
+			if err != nil {
+				return err
+			}
+			prefetch, err := cmdFlagBoolValue(cmd, "prefetch")
+			if err != nil {
+				return err
+			}
+			dryRun, err := cmdFlagBoolValue(cmd, "dry-run")
+			if err != nil {
+				return err
+			}
 			return runApplyWithOptions(cmd.Context(), applyOptions{
-				workflowPath:  cmdFlagValue(cmd, "file"),
-				server:        cmdFlagValue(cmd, "server"),
-				session:       cmdFlagValue(cmd, "session"),
-				apiToken:      cmdFlagValue(cmd, "api-token"),
-				selectedPhase: cmdFlagValue(cmd, "phase"),
-				prefetch:      cmdFlagBoolValue(cmd, "prefetch"),
-				dryRun:        cmdFlagBoolValue(cmd, "dry-run"),
+				workflowPath:  workflowPath,
+				server:        server,
+				session:       session,
+				apiToken:      apiToken,
+				selectedPhase: selectedPhase,
+				prefetch:      prefetch,
+				dryRun:        dryRun,
 				varOverrides:  vars.AsMap(),
 				positional:    args,
 			})
