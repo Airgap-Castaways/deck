@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -97,5 +99,35 @@ func TestAskLoggerDebugAndTrace(t *testing.T) {
 		if !strings.Contains(logText, want) {
 			t.Fatalf("expected %q in log output, got %q", want, logText)
 		}
+	}
+}
+
+func TestLoadRequestTextReadsWorkspaceFile(t *testing.T) {
+	root := t.TempDir()
+	requestPath := filepath.Join(root, "request.md")
+	if err := os.WriteFile(requestPath, []byte("extra details\n"), 0o600); err != nil {
+		t.Fatalf("write request file: %v", err)
+	}
+	text, err := loadRequestText(root, "base prompt", "request.md")
+	if err != nil {
+		t.Fatalf("load request text: %v", err)
+	}
+	if !strings.Contains(text, "base prompt") || !strings.Contains(text, "extra details") {
+		t.Fatalf("unexpected request text: %q", text)
+	}
+}
+
+func TestLoadRequestTextRejectsEscape(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "request.md")
+	if err := os.WriteFile(outside, []byte("secret\n"), 0o600); err != nil {
+		t.Fatalf("write outside request file: %v", err)
+	}
+	_, err := loadRequestText(root, "", outside)
+	if err == nil {
+		t.Fatalf("expected escape rejection")
+	}
+	if !strings.Contains(err.Error(), "resolve ask request file") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
