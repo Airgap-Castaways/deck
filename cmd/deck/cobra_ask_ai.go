@@ -70,7 +70,7 @@ func newAskCommand() *cobra.Command {
 	cmd.Flags().StringVar(&planDir, "plan-dir", ".deck/plan", "directory for ask plan artifacts")
 
 	cmd.AddCommand(newAskPlanCommand())
-	cmd.AddCommand(newAskAuthCommand())
+	cmd.AddCommand(newAskConfigCommand())
 	return cmd
 }
 
@@ -117,20 +117,20 @@ func newAskPlanCommand() *cobra.Command {
 	return cmd
 }
 
-func newAskAuthCommand() *cobra.Command {
+func newAskConfigCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "auth",
-		Short: askcontext.AskCommandMeta().Auth.Short,
+		Use:   "config",
+		Short: askcontext.AskCommandMeta().Config.Short,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(newAskAuthSetCommand(), newAskAuthShowCommand(), newAskAuthUnsetCommand())
+	cmd.AddCommand(newAskConfigSetCommand(), newAskConfigShowCommand(), newAskConfigUnsetCommand())
 	return cmd
 }
 
-func newAskAuthSetCommand() *cobra.Command {
+func newAskConfigSetCommand() *cobra.Command {
 	var apiKey string
 	var provider string
 	var model string
@@ -138,7 +138,7 @@ func newAskAuthSetCommand() *cobra.Command {
 	var logLevel string
 	cmd := &cobra.Command{
 		Use:   "set",
-		Short: "Save ask api key and default provider/model",
+		Short: "Save ask config defaults and api key",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			settings, err := askconfig.LoadStored()
@@ -167,12 +167,12 @@ func newAskAuthSetCommand() *cobra.Command {
 				settings.Endpoint != updated.Endpoint ||
 				settings.LogLevel != updated.LogLevel
 			if !changed {
-				return fmt.Errorf("ask auth set requires at least one of --api-key, --provider, --model, --endpoint, or --log-level")
+				return fmt.Errorf("ask config set requires at least one of --api-key, --provider, --model, --endpoint, or --log-level")
 			}
 			if err := askconfig.SaveStored(updated); err != nil {
 				return err
 			}
-			return stdoutPrintln("ask auth saved")
+			return stdoutPrintln("ask config saved")
 		},
 	}
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "save the ask api key in XDG config")
@@ -183,7 +183,7 @@ func newAskAuthSetCommand() *cobra.Command {
 	return cmd
 }
 
-func newAskAuthShowCommand() *cobra.Command {
+func newAskConfigShowCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "show",
 		Short: "Show the effective ask provider, model, and masked key source",
@@ -229,16 +229,16 @@ func newAskAuthShowCommand() *cobra.Command {
 	return cmd
 }
 
-func newAskAuthUnsetCommand() *cobra.Command {
+func newAskConfigUnsetCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "unset",
-		Short: "Clear saved ask auth settings from XDG config",
+		Short: "Clear saved ask config settings from XDG config",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := askconfig.ClearStored(); err != nil {
 				return err
 			}
-			return stdoutPrintln("ask auth cleared")
+			return stdoutPrintln("ask config cleared")
 		},
 	}
 	return cmd

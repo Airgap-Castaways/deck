@@ -28,9 +28,9 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 ## Optional AI-ready authoring helper
 
 - `ask`: experimental helper to draft, refine, or review workflows from the current workspace using an LLM-backed authoring assistant
-- `ask auth set`: save `ask.provider`, `ask.model`, `ask.endpoint`, and `ask.apiKey` in XDG config
-- `ask auth show`: show the effective ask config with a masked api key
-- `ask auth unset`: clear saved ask config
+- `ask config set`: save `ask.provider`, `ask.model`, `ask.endpoint`, and `ask.apiKey` in XDG config
+- `ask config show`: show the effective ask config with a masked api key
+- `ask config unset`: clear saved ask config
 
 `ask` is experimental and available only in AI-ready builds. Lite builds keep the command surface but return a clear unsupported-feature error.
 
@@ -44,7 +44,7 @@ OpenAI-compatible provider support currently targets:
 - `openrouter`
 - `gemini`
 
-You can override `provider`, `model`, and `endpoint` per run, or save defaults with `ask auth set`.
+You can override `provider`, `model`, and `endpoint` per run, or save defaults with `ask config set`.
 
 `ask.logLevel` controls terminal diagnostics on stderr:
 
@@ -97,7 +97,7 @@ deck server up --root ./bundle --addr :8080
 deck server health --server http://127.0.0.1:8080
 deck plan --scenario apply --source server
 
-deck ask auth set --provider openai --model gpt-5.4 --endpoint https://api.openai.com/v1 --api-key "$DECK_ASK_API_KEY"
+deck ask config set --provider openai --model gpt-5.4 --endpoint https://api.openai.com/v1 --api-key "$DECK_ASK_API_KEY"
 deck ask "rhel9 single-node kubeadm cluster scenario"
 deck ask plan "air-gapped rhel9 kubeadm cluster with prepare/apply split"
 deck ask "explain what workflows/scenarios/apply.yaml does"
@@ -141,11 +141,11 @@ Optional ask augmentation config example:
 - `plan` and `apply` accept `--scenario` for named scenarios and `--workflow` for an explicit path or URL.
 - `--source` controls whether `--scenario` resolves from the local workspace or the saved remote server.
 - workspace-local metadata stays under `./.deck/`, while user-global config, state, cache, and run history use standard XDG locations.
-- `ask` workspace context lives under `./.deck/ask/`, while saved ask auth/defaults live under `~/.config/deck/config.json` as the top-level `ask` object.
+- `ask` workspace context lives under `./.deck/ask/`, while saved ask config defaults live under `~/.config/deck/config.json` as the top-level `ask` object.
 - `deck ask plan` writes plan artifacts under `./.deck/plan/` by default (`<timestamp>-<slug>.md`, `<timestamp>-<slug>.json`, `latest.md`, `latest.json`).
 - `deck ask --from .deck/plan/<name>.md "implement this plan"` prefers the same-basename `.json` artifact when present.
 - complex one-shot authoring requests may stop after planning if blockers remain; in that case `deck ask` prints the saved plan paths and follow-up commands instead of writing weak output.
-- `ask auth set --log-level trace` is the quickest way to see the effective `deck ask` command, MCP/LSP events, and prompt text in terminal logs.
+- `ask config set --log-level trace` is the quickest way to see the effective `deck ask` command, MCP/LSP events, and prompt text in terminal logs.
 - optional augmentation config can be defined under `ask.mcp` and `ask.lsp` in the same config file.
 - optional MCP and LSP augmentation is disabled by default and degrades gracefully when configured tools are unavailable.
 - phase imports resolve from `workflows/components/` using component-relative paths

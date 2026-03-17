@@ -30,30 +30,30 @@ func (m *mockAskClient) Generate(_ context.Context, _ askprovider.Request) (askp
 	return askprovider.Response{Content: resp}, nil
 }
 
-func TestAskAuthCommands(t *testing.T) {
+func TestAskConfigCommands(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	out, err := runWithCapturedStdout([]string{"ask", "auth", "set", "--provider", "openrouter", "--model", "anthropic/claude-3.5-sonnet", "--endpoint", "https://openrouter.ai/api/v1", "--api-key", "secret-token", "--log-level", "debug"})
+	out, err := runWithCapturedStdout([]string{"ask", "config", "set", "--provider", "openrouter", "--model", "anthropic/claude-3.5-sonnet", "--endpoint", "https://openrouter.ai/api/v1", "--api-key", "secret-token", "--log-level", "debug"})
 	if err != nil {
-		t.Fatalf("auth set: %v", err)
+		t.Fatalf("config set: %v", err)
 	}
-	if !strings.Contains(out, "ask auth saved") {
-		t.Fatalf("unexpected auth set output: %q", out)
+	if !strings.Contains(out, "ask config saved") {
+		t.Fatalf("unexpected config set output: %q", out)
 	}
-	out, err = runWithCapturedStdout([]string{"ask", "auth", "show"})
+	out, err = runWithCapturedStdout([]string{"ask", "config", "show"})
 	if err != nil {
-		t.Fatalf("auth show: %v", err)
+		t.Fatalf("config show: %v", err)
 	}
 	for _, want := range []string{"provider=openrouter", "model=anthropic/claude-3.5-sonnet", "endpoint=https://openrouter.ai/api/v1", "endpointSource=config", "logLevel=debug", "mcpEnabled=false", "lspEnabled=false", "apiKey=secr****oken", "apiKeySource=config"} {
 		if !strings.Contains(out, want) {
-			t.Fatalf("expected %q in auth show output, got %q", want, out)
+			t.Fatalf("expected %q in config show output, got %q", want, out)
 		}
 	}
-	out, err = runWithCapturedStdout([]string{"ask", "auth", "unset"})
+	out, err = runWithCapturedStdout([]string{"ask", "config", "unset"})
 	if err != nil {
-		t.Fatalf("auth unset: %v", err)
+		t.Fatalf("config unset: %v", err)
 	}
-	if !strings.Contains(out, "ask auth cleared") {
-		t.Fatalf("unexpected auth unset output: %q", out)
+	if !strings.Contains(out, "ask config cleared") {
+		t.Fatalf("unexpected config unset output: %q", out)
 	}
 }
 
@@ -72,7 +72,7 @@ func TestAskCommandMetadataMatchesAskContext(t *testing.T) {
 	}
 }
 
-func TestAskAuthShowIncludesStoredAugmentSettings(t *testing.T) {
+func TestAskConfigShowIncludesStoredAugmentSettings(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
 	if err := askconfig.SaveStored(askconfig.Settings{
 		Provider: "openai",
@@ -84,13 +84,13 @@ func TestAskAuthShowIncludesStoredAugmentSettings(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("save stored config: %v", err)
 	}
-	out, err := runWithCapturedStdout([]string{"ask", "auth", "show"})
+	out, err := runWithCapturedStdout([]string{"ask", "config", "show"})
 	if err != nil {
-		t.Fatalf("auth show: %v", err)
+		t.Fatalf("config show: %v", err)
 	}
 	for _, want := range []string{"logLevel=trace", "mcpEnabled=true", "lspEnabled=true"} {
 		if !strings.Contains(out, want) {
-			t.Fatalf("expected %q in auth show output, got %q", want, out)
+			t.Fatalf("expected %q in config show output, got %q", want, out)
 		}
 	}
 }
