@@ -566,7 +566,7 @@ func validatePrepareSemantics(wf *config.Workflow) error {
 					return fmt.Errorf("E_SCHEMA_INVALID: artifacts.files group %s item %s output.path must be relative", group.Group, item.ID)
 				}
 				if strings.HasPrefix(normalized, "files/") {
-					return fmt.Errorf("E_SCHEMA_INVALID: artifacts.files group %s item %s output.path must be relative to files root", group.Group, item.ID)
+					return fmt.Errorf("E_SCHEMA_INVALID: artifacts.files group %s item %s output.path must not include the files/ prefix; it is added automatically", group.Group, item.ID)
 				}
 				rendered, err := workflowexec.RenderSpecWithExtra(map[string]any{"output": map[string]any{"path": filepath.ToSlash(filepath.Join("files", path))}}, wf, nil, map[string]any{"bundleRoot": "", "stateFile": ""}, map[string]any{"target": prepareTargetMap(target)})
 				if err != nil {
