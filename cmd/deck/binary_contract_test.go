@@ -185,6 +185,7 @@ func TestCLIContractHelpRoutesViaBinary(t *testing.T) {
 		wantStdout string
 	}{
 		{name: "root help flag", args: []string{"--help"}, wantStdout: "deck [command]"},
+		{name: "root help includes version", args: []string{"--help"}, wantStdout: "version"},
 		{name: "help bundle", args: []string{"help", "bundle"}, wantStdout: "deck bundle [command]"},
 		{name: "nested server help", args: []string{"server", "health", "--help"}, wantStdout: "deck server health [flags]"},
 	}
@@ -202,6 +203,20 @@ func TestCLIContractHelpRoutesViaBinary(t *testing.T) {
 				t.Fatalf("expected empty stderr for %v, got %q", tc.args, res.stderr)
 			}
 		})
+	}
+}
+
+func TestCLIContractVersionCommandViaBinary(t *testing.T) {
+	binaryPath := buildDeckBinary(t, "deck-version-bin")
+	res := runDeckBinary(t, binaryPath, "version")
+	if res.exitCode != 0 {
+		t.Fatalf("expected zero exit, got %d stderr=%q", res.exitCode, res.stderr)
+	}
+	if res.stdout != "deck dev\n" {
+		t.Fatalf("unexpected stdout: %q", res.stdout)
+	}
+	if res.stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", res.stderr)
 	}
 }
 

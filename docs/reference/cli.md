@@ -9,6 +9,7 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 - `init`: create starter workflow files under `workflows/`
 - `list`: list available scenarios from the local workspace or the saved remote source
 - `completion`: generate shell completion for bash, zsh, fish, and PowerShell
+- `version`: show the current `deck` build version and metadata
 - `lint`: validate a workflow file or workspace against the workflow and step schemas
 - `prepare`: gather artifacts into `outputs/`, refresh the local `deck` binary, and write `.deck/manifest.json`
 - `plan`: inspect which apply steps would run or skip before execution
@@ -74,6 +75,7 @@ deck completion powershell
 
 ```bash
 deck init --out ./demo
+deck version
 deck list --source local
 deck completion bash > ./deck.bash
 deck lint --file ./demo/workflows/scenarios/apply.yaml
@@ -151,6 +153,7 @@ Optional ask augmentation config example:
 - `bundle build` archives the canonical workspace bundle inputs: `deck`, `workflows/`, `outputs/`, and `.deck/manifest.json`, and respects `.deckignore` within those paths.
 - Help text is shown on stdout only when you request it with `--help` or `help`.
 - Command and flag errors are written to stderr without automatic usage output.
+- `version` prints `deck <version>` by default and supports `--json` for machine-readable metadata.
 - Prefer typed step kinds for common host changes.
 - Keep `Command` for cases where the clearer typed form does not exist yet.
 - `deck ask` previews changes by default and only writes workflow files when `--write` is present.
