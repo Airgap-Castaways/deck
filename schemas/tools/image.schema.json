@@ -66,6 +66,25 @@
               "images"
             ]
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
+                "const": "verify"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "auth"
+              ]
+            }
+          }
         }
       ],
       "properties": {
@@ -75,6 +94,39 @@
             "verify"
           ],
           "type": "string"
+        },
+        "auth": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "basic": {
+                "additionalProperties": false,
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "type": "object"
+              },
+              "registry": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "registry",
+              "basic"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
         },
         "backend": {
           "additionalProperties": true,

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -64,10 +65,15 @@ func runImageDownload(ctx context.Context, runner CommandRunner, bundleRoot stri
 		return nil, fmt.Errorf("%s: unsupported image engine: %s", errCodePrepareEngineUnsupported, engine)
 	}
 
-	return runGoContainerRegistryDownloads(ctx, bundleRoot, dir, images, opts)
+	auth, err := parseImageRegistryAuth(spec)
+	if err != nil {
+		return nil, err
+	}
+
+	return runGoContainerRegistryDownloads(ctx, bundleRoot, dir, images, auth, opts)
 }
 
-func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string, images []string, opts RunOptions) ([]string, error) {
+func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string, images []string, auth imageRegistryAuthMap, opts RunOptions) ([]string, error) {
 	deps := resolveImageDownloadOps(opts)
 	files := make([]string, 0, len(images))
 	for _, img := range images {
@@ -93,13 +99,17 @@ func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string
 		if err != nil {
 			return nil, fmt.Errorf("parse image reference %s: %w", img, err)
 		}
+		registry := ref.Context().RegistryStr()
 
 		imageObj, err := deps.fetchImage(
 			ref,
-			remote.WithAuthFromKeychain(authn.DefaultKeychain),
+			remote.WithAuthFromKeychain(auth.keychain()),
 			remote.WithContext(ctx),
 		)
 		if err != nil {
+			if auth.hasRegistry(registry) {
+				return nil, fmt.Errorf("pull image %s from registry %s with configured auth: %w", img, registry, err)
+			}
 			return nil, fmt.Errorf("pull image %s: %w", img, err)
 		}
 
@@ -116,6 +126,77 @@ func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string
 		files = append(files, rel)
 	}
 	return files, nil
+}
+
+type imageRegistryAuth struct {
+	registry string
+	username string
+	password string
+}
+
+type imageRegistryAuthMap map[string]imageRegistryAuth
+
+func (m imageRegistryAuthMap) hasRegistry(registry string) bool {
+	_, ok := m[strings.ToLower(strings.TrimSpace(registry))]
+	return ok
+}
+
+func (m imageRegistryAuthMap) keychain() authn.Keychain {
+	if len(m) == 0 {
+		return authn.DefaultKeychain
+	}
+	return imageAuthKeychain{entries: m, fallback: authn.DefaultKeychain}
+}
+
+type imageAuthKeychain struct {
+	entries  imageRegistryAuthMap
+	fallback authn.Keychain
+}
+
+func (k imageAuthKeychain) Resolve(resource authn.Resource) (authn.Authenticator, error) {
+	registry := strings.ToLower(strings.TrimSpace(resource.RegistryStr()))
+	if entry, ok := k.entries[registry]; ok {
+		return authn.FromConfig(authn.AuthConfig{Username: entry.username, Password: entry.password}), nil
+	}
+	if k.fallback == nil {
+		return authn.Anonymous, nil
+	}
+	return k.fallback.Resolve(resource)
+}
+
+func parseImageRegistryAuth(spec map[string]any) (imageRegistryAuthMap, error) {
+	items, ok := spec["auth"].([]any)
+	if !ok || len(items) == 0 {
+		return nil, nil
+	}
+	entries := make(imageRegistryAuthMap, len(items))
+	duplicates := make([]string, 0)
+	for _, item := range items {
+		entryMap, ok := item.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("image auth entries must be objects")
+		}
+		registry := strings.ToLower(strings.TrimSpace(stringValue(entryMap, "registry")))
+		basic := mapValue(entryMap, "basic")
+		username := stringValue(basic, "username")
+		password := stringValue(basic, "password")
+		if registry == "" {
+			return nil, fmt.Errorf("image auth entry requires registry")
+		}
+		if username == "" || password == "" {
+			return nil, fmt.Errorf("image auth entry for registry %s requires basic.username and basic.password", registry)
+		}
+		if _, exists := entries[registry]; exists {
+			duplicates = append(duplicates, registry)
+			continue
+		}
+		entries[registry] = imageRegistryAuth{registry: registry, username: username, password: password}
+	}
+	if len(duplicates) > 0 {
+		sort.Strings(duplicates)
+		return nil, fmt.Errorf("image auth contains duplicate registry entries: %s", strings.Join(duplicates, ", "))
+	}
+	return entries, nil
 }
 
 func sanitizeImageName(v string) string {
