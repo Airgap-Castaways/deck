@@ -1,16 +1,19 @@
 package askcli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/taedi90/deck/internal/askcontract"
+	"github.com/taedi90/deck/internal/askintent"
 	"github.com/taedi90/deck/internal/askretrieve"
 	"github.com/taedi90/deck/internal/askreview"
 	"github.com/taedi90/deck/internal/fsutil"
@@ -231,14 +234,154 @@ func loadRequestText(root string, prompt string, fromPath string) (string, error
 		return "", fmt.Errorf("read ask request file: %w", err)
 	}
 	fromText := strings.TrimSpace(string(raw))
+	if strings.HasPrefix(filepath.ToSlash(rel), ".deck/plan/") && strings.HasSuffix(strings.ToLower(resolved), ".md") {
+		jsonPath := strings.TrimSuffix(resolved, filepath.Ext(resolved)) + ".json"
+		jsonRaw, jsonErr := os.ReadFile(jsonPath) //nolint:gosec
+		if jsonErr == nil {
+			var plan askcontract.PlanResponse
+			if err := json.Unmarshal(jsonRaw, &plan); err == nil {
+				fromText = buildPlanSourceText(plan)
+			}
+		}
+	}
 	if prompt == "" {
 		return fromText, nil
 	}
 	return prompt + "\n\nAttached request details:\n" + fromText, nil
 }
 
+func buildPlanSourceText(plan askcontract.PlanResponse) string {
+	b := &strings.Builder{}
+	b.WriteString("Plan request:\n")
+	b.WriteString(strings.TrimSpace(plan.Request))
+	b.WriteString("\nIntent: ")
+	b.WriteString(strings.TrimSpace(plan.Intent))
+	b.WriteString("\nTarget outcome: ")
+	b.WriteString(strings.TrimSpace(plan.TargetOutcome))
+	b.WriteString("\nPlanned files:\n")
+	for _, file := range plan.Files {
+		b.WriteString("- ")
+		b.WriteString(file.Path)
+		if strings.TrimSpace(file.Action) != "" {
+			b.WriteString(" (")
+			b.WriteString(strings.TrimSpace(file.Action))
+			b.WriteString(")")
+		}
+		b.WriteString("\n")
+	}
+	if len(plan.ValidationChecklist) > 0 {
+		b.WriteString("Validation checklist:\n")
+		for _, line := range plan.ValidationChecklist {
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(line))
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func resolvePlanDir(root string, requested string) (string, error) {
+	if strings.TrimSpace(requested) == "" {
+		return filepath.Join(root, ".deck", "plan"), nil
+	}
+	candidate := requested
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(root, candidate)
+	}
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil {
+		return "", fmt.Errorf("resolve plan directory: %w", err)
+	}
+	resolved, err := fsutil.ResolveUnder(root, strings.Split(filepath.ToSlash(rel), "/")...)
+	if err != nil {
+		return "", fmt.Errorf("resolve plan directory: %w", err)
+	}
+	return resolved, nil
+}
+
+func planSlug(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return "plan"
+	}
+	var out strings.Builder
+	lastDash := false
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			out.WriteRune(r)
+			lastDash = false
+		case r >= '0' && r <= '9':
+			out.WriteRune(r)
+			lastDash = false
+		default:
+			if !lastDash && out.Len() > 0 {
+				out.WriteRune('-')
+				lastDash = true
+			}
+		}
+	}
+	slug := strings.Trim(out.String(), "-")
+	if slug == "" {
+		return "plan"
+	}
+	if len(slug) > 48 {
+		slug = strings.Trim(slug[:48], "-")
+	}
+	if slug == "" {
+		return "plan"
+	}
+	return slug
+}
+
+func savePlanArtifacts(root string, opts Options, plan askcontract.PlanResponse, markdown string) (string, string, error) {
+	planDir, err := resolvePlanDir(root, opts.PlanDir)
+	if err != nil {
+		return "", "", err
+	}
+	if err := os.MkdirAll(planDir, 0o750); err != nil {
+		return "", "", fmt.Errorf("create plan directory: %w", err)
+	}
+	name := strings.TrimSpace(opts.PlanName)
+	if name == "" {
+		name = plan.Request
+	}
+	timestamp := time.Now().UTC().Format("2006-01-02-150405")
+	base := timestamp + "-" + planSlug(name)
+	mdPath := filepath.Join(planDir, base+".md")
+	jsonPath := filepath.Join(planDir, base+".json")
+	jsonRaw, err := json.MarshalIndent(plan, "", "  ")
+	if err != nil {
+		return "", "", fmt.Errorf("marshal plan json: %w", err)
+	}
+	if err := os.WriteFile(mdPath, []byte(markdown+"\n"), 0o600); err != nil {
+		return "", "", fmt.Errorf("write plan markdown: %w", err)
+	}
+	if err := os.WriteFile(jsonPath, append(jsonRaw, '\n'), 0o600); err != nil {
+		return "", "", fmt.Errorf("write plan json: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "latest.md"), []byte(markdown+"\n"), 0o600); err != nil {
+		return "", "", fmt.Errorf("write latest plan markdown: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "latest.json"), append(jsonRaw, '\n'), 0o600); err != nil {
+		return "", "", fmt.Errorf("write latest plan json: %w", err)
+	}
+	relMD, err := filepath.Rel(root, mdPath)
+	if err != nil {
+		relMD = mdPath
+	}
+	relJSON, err := filepath.Rel(root, jsonPath)
+	if err != nil {
+		relJSON = jsonPath
+	}
+	return filepath.ToSlash(relMD), filepath.ToSlash(relJSON), nil
+}
+
 func renderUserCommand(opts Options) string {
 	parts := []string{"deck", "ask"}
+	if opts.PlanOnly {
+		parts = append(parts, "plan")
+	}
 	if opts.Write {
 		parts = append(parts, "--write")
 	}
@@ -250,6 +393,12 @@ func renderUserCommand(opts Options) string {
 	}
 	if strings.TrimSpace(opts.FromPath) != "" {
 		parts = append(parts, "--from", strings.TrimSpace(opts.FromPath))
+	}
+	if strings.TrimSpace(opts.PlanName) != "" {
+		parts = append(parts, "--plan-name", strings.TrimSpace(opts.PlanName))
+	}
+	if strings.TrimSpace(opts.PlanDir) != "" {
+		parts = append(parts, "--plan-dir", strings.TrimSpace(opts.PlanDir))
 	}
 	if strings.TrimSpace(opts.Provider) != "" {
 		parts = append(parts, "--provider", strings.TrimSpace(opts.Provider))
@@ -285,6 +434,49 @@ func chunkIDs(chunks []askretrieve.Chunk) []string {
 		ids = append(ids, chunk.ID)
 	}
 	return ids
+}
+
+func filePathsFromPlan(plan askcontract.PlanResponse) []string {
+	paths := make([]string, 0, len(plan.Files))
+	for _, file := range plan.Files {
+		if strings.TrimSpace(file.Path) == "" {
+			continue
+		}
+		paths = append(paths, strings.TrimSpace(file.Path))
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func validateSemanticGeneration(gen askcontract.GenerationResponse, decision askintent.Decision, plan askcontract.PlanResponse) error {
+	if len(plan.Files) > 0 {
+		planned := map[string]string{}
+		for _, file := range plan.Files {
+			planned[filepath.ToSlash(strings.TrimSpace(file.Path))] = strings.ToLower(strings.TrimSpace(file.Action))
+		}
+		generated := map[string]bool{}
+		for _, file := range gen.Files {
+			generated[filepath.ToSlash(strings.TrimSpace(file.Path))] = true
+		}
+		for path := range planned {
+			if !generated[path] {
+				return fmt.Errorf("semantic validation failed: planned file missing from generation: %s", path)
+			}
+		}
+		if decision.Route == askintent.RouteRefine {
+			for _, file := range gen.Files {
+				clean := filepath.ToSlash(strings.TrimSpace(file.Path))
+				action, ok := planned[clean]
+				if !ok {
+					return fmt.Errorf("semantic validation failed: refine generated unplanned file: %s", clean)
+				}
+				if action != "" && action != "update" && action != "create" {
+					return fmt.Errorf("semantic validation failed: invalid planned action for %s", clean)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func dedupe(values []string) []string {

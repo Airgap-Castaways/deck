@@ -17,6 +17,36 @@ type GenerationResponse struct {
 	Files   []GeneratedFile `json:"files"`
 }
 
+type PlanFile struct {
+	Path    string `json:"path"`
+	Kind    string `json:"kind"`
+	Action  string `json:"action"`
+	Purpose string `json:"purpose"`
+}
+
+type PlanResponse struct {
+	Version             int        `json:"version"`
+	Request             string     `json:"request"`
+	Intent              string     `json:"intent"`
+	Complexity          string     `json:"complexity"`
+	Blockers            []string   `json:"blockers"`
+	TargetOutcome       string     `json:"targetOutcome"`
+	Assumptions         []string   `json:"assumptions"`
+	OpenQuestions       []string   `json:"openQuestions"`
+	EntryScenario       string     `json:"entryScenario"`
+	Files               []PlanFile `json:"files"`
+	ValidationChecklist []string   `json:"validationChecklist"`
+}
+
+type CriticResponse struct {
+	Blocking     []string `json:"blocking"`
+	Advisory     []string `json:"advisory"`
+	MissingFiles []string `json:"missingFiles"`
+	InvalidPaths []string `json:"invalidImports"`
+	CoverageGaps []string `json:"coverageGaps"`
+	RequiredFix  []string `json:"requiredFixes"`
+}
+
 type InfoResponse struct {
 	Summary         string   `json:"summary"`
 	Answer          string   `json:"answer"`
@@ -93,6 +123,47 @@ func ParseClassification(raw string) (ClassificationResponse, error) {
 	}
 	if resp.Confidence > 1 {
 		resp.Confidence = 1
+	}
+	return resp, nil
+}
+
+func ParsePlan(raw string) (PlanResponse, error) {
+	cleaned := clean(raw)
+	if cleaned == "" {
+		return PlanResponse{}, fmt.Errorf("plan response is empty")
+	}
+	var resp PlanResponse
+	if err := json.Unmarshal([]byte(cleaned), &resp); err != nil {
+		return PlanResponse{}, fmt.Errorf("parse plan response: %w", err)
+	}
+	if resp.Version == 0 {
+		resp.Version = 1
+	}
+	resp.Request = strings.TrimSpace(resp.Request)
+	resp.Intent = strings.TrimSpace(resp.Intent)
+	resp.Complexity = strings.TrimSpace(resp.Complexity)
+	resp.TargetOutcome = strings.TrimSpace(resp.TargetOutcome)
+	resp.EntryScenario = strings.TrimSpace(resp.EntryScenario)
+	if resp.Request == "" {
+		return PlanResponse{}, fmt.Errorf("plan response is missing request")
+	}
+	if resp.Intent == "" {
+		return PlanResponse{}, fmt.Errorf("plan response is missing intent")
+	}
+	if len(resp.Files) == 0 {
+		return PlanResponse{}, fmt.Errorf("plan response is missing files")
+	}
+	for i := range resp.Files {
+		resp.Files[i].Path = strings.TrimSpace(resp.Files[i].Path)
+		resp.Files[i].Kind = strings.TrimSpace(resp.Files[i].Kind)
+		resp.Files[i].Action = strings.TrimSpace(resp.Files[i].Action)
+		resp.Files[i].Purpose = strings.TrimSpace(resp.Files[i].Purpose)
+		if resp.Files[i].Path == "" {
+			return PlanResponse{}, fmt.Errorf("plan response has file with empty path")
+		}
+		if resp.Files[i].Action == "" {
+			resp.Files[i].Action = "create"
+		}
 	}
 	return resp, nil
 }

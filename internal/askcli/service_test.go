@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/taedi90/deck/internal/askconfig"
+	"github.com/taedi90/deck/internal/askcontract"
 	"github.com/taedi90/deck/internal/askintent"
 	"github.com/taedi90/deck/internal/askprovider"
 	"github.com/taedi90/deck/internal/askretrieve"
@@ -58,7 +59,7 @@ func TestGenerateWithValidationStopsOnRouteMismatch(t *testing.T) {
 		`{"summary":"wrong route","review":[],"files":[]}`,
 		`{"summary":"should not retry","review":[],"files":[{"path":"workflows/scenarios/apply.yaml","content":"role: apply\nversion: v1alpha1\n"}]}`,
 	}}
-	_, _, _, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"))
+	_, _, _, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{})
 	if err == nil {
 		t.Fatalf("expected generation failure")
 	}
@@ -129,5 +130,38 @@ func TestLoadRequestTextRejectsEscape(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "resolve ask request file") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadRequestTextPrefersPlanJSON(t *testing.T) {
+	root := t.TempDir()
+	planDir := filepath.Join(root, ".deck", "plan")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatalf("mkdir plan dir: %v", err)
+	}
+	mdPath := filepath.Join(planDir, "sample.md")
+	jsonPath := filepath.Join(planDir, "sample.json")
+	if err := os.WriteFile(mdPath, []byte("freeform markdown"), 0o600); err != nil {
+		t.Fatalf("write md: %v", err)
+	}
+	json := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	if err := os.WriteFile(jsonPath, []byte(json), 0o600); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+	text, err := loadRequestText(root, "", ".deck/plan/sample.md")
+	if err != nil {
+		t.Fatalf("load request text: %v", err)
+	}
+	if !strings.Contains(text, "Plan request") || !strings.Contains(text, "workflows/scenarios/apply.yaml") {
+		t.Fatalf("expected plan-derived request text, got %q", text)
+	}
+}
+
+func TestValidateSemanticGenerationRefineRejectsUnplannedFile(t *testing.T) {
+	gen := askcontract.GenerationResponse{Files: []askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: "role: apply\nversion: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [\"true\"]\n"}, {Path: "workflows/components/new.yaml", Content: "steps: []\n"}}}
+	plan := askcontract.PlanResponse{Files: []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "update"}}}
+	err := validateSemanticGeneration(gen, askintent.Decision{Route: askintent.RouteRefine}, plan)
+	if err == nil {
+		t.Fatalf("expected refine semantic validation failure")
 	}
 }

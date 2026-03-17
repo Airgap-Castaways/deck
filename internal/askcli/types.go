@@ -16,6 +16,9 @@ type Options struct {
 	Root          string
 	Prompt        string
 	FromPath      string
+	PlanOnly      bool
+	PlanName      string
+	PlanDir       string
 	Write         bool
 	Review        bool
 	MaxIterations int
@@ -48,6 +51,10 @@ type runResult struct {
 	UserCommand   string
 	PromptTraces  []promptTrace
 	ConfigSource  askconfig.EffectiveSettings
+	Plan          *askcontract.PlanResponse
+	PlanMarkdown  string
+	PlanJSON      string
+	FallbackNote  string
 }
 
 type promptTrace struct {

@@ -89,6 +89,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	mcpChunks, mcpEvents := mcpaugment.Gather(ctx, effective.MCP, decision.Route, requestText)
 	lspChunks, lspEvents := lspaugment.Gather(ctx, effective.LSP, decision.Target, workspace)
 	externalChunks := append(append([]askretrieve.Chunk{}, mcpChunks...), lspChunks...)
+	externalChunks = append(externalChunks, projectContextChunk(resolvedRoot))
 	retrieval := askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, externalChunks)
 	result := runResult{
 		Route:         decision.Route,
@@ -122,6 +123,77 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	if decision.LLMPolicy == askintent.LLMRequired && !canUseLLM(effective) {
 		return fmt.Errorf("missing ask api key for provider %q; set %s or run `deck ask auth set --api-key ...`", effective.Provider, "DECK_ASK_API_KEY")
 	}
+	if opts.PlanOnly && !isAuthoringRoute(decision.Route) {
+		return fmt.Errorf("ask plan is intended for draft/refine authoring requests; got route %s", decision.Route)
+	}
+
+	planRequested := opts.PlanOnly
+	planNeeded := isAuthoringRoute(decision.Route) && (planRequested || needsComplexPlanner(requestText, workspace, decision))
+	var plan askcontract.PlanResponse
+	if planNeeded {
+		if !canUseLLM(effective) {
+			return fmt.Errorf("route %s requires model access; configure provider credentials first", decision.Route)
+		}
+		logger.logf("basic", "deck ask phase=plan-start route=%s\n", decision.Route)
+		planned, planErr := planWithLLM(ctx, client, askconfigSettings{provider: effective.Provider, model: effective.Model, apiKey: effective.APIKey, endpoint: effective.Endpoint}, decision, retrieval, requestText, workspace, logger)
+		if planErr != nil {
+			logger.logf("debug", "deck ask phase=plan-fallback error=%v\n", planErr)
+			planned = localPlan(requestText, decision, workspace)
+		}
+		plan = planned
+		result.Plan = &plan
+		logger.logf("basic", "deck ask phase=plan-complete files=%d blockers=%d\n", len(plan.Files), len(plan.Blockers))
+		planMD := renderPlanMarkdown(plan, ".deck/plan/latest.md")
+		planMDPath, planJSONPath, saveErr := savePlanArtifacts(resolvedRoot, opts, plan, planMD)
+		if saveErr != nil {
+			return saveErr
+		}
+		logger.logf("basic", "deck ask phase=plan-save markdown=%s json=%s\n", planMDPath, planJSONPath)
+		result.PlanMarkdown = planMDPath
+		result.PlanJSON = planJSONPath
+		planMarkdownFinal := renderPlanMarkdown(plan, planMDPath)
+		if updateErr := os.WriteFile(filepath.Join(resolvedRoot, filepath.FromSlash(planMDPath)), []byte(planMarkdownFinal+"\n"), 0o600); updateErr == nil {
+			_ = os.WriteFile(filepath.Join(filepath.Dir(filepath.Join(resolvedRoot, filepath.FromSlash(planMDPath))), "latest.md"), []byte(planMarkdownFinal+"\n"), 0o600)
+		}
+		if opts.PlanOnly {
+			result.Summary = "generated plan artifact"
+			result.Termination = "plan-only-requested"
+			result.FallbackNote = "plan requested"
+			if err := askstate.Save(resolvedRoot, askstate.Context{
+				LastMode:          "plan",
+				LastRoute:         string(result.Route),
+				LastPrompt:        strings.TrimSpace(requestText),
+				LastFiles:         filePathsFromPlan(plan),
+				LastLLMUsed:       true,
+				LastClassifierLLM: result.ClassifierLLM,
+				LastTermination:   result.Termination,
+			}, requestText, resultToMarkdown(result)); err != nil {
+				return err
+			}
+			return render(opts.Stdout, opts.Stderr, result)
+		}
+		if hasBlockingPlanItems(plan) {
+			result.Summary = "plan generated with blockers"
+			result.Termination = "plan-only-blocked"
+			result.FallbackNote = "generation stopped because plan has blockers"
+			if err := askstate.Save(resolvedRoot, askstate.Context{
+				LastMode:          "plan",
+				LastRoute:         string(result.Route),
+				LastPrompt:        strings.TrimSpace(requestText),
+				LastFiles:         filePathsFromPlan(plan),
+				LastLLMUsed:       true,
+				LastClassifierLLM: result.ClassifierLLM,
+				LastTermination:   result.Termination,
+			}, requestText, resultToMarkdown(result)); err != nil {
+				return err
+			}
+			return render(opts.Stdout, opts.Stderr, result)
+		}
+		retrieval = askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, append(externalChunks, repoMapChunk(workspace), planChunk(plan)))
+		result.Chunks = retrieval.Chunks
+		result.DroppedChunks = retrieval.Dropped
+		logger.logf("debug", "deck ask phase=retrieval-second-pass chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
+	}
 
 	switch decision.Route {
 	case askintent.RouteDraft, askintent.RouteRefine:
@@ -141,7 +213,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		}
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "generation", SystemPrompt: generationRequest.SystemPrompt, UserPrompt: generationRequest.Prompt})
 		logger.logf("basic", "deck ask phase=generation-start route=%s attempts=%d\n", decision.Route, attempts)
-		gen, lintSummary, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts, logger)
+		gen, lintSummary, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts, logger, decision, plan)
 		if genErr != nil {
 			return genErr
 		}
@@ -325,7 +397,7 @@ func generationAttempts(requested int, decision askintent.Decision, prompt strin
 	return 2
 }
 
-func generateWithValidation(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, attempts int, logger askLogger) (askcontract.GenerationResponse, string, int, error) {
+func generateWithValidation(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, attempts int, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse) (askcontract.GenerationResponse, string, int, error) {
 	var lastValidation string
 	for attempt := 1; attempt <= attempts; attempt++ {
 		currentPrompt := req.Prompt
@@ -352,9 +424,12 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 		if err != nil {
 			lastValidation = err.Error()
 			logger.logf("debug", "deck ask phase=generation-parse-error error=%s\n", lastValidation)
+			if attempt < attempts {
+				continue
+			}
 			return askcontract.GenerationResponse{}, lastValidation, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
 		}
-		lintSummary, err := validateGeneration(root, gen)
+		lintSummary, err := validateGeneration(root, gen, decision, plan)
 		if err == nil {
 			return gen, lintSummary, attempt - 1, nil
 		}
@@ -389,7 +464,7 @@ func repairableValidationError(message string) bool {
 	return true
 }
 
-func validateGeneration(root string, gen askcontract.GenerationResponse) (string, error) {
+func validateGeneration(root string, gen askcontract.GenerationResponse, decision askintent.Decision, plan askcontract.PlanResponse) (string, error) {
 	if len(gen.Files) == 0 {
 		return "", fmt.Errorf("response did not include any files")
 	}
@@ -415,5 +490,8 @@ func validateGeneration(root string, gen askcontract.GenerationResponse) (string
 		validated = append(validated, files...)
 	}
 	validated = dedupe(validated)
+	if err := validateSemanticGeneration(gen, decision, plan); err != nil {
+		return "", err
+	}
 	return fmt.Sprintf("lint ok (%d workflows)", len(validated)), nil
 }

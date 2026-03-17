@@ -53,6 +53,32 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 			return err
 		}
 	}
+	if result.FallbackNote != "" {
+		if _, err := fmt.Fprintf(stdout, "note: %s\n", result.FallbackNote); err != nil {
+			return err
+		}
+	}
+	if result.PlanMarkdown != "" {
+		if _, err := fmt.Fprintf(stdout, "plan: %s\n", result.PlanMarkdown); err != nil {
+			return err
+		}
+	}
+	if result.PlanJSON != "" {
+		if _, err := fmt.Fprintf(stdout, "plan-json: %s\n", result.PlanJSON); err != nil {
+			return err
+		}
+	}
+	if result.PlanMarkdown != "" {
+		if _, err := io.WriteString(stdout, "next:\n"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(stdout, "- deck ask --from %s \"implement this plan\"\n", result.PlanMarkdown); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(stdout, "- deck ask --write --from %s \"implement this plan\"\n", result.PlanMarkdown); err != nil {
+			return err
+		}
+	}
 	if result.LintSummary != "" {
 		if _, err := fmt.Fprintf(stdout, "lint: %s\n", result.LintSummary); err != nil {
 			return err

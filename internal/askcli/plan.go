@@ -1,0 +1,257 @@
+package askcli
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/taedi90/deck/internal/askcontract"
+	"github.com/taedi90/deck/internal/askintent"
+	"github.com/taedi90/deck/internal/askprovider"
+	"github.com/taedi90/deck/internal/askretrieve"
+)
+
+func isAuthoringRoute(route askintent.Route) bool {
+	return route == askintent.RouteDraft || route == askintent.RouteRefine
+}
+
+func needsComplexPlanner(prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) bool {
+	if !isAuthoringRoute(decision.Route) {
+		return false
+	}
+	lower := strings.ToLower(strings.TrimSpace(prompt))
+	tokens := []string{"air-gapped", "airgapped", "multi-node", "3-node", "prepare", "component", "components", "vars", "orchestration", "cluster"}
+	hits := 0
+	for _, token := range tokens {
+		if strings.Contains(lower, token) {
+			hits++
+		}
+	}
+	if hits >= 2 {
+		return true
+	}
+	if workspace.HasWorkflowTree && strings.Contains(lower, "refine") {
+		return true
+	}
+	return false
+}
+
+func planSystemPrompt(decision askintent.Decision, retrieval askretrieve.RetrievalResult) string {
+	b := &strings.Builder{}
+	b.WriteString("You are deck ask planner. Return strict JSON only.\n")
+	b.WriteString("JSON shape: {\"version\":number,\"request\":string,\"intent\":string,\"complexity\":string,\"blockers\":[]string,\"targetOutcome\":string,\"assumptions\":[]string,\"openQuestions\":[]string,\"entryScenario\":string,\"files\":[{\"path\":string,\"kind\":string,\"action\":string,\"purpose\":string}],\"validationChecklist\":[]string}.\n")
+	b.WriteString("Allowed file paths: workflows/scenarios/*.yaml, workflows/components/*.yaml, workflows/vars.yaml.\n")
+	b.WriteString("Use blockers only for missing information that should stop generation safely.\n")
+	b.WriteString("Intent route: ")
+	b.WriteString(string(decision.Route))
+	b.WriteString("\n")
+	b.WriteString("Project guide highlights:\n")
+	b.WriteString("- Prefer typed steps over Command where possible.\n")
+	b.WriteString("- Keep workflows explicit and reviewable.\n")
+	b.WriteString("- Keep changes surgical to requested scope.\n")
+	b.WriteString("Retrieved context:\n")
+	b.WriteString(askretrieve.BuildChunkText(retrieval))
+	return b.String()
+}
+
+func planUserPrompt(prompt string, workspace askretrieve.WorkspaceSummary) string {
+	b := &strings.Builder{}
+	b.WriteString("User request:\n")
+	b.WriteString(strings.TrimSpace(prompt))
+	b.WriteString("\n")
+	_, _ = fmt.Fprintf(b, "Workspace has workflow tree: %t\n", workspace.HasWorkflowTree)
+	_, _ = fmt.Fprintf(b, "Workspace has prepare scenario: %t\n", workspace.HasPrepare)
+	_, _ = fmt.Fprintf(b, "Workspace has apply scenario: %t\n", workspace.HasApply)
+	b.WriteString("Workspace files:\n")
+	for _, file := range workspace.Files {
+		b.WriteString("- ")
+		b.WriteString(file.Path)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func planWithLLM(ctx context.Context, client askprovider.Client, cfg askconfigSettings, decision askintent.Decision, retrieval askretrieve.RetrievalResult, prompt string, workspace askretrieve.WorkspaceSummary, logger askLogger) (askcontract.PlanResponse, error) {
+	systemPrompt := planSystemPrompt(decision, retrieval)
+	userPrompt := planUserPrompt(prompt, workspace)
+	logger.prompt("plan", systemPrompt, userPrompt)
+	resp, err := client.Generate(ctx, askprovider.Request{
+		Kind:         "plan",
+		Provider:     cfg.provider,
+		Model:        cfg.model,
+		APIKey:       cfg.apiKey,
+		Endpoint:     cfg.endpoint,
+		SystemPrompt: systemPrompt,
+		Prompt:       userPrompt,
+		MaxRetries:   1,
+	})
+	if err != nil {
+		return askcontract.PlanResponse{}, err
+	}
+	logger.response("plan", resp.Content)
+	return askcontract.ParsePlan(resp.Content)
+}
+
+type askconfigSettings struct {
+	provider string
+	model    string
+	apiKey   string
+	endpoint string
+}
+
+func localPlan(prompt string, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) askcontract.PlanResponse {
+	files := []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Kind: "scenario", Action: "create", Purpose: "Primary workflow entrypoint"}}
+	if strings.Contains(strings.ToLower(prompt), "prepare") {
+		files = append(files, askcontract.PlanFile{Path: "workflows/scenarios/prepare.yaml", Kind: "scenario", Action: "create", Purpose: "Prepare artifacts and dependencies"})
+	}
+	if strings.Contains(strings.ToLower(prompt), "vars") {
+		files = append(files, askcontract.PlanFile{Path: "workflows/vars.yaml", Kind: "vars", Action: "create", Purpose: "Workspace variables"})
+	}
+	if workspace.HasWorkflowTree {
+		for i := range files {
+			if strings.HasPrefix(files[i].Path, "workflows/scenarios/") {
+				files[i].Action = "update"
+			}
+		}
+	}
+	return askcontract.PlanResponse{
+		Version:             1,
+		Request:             strings.TrimSpace(prompt),
+		Intent:              string(decision.Route),
+		Complexity:          "simple",
+		TargetOutcome:       "Generate valid workflow files for the request.",
+		Assumptions:         []string{"Use v1alpha1 workflow schema", "Prefer typed steps where possible"},
+		OpenQuestions:       nil,
+		EntryScenario:       "workflows/scenarios/apply.yaml",
+		Files:               files,
+		ValidationChecklist: []string{"Workflow schema validates", "Entrypoint scenarios are loadable", "Planned files are generated"},
+	}
+}
+
+func hasBlockingPlanItems(plan askcontract.PlanResponse) bool {
+	for _, blocker := range plan.Blockers {
+		if strings.TrimSpace(blocker) != "" {
+			return true
+		}
+	}
+	for _, q := range plan.OpenQuestions {
+		lower := strings.ToLower(strings.TrimSpace(q))
+		if strings.HasPrefix(lower, "blocking:") {
+			return true
+		}
+	}
+	return false
+}
+
+func renderPlanMarkdown(plan askcontract.PlanResponse, mdPath string) string {
+	b := &strings.Builder{}
+	b.WriteString("# deck ask plan\n\n")
+	b.WriteString("## Request\n")
+	b.WriteString(strings.TrimSpace(plan.Request))
+	b.WriteString("\n\n## Intent\n")
+	b.WriteString(strings.TrimSpace(plan.Intent))
+	b.WriteString("\n\n## Target outcome\n")
+	b.WriteString(strings.TrimSpace(plan.TargetOutcome))
+	b.WriteString("\n\n## Assumptions\n")
+	if len(plan.Assumptions) == 0 {
+		b.WriteString("- None\n")
+	} else {
+		for _, line := range plan.Assumptions {
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(line))
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("\n## Blockers\n")
+	if len(plan.Blockers) == 0 {
+		b.WriteString("- None\n")
+	} else {
+		for _, line := range plan.Blockers {
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(line))
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("\n## Planned files\n")
+	for _, file := range plan.Files {
+		b.WriteString("- ")
+		b.WriteString(file.Path)
+		if strings.TrimSpace(file.Action) != "" {
+			b.WriteString(" (")
+			b.WriteString(strings.TrimSpace(file.Action))
+			b.WriteString(")")
+		}
+		if strings.TrimSpace(file.Purpose) != "" {
+			b.WriteString(": ")
+			b.WriteString(strings.TrimSpace(file.Purpose))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("\n## Validation checklist\n")
+	for _, line := range plan.ValidationChecklist {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(line))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n## Next commands\n")
+	b.WriteString("deck ask --from ")
+	b.WriteString(mdPath)
+	b.WriteString(" \"implement this plan\"\n")
+	b.WriteString("deck ask --write --from ")
+	b.WriteString(mdPath)
+	b.WriteString(" \"implement this plan\"\n")
+	return b.String()
+}
+
+func planChunk(plan askcontract.PlanResponse) askretrieve.Chunk {
+	b := &strings.Builder{}
+	b.WriteString("Plan intent: ")
+	b.WriteString(plan.Intent)
+	b.WriteString("\n")
+	b.WriteString("Target outcome: ")
+	b.WriteString(plan.TargetOutcome)
+	b.WriteString("\n")
+	b.WriteString("Planned files:\n")
+	for _, file := range plan.Files {
+		b.WriteString("- ")
+		b.WriteString(file.Path)
+		b.WriteString(" (")
+		b.WriteString(file.Action)
+		b.WriteString(")\n")
+	}
+	return askretrieve.Chunk{ID: "plan-artifact", Source: "plan", Label: "plan", Content: b.String(), Score: 90}
+}
+
+func repoMapChunk(workspace askretrieve.WorkspaceSummary) askretrieve.Chunk {
+	b := &strings.Builder{}
+	b.WriteString("Workflow repo map:\n")
+	for _, file := range workspace.Files {
+		clean := filepath.ToSlash(file.Path)
+		if !strings.HasPrefix(clean, "workflows/") {
+			continue
+		}
+		b.WriteString("- ")
+		b.WriteString(clean)
+		b.WriteString("\n")
+	}
+	return askretrieve.Chunk{ID: "workflow-repo-map", Source: "repo-map", Label: "repo-map", Content: b.String(), Score: 60}
+}
+
+func projectContextChunk(root string) askretrieve.Chunk {
+	b := &strings.Builder{}
+	b.WriteString("Project context:\n")
+	agentPath := filepath.Join(root, "AGENTS.md")
+	if raw, err := os.ReadFile(agentPath); err == nil { //nolint:gosec // Project-local metadata file only.
+		text := strings.TrimSpace(string(raw))
+		if len(text) > 2000 {
+			text = text[:2000]
+		}
+		b.WriteString("AGENTS.md excerpt:\n")
+		b.WriteString(text)
+		b.WriteString("\n")
+	}
+	b.WriteString("Authoring defaults: Prefer typed steps over Command; keep changes surgical and goal-driven.\n")
+	return askretrieve.Chunk{ID: "project-context", Source: "project", Label: "project-context", Content: b.String(), Score: 70}
+}

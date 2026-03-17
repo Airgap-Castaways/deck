@@ -221,6 +221,103 @@ func TestAskReviewMode(t *testing.T) {
 	}
 }
 
+func TestAskPlanWritesArtifacts(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "env-key")
+	root := t.TempDir()
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWD) }()
+
+	originalFactory := newAskBackend
+	newAskBackend = func() askprovider.Client {
+		return &mockAskClient{responses: []string{validClassificationDraft(), validPlanJSON()}}
+	}
+	defer func() { newAskBackend = originalFactory }()
+
+	out, err := runWithCapturedStdout([]string{"ask", "plan", "create multi-node cluster workflow"})
+	if err != nil {
+		t.Fatalf("ask plan: %v", err)
+	}
+	for _, want := range []string{"plan:", "plan-json:", "next:", "deck ask --from"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in output, got %q", want, out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".deck", "plan", "latest.md")); err != nil {
+		t.Fatalf("expected latest markdown plan: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".deck", "plan", "latest.json")); err != nil {
+		t.Fatalf("expected latest json plan: %v", err)
+	}
+}
+
+func TestAskPlanRejectsNonAuthoringRoute(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "env-key")
+	root := t.TempDir()
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWD) }()
+
+	originalFactory := newAskBackend
+	newAskBackend = func() askprovider.Client {
+		return &mockAskClient{responses: []string{`{"route":"question","confidence":0.9,"reason":"question","target":{"kind":"workspace"},"generationAllowed":false}`}}
+	}
+	defer func() { newAskBackend = originalFactory }()
+
+	if _, err := runWithCapturedStdout([]string{"ask", "plan", "what is this workspace"}); err == nil {
+		t.Fatalf("expected non-authoring ask plan to fail")
+	}
+}
+
+func TestAskFromPlanPrefersJSONArtifact(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "env-key")
+	root := t.TempDir()
+	planDir := filepath.Join(root, ".deck", "plan")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatalf("mkdir plan dir: %v", err)
+	}
+	mdPath := filepath.Join(planDir, "sample.md")
+	jsonPath := filepath.Join(planDir, "sample.json")
+	if err := os.WriteFile(mdPath, []byte("human plan text"), 0o600); err != nil {
+		t.Fatalf("write md: %v", err)
+	}
+	if err := os.WriteFile(jsonPath, []byte(validPlanJSON()), 0o600); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWD) }()
+
+	originalFactory := newAskBackend
+	newAskBackend = func() askprovider.Client {
+		return &mockAskClient{responses: []string{validClassificationDraft(), validAskJSON()}}
+	}
+	defer func() { newAskBackend = originalFactory }()
+
+	out, err := runWithCapturedStdout([]string{"ask", "--from", ".deck/plan/sample.md", "implement this plan"})
+	if err != nil {
+		t.Fatalf("ask from plan: %v", err)
+	}
+	if !strings.Contains(out, "preview:") {
+		t.Fatalf("expected generation preview, got %q", out)
+	}
+}
+
 func validAskJSON() string {
 	return `{"summary":"generated starter workflows","review":["Prefer typed steps where possible."],"files":[{"path":"workflows/vars.yaml","content":"{}\n"},{"path":"workflows/scenarios/prepare.yaml","content":"role: prepare\nversion: v1alpha1\nartifacts: {}\n"},{"path":"workflows/scenarios/apply.yaml","content":"role: apply\nversion: v1alpha1\nphases:\n  - name: install\n    imports:\n      - path: example-apply.yaml\n"},{"path":"workflows/components/example-apply.yaml","content":"steps:\n  - id: wait-runtime\n    kind: Wait\n    spec:\n      action: fileExists\n      path: /etc/containerd/config.toml\n      interval: 1s\n      timeout: 5s\n"}]}`
 }
@@ -231,4 +328,8 @@ func validClassificationDraft() string {
 
 func validClassificationReview() string {
 	return `{"route":"review","confidence":0.94,"reason":"user explicitly requested review","target":{"kind":"workspace"},"generationAllowed":false}`
+}
+
+func validPlanJSON() string {
+	return `{"version":1,"request":"create multi-node cluster workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"Generate workflows","assumptions":["Use v1alpha1"],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry scenario"},{"path":"workflows/vars.yaml","kind":"vars","action":"create","purpose":"variables"}],"validationChecklist":["lint"]}`
 }

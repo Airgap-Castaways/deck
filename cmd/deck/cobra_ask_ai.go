@@ -22,6 +22,8 @@ func newAskCommand() *cobra.Command {
 	var fromPath string
 	var write bool
 	var review bool
+	var planName string
+	var planDir string
 	var maxIterations int
 	var provider string
 	var model string
@@ -37,6 +39,8 @@ func newAskCommand() *cobra.Command {
 				Root:          ".",
 				Prompt:        request,
 				FromPath:      fromPath,
+				PlanName:      planName,
+				PlanDir:       planDir,
 				Write:         write,
 				Review:        review,
 				MaxIterations: maxIterations,
@@ -55,8 +59,48 @@ func newAskCommand() *cobra.Command {
 	cmd.Flags().StringVar(&provider, "provider", "", "override the configured ask provider for this run")
 	cmd.Flags().StringVar(&model, "model", "", "override the configured ask model for this run")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "override the configured ask provider endpoint for this run")
+	cmd.Flags().StringVar(&planName, "plan-name", "", "optional plan artifact name used by ask plan")
+	cmd.Flags().StringVar(&planDir, "plan-dir", ".deck/plan", "directory for ask plan artifacts")
 
+	cmd.AddCommand(newAskPlanCommand())
 	cmd.AddCommand(newAskAuthCommand())
+	return cmd
+}
+
+func newAskPlanCommand() *cobra.Command {
+	var fromPath string
+	var planName string
+	var planDir string
+	var provider string
+	var model string
+	var endpoint string
+	cmd := &cobra.Command{
+		Use:   "plan [request]",
+		Short: "Generate an ask plan artifact without writing workflow files",
+		Args:  cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			request := strings.TrimSpace(strings.Join(args, " "))
+			return askcli.Execute(cmd.Context(), askcli.Options{
+				Root:     ".",
+				Prompt:   request,
+				FromPath: fromPath,
+				PlanOnly: true,
+				PlanName: planName,
+				PlanDir:  planDir,
+				Provider: provider,
+				Model:    model,
+				Endpoint: endpoint,
+				Stdout:   cmd.OutOrStdout(),
+				Stderr:   cmd.ErrOrStderr(),
+			}, newAskBackend())
+		},
+	}
+	cmd.Flags().StringVar(&fromPath, "from", "", "load additional request details from a text or markdown file")
+	cmd.Flags().StringVar(&planName, "plan-name", "", "optional plan artifact name")
+	cmd.Flags().StringVar(&planDir, "plan-dir", ".deck/plan", "directory for ask plan artifacts")
+	cmd.Flags().StringVar(&provider, "provider", "", "override the configured ask provider for this run")
+	cmd.Flags().StringVar(&model, "model", "", "override the configured ask model for this run")
+	cmd.Flags().StringVar(&endpoint, "endpoint", "", "override the configured ask provider endpoint for this run")
 	return cmd
 }
 
