@@ -30,6 +30,7 @@ type Chunk struct {
 	ID      string
 	Source  string
 	Label   string
+	Topic   askcontext.Topic
 	Content string
 	Score   int
 }
@@ -66,24 +67,32 @@ func InspectWorkspace(root string) (WorkspaceSummary, error) {
 		}
 		out.Files = append(out.Files, WorkspaceFile{Path: toRel(resolvedRoot, path), Content: string(content)})
 	}
-	componentDir := filepath.Join(workflowRoot, workspacepaths.WorkflowComponentsDir)
-	entries, err := os.ReadDir(componentDir)
-	if err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
+	for _, dir := range []string{
+		filepath.Join(workflowRoot, workspacepaths.WorkflowScenariosDir),
+		filepath.Join(workflowRoot, workspacepaths.WorkflowComponentsDir),
+	} {
+		if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
 			}
-			name := entry.Name()
-			lower := strings.ToLower(name)
+			if d.IsDir() {
+				return nil
+			}
+			lower := strings.ToLower(d.Name())
 			if !strings.HasSuffix(lower, ".yaml") && !strings.HasSuffix(lower, ".yml") {
-				continue
+				return nil
 			}
-			path := filepath.Join(componentDir, name)
 			content, readErr := os.ReadFile(path) //nolint:gosec // Workspace-derived files only.
 			if readErr != nil {
-				return WorkspaceSummary{}, fmt.Errorf("read component file %s: %w", path, readErr)
+				return fmt.Errorf("read workspace file %s: %w", path, readErr)
 			}
-			out.Files = append(out.Files, WorkspaceFile{Path: toRel(resolvedRoot, path), Content: string(content)})
+			rel := toRel(resolvedRoot, path)
+			if !containsWorkspacePath(out.Files, rel) {
+				out.Files = append(out.Files, WorkspaceFile{Path: rel, Content: string(content)})
+			}
+			return nil
+		}); err != nil && !os.IsNotExist(err) {
+			return WorkspaceSummary{}, fmt.Errorf("walk workflow directory %s: %w", dir, err)
 		}
 	}
 	sort.Slice(out.Files, func(i, j int) bool {
@@ -102,6 +111,7 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 		ID:      "workflow-meta",
 		Source:  "askcontext",
 		Label:   "workflow-summary",
+		Topic:   askcontext.TopicWorkflowInvariants,
 		Content: manifest.Workflow.Summary + "\n" + strings.Join(manifest.Workflow.Notes, "\n"),
 		Score:   50,
 	})
@@ -109,47 +119,25 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 		ID:      "philosophy",
 		Source:  "askcontext",
 		Label:   "authoring-rules",
-		Content: askcontext.GlobalAuthoringBlock(),
+		Topic:   askcontext.TopicPolicy,
+		Content: askcontext.PolicyPromptBlock().Content,
 		Score:   45,
 	})
 	chunks = append(chunks,
-		Chunk{ID: "topology", Source: "askcontext", Label: "workspace-topology", Content: askcontext.WorkspaceTopologyBlock(), Score: 52},
-		Chunk{ID: "role-guidance", Source: "askcontext", Label: "prepare-apply-guidance", Content: askcontext.RoleGuidanceBlock(), Score: 52},
-		Chunk{ID: "component-guidance", Source: "askcontext", Label: "components-imports", Content: askcontext.ComponentGuidanceBlock(), Score: 52},
-		Chunk{ID: "vars-guidance", Source: "askcontext", Label: "vars-guidance", Content: askcontext.VarsGuidanceBlock(), Score: 52},
-		Chunk{ID: "cli-guidance", Source: "askcontext", Label: "cli-hints", Content: askcontext.CLIHintsBlock(), Score: 25},
+		Chunk{ID: "topology", Source: "askcontext", Label: "workspace-topology", Topic: askcontext.TopicWorkspaceTopology, Content: askcontext.WorkspaceTopologyBlock(), Score: 52},
+		Chunk{ID: "role-guidance", Source: "askcontext", Label: "prepare-apply-guidance", Topic: askcontext.TopicPrepareApplyGuidance, Content: askcontext.RoleGuidanceBlock(), Score: roleGuidanceScore(prompt)},
+		Chunk{ID: "component-guidance", Source: "askcontext", Label: "components-imports", Topic: askcontext.TopicComponentsImports, Content: askcontext.ComponentGuidanceBlock(), Score: 52},
+		Chunk{ID: "vars-guidance", Source: "askcontext", Label: "vars-guidance", Topic: askcontext.TopicVarsGuidance, Content: askcontext.VarsGuidanceBlock(), Score: 52},
+		Chunk{ID: "cli-guidance", Source: "askcontext", Label: "cli-hints", Topic: askcontext.TopicCLIHints, Content: askcontext.CLIHintsBlock(), Score: 25},
 	)
-	for _, step := range askcontext.RelevantStepKinds(prompt) {
-		score := 10
-		if strings.Contains(lowerPrompt, strings.ToLower(step.Kind)) {
-			score += 80
-		}
-		if strings.Contains(lowerPrompt, strings.ToLower(step.Category)) {
-			score += 5
-		}
-		if strings.Contains(lowerPrompt, strings.ToLower(step.Summary)) {
-			score += 8
-		}
-		if len(step.AllowedRoles) > 0 {
-			for _, role := range step.AllowedRoles {
-				if strings.Contains(lowerPrompt, role) {
-					score += 10
-				}
-			}
-		}
-		content := step.Kind + ": " + step.Summary + "\nWhen to use: " + step.WhenToUse
-		if len(step.AllowedRoles) > 0 {
-			content += "\nAllowed roles: " + strings.Join(step.AllowedRoles, ", ")
-		}
-		if len(step.Actions) > 0 {
-			content += "\nActions: " + strings.Join(step.Actions, ", ")
-		}
+	if typedSteps := askcontext.RelevantStepKindsBlock(prompt); strings.TrimSpace(typedSteps) != "" {
 		chunks = append(chunks, Chunk{
-			ID:      "tool-meta-" + strings.ToLower(step.Kind),
+			ID:      "typed-steps",
 			Source:  "askcontext",
-			Label:   step.Kind,
-			Content: content,
-			Score:   score,
+			Label:   "typed-steps",
+			Topic:   askcontext.TopicTypedSteps,
+			Content: typedSteps,
+			Score:   typedStepsScore(lowerPrompt),
 		})
 	}
 	for _, file := range workspace.Files {
@@ -176,6 +164,7 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 			ID:      "workspace-" + strings.ReplaceAll(file.Path, "/", "_"),
 			Source:  "workspace",
 			Label:   file.Path,
+			Topic:   askcontext.Topic("workspace:" + filepath.ToSlash(file.Path)),
 			Content: file.Content,
 			Score:   score,
 		})
@@ -185,6 +174,7 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 			ID:      "state-last-lint",
 			Source:  "state",
 			Label:   "last-lint",
+			Topic:   askcontext.Topic("state:last-lint"),
 			Content: state.LastLint,
 			Score:   20,
 		})
@@ -196,6 +186,7 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 		chunks = append(chunks, chunk)
 	}
 
+	chunks = dedupeChunksByTopic(chunks)
 	sort.Slice(chunks, func(i, j int) bool {
 		if chunks[i].Score == chunks[j].Score {
 			return chunks[i].ID < chunks[j].ID
@@ -221,6 +212,57 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 	}
 
 	return RetrievalResult{Chunks: selected, Dropped: dropped, MaxBytes: budget}
+}
+
+func dedupeChunksByTopic(chunks []Chunk) []Chunk {
+	best := make(map[askcontext.Topic]Chunk, len(chunks))
+	ordered := make([]askcontext.Topic, 0, len(chunks))
+	for _, chunk := range chunks {
+		topic := chunk.Topic
+		if topic == "" {
+			topic = askcontext.Topic("id:" + chunk.ID)
+			chunk.Topic = topic
+		}
+		current, ok := best[topic]
+		if !ok {
+			best[topic] = chunk
+			ordered = append(ordered, topic)
+			continue
+		}
+		if chunk.Score > current.Score || (chunk.Score == current.Score && chunk.ID < current.ID) {
+			best[topic] = chunk
+		}
+	}
+	out := make([]Chunk, 0, len(best))
+	for _, topic := range ordered {
+		out = append(out, best[topic])
+	}
+	return out
+}
+
+func typedStepsScore(prompt string) int {
+	score := 30
+	if strings.Contains(prompt, "docker") || strings.Contains(prompt, "package") || strings.Contains(prompt, "install") {
+		score += 30
+	}
+	return score
+}
+
+func roleGuidanceScore(prompt string) int {
+	score := 40
+	if strings.Contains(strings.ToLower(prompt), "prepare") || strings.Contains(strings.ToLower(prompt), "apply") {
+		score += 20
+	}
+	return score
+}
+
+func containsWorkspacePath(files []WorkspaceFile, path string) bool {
+	for _, file := range files {
+		if filepath.ToSlash(file.Path) == filepath.ToSlash(path) {
+			return true
+		}
+	}
+	return false
 }
 
 func relatedWorkspaceTargets(workspace WorkspaceSummary, target askintent.Target) map[string]bool {
@@ -266,8 +308,19 @@ func importPaths(content string) []string {
 }
 
 func BuildChunkText(retrieval RetrievalResult) string {
+	return BuildChunkTextWithoutTopics(retrieval)
+}
+
+func BuildChunkTextWithoutTopics(retrieval RetrievalResult, excluded ...askcontext.Topic) string {
+	excludedSet := map[askcontext.Topic]bool{}
+	for _, topic := range excluded {
+		excludedSet[topic] = true
+	}
 	b := &strings.Builder{}
 	for _, chunk := range retrieval.Chunks {
+		if excludedSet[chunk.Topic] {
+			continue
+		}
 		b.WriteString("[chunk:")
 		b.WriteString(chunk.ID)
 		b.WriteString(",source:")
@@ -308,7 +361,7 @@ func workspaceFileAllowed(path string) bool {
 	if strings.HasPrefix(clean, "outputs/") || strings.HasPrefix(clean, ".git/") || strings.HasPrefix(clean, "bin/") || strings.HasPrefix(clean, "test/artifacts/") {
 		return false
 	}
-	if strings.HasPrefix(clean, "workflows/scenarios/") || strings.HasPrefix(clean, "workflows/components/") || clean == "workflows/vars.yaml" {
+	if askcontext.AllowedGeneratedPath(clean) {
 		return true
 	}
 	return false

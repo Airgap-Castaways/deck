@@ -10,6 +10,7 @@ import (
 
 	"github.com/taedi90/deck/internal/askcli"
 	"github.com/taedi90/deck/internal/askconfig"
+	"github.com/taedi90/deck/internal/askcontext"
 	"github.com/taedi90/deck/internal/askprovider"
 	openaiprovider "github.com/taedi90/deck/internal/askprovider/openai"
 )
@@ -28,10 +29,11 @@ func newAskCommand() *cobra.Command {
 	var provider string
 	var model string
 	var endpoint string
+	meta := askcontext.AskCommandMeta()
 
 	cmd := &cobra.Command{
 		Use:   "ask [request]",
-		Short: "(Experimental) AI helper for drafting and reviewing workflows",
+		Short: meta.Short,
 		Example: strings.Join([]string{
 			`  deck ask "explain what workflows/scenarios/apply.yaml does"`,
 			`  deck ask --write "create an air-gapped rhel9 kubeadm cluster workflow"`,
@@ -79,10 +81,11 @@ func newAskPlanCommand() *cobra.Command {
 	var provider string
 	var model string
 	var endpoint string
+	meta := askcontext.AskCommandMeta()
 	cmd := &cobra.Command{
 		Use:   "plan [request]",
-		Short: "Generate an ask plan artifact without writing workflow files",
-		Long:  "Generate a reusable planning artifact under .deck/plan without writing workflow files. This mode is intended for draft/refine style authoring requests.",
+		Short: meta.Plan.Short,
+		Long:  meta.Plan.Long,
 		Example: strings.Join([]string{
 			`  deck ask plan "create an air-gapped rhel9 kubeadm cluster workflow"`,
 			`  deck ask plan --plan-name kubeadm-ha "create a 3-node kubeadm workflow"`,
@@ -117,7 +120,7 @@ func newAskPlanCommand() *cobra.Command {
 func newAskAuthCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
-		Short: "Manage global ask authentication and defaults",
+		Short: askcontext.AskCommandMeta().Auth.Short,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()

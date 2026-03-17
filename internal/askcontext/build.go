@@ -1,11 +1,13 @@
 package askcontext
 
 import (
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/taedi90/deck/internal/schemadoc"
+	"github.com/taedi90/deck/internal/validate"
 	"github.com/taedi90/deck/internal/workflowexec"
 	"github.com/taedi90/deck/internal/workspacepaths"
 )
@@ -24,17 +26,14 @@ func Current() Manifest {
 
 func buildManifest() Manifest {
 	workflow := schemadoc.WorkflowMeta()
+	cli := AskCommandMeta()
 	manifest := Manifest{
 		CLI: CLIContext{
 			Command:             "deck ask",
 			PlanSubcommand:      "deck ask plan",
-			TopLevelDescription: "AI helper for drafting, reviewing, and planning workflow changes.",
-			ImportantFlags: []CLIFlag{
-				{Name: "--write", Description: "Write workflow files instead of previewing them."},
-				{Name: "--from", Description: "Attach a request file or saved plan artifact as additional input."},
-				{Name: "--plan-name", Description: "Set a stable slug for saved plan artifacts."},
-				{Name: "--plan-dir", Description: "Choose the output directory for saved plan artifacts."},
-			},
+			AuthSubcommand:      "deck ask auth",
+			TopLevelDescription: cli.Short,
+			ImportantFlags:      append([]CLIFlag(nil), cli.Flags...),
 			Examples: []string{
 				`deck ask "explain what workflows/scenarios/apply.yaml does"`,
 				`deck ask --write "create an air-gapped rhel9 kubeadm cluster workflow"`,
@@ -46,12 +45,19 @@ func buildManifest() Manifest {
 			ScenarioDir:       pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowScenariosDir),
 			ComponentDir:      pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowComponentsDir),
 			VarsPath:          pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowVarsRel),
-			AllowedPaths:      []string{"workflows/scenarios/*.yaml", "workflows/components/*.yaml", "workflows/vars.yaml"},
+			AllowedPaths:      AllowedGeneratedPathPatterns(),
 			CanonicalPrepare:  pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.CanonicalPrepareWorkflowRel),
 			CanonicalApply:    pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.CanonicalApplyWorkflowRel),
 			GeneratedPathNote: "New ask-generated files must stay under workflows/scenarios/, workflows/components/, or workflows/vars.yaml.",
 		},
-		Workflow: WorkflowRules{Summary: workflow.Summary, Notes: append([]string(nil), workflow.Notes...)},
+		Workflow: WorkflowRules{
+			Summary:          workflow.Summary,
+			TopLevelModes:    validate.WorkflowTopLevelModes(),
+			SupportedRoles:   validate.SupportedWorkflowRoles(),
+			SupportedVersion: validate.SupportedWorkflowVersion(),
+			ImportRule:       validate.WorkflowImportRule(),
+			Notes:            append([]string(nil), validate.WorkflowInvariantNotes()...),
+		},
 		Roles: []RoleGuidance{
 			{
 				Role:        "prepare",
@@ -86,6 +92,18 @@ func buildManifest() Manifest {
 		StepKinds: buildStepKinds(),
 	}
 	return manifest
+}
+
+func AllowedGeneratedPathPatterns() []string {
+	return []string{"workflows/scenarios/*.yaml", "workflows/components/*.yaml", "workflows/vars.yaml"}
+}
+
+func AllowedGeneratedPath(path string) bool {
+	clean := filepath.ToSlash(strings.TrimSpace(path))
+	if clean == "" || strings.Contains(clean, "..") {
+		return false
+	}
+	return strings.HasPrefix(clean, "workflows/scenarios/") || strings.HasPrefix(clean, "workflows/components/") || clean == "workflows/vars.yaml"
 }
 
 func buildStepKinds() []StepKindContext {

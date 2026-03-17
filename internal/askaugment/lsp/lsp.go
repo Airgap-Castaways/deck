@@ -10,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/taedi90/deck/internal/askconfig"
+	"github.com/taedi90/deck/internal/askcontext"
 	"github.com/taedi90/deck/internal/askintent"
 	"github.com/taedi90/deck/internal/askretrieve"
 )
@@ -36,6 +37,7 @@ func Gather(ctx context.Context, cfg askconfig.LSP, target askintent.Target, wor
 		ID:      "lsp-yaml-diagnostics",
 		Source:  "lsp",
 		Label:   "yaml-diagnostics",
+		Topic:   askcontext.Topic("lsp:yaml-diagnostics"),
 		Content: diag,
 		Score:   65,
 	}

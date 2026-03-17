@@ -12,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/taedi90/deck/internal/askcontext"
 	"github.com/taedi90/deck/internal/askcontract"
 	"github.com/taedi90/deck/internal/askintent"
 	"github.com/taedi90/deck/internal/askretrieve"
@@ -26,12 +27,8 @@ func validateGeneratedPath(path string) error { /* split helper below */
 	if clean == "" {
 		return fmt.Errorf("generated file path is empty")
 	}
-	allowed := strings.HasPrefix(clean, "workflows/scenarios/") || strings.HasPrefix(clean, "workflows/components/") || clean == "workflows/vars.yaml"
-	if !allowed {
+	if !askcontext.AllowedGeneratedPath(clean) {
 		return fmt.Errorf("generated file path is not allowed: %s", clean)
-	}
-	if strings.Contains(clean, "..") {
-		return fmt.Errorf("generated file path escapes workspace: %s", clean)
 	}
 	return nil
 }

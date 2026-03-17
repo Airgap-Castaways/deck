@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/taedi90/deck/internal/askconfig"
+	"github.com/taedi90/deck/internal/askcontext"
 	"github.com/taedi90/deck/internal/askprovider"
 )
 
@@ -53,6 +54,21 @@ func TestAskAuthCommands(t *testing.T) {
 	}
 	if !strings.Contains(out, "ask auth cleared") {
 		t.Fatalf("unexpected auth unset output: %q", out)
+	}
+}
+
+func TestAskCommandMetadataMatchesAskContext(t *testing.T) {
+	cmd := newAskCommand()
+	meta := askcontext.AskCommandMeta()
+	if cmd.Short != meta.Short {
+		t.Fatalf("unexpected ask short help: %q", cmd.Short)
+	}
+	plan, _, err := cmd.Find([]string{"plan"})
+	if err != nil {
+		t.Fatalf("find ask plan: %v", err)
+	}
+	if plan == nil || plan.Short != meta.Plan.Short || plan.Long != meta.Plan.Long {
+		t.Fatalf("unexpected ask plan metadata")
 	}
 }
 

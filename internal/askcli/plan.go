@@ -13,7 +13,6 @@ import (
 	"github.com/taedi90/deck/internal/askintent"
 	"github.com/taedi90/deck/internal/askprovider"
 	"github.com/taedi90/deck/internal/askretrieve"
-	"github.com/taedi90/deck/internal/schemadoc"
 )
 
 func isAuthoringRoute(route askintent.Route) bool {
@@ -45,23 +44,20 @@ func planSystemPrompt(decision askintent.Decision, retrieval askretrieve.Retriev
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask planner. Return strict JSON only.\n")
 	b.WriteString("JSON shape: {\"version\":number,\"request\":string,\"intent\":string,\"complexity\":string,\"blockers\":[]string,\"targetOutcome\":string,\"assumptions\":[]string,\"openQuestions\":[]string,\"entryScenario\":string,\"files\":[{\"path\":string,\"kind\":string,\"action\":string,\"purpose\":string}],\"validationChecklist\":[]string}.\n")
-	b.WriteString(askcontext.WorkspaceTopologyBlock())
+	b.WriteString(askcontext.InvariantPromptBlock().Content)
+	b.WriteString("\n")
+	b.WriteString(askcontext.PolicyPromptBlock().Content)
 	b.WriteString("\n")
 	b.WriteString("Use blockers only for missing information that should stop generation safely.\n")
 	b.WriteString("Intent route: ")
 	b.WriteString(string(decision.Route))
 	b.WriteString("\n")
 	b.WriteString("Project guide highlights:\n")
-	b.WriteString(askcontext.GlobalAuthoringBlock())
-	b.WriteString("\n")
-	b.WriteString(askcontext.RoleGuidanceBlock())
-	b.WriteString("\n")
-	b.WriteString(askcontext.ComponentGuidanceBlock())
-	b.WriteString("\n")
-	b.WriteString(askcontext.VarsGuidanceBlock())
-	b.WriteString("\n")
+	b.WriteString("- Keep changes surgical to the requested scope.\n")
+	b.WriteString("- Use blockers when the plan cannot safely continue without missing details.\n")
+	b.WriteString("- Use retrieved context for topology, imports, vars guidance, and typed-step choices.\n")
 	b.WriteString("Retrieved context:\n")
-	b.WriteString(askretrieve.BuildChunkText(retrieval))
+	b.WriteString(askretrieve.BuildChunkTextWithoutTopics(retrieval, askcontext.TopicWorkflowInvariants, askcontext.TopicPolicy, askcontext.TopicProjectPhilosophy))
 	return b.String()
 }
 
@@ -240,7 +236,7 @@ func planChunk(plan askcontract.PlanResponse) askretrieve.Chunk {
 		b.WriteString(file.Action)
 		b.WriteString(")\n")
 	}
-	return askretrieve.Chunk{ID: "plan-artifact", Source: "plan", Label: "plan", Content: b.String(), Score: 90}
+	return askretrieve.Chunk{ID: "plan-artifact", Source: "plan", Label: "plan", Topic: askcontext.Topic("plan-artifact"), Content: b.String(), Score: 90}
 }
 
 func repoMapChunk(workspace askretrieve.WorkspaceSummary) askretrieve.Chunk {
@@ -278,7 +274,7 @@ func repoMapChunk(workspace askretrieve.WorkspaceSummary) askretrieve.Chunk {
 		}
 		b.WriteString("\n")
 	}
-	return askretrieve.Chunk{ID: "workflow-repo-map", Source: "repo-map", Label: "repo-map", Content: b.String(), Score: 60}
+	return askretrieve.Chunk{ID: "workflow-repo-map", Source: "repo-map", Label: "repo-map", Topic: askcontext.Topic("repo-map"), Content: b.String(), Score: 60}
 }
 
 func projectContextChunk(root string) askretrieve.Chunk {
@@ -294,26 +290,9 @@ func projectContextChunk(root string) askretrieve.Chunk {
 		b.WriteString(text)
 		b.WriteString("\n")
 	}
-	meta := schemadoc.WorkflowMeta()
-	b.WriteString("Workflow summary: ")
-	b.WriteString(strings.TrimSpace(meta.Summary))
-	b.WriteString("\n")
-	for _, note := range meta.Notes {
-		if strings.TrimSpace(note) == "" {
-			continue
-		}
-		b.WriteString("- ")
-		b.WriteString(strings.TrimSpace(note))
-		b.WriteString("\n")
-	}
 	b.WriteString("Authoring defaults: Prefer typed steps over Command; keep changes surgical and goal-driven.\n")
-	b.WriteString(askcontext.WorkspaceTopologyBlock())
-	b.WriteString("\n")
-	b.WriteString(askcontext.ComponentGuidanceBlock())
-	b.WriteString("\n")
-	b.WriteString(askcontext.VarsGuidanceBlock())
-	b.WriteString("\n")
-	return askretrieve.Chunk{ID: "project-context", Source: "project", Label: "project-context", Content: b.String(), Score: 70}
+	b.WriteString("Planner defaults: use retrieved context for workspace topology, component imports, vars placement, and relevant typed steps.\n")
+	return askretrieve.Chunk{ID: "project-context", Source: "project", Label: "project-context", Topic: askcontext.TopicProjectPhilosophy, Content: b.String(), Score: 70}
 }
 
 func renderPlanNotes(plan askcontract.PlanResponse) []string {
@@ -350,7 +329,7 @@ func planWorkspaceChunks(plan askcontract.PlanResponse, workspace askretrieve.Wo
 		}
 		if file, ok := byPath[path]; ok && !seen[path] {
 			seen[path] = true
-			chunks = append(chunks, askretrieve.Chunk{ID: "planned-" + strings.ReplaceAll(path, "/", "_"), Source: "plan-workspace", Label: path, Content: file.Content, Score: 95})
+			chunks = append(chunks, askretrieve.Chunk{ID: "planned-" + strings.ReplaceAll(path, "/", "_"), Source: "plan-workspace", Label: path, Topic: askcontext.Topic("workspace:" + path), Content: file.Content, Score: 95})
 		}
 		if strings.HasPrefix(path, "workflows/scenarios/") {
 			file, ok := byPath[path]
@@ -361,7 +340,7 @@ func planWorkspaceChunks(plan askcontract.PlanResponse, workspace askretrieve.Wo
 				resolved := filepath.ToSlash(filepath.Join("workflows/components", importPath))
 				if component, exists := byPath[resolved]; exists && !seen[resolved] {
 					seen[resolved] = true
-					chunks = append(chunks, askretrieve.Chunk{ID: "planned-import-" + strings.ReplaceAll(resolved, "/", "_"), Source: "plan-workspace", Label: resolved, Content: component.Content, Score: 92})
+					chunks = append(chunks, askretrieve.Chunk{ID: "planned-import-" + strings.ReplaceAll(resolved, "/", "_"), Source: "plan-workspace", Label: resolved, Topic: askcontext.Topic("workspace:" + resolved), Content: component.Content, Score: 92})
 				}
 			}
 		}

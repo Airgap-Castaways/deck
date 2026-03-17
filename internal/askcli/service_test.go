@@ -133,10 +133,15 @@ func TestAskLoggerDebugAndTrace(t *testing.T) {
 }
 
 func TestGenerationSystemPromptIncludesAskContextBlocks(t *testing.T) {
-	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "workspace"}, askretrieve.RetrievalResult{}, "install docker on rocky9")
-	for _, want := range []string{"Workspace topology:", "Prepare/apply guidance:", "Components and imports:", "Variables guidance:", "Relevant CLI usage:", "Relevant typed steps:"} {
+	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "workspace"}, askretrieve.RetrievalResult{})
+	for _, want := range []string{"Workflow invariants:", "Workflow authoring policy:", "Detailed topology, component/import guidance, vars guidance, and typed-step references are provided through retrieved context."} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
+		}
+	}
+	for _, avoid := range []string{"Workspace topology:", "Prepare/apply guidance:", "Components and imports:", "Variables guidance:", "Relevant CLI usage:", "Relevant typed steps:"} {
+		if strings.Contains(prompt, avoid) {
+			t.Fatalf("expected generation prompt to avoid duplicated context block %q, got %q", avoid, prompt)
 		}
 	}
 }

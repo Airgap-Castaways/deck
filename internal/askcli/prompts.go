@@ -40,7 +40,7 @@ func classifierUserPrompt(prompt string, reviewFlag bool, workspace askretrieve.
 	return b.String()
 }
 
-func generationSystemPrompt(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult, prompt string) string {
+func generationSystemPrompt(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult) string {
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask, a workflow authoring assistant.\n")
 	b.WriteString("Route: ")
@@ -57,28 +57,14 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, retr
 	b.WriteString("Rules:\n")
 	b.WriteString("- Produce only strict JSON.\n")
 	b.WriteString("- JSON shape: {\"summary\":string,\"review\":[]string,\"files\":[{\"path\":string,\"content\":string}]}.\n")
-	b.WriteString("- Every workflow YAML must be schema-valid. Scenario files need top-level role and version.\n")
-	b.WriteString("- Use version: v1alpha1 for generated workflow files unless the workspace clearly uses something else.\n")
-	b.WriteString("- Each step must contain id, kind, and spec. Command steps must use spec.command as a YAML list of arguments.\n")
+	b.WriteString(askcontext.InvariantPromptBlock().Content)
+	b.WriteString("\n")
+	b.WriteString(askcontext.PolicyPromptBlock().Content)
+	b.WriteString("\n")
 	b.WriteString("- Never place summary, description, or review fields inside workflow YAML content.\n")
 	b.WriteString("- For a new workspace draft, prefer creating workflows/scenarios/apply.yaml and workflows/vars.yaml only when needed.\n")
 	b.WriteString("- If the request is simply to print text in the terminal, a minimal valid apply scenario with one Command step is acceptable.\n")
-	b.WriteString(askcontext.GlobalAuthoringBlock())
-	b.WriteString("\n")
-	b.WriteString(askcontext.WorkspaceTopologyBlock())
-	b.WriteString("\n")
-	b.WriteString(askcontext.RoleGuidanceBlock())
-	b.WriteString("\n")
-	b.WriteString(askcontext.ComponentGuidanceBlock())
-	b.WriteString("\n")
-	b.WriteString(askcontext.VarsGuidanceBlock())
-	b.WriteString("\n")
-	b.WriteString(askcontext.CLIHintsBlock())
-	b.WriteString("\n")
-	if block := askcontext.RelevantStepKindsBlock(prompt); block != "" {
-		b.WriteString(block)
-		b.WriteString("\n")
-	}
+	b.WriteString("- Detailed topology, component/import guidance, vars guidance, and typed-step references are provided through retrieved context.\n")
 	b.WriteString("- Example valid minimal scenario YAML:\n")
 	b.WriteString("  role: apply\n")
 	b.WriteString("  version: v1alpha1\n")
@@ -92,7 +78,7 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, retr
 	b.WriteString("- Do not use Kubernetes-style fields such as apiVersion, kind, metadata, or spec wrappers at the workflow top level.\n")
 	b.WriteString("- Do not invent unsupported fields.\n")
 	b.WriteString("Retrieved context follows.\n")
-	b.WriteString(askretrieve.BuildChunkText(retrieval))
+	b.WriteString(askretrieve.BuildChunkTextWithoutTopics(retrieval, askcontext.TopicWorkflowInvariants, askcontext.TopicPolicy))
 	return b.String()
 }
 

@@ -1,7 +1,9 @@
 package askretrieve
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/taedi90/deck/internal/askintent"
@@ -17,6 +19,38 @@ func TestWorkspaceFileAllowed(t *testing.T) {
 	for _, path := range []string{".env", "outputs/report.txt", ".git/config", "test/artifacts/foo", "bin/tool"} {
 		if workspaceFileAllowed(path) {
 			t.Fatalf("expected blocked path: %s", path)
+		}
+	}
+}
+
+func TestInspectWorkspaceWalksScenarioAndComponentTrees(t *testing.T) {
+	root := t.TempDir()
+	for path, content := range map[string]string{
+		"workflows/scenarios/apply.yaml":         "role: apply\nversion: v1alpha1\nsteps: []\n",
+		"workflows/scenarios/extra/install.yaml": "role: apply\nversion: v1alpha1\nsteps: []\n",
+		"workflows/components/base/docker.yaml":  "steps: []\n",
+		"workflows/components/base/systemd.yaml": "steps: []\n",
+		"workflows/vars.yaml":                    "{}\n",
+	} {
+		full := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", full, err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", full, err)
+		}
+	}
+	workspace, err := InspectWorkspace(root)
+	if err != nil {
+		t.Fatalf("inspect workspace: %v", err)
+	}
+	ids := make([]string, 0, len(workspace.Files))
+	for _, file := range workspace.Files {
+		ids = append(ids, file.Path)
+	}
+	for _, want := range []string{"workflows/scenarios/apply.yaml", "workflows/scenarios/extra/install.yaml", "workflows/components/base/docker.yaml", "workflows/components/base/systemd.yaml", "workflows/vars.yaml"} {
+		if !contains(ids, want) {
+			t.Fatalf("expected workspace file %s, got %v", want, ids)
 		}
 	}
 }
@@ -76,20 +110,41 @@ func TestRetrieveIncludesAskContextChunks(t *testing.T) {
 	workspace := WorkspaceSummary{Root: filepath.ToSlash(t.TempDir())}
 	result := Retrieve(askintent.RouteDraft, "install docker on rocky9", askintent.Target{Kind: "workspace"}, workspace, askstate.Context{}, nil)
 	ids := chunkIDs(result.Chunks)
-	for _, want := range []string{"workflow-meta", "topology", "role-guidance", "component-guidance", "vars-guidance"} {
+	for _, want := range []string{"workflow-meta", "topology", "role-guidance", "component-guidance", "vars-guidance", "typed-steps"} {
 		if !contains(ids, want) {
 			t.Fatalf("expected %q in retrieval ids, got %v", want, ids)
 		}
 	}
-	toolChunkFound := false
 	for _, chunk := range result.Chunks {
-		if chunk.Label == "Packages" || chunk.Label == "Repository" || chunk.Label == "Service" {
-			toolChunkFound = true
-			break
+		if chunk.ID == "typed-steps" && !containsString(chunk.Content, "Packages") {
+			t.Fatalf("expected Packages in typed-step chunk, got %q", chunk.Content)
 		}
 	}
-	if !toolChunkFound {
-		t.Fatalf("expected relevant typed step chunk for docker install, got %#v", result.Chunks)
+}
+
+func TestRetrieveDedupesChunksByTopic(t *testing.T) {
+	workspace := WorkspaceSummary{Root: filepath.ToSlash(t.TempDir())}
+	external := []Chunk{{ID: "override-topology", Source: "external", Label: "topology", Topic: "workspace-topology", Content: "external topology", Score: 200}}
+	result := Retrieve(askintent.RouteDraft, "create workflow", askintent.Target{}, workspace, askstate.Context{}, external)
+	count := 0
+	for _, chunk := range result.Chunks {
+		if chunk.Topic == "workspace-topology" {
+			count++
+			if chunk.ID != "override-topology" {
+				t.Fatalf("expected highest-scored topology chunk to win, got %s", chunk.ID)
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected one topology chunk, got %d", count)
+	}
+}
+
+func TestBuildChunkTextWithoutTopicsFiltersExcludedTopics(t *testing.T) {
+	retrieval := RetrievalResult{Chunks: []Chunk{{ID: "invariants", Topic: "workflow-invariants", Content: "invariants"}, {ID: "vars", Topic: "vars-guidance", Content: "vars"}}}
+	text := BuildChunkTextWithoutTopics(retrieval, "workflow-invariants")
+	if strings.Contains(text, "invariants") || !strings.Contains(text, "vars") {
+		t.Fatalf("unexpected filtered chunk text: %q", text)
 	}
 }
 
@@ -108,6 +163,10 @@ func contains(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func containsString(haystack string, needle string) bool {
+	return strings.Contains(haystack, needle)
 }
 
 func longText(size int) string {

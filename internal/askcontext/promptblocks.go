@@ -5,19 +5,45 @@ import (
 	"strings"
 )
 
-func GlobalAuthoringBlock() string {
+func InvariantPromptBlock() PromptBlock {
 	manifest := Current()
 	b := &strings.Builder{}
-	b.WriteString("Workflow authoring rules:\n")
-	b.WriteString("- ")
-	b.WriteString(manifest.Workflow.Summary)
+	b.WriteString("Workflow invariants:\n")
+	b.WriteString("- Supported roles: ")
+	b.WriteString(strings.Join(manifest.Workflow.SupportedRoles, ", "))
+	b.WriteString("\n")
+	b.WriteString("- Supported workflow version: ")
+	b.WriteString(manifest.Workflow.SupportedVersion)
+	b.WriteString("\n")
+	b.WriteString("- Allowed generated paths: ")
+	b.WriteString(strings.Join(manifest.Topology.AllowedPaths, ", "))
+	b.WriteString("\n")
+	b.WriteString("- Top-level workflow modes: ")
+	b.WriteString(strings.Join(manifest.Workflow.TopLevelModes, ", "))
 	b.WriteString("\n")
 	for _, note := range manifest.Workflow.Notes {
 		b.WriteString("- ")
 		b.WriteString(note)
 		b.WriteString("\n")
 	}
+	return PromptBlock{Topic: TopicWorkflowInvariants, Title: "Workflow invariants", Content: strings.TrimSpace(b.String())}
+}
+
+func PolicyPromptBlock() PromptBlock {
+	b := &strings.Builder{}
+	b.WriteString("Workflow authoring policy:\n")
 	b.WriteString("- Prefer typed steps over Command whenever a typed step expresses the change clearly.\n")
+	b.WriteString("- Prefer workflows/vars.yaml for repeated configurable values instead of scattering literals across steps.\n")
+	b.WriteString("- Split repeated logic into reusable components and import them under phases[].imports.\n")
+	b.WriteString("- Use prepare for online collection or offline artifact preparation and apply for local node changes.\n")
+	return PromptBlock{Topic: TopicPolicy, Title: "Workflow authoring policy", Content: strings.TrimSpace(b.String())}
+}
+
+func GlobalAuthoringBlock() string {
+	b := &strings.Builder{}
+	b.WriteString(InvariantPromptBlock().Content)
+	b.WriteString("\n")
+	b.WriteString(PolicyPromptBlock().Content)
 	return strings.TrimSpace(b.String())
 }
 
@@ -48,6 +74,10 @@ func WorkspaceTopologyBlock() string {
 	return strings.TrimSpace(b.String())
 }
 
+func WorkspaceTopologyPromptBlock() PromptBlock {
+	return PromptBlock{Topic: TopicWorkspaceTopology, Title: "Workspace topology", Content: WorkspaceTopologyBlock()}
+}
+
 func RoleGuidanceBlock() string {
 	manifest := Current()
 	b := &strings.Builder{}
@@ -62,6 +92,10 @@ func RoleGuidanceBlock() string {
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func RoleGuidancePromptBlock() PromptBlock {
+	return PromptBlock{Topic: TopicPrepareApplyGuidance, Title: "Prepare/apply guidance", Content: RoleGuidanceBlock()}
 }
 
 func ComponentGuidanceBlock() string {
@@ -79,6 +113,10 @@ func ComponentGuidanceBlock() string {
 	return strings.TrimSpace(b.String())
 }
 
+func ComponentGuidancePromptBlock() PromptBlock {
+	return PromptBlock{Topic: TopicComponentsImports, Title: "Components and imports", Content: ComponentGuidanceBlock()}
+}
+
 func VarsGuidanceBlock() string {
 	manifest := Current()
 	b := &strings.Builder{}
@@ -92,6 +130,10 @@ func VarsGuidanceBlock() string {
 	b.WriteString("\n- Example vars keys: ")
 	b.WriteString(strings.Join(manifest.Vars.ExampleKeys, ", "))
 	return strings.TrimSpace(b.String())
+}
+
+func VarsGuidancePromptBlock() PromptBlock {
+	return PromptBlock{Topic: TopicVarsGuidance, Title: "Variables guidance", Content: VarsGuidanceBlock()}
 }
 
 func CLIHintsBlock() string {
@@ -112,6 +154,10 @@ func CLIHintsBlock() string {
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func CLIHintsPromptBlock() PromptBlock {
+	return PromptBlock{Topic: TopicCLIHints, Title: "Relevant CLI usage", Content: CLIHintsBlock()}
 }
 
 func RelevantStepKindsBlock(prompt string) string {
@@ -141,6 +187,10 @@ func RelevantStepKindsBlock(prompt string) string {
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func RelevantStepKindsPromptBlock(prompt string) PromptBlock {
+	return PromptBlock{Topic: TopicTypedSteps, Title: "Relevant typed steps", Content: RelevantStepKindsBlock(prompt)}
 }
 
 func RelevantStepKinds(prompt string) []StepKindContext {

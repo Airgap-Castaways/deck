@@ -10,9 +10,30 @@ type Manifest struct {
 	StepKinds  []StepKindContext
 }
 
+type Topic string
+
+const (
+	TopicWorkflowInvariants   Topic = "workflow-invariants"
+	TopicPolicy               Topic = "policy"
+	TopicWorkspaceTopology    Topic = "workspace-topology"
+	TopicPrepareApplyGuidance Topic = "prepare-apply-guidance"
+	TopicComponentsImports    Topic = "components-imports"
+	TopicVarsGuidance         Topic = "vars-guidance"
+	TopicTypedSteps           Topic = "typed-steps"
+	TopicCLIHints             Topic = "cli-hints"
+	TopicProjectPhilosophy    Topic = "project-philosophy"
+)
+
+type PromptBlock struct {
+	Topic   Topic
+	Title   string
+	Content string
+}
+
 type CLIContext struct {
 	Command             string
 	PlanSubcommand      string
+	AuthSubcommand      string
 	TopLevelDescription string
 	ImportantFlags      []CLIFlag
 	Examples            []string
@@ -35,8 +56,12 @@ type WorkspaceTopology struct {
 }
 
 type WorkflowRules struct {
-	Summary string
-	Notes   []string
+	Summary          string
+	TopLevelModes    []string
+	SupportedRoles   []string
+	SupportedVersion string
+	ImportRule       string
+	Notes            []string
 }
 
 type RoleGuidance struct {
