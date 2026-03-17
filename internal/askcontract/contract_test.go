@@ -33,3 +33,20 @@ func TestParseClassification(t *testing.T) {
 		t.Fatalf("unexpected target: %#v", resp.Target)
 	}
 }
+
+func TestParsePlan(t *testing.T) {
+	raw := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":["use v1alpha1"],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	resp, err := ParsePlan(raw)
+	if err != nil {
+		t.Fatalf("parse plan: %v", err)
+	}
+	if resp.Intent != "draft" || len(resp.Files) != 1 {
+		t.Fatalf("unexpected plan: %#v", resp)
+	}
+}
+
+func TestParsePlanMissingRequiredFields(t *testing.T) {
+	if _, err := ParsePlan(`{"version":1,"intent":"draft","files":[]}`); err == nil {
+		t.Fatalf("expected parse error")
+	}
+}

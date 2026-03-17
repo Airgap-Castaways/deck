@@ -97,6 +97,7 @@ deck plan --scenario apply --source server
 
 deck ask auth set --provider openai --model gpt-5.4 --endpoint https://api.openai.com/v1 --api-key "$DECK_ASK_API_KEY"
 deck ask "rhel9 single-node kubeadm cluster scenario"
+deck ask plan "air-gapped rhel9 kubeadm cluster with prepare/apply split"
 deck ask "explain what workflows/scenarios/apply.yaml does"
 deck ask --review
 deck ask --write --from ./request.md
@@ -139,6 +140,9 @@ Optional ask augmentation config example:
 - `--source` controls whether `--scenario` resolves from the local workspace or the saved remote source.
 - workspace-local metadata stays under `./.deck/`, while user-global config, state, cache, and run history use standard XDG locations.
 - `ask` workspace context lives under `./.deck/ask/`, while saved ask auth/defaults live under `~/.config/deck/config.json` as the top-level `ask` object.
+- `deck ask plan` writes plan artifacts under `./.deck/plan/` by default (`<timestamp>-<slug>.md`, `<timestamp>-<slug>.json`, `latest.md`, `latest.json`).
+- `deck ask --from .deck/plan/<name>.md "implement this plan"` prefers the same-basename `.json` artifact when present.
+- complex one-shot authoring requests may stop after planning if blockers remain; in that case `deck ask` prints the saved plan paths and follow-up commands instead of writing weak output.
 - `ask auth set --log-level trace` is the quickest way to see the effective `deck ask` command, MCP/LSP events, and prompt text in terminal logs.
 - optional augmentation config can be defined under `ask.mcp` and `ask.lsp` in the same config file.
 - optional MCP and LSP augmentation is disabled by default and degrades gracefully when configured tools are unavailable.
@@ -151,3 +155,19 @@ Optional ask augmentation config example:
 - Keep `Command` for cases where the clearer typed form does not exist yet.
 - `deck ask` previews changes by default and only writes workflow files when `--write` is present.
 - `--max-iterations` applies to generation routes (`draft`/`refine`) only; non-generation routes do not run repair loops.
+
+<!-- BEGIN GENERATED:ASK_CLI_CONTEXT -->
+## Ask CLI context
+
+- `deck ask` previews by default; add `--write` to write workflow files.
+- `deck ask plan` saves reusable plan artifacts under `./.deck/plan/`.
+<!-- END GENERATED:ASK_CLI_CONTEXT -->
+
+<!-- BEGIN GENERATED:ASK_AUTHORING_CONTEXT -->
+## Ask authoring context
+
+- Top-level workflow authoring reference for deck workflows.
+- Imports are only valid under phases[].imports and resolve from workflows/components/ using component-relative paths.
+- Prefer workflows/vars.yaml for configurable values that would otherwise be repeated inline across steps or files.
+- Prefer typed steps over `Command` when a typed step exists.
+<!-- END GENERATED:ASK_AUTHORING_CONTEXT -->

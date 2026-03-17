@@ -10,6 +10,7 @@ import (
 
 	"github.com/taedi90/deck/internal/askcli"
 	"github.com/taedi90/deck/internal/askconfig"
+	"github.com/taedi90/deck/internal/askcontext"
 	"github.com/taedi90/deck/internal/askprovider"
 	openaiprovider "github.com/taedi90/deck/internal/askprovider/openai"
 )
@@ -22,21 +23,31 @@ func newAskCommand() *cobra.Command {
 	var fromPath string
 	var write bool
 	var review bool
+	var planName string
+	var planDir string
 	var maxIterations int
 	var provider string
 	var model string
 	var endpoint string
+	meta := askcontext.AskCommandMeta()
 
 	cmd := &cobra.Command{
 		Use:   "ask [request]",
-		Short: "Experimental AI helper for drafting and reviewing workflows",
-		Args:  cobra.ArbitraryArgs,
+		Short: meta.Short,
+		Example: strings.Join([]string{
+			`  deck ask "explain what workflows/scenarios/apply.yaml does"`,
+			`  deck ask --write "create an air-gapped rhel9 kubeadm cluster workflow"`,
+			`  deck ask plan "create an air-gapped rhel9 kubeadm cluster workflow"`,
+		}, "\n"),
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			request := strings.TrimSpace(strings.Join(args, " "))
 			return askcli.Execute(cmd.Context(), askcli.Options{
 				Root:          ".",
 				Prompt:        request,
 				FromPath:      fromPath,
+				PlanName:      planName,
+				PlanDir:       planDir,
 				Write:         write,
 				Review:        review,
 				MaxIterations: maxIterations,
@@ -55,15 +66,61 @@ func newAskCommand() *cobra.Command {
 	cmd.Flags().StringVar(&provider, "provider", "", "override the configured ask provider for this run")
 	cmd.Flags().StringVar(&model, "model", "", "override the configured ask model for this run")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "override the configured ask provider endpoint for this run")
+	cmd.Flags().StringVar(&planName, "plan-name", "", "optional plan artifact name used by ask plan")
+	cmd.Flags().StringVar(&planDir, "plan-dir", ".deck/plan", "directory for ask plan artifacts")
 
+	cmd.AddCommand(newAskPlanCommand())
 	cmd.AddCommand(newAskAuthCommand())
+	return cmd
+}
+
+func newAskPlanCommand() *cobra.Command {
+	var fromPath string
+	var planName string
+	var planDir string
+	var provider string
+	var model string
+	var endpoint string
+	meta := askcontext.AskCommandMeta()
+	cmd := &cobra.Command{
+		Use:   "plan [request]",
+		Short: meta.Plan.Short,
+		Long:  meta.Plan.Long,
+		Example: strings.Join([]string{
+			`  deck ask plan "create an air-gapped rhel9 kubeadm cluster workflow"`,
+			`  deck ask plan --plan-name kubeadm-ha "create a 3-node kubeadm workflow"`,
+		}, "\n"),
+		Args: cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			request := strings.TrimSpace(strings.Join(args, " "))
+			return askcli.Execute(cmd.Context(), askcli.Options{
+				Root:     ".",
+				Prompt:   request,
+				FromPath: fromPath,
+				PlanOnly: true,
+				PlanName: planName,
+				PlanDir:  planDir,
+				Provider: provider,
+				Model:    model,
+				Endpoint: endpoint,
+				Stdout:   cmd.OutOrStdout(),
+				Stderr:   cmd.ErrOrStderr(),
+			}, newAskBackend())
+		},
+	}
+	cmd.Flags().StringVar(&fromPath, "from", "", "load additional request details from a text or markdown file")
+	cmd.Flags().StringVar(&planName, "plan-name", "", "optional plan artifact name")
+	cmd.Flags().StringVar(&planDir, "plan-dir", ".deck/plan", "directory for ask plan artifacts")
+	cmd.Flags().StringVar(&provider, "provider", "", "override the configured ask provider for this run")
+	cmd.Flags().StringVar(&model, "model", "", "override the configured ask model for this run")
+	cmd.Flags().StringVar(&endpoint, "endpoint", "", "override the configured ask provider endpoint for this run")
 	return cmd
 }
 
 func newAskAuthCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
-		Short: "Manage global ask authentication and defaults",
+		Short: askcontext.AskCommandMeta().Auth.Short,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()

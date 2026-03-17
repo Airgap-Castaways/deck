@@ -11,6 +11,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/taedi90/deck/internal/askconfig"
+	"github.com/taedi90/deck/internal/askcontext"
 	"github.com/taedi90/deck/internal/askintent"
 	"github.com/taedi90/deck/internal/askretrieve"
 )
@@ -88,6 +89,7 @@ func queryServer(parent context.Context, server askconfig.MCPServer, route askin
 		ID:      "mcp-" + sanitize(server.Name) + "-" + sanitize(toolName),
 		Source:  "mcp",
 		Label:   server.Name + ":" + toolName,
+		Topic:   askcontext.Topic("mcp:" + sanitize(server.Name) + ":" + sanitize(toolName)),
 		Content: content,
 		Score:   70,
 	}, fmt.Sprintf("mcp:%s call %s ok", server.Name, toolName)

@@ -53,6 +53,32 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 			return err
 		}
 	}
+	if result.FallbackNote != "" {
+		if _, err := fmt.Fprintf(stdout, "note: %s\n", result.FallbackNote); err != nil {
+			return err
+		}
+	}
+	if result.PlanMarkdown != "" {
+		if _, err := fmt.Fprintf(stdout, "plan: %s\n", result.PlanMarkdown); err != nil {
+			return err
+		}
+	}
+	if result.PlanJSON != "" {
+		if _, err := fmt.Fprintf(stdout, "plan-json: %s\n", result.PlanJSON); err != nil {
+			return err
+		}
+	}
+	if result.PlanMarkdown != "" {
+		if _, err := io.WriteString(stdout, "next:\n"); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(stdout, "- deck ask --from %s \"implement this plan\"\n", result.PlanMarkdown); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(stdout, "- deck ask --write --from %s \"implement this plan\"\n", result.PlanMarkdown); err != nil {
+			return err
+		}
+	}
 	if result.LintSummary != "" {
 		if _, err := fmt.Fprintf(stdout, "lint: %s\n", result.LintSummary); err != nil {
 			return err
@@ -113,7 +139,7 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 		}
 	}
 	if shouldLogAsk(result.ConfigSource.LogLevel, "basic") {
-		if _, err := fmt.Fprintf(stderr, "deck ask phase=done route=%s reason=%s target=%s classifierLlmUsed=%t llmUsed=%t retries=%d termination=%s\n", result.Route, result.Reason, result.Target.Path, result.ClassifierLLM, result.LLMUsed, result.RetriesUsed, result.Termination); err != nil {
+		if _, err := fmt.Fprintf(stderr, "\n[ask][phase:done] route=%s reason=%s target=%s classifierLlmUsed=%t llmUsed=%t retries=%d termination=%s\n", result.Route, result.Reason, result.Target.Path, result.ClassifierLLM, result.LLMUsed, result.RetriesUsed, result.Termination); err != nil {
 			return err
 		}
 	}

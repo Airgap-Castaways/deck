@@ -3,6 +3,7 @@ package askcli
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/taedi90/deck/internal/askconfig"
@@ -16,6 +17,9 @@ type Options struct {
 	Root          string
 	Prompt        string
 	FromPath      string
+	PlanOnly      bool
+	PlanName      string
+	PlanDir       string
 	Write         bool
 	Review        bool
 	MaxIterations int
@@ -48,6 +52,11 @@ type runResult struct {
 	UserCommand   string
 	PromptTraces  []promptTrace
 	ConfigSource  askconfig.EffectiveSettings
+	Plan          *askcontract.PlanResponse
+	PlanMarkdown  string
+	PlanJSON      string
+	FallbackNote  string
+	Critic        *askcontract.CriticResponse
 }
 
 type promptTrace struct {
@@ -59,6 +68,14 @@ type promptTrace struct {
 type askLogger struct {
 	writer io.Writer
 	level  string
+}
+
+type flushWriter interface {
+	Flush() error
+}
+
+type syncWriter interface {
+	Sync() error
 }
 
 func newAskLogger(writer io.Writer, level string) askLogger {
@@ -77,19 +94,36 @@ func (l askLogger) logf(required string, format string, args ...any) {
 		return
 	}
 	_, _ = fmt.Fprintf(l.writer, format, args...)
+	l.flush()
 }
 
 func (l askLogger) prompt(label string, systemPrompt string, userPrompt string) {
 	if !l.enabled("trace") {
 		return
 	}
-	l.logf("trace", "deck ask %s system-prompt:\n%s\n", label, strings.TrimSpace(systemPrompt))
-	l.logf("trace", "deck ask %s user-prompt:\n%s\n", label, strings.TrimSpace(userPrompt))
+	l.logf("trace", "\n[ask][prompt:%s][system]\n%s\n", label, strings.TrimSpace(systemPrompt))
+	l.logf("trace", "\n[ask][prompt:%s][user]\n%s\n", label, strings.TrimSpace(userPrompt))
 }
 
 func (l askLogger) response(label string, content string) {
 	if !l.enabled("trace") {
 		return
 	}
-	l.logf("trace", "deck ask %s raw-response:\n%s\n", label, strings.TrimSpace(content))
+	l.logf("trace", "\n[ask][response:%s]\n%s\n", label, strings.TrimSpace(content))
+}
+
+func (l askLogger) flush() {
+	if l.writer == nil || l.writer == io.Discard {
+		return
+	}
+	if writer, ok := l.writer.(flushWriter); ok {
+		_ = writer.Flush()
+	}
+	if writer, ok := l.writer.(syncWriter); ok {
+		_ = writer.Sync()
+		return
+	}
+	if file, ok := l.writer.(*os.File); ok {
+		_ = file.Sync()
+	}
 }

@@ -269,7 +269,7 @@ func validateLoadedWorkflow(name string, wf *config.Workflow) error {
 	if wf.Version == "" {
 		return fmt.Errorf("version is required")
 	}
-	if strings.TrimSpace(wf.Version) != "v1alpha1" {
+	if strings.TrimSpace(wf.Version) != workflowSupportedVersion {
 		return fmt.Errorf("unsupported version: %s (supported: v1alpha1)", wf.Version)
 	}
 	if err := validateWorkflowMode(wf); err != nil {
