@@ -161,7 +161,7 @@ func TestGenerationSystemPromptIncludesAskContextBlocks(t *testing.T) {
 
 func TestRequiredFixesForValidationFlagsTemplatedCollections(t *testing.T) {
 	fixes := requiredFixesForValidation("parse yaml: yaml: invalid map key: map[string]interface {}{\".vars.dockerPackages\":interface {}(nil)}")
-	if len(fixes) < 2 {
+	if len(fixes) != 2 {
 		t.Fatalf("expected extra required fix, got %v", fixes)
 	}
 	if !strings.Contains(fixes[1], "whole-value template expressions") {

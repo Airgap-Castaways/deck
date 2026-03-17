@@ -521,7 +521,7 @@ func validateGeneration(root string, gen askcontract.GenerationResponse, decisio
 func requiredFixesForValidation(message string) []string {
 	fixes := []string{"Return only schema-valid files under allowed workflow paths"}
 	lower := strings.ToLower(strings.TrimSpace(message))
-	if strings.Contains(lower, "invalid map key") && (strings.Contains(message, "{{") || strings.Contains(lower, ".vars.")) {
+	if strings.Contains(lower, "invalid map key") && (strings.Contains(lower, "{{") || strings.Contains(lower, ".vars.")) {
 		fixes = append(fixes, "Do not use whole-value template expressions like `{{ .vars.* }}` for typed YAML arrays or objects such as spec.packages or spec.repositories; inline concrete YAML lists or objects instead")
 	}
 	return fixes
