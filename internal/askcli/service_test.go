@@ -132,6 +132,15 @@ func TestAskLoggerDebugAndTrace(t *testing.T) {
 	}
 }
 
+func TestGenerationSystemPromptIncludesAskContextBlocks(t *testing.T) {
+	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "workspace"}, askretrieve.RetrievalResult{}, "install docker on rocky9")
+	for _, want := range []string{"Workspace topology:", "Prepare/apply guidance:", "Components and imports:", "Variables guidance:", "Relevant CLI usage:", "Relevant typed steps:"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
+		}
+	}
+}
+
 func TestLoadRequestTextReadsWorkspaceFile(t *testing.T) {
 	root := t.TempDir()
 	requestPath := filepath.Join(root, "request.md")

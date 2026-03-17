@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/taedi90/deck/internal/askcontext"
 	"github.com/taedi90/deck/internal/askintent"
 	"github.com/taedi90/deck/internal/askstate"
-	"github.com/taedi90/deck/internal/schemadoc"
 	"github.com/taedi90/deck/internal/workspacepaths"
 )
 
@@ -97,38 +97,58 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 	lowerPrompt := strings.ToLower(strings.TrimSpace(prompt))
 	related := relatedWorkspaceTargets(workspace, target)
 	chunks := make([]Chunk, 0, 32)
-	workflowMeta := schemadoc.WorkflowMeta()
+	manifest := askcontext.Current()
 	chunks = append(chunks, Chunk{
 		ID:      "workflow-meta",
-		Source:  "schemadoc",
+		Source:  "askcontext",
 		Label:   "workflow-summary",
-		Content: workflowMeta.Summary + "\n" + strings.Join(workflowMeta.Notes, "\n"),
+		Content: manifest.Workflow.Summary + "\n" + strings.Join(manifest.Workflow.Notes, "\n"),
 		Score:   50,
 	})
 	chunks = append(chunks, Chunk{
 		ID:      "philosophy",
-		Source:  "built-in",
+		Source:  "askcontext",
 		Label:   "authoring-rules",
-		Content: "Prefer typed steps over Command. Keep workflows explicit and reviewable. Use workflows/components imports for reusable blocks. Do not invent unsupported fields.",
+		Content: askcontext.GlobalAuthoringBlock(),
 		Score:   45,
 	})
-	for _, kind := range schemadoc.ToolKinds() {
-		meta := schemadoc.ToolMeta(kind)
+	chunks = append(chunks,
+		Chunk{ID: "topology", Source: "askcontext", Label: "workspace-topology", Content: askcontext.WorkspaceTopologyBlock(), Score: 52},
+		Chunk{ID: "role-guidance", Source: "askcontext", Label: "prepare-apply-guidance", Content: askcontext.RoleGuidanceBlock(), Score: 52},
+		Chunk{ID: "component-guidance", Source: "askcontext", Label: "components-imports", Content: askcontext.ComponentGuidanceBlock(), Score: 52},
+		Chunk{ID: "vars-guidance", Source: "askcontext", Label: "vars-guidance", Content: askcontext.VarsGuidanceBlock(), Score: 52},
+		Chunk{ID: "cli-guidance", Source: "askcontext", Label: "cli-hints", Content: askcontext.CLIHintsBlock(), Score: 25},
+	)
+	for _, step := range askcontext.RelevantStepKinds(prompt) {
 		score := 10
-		if strings.Contains(lowerPrompt, strings.ToLower(kind)) {
+		if strings.Contains(lowerPrompt, strings.ToLower(step.Kind)) {
 			score += 80
 		}
-		if strings.Contains(lowerPrompt, strings.ToLower(meta.Category)) {
+		if strings.Contains(lowerPrompt, strings.ToLower(step.Category)) {
 			score += 5
 		}
-		if strings.Contains(lowerPrompt, strings.ToLower(meta.Summary)) {
+		if strings.Contains(lowerPrompt, strings.ToLower(step.Summary)) {
 			score += 8
 		}
+		if len(step.AllowedRoles) > 0 {
+			for _, role := range step.AllowedRoles {
+				if strings.Contains(lowerPrompt, role) {
+					score += 10
+				}
+			}
+		}
+		content := step.Kind + ": " + step.Summary + "\nWhen to use: " + step.WhenToUse
+		if len(step.AllowedRoles) > 0 {
+			content += "\nAllowed roles: " + strings.Join(step.AllowedRoles, ", ")
+		}
+		if len(step.Actions) > 0 {
+			content += "\nActions: " + strings.Join(step.Actions, ", ")
+		}
 		chunks = append(chunks, Chunk{
-			ID:      "tool-meta-" + strings.ToLower(kind),
-			Source:  "schemadoc",
-			Label:   kind,
-			Content: meta.Kind + ": " + meta.Summary + "\nWhen to use: " + meta.WhenToUse,
+			ID:      "tool-meta-" + strings.ToLower(step.Kind),
+			Source:  "askcontext",
+			Label:   step.Kind,
+			Content: content,
 			Score:   score,
 		})
 	}

@@ -72,6 +72,27 @@ func TestRetrieveIncludesExternalPlanAwareChunks(t *testing.T) {
 	}
 }
 
+func TestRetrieveIncludesAskContextChunks(t *testing.T) {
+	workspace := WorkspaceSummary{Root: filepath.ToSlash(t.TempDir())}
+	result := Retrieve(askintent.RouteDraft, "install docker on rocky9", askintent.Target{Kind: "workspace"}, workspace, askstate.Context{}, nil)
+	ids := chunkIDs(result.Chunks)
+	for _, want := range []string{"workflow-meta", "topology", "role-guidance", "component-guidance", "vars-guidance"} {
+		if !contains(ids, want) {
+			t.Fatalf("expected %q in retrieval ids, got %v", want, ids)
+		}
+	}
+	toolChunkFound := false
+	for _, chunk := range result.Chunks {
+		if chunk.Label == "Packages" || chunk.Label == "Repository" || chunk.Label == "Service" {
+			toolChunkFound = true
+			break
+		}
+	}
+	if !toolChunkFound {
+		t.Fatalf("expected relevant typed step chunk for docker install, got %#v", result.Chunks)
+	}
+}
+
 func chunkIDs(chunks []Chunk) []string {
 	ids := make([]string, 0, len(chunks))
 	for _, chunk := range chunks {

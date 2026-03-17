@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/taedi90/deck/internal/askcontext"
 	"github.com/taedi90/deck/internal/askcontract"
 	"github.com/taedi90/deck/internal/askintent"
 	"github.com/taedi90/deck/internal/askprovider"
@@ -44,15 +45,21 @@ func planSystemPrompt(decision askintent.Decision, retrieval askretrieve.Retriev
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask planner. Return strict JSON only.\n")
 	b.WriteString("JSON shape: {\"version\":number,\"request\":string,\"intent\":string,\"complexity\":string,\"blockers\":[]string,\"targetOutcome\":string,\"assumptions\":[]string,\"openQuestions\":[]string,\"entryScenario\":string,\"files\":[{\"path\":string,\"kind\":string,\"action\":string,\"purpose\":string}],\"validationChecklist\":[]string}.\n")
-	b.WriteString("Allowed file paths: workflows/scenarios/*.yaml, workflows/components/*.yaml, workflows/vars.yaml.\n")
+	b.WriteString(askcontext.WorkspaceTopologyBlock())
+	b.WriteString("\n")
 	b.WriteString("Use blockers only for missing information that should stop generation safely.\n")
 	b.WriteString("Intent route: ")
 	b.WriteString(string(decision.Route))
 	b.WriteString("\n")
 	b.WriteString("Project guide highlights:\n")
-	b.WriteString("- Prefer typed steps over Command where possible.\n")
-	b.WriteString("- Keep workflows explicit and reviewable.\n")
-	b.WriteString("- Keep changes surgical to requested scope.\n")
+	b.WriteString(askcontext.GlobalAuthoringBlock())
+	b.WriteString("\n")
+	b.WriteString(askcontext.RoleGuidanceBlock())
+	b.WriteString("\n")
+	b.WriteString(askcontext.ComponentGuidanceBlock())
+	b.WriteString("\n")
+	b.WriteString(askcontext.VarsGuidanceBlock())
+	b.WriteString("\n")
 	b.WriteString("Retrieved context:\n")
 	b.WriteString(askretrieve.BuildChunkText(retrieval))
 	return b.String()
@@ -300,6 +307,12 @@ func projectContextChunk(root string) askretrieve.Chunk {
 		b.WriteString("\n")
 	}
 	b.WriteString("Authoring defaults: Prefer typed steps over Command; keep changes surgical and goal-driven.\n")
+	b.WriteString(askcontext.WorkspaceTopologyBlock())
+	b.WriteString("\n")
+	b.WriteString(askcontext.ComponentGuidanceBlock())
+	b.WriteString("\n")
+	b.WriteString(askcontext.VarsGuidanceBlock())
+	b.WriteString("\n")
 	return askretrieve.Chunk{ID: "project-context", Source: "project", Label: "project-context", Content: b.String(), Score: 70}
 }
 

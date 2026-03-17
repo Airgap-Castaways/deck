@@ -216,7 +216,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			Model:        effective.Model,
 			APIKey:       effective.APIKey,
 			Endpoint:     effective.Endpoint,
-			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval),
+			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval, requestText),
 			Prompt:       generationUserPrompt(workspace, state, requestText, strings.TrimSpace(opts.FromPath), decision.Route),
 			MaxRetries:   attempts,
 		}

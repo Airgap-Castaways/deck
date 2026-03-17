@@ -146,7 +146,11 @@ Optional ask augmentation config example:
 - `ask auth set --log-level trace` is the quickest way to see the effective `deck ask` command, MCP/LSP events, and prompt text in terminal logs.
 - optional augmentation config can be defined under `ask.mcp` and `ask.lsp` in the same config file.
 - optional MCP and LSP augmentation is disabled by default and degrades gracefully when configured tools are unavailable.
+- `prepare` is the online or collection-oriented side of a workflow tree; use it to gather files, packages, and images needed for offline execution.
+- `apply` is the local-node execution side; use it for host changes such as package installation, file writes, service management, and runtime configuration.
 - phase imports resolve from `workflows/components/` using component-relative paths
+- reusable workflow fragments belong in `workflows/components/` and are imported under `phases[].imports`
+- prefer `workflows/vars.yaml` for repeated URLs, package lists, paths, ports, and other configurable values instead of scattering literals across steps
 - `apply` runs all phases by default when phases are used; `--phase` narrows execution to one phase.
 - `bundle build` archives the canonical workspace bundle inputs: `deck`, `workflows/`, `outputs/`, and `.deck/manifest.json`, and respects `.deckignore` within those paths.
 - Help text is shown on stdout only when you request it with `--help` or `help`.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/taedi90/deck/internal/askcontext"
 	"github.com/taedi90/deck/internal/askintent"
 	"github.com/taedi90/deck/internal/askretrieve"
 	"github.com/taedi90/deck/internal/askstate"
@@ -39,7 +40,7 @@ func classifierUserPrompt(prompt string, reviewFlag bool, workspace askretrieve.
 	return b.String()
 }
 
-func generationSystemPrompt(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult) string {
+func generationSystemPrompt(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult, prompt string) string {
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask, a workflow authoring assistant.\n")
 	b.WriteString("Route: ")
@@ -56,15 +57,28 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, retr
 	b.WriteString("Rules:\n")
 	b.WriteString("- Produce only strict JSON.\n")
 	b.WriteString("- JSON shape: {\"summary\":string,\"review\":[]string,\"files\":[{\"path\":string,\"content\":string}]}.\n")
-	b.WriteString("- Allowed paths: workflows/scenarios/*.yaml, workflows/components/*.yaml, workflows/vars.yaml.\n")
 	b.WriteString("- Every workflow YAML must be schema-valid. Scenario files need top-level role and version.\n")
 	b.WriteString("- Use version: v1alpha1 for generated workflow files unless the workspace clearly uses something else.\n")
-	b.WriteString("- A workflow must define at least one of artifacts, phases, or steps.\n")
 	b.WriteString("- Each step must contain id, kind, and spec. Command steps must use spec.command as a YAML list of arguments.\n")
 	b.WriteString("- Never place summary, description, or review fields inside workflow YAML content.\n")
 	b.WriteString("- For a new workspace draft, prefer creating workflows/scenarios/apply.yaml and workflows/vars.yaml only when needed.\n")
-	b.WriteString("- Prefer typed steps over Command.\n")
 	b.WriteString("- If the request is simply to print text in the terminal, a minimal valid apply scenario with one Command step is acceptable.\n")
+	b.WriteString(askcontext.GlobalAuthoringBlock())
+	b.WriteString("\n")
+	b.WriteString(askcontext.WorkspaceTopologyBlock())
+	b.WriteString("\n")
+	b.WriteString(askcontext.RoleGuidanceBlock())
+	b.WriteString("\n")
+	b.WriteString(askcontext.ComponentGuidanceBlock())
+	b.WriteString("\n")
+	b.WriteString(askcontext.VarsGuidanceBlock())
+	b.WriteString("\n")
+	b.WriteString(askcontext.CLIHintsBlock())
+	b.WriteString("\n")
+	if block := askcontext.RelevantStepKindsBlock(prompt); block != "" {
+		b.WriteString(block)
+		b.WriteString("\n")
+	}
 	b.WriteString("- Example valid minimal scenario YAML:\n")
 	b.WriteString("  role: apply\n")
 	b.WriteString("  version: v1alpha1\n")

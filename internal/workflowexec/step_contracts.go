@@ -77,6 +77,11 @@ func StepSchemaFile(kind string) (string, bool) {
 	return contract.SchemaFile, true
 }
 
+func StepContractForKind(kind string) (StepContract, bool) {
+	contract, ok := stepContracts()[kind]
+	return contract, ok
+}
+
 func StepKinds() []string {
 	contracts := stepContracts()
 	kinds := make([]string, 0, len(contracts))
