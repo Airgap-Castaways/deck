@@ -114,6 +114,35 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	}
 	ctxData := map[string]any{"bundleRoot": bundleRoot, "stateFile": ""}
 
+	if hasPrepareArtifacts(wf) {
+		plannedGroups, err := planArtifactJobGroups(wf, bundleRoot, opts)
+		if err != nil {
+			return err
+		}
+		artifactFiles, err := runArtifactJobGroups(ctx, plannedGroups)
+		if err != nil {
+			return err
+		}
+		for _, f := range artifactFiles {
+			entry, err := fileManifestEntry(bundleRoot, f)
+			if err != nil {
+				return err
+			}
+			entries = append(entries, entry)
+		}
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
+		manifestPath := filepath.Join(bundleRoot, ".deck", "manifest.json")
+		if err := writeManifest(manifestPath, dedupeEntries(filterManifestEntries(entries))); err != nil {
+			return err
+		}
+		if packCacheEnabled {
+			if err := savePackCacheState(packCacheStatePath, packCacheStateFromPlan(packCachePlan)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	for _, step := range prepareSteps {
 		ok, err := evaluateWhen(step.When, wf.Vars, runtimeVars, ctxData)
 		if err != nil {

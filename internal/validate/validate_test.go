@@ -313,6 +313,93 @@ phases:
 		}
 	})
 
+	t.Run("prepare artifacts allow execution settings", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: prepare
+version: v1alpha1
+artifacts:
+  files:
+    - group: binaries
+      execution:
+        parallelism: 2
+        retry: 1
+      items:
+        - id: crictl
+          source:
+            url: https://example.invalid/crictl
+          output:
+            path: bin/crictl
+  images:
+    - group: control-plane
+      execution:
+        parallelism: 3
+        retry: 2
+      items:
+        - image: registry.k8s.io/pause:3.9
+  packages:
+    - group: runtimes
+      execution:
+        parallelism: 2
+        retry: 1
+      targets:
+        - osFamily: rhel
+          release: "9"
+      items:
+        - name: containerd
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("prepare artifacts reject duplicate package roots", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: prepare
+version: v1alpha1
+artifacts:
+  packages:
+    - group: rhel-a
+      targets:
+        - osFamily: rhel
+          release: "9"
+      items:
+        - name: containerd
+      repo:
+        type: yum
+      backend:
+        mode: container
+        image: rockylinux:9
+    - group: rhel-b
+      targets:
+        - osFamily: rhel
+          release: "9"
+      items:
+        - name: cri-tools
+      repo:
+        type: yum
+      backend:
+        mode: container
+        image: rockylinux:9
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected duplicate package root error")
+		}
+		if !strings.Contains(err.Error(), "duplicate package artifact root") {
+			t.Fatalf("expected duplicate package artifact root, got %v", err)
+		}
+	})
+
 	t.Run("missing file", func(t *testing.T) {
 		if err := File("does-not-exist.yaml"); err == nil {
 			t.Fatalf("expected error for missing file")

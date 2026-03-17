@@ -128,6 +128,59 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 	}
 }
 
+func TestRun_PrepareArtifactGroupsExecution(t *testing.T) {
+	imageOps := stubImageDownloadOps()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("hello-artifact-group"))
+	}))
+	defer server.Close()
+
+	bundle := t.TempDir()
+	wf := &config.Workflow{
+		Version: "v1",
+		Artifacts: &config.ArtifactsSpec{
+			Files: []config.ArtifactFileGroup{{
+				Group:     "binaries",
+				Execution: &config.ArtifactExecutionSpec{Parallelism: 2, Retry: 1},
+				Items: []config.ArtifactFileItem{{
+					ID:     "tool",
+					Source: config.ArtifactSource{URL: server.URL + "/tool"},
+					Output: config.ArtifactFileOutput{Path: "bin/tool"},
+				}},
+			}},
+			Images: []config.ArtifactImageGroup{{
+				Group:     "images",
+				Execution: &config.ArtifactExecutionSpec{Parallelism: 2},
+				Items:     []config.ArtifactImageItem{{Image: "registry.k8s.io/pause:3.9"}, {Image: "registry.k8s.io/coredns:v1.11.1"}},
+			}},
+			Packages: []config.ArtifactPackageGroup{{
+				Group:     "packages",
+				Execution: &config.ArtifactExecutionSpec{Parallelism: 2, Retry: 1},
+				Targets:   []config.ArtifactTarget{{OSFamily: "rhel", Release: "8"}, {OSFamily: "rhel", Release: "9"}},
+				Items:     []config.ArtifactPackageItem{{Name: "containerd"}},
+				Backend:   map[string]any{"mode": "container", "runtime": "docker", "image": "rockylinux:9"},
+				Repo:      map[string]any{"type": "yum"},
+			}},
+		},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}, imageDownloadOps: imageOps}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	for _, rel := range []string{
+		"files/bin/tool",
+		"images/registry.k8s.io_pause_3.9.tar",
+		"images/registry.k8s.io_coredns_v1.11.1.tar",
+		"packages/yum/8/mock-package.rpm",
+		"packages/yum/9/mock-package.rpm",
+	} {
+		if _, err := os.Stat(filepath.Join(bundle, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("expected artifact %s: %v", rel, err)
+		}
+	}
+}
+
 func TestRun_NoPreparePhase(t *testing.T) {
 	wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "install"}}}
 	if err := Run(context.Background(), wf, RunOptions{BundleRoot: t.TempDir()}); err == nil {

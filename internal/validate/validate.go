@@ -548,29 +548,195 @@ func validatePrepareSemantics(wf *config.Workflow) error {
 	if wf == nil || wf.Artifacts == nil {
 		return nil
 	}
+	fileOutputs := make(map[string]string)
+	imageOutputs := make(map[string]string)
+	packageRoots := make(map[string]string)
 	for _, group := range wf.Artifacts.Files {
-		for _, item := range group.Items {
-			path := strings.TrimSpace(item.Output.Path)
-			if path == "" {
-				return fmt.Errorf("E_SCHEMA_INVALID: artifacts.files group %s item %s requires output.path", group.Group, item.ID)
-			}
-			normalized := filepath.ToSlash(strings.TrimSpace(path))
-			if strings.HasPrefix(normalized, "/") {
-				return fmt.Errorf("E_SCHEMA_INVALID: artifacts.files group %s item %s output.path must be relative", group.Group, item.ID)
-			}
-			if strings.HasPrefix(normalized, "files/") {
-				return fmt.Errorf("E_SCHEMA_INVALID: artifacts.files group %s item %s output.path must be relative to files root", group.Group, item.ID)
+		if err := validateArtifactExecution(group.Execution, fmt.Sprintf("artifacts.files group %s", group.Group)); err != nil {
+			return err
+		}
+		for _, target := range expandArtifactTargets(group.Targets) {
+			for _, item := range group.Items {
+				path := strings.TrimSpace(item.Output.Path)
+				if path == "" {
+					return fmt.Errorf("E_SCHEMA_INVALID: artifacts.files group %s item %s requires output.path", group.Group, item.ID)
+				}
+				normalized := filepath.ToSlash(strings.TrimSpace(path))
+				if strings.HasPrefix(normalized, "/") {
+					return fmt.Errorf("E_SCHEMA_INVALID: artifacts.files group %s item %s output.path must be relative", group.Group, item.ID)
+				}
+				if strings.HasPrefix(normalized, "files/") {
+					return fmt.Errorf("E_SCHEMA_INVALID: artifacts.files group %s item %s output.path must be relative to files root", group.Group, item.ID)
+				}
+				rendered, err := workflowexec.RenderSpecWithExtra(map[string]any{"output": map[string]any{"path": filepath.ToSlash(filepath.Join("files", path))}}, wf, nil, map[string]any{"bundleRoot": "", "stateFile": ""}, map[string]any{"target": prepareTargetMap(target)})
+				if err != nil {
+					return fmt.Errorf("E_SCHEMA_INVALID: artifacts.files group %s item %s output render failed: %v", group.Group, item.ID, err)
+				}
+				finalPath := strings.TrimSpace(stringValue(mapValue(rendered, "output"), "path"))
+				if prev, exists := fileOutputs[finalPath]; exists {
+					return fmt.Errorf("E_SCHEMA_INVALID: duplicate file artifact output path %s (%s and %s)", finalPath, prev, item.ID)
+				}
+				fileOutputs[finalPath] = item.ID
 			}
 		}
 	}
 	for _, group := range wf.Artifacts.Packages {
+		if err := validateArtifactExecution(group.Execution, fmt.Sprintf("artifacts.packages group %s", group.Group)); err != nil {
+			return err
+		}
 		for _, target := range group.Targets {
 			if strings.TrimSpace(target.OSFamily) == "" || strings.TrimSpace(target.Release) == "" {
 				return fmt.Errorf("E_SCHEMA_INVALID: artifacts.packages group %s targets require osFamily and release", group.Group)
 			}
+			renderedRepo := map[string]any{}
+			if len(group.Repo) > 0 {
+				var err error
+				renderedRepo, err = workflowexec.RenderSpecWithExtra(group.Repo, wf, nil, map[string]any{"bundleRoot": "", "stateFile": ""}, map[string]any{"target": prepareTargetMap(target)})
+				if err != nil {
+					return fmt.Errorf("E_SCHEMA_INVALID: artifacts.packages group %s repo render failed: %v", group.Group, err)
+				}
+			}
+			renderedBackend := map[string]any{}
+			if len(group.Backend) > 0 {
+				var err error
+				renderedBackend, err = workflowexec.RenderSpecWithExtra(group.Backend, wf, nil, map[string]any{"bundleRoot": "", "stateFile": ""}, map[string]any{"target": prepareTargetMap(target)})
+				if err != nil {
+					return fmt.Errorf("E_SCHEMA_INVALID: artifacts.packages group %s backend render failed: %v", group.Group, err)
+				}
+			}
+			spec := map[string]any{"distro": map[string]any{"family": target.OSFamily, "release": target.Release, "arch": target.Arch}, "packages": []any{"placeholder"}}
+			if len(renderedRepo) > 0 {
+				spec["repo"] = renderedRepo
+			}
+			if len(renderedBackend) > 0 {
+				spec["backend"] = renderedBackend
+			}
+			root, err := packageArtifactRootForValidation(spec, "packages")
+			if err != nil {
+				return fmt.Errorf("E_SCHEMA_INVALID: artifacts.packages group %s target %s/%s: %v", group.Group, target.OSFamily, target.Release, err)
+			}
+			jobID := fmt.Sprintf("%s:%s/%s", group.Group, target.OSFamily, target.Release)
+			if prev, exists := packageRoots[root]; exists {
+				return fmt.Errorf("E_SCHEMA_INVALID: duplicate package artifact root %s (%s and %s)", root, prev, jobID)
+			}
+			packageRoots[root] = jobID
+		}
+	}
+	for _, group := range wf.Artifacts.Images {
+		if err := validateArtifactExecution(group.Execution, fmt.Sprintf("artifacts.images group %s", group.Group)); err != nil {
+			return err
+		}
+		for _, target := range expandArtifactTargets(group.Targets) {
+			renderedOutput := map[string]any{}
+			if len(group.Output) > 0 {
+				var err error
+				renderedOutput, err = workflowexec.RenderSpecWithExtra(group.Output, wf, nil, map[string]any{"bundleRoot": "", "stateFile": ""}, map[string]any{"target": prepareTargetMap(target)})
+				if err != nil {
+					return fmt.Errorf("E_SCHEMA_INVALID: artifacts.images group %s output render failed: %v", group.Group, err)
+				}
+			}
+			for _, item := range group.Items {
+				renderedImage, err := workflowexec.RenderSpecWithExtra(map[string]any{"image": item.Image}, wf, nil, map[string]any{"bundleRoot": "", "stateFile": ""}, map[string]any{"target": prepareTargetMap(target)})
+				if err != nil {
+					return fmt.Errorf("E_SCHEMA_INVALID: artifacts.images group %s image render failed: %v", group.Group, err)
+				}
+				image := strings.TrimSpace(stringValue(renderedImage, "image"))
+				path := imageArchivePathForValidation(renderedOutput, image)
+				jobID := fmt.Sprintf("%s:%s", group.Group, image)
+				if prev, exists := imageOutputs[path]; exists {
+					return fmt.Errorf("E_SCHEMA_INVALID: duplicate image artifact output path %s (%s and %s)", path, prev, jobID)
+				}
+				imageOutputs[path] = jobID
+			}
 		}
 	}
 	return nil
+}
+
+func validateArtifactExecution(spec *config.ArtifactExecutionSpec, scope string) error {
+	if spec == nil {
+		return nil
+	}
+	if spec.Parallelism != 0 && spec.Parallelism < 1 {
+		return fmt.Errorf("E_SCHEMA_INVALID: %s execution.parallelism must be >= 1", scope)
+	}
+	if spec.Retry < 0 {
+		return fmt.Errorf("E_SCHEMA_INVALID: %s execution.retry must be >= 0", scope)
+	}
+	return nil
+}
+
+func expandArtifactTargets(targets []config.ArtifactTarget) []config.ArtifactTarget {
+	if len(targets) == 0 {
+		return []config.ArtifactTarget{{}}
+	}
+	return targets
+}
+
+func prepareTargetMap(target config.ArtifactTarget) map[string]any {
+	return map[string]any{"os": target.OS, "osFamily": target.OSFamily, "release": target.Release, "arch": target.Arch}
+}
+
+func packageArtifactRootForValidation(spec map[string]any, defaultDir string) (string, error) {
+	output := mapValue(spec, "output")
+	dir := stringValue(output, "dir")
+	if dir == "" {
+		dir = defaultDir
+	}
+	backend := mapValue(spec, "backend")
+	if stringValue(backend, "mode") == "container" && stringValue(backend, "image") != "" {
+		repo := mapValue(spec, "repo")
+		if len(repo) > 0 {
+			distro := mapValue(spec, "distro")
+			release := strings.TrimSpace(stringValue(distro, "release"))
+			if release == "" {
+				return "", fmt.Errorf("packages action download repo mode requires distro.release")
+			}
+			switch strings.TrimSpace(stringValue(repo, "type")) {
+			case "apt-flat":
+				return filepath.ToSlash(filepath.Join("packages", "apt", release)), nil
+			case "yum":
+				return filepath.ToSlash(filepath.Join("packages", "yum", release)), nil
+			default:
+				return "", fmt.Errorf("packages action download repo.type must be apt-flat or yum")
+			}
+		}
+	}
+	return filepath.ToSlash(dir), nil
+}
+
+func imageArchivePathForValidation(output map[string]any, image string) string {
+	dir := stringValue(output, "dir")
+	if dir == "" {
+		dir = "images"
+	}
+	replacer := strings.NewReplacer("/", "_", ":", "_", "@", "_")
+	return filepath.ToSlash(filepath.Join(dir, replacer.Replace(image)+".tar"))
+}
+
+func mapValue(v map[string]any, key string) map[string]any {
+	if v == nil {
+		return map[string]any{}
+	}
+	if mv, ok := v[key].(map[string]any); ok {
+		return mv
+	}
+	return map[string]any{}
+}
+
+func stringValue(v map[string]any, key string) string {
+	if v == nil {
+		return ""
+	}
+	raw, ok := v[key]
+	if !ok {
+		return ""
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(s)
 }
 
 func validateRoleKinds(wf *config.Workflow) error {
