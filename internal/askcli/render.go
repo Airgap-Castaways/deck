@@ -139,7 +139,7 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 		}
 	}
 	if shouldLogAsk(result.ConfigSource.LogLevel, "basic") {
-		if _, err := fmt.Fprintf(stderr, "deck ask phase=done route=%s reason=%s target=%s classifierLlmUsed=%t llmUsed=%t retries=%d termination=%s\n", result.Route, result.Reason, result.Target.Path, result.ClassifierLLM, result.LLMUsed, result.RetriesUsed, result.Termination); err != nil {
+		if _, err := fmt.Fprintf(stderr, "\n[ask][phase:done] route=%s reason=%s target=%s classifierLlmUsed=%t llmUsed=%t retries=%d termination=%s\n", result.Route, result.Reason, result.Target.Path, result.ClassifierLLM, result.LLMUsed, result.RetriesUsed, result.Termination); err != nil {
 			return err
 		}
 	}

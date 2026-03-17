@@ -21,6 +21,16 @@ type stubClient struct {
 	calls     int
 }
 
+type flushBuffer struct {
+	bytes.Buffer
+	flushes int
+}
+
+func (b *flushBuffer) Flush() error {
+	b.flushes++
+	return nil
+}
+
 func (s *stubClient) Generate(_ context.Context, _ askprovider.Request) (askprovider.Response, error) {
 	defer func() { s.calls++ }()
 	idx := s.calls
@@ -119,16 +129,19 @@ func TestLocalExplainDescribesScenarioStructure(t *testing.T) {
 }
 
 func TestAskLoggerDebugAndTrace(t *testing.T) {
-	var buf bytes.Buffer
+	var buf flushBuffer
 	logger := newAskLogger(&buf, "trace")
-	logger.logf("debug", "deck ask command=%s\n", `deck ask "explain apply"`)
+	logger.logf("debug", "[ask][command] %s\n", `deck ask "explain apply"`)
 	logger.prompt("explain", "system text", "user text")
 	logger.response("explain", `{"summary":"ok"}`)
 	logText := buf.String()
-	for _, want := range []string{"deck ask command=deck ask \"explain apply\"", "deck ask explain system-prompt:\nsystem text", "deck ask explain user-prompt:\nuser text", "deck ask explain raw-response:\n{\"summary\":\"ok\"}"} {
+	for _, want := range []string{"[ask][command] deck ask \"explain apply\"", "[ask][prompt:explain][system]\nsystem text", "[ask][prompt:explain][user]\nuser text", "[ask][response:explain]\n{\"summary\":\"ok\"}"} {
 		if !strings.Contains(logText, want) {
 			t.Fatalf("expected %q in log output, got %q", want, logText)
 		}
+	}
+	if buf.flushes == 0 {
+		t.Fatalf("expected logger to flush output")
 	}
 }
 

@@ -58,33 +58,33 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		return err
 	}
 	logger := newAskLogger(opts.Stderr, effective.LogLevel)
-	logger.logf("basic", "deck ask phase=request routeCandidate=%s write=%t review=%t\n", heuristic.Route, opts.Write, opts.Review)
-	logger.logf("basic", "deck ask using provider=%s model=%s endpoint=%s apiKeySource=%s logLevel=%s\n", effective.Provider, effective.Model, effective.Endpoint, effective.APIKeySource, effective.LogLevel)
-	logger.logf("debug", "deck ask command=%s\n", renderUserCommand(opts))
+	logger.logf("basic", "\n[ask][phase:request] routeCandidate=%s write=%t review=%t\n", heuristic.Route, opts.Write, opts.Review)
+	logger.logf("basic", "[ask][config] provider=%s model=%s endpoint=%s apiKeySource=%s logLevel=%s\n", effective.Provider, effective.Model, effective.Endpoint, effective.APIKeySource, effective.LogLevel)
+	logger.logf("debug", "[ask][command] %s\n", renderUserCommand(opts))
 	if requestSource != "" {
-		logger.logf("debug", "deck ask request-source=%s from=%s\n", requestSource, strings.TrimSpace(opts.FromPath))
+		logger.logf("debug", "[ask][request-source] type=%s from=%s\n", requestSource, strings.TrimSpace(opts.FromPath))
 	}
-	logger.logf("trace", "deck ask user-request:\n%s\n", strings.TrimSpace(requestText))
+	logger.logf("trace", "\n[ask][request]\n%s\n", strings.TrimSpace(requestText))
 
 	decision := heuristic
 	classifierLLM := false
 	classifierSystem := classifierSystemPrompt()
 	classifierUser := classifierUserPrompt(requestText, opts.Review, workspace)
 	if canUseLLM(effective) {
-		logger.logf("debug", "deck ask phase=classify provider=%s model=%s\n", effective.Provider, effective.Model)
+		logger.logf("debug", "\n[ask][phase:classify:start] provider=%s model=%s\n", effective.Provider, effective.Model)
 		classified, classifyErr := classifyWithLLM(ctx, client, effective, classifierSystem, classifierUser, logger)
 		if classifyErr == nil {
 			decision = classified
 			classifierLLM = true
-			logger.logf("basic", "deck ask phase=classify-complete route=%s confidence=%.2f reason=%s\n", decision.Route, decision.Confidence, decision.Reason)
+			logger.logf("basic", "[ask][phase:classify:done] route=%s confidence=%.2f reason=%s\n", decision.Route, decision.Confidence, decision.Reason)
 		} else {
-			logger.logf("debug", "deck ask phase=classify-fallback error=%v\n", classifyErr)
+			logger.logf("debug", "[ask][phase:classify:fallback] error=%v\n", classifyErr)
 		}
 	} else {
-		logger.logf("debug", "deck ask phase=classify-skip reason=no-llm-credentials\n")
+		logger.logf("debug", "[ask][phase:classify:skip] reason=no-llm-credentials\n")
 	}
 	if opts.Write && !decision.AllowGeneration && heuristic.AllowGeneration {
-		logger.logf("debug", "deck ask phase=classify-override from=%s to=%s reason=write-flag\n", decision.Route, heuristic.Route)
+		logger.logf("debug", "[ask][phase:classify:override] from=%s to=%s reason=write-flag\n", decision.Route, heuristic.Route)
 		decision = heuristic
 		decision.Reason = "write flag overrides non-generation classification"
 	}
@@ -111,7 +111,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "classifier", SystemPrompt: classifierSystem, UserPrompt: classifierUser})
 	}
 
-	logger.logf("debug", "deck ask phase=augment-start mcp=%t lsp=%t\n", effective.MCP.Enabled, effective.LSP.Enabled)
+	logger.logf("debug", "\n[ask][phase:augment:start] mcp=%t lsp=%t\n", effective.MCP.Enabled, effective.LSP.Enabled)
 	for _, event := range result.AugmentEvents {
 		prefix := "augment"
 		if strings.HasPrefix(event, "mcp:") {
@@ -119,9 +119,9 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		} else if strings.HasPrefix(event, "lsp") {
 			prefix = "lsp"
 		}
-		logger.logf("debug", "deck ask %s=%s\n", prefix, event)
+		logger.logf("debug", "[ask][augment:%s] %s\n", prefix, event)
 	}
-	logger.logf("debug", "deck ask phase=retrieval chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
+	logger.logf("debug", "[ask][phase:retrieve] chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
 
 	if decision.LLMPolicy == askintent.LLMRequired && !canUseLLM(effective) {
 		return fmt.Errorf("missing ask api key for provider %q; set %s or run `deck ask auth set --api-key ...`", effective.Provider, "DECK_ASK_API_KEY")
@@ -137,21 +137,21 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		if !canUseLLM(effective) {
 			return fmt.Errorf("route %s requires model access; configure provider credentials first", decision.Route)
 		}
-		logger.logf("basic", "deck ask phase=plan-start route=%s\n", decision.Route)
+		logger.logf("basic", "\n[ask][phase:plan:start] route=%s\n", decision.Route)
 		planned, planErr := planWithLLM(ctx, client, askconfigSettings{provider: effective.Provider, model: effective.Model, apiKey: effective.APIKey, endpoint: effective.Endpoint}, decision, retrieval, requestText, workspace, logger)
 		if planErr != nil {
-			logger.logf("debug", "deck ask phase=plan-fallback error=%v\n", planErr)
+			logger.logf("debug", "[ask][phase:plan:fallback] error=%v\n", planErr)
 			planned = localPlan(requestText, decision, workspace)
 		}
 		plan = planned
 		result.Plan = &plan
-		logger.logf("basic", "deck ask phase=plan-complete files=%d blockers=%d\n", len(plan.Files), len(plan.Blockers))
+		logger.logf("basic", "[ask][phase:plan:done] files=%d blockers=%d\n", len(plan.Files), len(plan.Blockers))
 		planMD := renderPlanMarkdown(plan, ".deck/plan/latest.md")
 		planMDPath, planJSONPath, saveErr := savePlanArtifacts(resolvedRoot, opts, plan, planMD)
 		if saveErr != nil {
 			return saveErr
 		}
-		logger.logf("basic", "deck ask phase=plan-save markdown=%s json=%s\n", planMDPath, planJSONPath)
+		logger.logf("basic", "[ask][phase:plan:save] markdown=%s json=%s\n", planMDPath, planJSONPath)
 		result.PlanMarkdown = planMDPath
 		result.PlanJSON = planJSONPath
 		planMarkdownFinal := renderPlanMarkdown(plan, planMDPath)
@@ -201,7 +201,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		retrieval = askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, secondPassExternal)
 		result.Chunks = retrieval.Chunks
 		result.DroppedChunks = retrieval.Dropped
-		logger.logf("debug", "deck ask phase=retrieval-second-pass chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
+		logger.logf("debug", "[ask][phase:retrieve:second-pass] chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
 	}
 
 	switch decision.Route {
@@ -221,12 +221,12 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			MaxRetries:   attempts,
 		}
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "generation", SystemPrompt: generationRequest.SystemPrompt, UserPrompt: generationRequest.Prompt})
-		logger.logf("basic", "deck ask phase=generation-start route=%s attempts=%d\n", decision.Route, attempts)
+		logger.logf("basic", "\n[ask][phase:generation:start] route=%s attempts=%d\n", decision.Route, attempts)
 		gen, lintSummary, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts, logger, decision, plan)
 		if genErr != nil {
 			return genErr
 		}
-		logger.logf("basic", "deck ask phase=generation-complete files=%d lint=%s\n", len(gen.Files), lintSummary)
+		logger.logf("basic", "[ask][phase:generation:done] files=%d lint=%s\n", len(gen.Files), lintSummary)
 		result.LLMUsed = true
 		result.RetriesUsed = retriesUsed
 		result.Files = gen.Files
@@ -256,7 +256,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		if canUseLLM(effective) {
 			systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, requestText)
 			result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
-			logger.logf("basic", "deck ask phase=answer-start route=%s\n", decision.Route)
+			logger.logf("basic", "\n[ask][phase:answer:start] route=%s\n", decision.Route)
 			info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)
 			if infoErr == nil {
 				result.LLMUsed = true
@@ -265,10 +265,10 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 				result.ReviewLines = append(result.ReviewLines, info.Suggestions...)
 				result.ReviewLines = append(result.ReviewLines, info.Findings...)
 				result.ReviewLines = append(result.ReviewLines, info.SuggestedChange...)
-				logger.logf("basic", "deck ask phase=answer-complete route=%s\n", decision.Route)
+				logger.logf("basic", "[ask][phase:answer:done] route=%s\n", decision.Route)
 			} else {
 				result.ReviewLines = append(result.ReviewLines, "LLM response failed; using local fallback: "+infoErr.Error())
-				logger.logf("debug", "deck ask phase=answer-fallback error=%v\n", infoErr)
+				logger.logf("debug", "[ask][phase:answer:fallback] error=%v\n", infoErr)
 				applyLocalFallback(&result, resolvedRoot, workspace, requestText)
 			}
 		} else {
@@ -417,13 +417,13 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 		if attempt > 1 && lastValidation != "" {
 			currentPrompt += "\n\nLocal validation failed. Fix the response and return full JSON again."
 			if len(lastCritic.Blocking) > 0 || len(lastCritic.Advisory) > 0 {
-				logger.logf("debug", "deck ask phase=repair-critic payload=%s\n", criticJSON(lastCritic))
+				logger.logf("debug", "\n[ask][phase:repair:critic]\n%s\n", criticJSON(lastCritic))
 				currentPrompt += "\nBlocking and advisory feedback as JSON:\n" + criticJSON(lastCritic)
 			} else {
 				currentPrompt += "\nErrors:\n" + lastValidation
 			}
 		}
-		logger.logf("basic", "deck ask phase=generation-attempt attempt=%d/%d\n", attempt, attempts)
+		logger.logf("basic", "[ask][phase:generation:attempt] attempt=%d/%d\n", attempt, attempts)
 		logger.prompt("generation", req.SystemPrompt, currentPrompt)
 		resp, err := client.Generate(ctx, askprovider.Request{
 			Kind:         req.Kind,
@@ -442,20 +442,20 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 		gen, err := askcontract.ParseGeneration(resp.Content)
 		if err != nil {
 			lastValidation = err.Error()
-			logger.logf("debug", "deck ask phase=generation-parse-error error=%s\n", lastValidation)
+			logger.logf("debug", "[ask][phase:generation:parse-error] error=%s\n", lastValidation)
 			if attempt < attempts {
 				continue
 			}
 			return askcontract.GenerationResponse{}, lastValidation, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
 		}
-		logger.logf("debug", "deck ask phase=semantic-validate attempt=%d/%d\n", attempt, attempts)
+		logger.logf("debug", "[ask][phase:semantic-validate] attempt=%d/%d\n", attempt, attempts)
 		lintSummary, critic, err := validateGeneration(root, gen, decision, plan)
 		lastCritic = critic
 		if err == nil {
 			return gen, lintSummary, attempt - 1, nil
 		}
 		lastValidation = err.Error()
-		logger.logf("debug", "deck ask phase=generation-validation-error error=%s\n", lastValidation)
+		logger.logf("debug", "[ask][phase:generation:validation-error] error=%s\n", lastValidation)
 		if !repairableValidationError(lastValidation) {
 			return askcontract.GenerationResponse{}, lastValidation, attempt - 1, fmt.Errorf("ask generation stopped without repair: %s", lastValidation)
 		}
