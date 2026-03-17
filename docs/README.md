@@ -19,6 +19,7 @@ AI-ready builds also include `deck ask`, a single-shot workflow authoring helper
 - `concepts/why-deck.md`: the problem deck solves and how it approaches it
 - `concepts/architecture.md`: system boundaries, execution flow, and trust model
 - `development/go-style-guide.md`: Go coding conventions for the `deck` repository
+- `development/versioning.md`: project versioning policy and build metadata rules
 - `tutorials/quick-start.md`: create, lint, prepare, and run a workflow
 - `tutorials/offline-kubernetes.md`: deck for offline Kubernetes maintenance
 

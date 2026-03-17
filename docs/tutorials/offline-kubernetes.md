@@ -69,7 +69,7 @@ Use the control-plane and worker examples as starting points for kubeadm-based b
 
 ## 7. Add site assistance only when it solves a real problem
 
-Some sites benefit from a temporary shared bundle source or a local place to collect session status across multiple nodes. That can help when several nodes need the same release inside the same air gap.
+Some sites benefit from a temporary shared bundle source inside the air gap. That can help when several nodes need the same release inside the same air gap.
 
 Keep that choice explicit and secondary. The core workflow centers on local `deck` execution on each node.
 

@@ -58,11 +58,15 @@ go run ./cmd/deck --help
 # generate shell completion
 go run ./cmd/deck completion bash
 
+# show build version
+go run ./cmd/deck version
+
 # install the binary
 go install ./cmd/deck
 
 # verify
 deck --help
+deck version
 ```
 
 ## Quick Start
@@ -97,6 +101,7 @@ Completion output goes to stdout. Help is shown only when requested with `--help
 - Why deck: `docs/concepts/why-deck.md`
 - Workflow model: `docs/reference/workflow-model.md`
 - CLI reference: `docs/reference/cli.md`
+- Versioning: `docs/development/versioning.md`
 - Example workflows: `docs/examples/README.md`
 
 ## Contributing and validation

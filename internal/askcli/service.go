@@ -124,7 +124,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	logger.logf("debug", "[ask][phase:retrieve] chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
 
 	if decision.LLMPolicy == askintent.LLMRequired && !canUseLLM(effective) {
-		return fmt.Errorf("missing ask api key for provider %q; set %s or run `deck ask auth set --api-key ...`", effective.Provider, "DECK_ASK_API_KEY")
+		return fmt.Errorf("missing ask api key for provider %q; set %s or run `deck ask config set --api-key ...`", effective.Provider, "DECK_ASK_API_KEY")
 	}
 	if opts.PlanOnly && !isAuthoringRoute(decision.Route) {
 		return fmt.Errorf("ask plan is intended for draft/refine authoring requests; got route %s. Try `deck ask %q` instead", decision.Route, strings.TrimSpace(requestText))

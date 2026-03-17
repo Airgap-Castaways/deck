@@ -31,7 +31,7 @@ func buildManifest() Manifest {
 		CLI: CLIContext{
 			Command:             "deck ask",
 			PlanSubcommand:      "deck ask plan",
-			AuthSubcommand:      "deck ask auth",
+			ConfigSubcommand:    "deck ask config",
 			TopLevelDescription: cli.Short,
 			ImportantFlags:      append([]CLIFlag(nil), cli.Flags...),
 			Examples: []string{

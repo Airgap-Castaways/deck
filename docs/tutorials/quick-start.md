@@ -78,7 +78,7 @@ deck apply
 
 ## 6. Optional: add site assistance
 
-Some sites benefit from a temporary local server inside the air gap — a shared bundle source or a place to collect session status across multiple nodes. Use `deck server up` for this when it solves a real problem.
+Some sites benefit from a temporary local server inside the air gap as a shared bundle source. Use `deck server up` for this when it solves a real problem.
 
 That path extends the local workflow. It does not replace it.
 

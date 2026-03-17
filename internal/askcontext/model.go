@@ -33,7 +33,7 @@ type PromptBlock struct {
 type CLIContext struct {
 	Command             string
 	PlanSubcommand      string
-	AuthSubcommand      string
+	ConfigSubcommand    string
 	TopLevelDescription string
 	ImportantFlags      []CLIFlag
 	Examples            []string

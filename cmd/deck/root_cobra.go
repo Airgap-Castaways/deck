@@ -28,15 +28,15 @@ func newRootCommand() *cobra.Command {
 
 	for _, child := range []*cobra.Command{
 		withGroup(newInitCommand(), commandGroupCore),
-		withGroup(newListCommand(), commandGroupCore),
 		withGroup(newLintCommand(), commandGroupCore),
 		withGroup(newPrepareCommand(), commandGroupCore),
 		withGroup(newBundleCommand(), commandGroupCore),
 		withGroup(newPlanCommand(), commandGroupCore),
 		withGroup(newApplyCommand(), commandGroupCore),
-		withGroup(newSourceCommand(), commandGroupAdditional),
+		withGroup(newListCommand(), commandGroupAdditional),
 		withGroup(newServerCommand(), commandGroupAdditional),
 		withGroup(newAskCommand(), commandGroupAdditional),
+		withGroup(newVersionCommand(), commandGroupAdditional),
 		withGroup(newCompletionCommand(), commandGroupAdditional),
 		withGroup(newCacheCommand(), commandGroupAdditional),
 	} {

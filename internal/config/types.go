@@ -44,9 +44,10 @@ type ArtifactFileItem struct {
 }
 
 type ArtifactFileGroup struct {
-	Group   string             `yaml:"group" json:"group"`
-	Targets []ArtifactTarget   `yaml:"targets,omitempty" json:"targets,omitempty"`
-	Items   []ArtifactFileItem `yaml:"items" json:"items"`
+	Group     string                 `yaml:"group" json:"group"`
+	Targets   []ArtifactTarget       `yaml:"targets,omitempty" json:"targets,omitempty"`
+	Items     []ArtifactFileItem     `yaml:"items" json:"items"`
+	Execution *ArtifactExecutionSpec `yaml:"execution,omitempty" json:"execution,omitempty"`
 }
 
 type ArtifactImageItem struct {
@@ -54,11 +55,12 @@ type ArtifactImageItem struct {
 }
 
 type ArtifactImageGroup struct {
-	Group   string              `yaml:"group" json:"group"`
-	Targets []ArtifactTarget    `yaml:"targets,omitempty" json:"targets,omitempty"`
-	Items   []ArtifactImageItem `yaml:"items" json:"items"`
-	Backend map[string]any      `yaml:"backend,omitempty" json:"backend,omitempty"`
-	Output  map[string]any      `yaml:"output,omitempty" json:"output,omitempty"`
+	Group     string                 `yaml:"group" json:"group"`
+	Targets   []ArtifactTarget       `yaml:"targets,omitempty" json:"targets,omitempty"`
+	Items     []ArtifactImageItem    `yaml:"items" json:"items"`
+	Backend   map[string]any         `yaml:"backend,omitempty" json:"backend,omitempty"`
+	Output    map[string]any         `yaml:"output,omitempty" json:"output,omitempty"`
+	Execution *ArtifactExecutionSpec `yaml:"execution,omitempty" json:"execution,omitempty"`
 }
 
 type ArtifactPackageItem struct {
@@ -66,11 +68,17 @@ type ArtifactPackageItem struct {
 }
 
 type ArtifactPackageGroup struct {
-	Group   string                `yaml:"group" json:"group"`
-	Targets []ArtifactTarget      `yaml:"targets" json:"targets"`
-	Items   []ArtifactPackageItem `yaml:"items" json:"items"`
-	Repo    map[string]any        `yaml:"repo,omitempty" json:"repo,omitempty"`
-	Backend map[string]any        `yaml:"backend,omitempty" json:"backend,omitempty"`
+	Group     string                 `yaml:"group" json:"group"`
+	Targets   []ArtifactTarget       `yaml:"targets" json:"targets"`
+	Items     []ArtifactPackageItem  `yaml:"items" json:"items"`
+	Repo      map[string]any         `yaml:"repo,omitempty" json:"repo,omitempty"`
+	Backend   map[string]any         `yaml:"backend,omitempty" json:"backend,omitempty"`
+	Execution *ArtifactExecutionSpec `yaml:"execution,omitempty" json:"execution,omitempty"`
+}
+
+type ArtifactExecutionSpec struct {
+	Parallelism int `yaml:"parallelism,omitempty" json:"parallelism,omitempty"`
+	Retry       int `yaml:"retry,omitempty" json:"retry,omitempty"`
 }
 
 type Phase struct {

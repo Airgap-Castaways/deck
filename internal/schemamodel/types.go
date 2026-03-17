@@ -42,9 +42,10 @@ type ArtifactFileItem struct {
 }
 
 type ArtifactFileGroup struct {
-	Group   string             `json:"group"`
-	Targets []ArtifactTarget   `json:"targets,omitempty"`
-	Items   []ArtifactFileItem `json:"items"`
+	Group     string                 `json:"group"`
+	Targets   []ArtifactTarget       `json:"targets,omitempty"`
+	Items     []ArtifactFileItem     `json:"items"`
+	Execution *ArtifactExecutionSpec `json:"execution,omitempty"`
 }
 
 type ArtifactImageItem struct {
@@ -52,11 +53,12 @@ type ArtifactImageItem struct {
 }
 
 type ArtifactImageGroup struct {
-	Group   string              `json:"group"`
-	Targets []ArtifactTarget    `json:"targets,omitempty"`
-	Items   []ArtifactImageItem `json:"items"`
-	Backend map[string]any      `json:"backend,omitempty"`
-	Output  map[string]any      `json:"output,omitempty"`
+	Group     string                 `json:"group"`
+	Targets   []ArtifactTarget       `json:"targets,omitempty"`
+	Items     []ArtifactImageItem    `json:"items"`
+	Backend   map[string]any         `json:"backend,omitempty"`
+	Output    map[string]any         `json:"output,omitempty"`
+	Execution *ArtifactExecutionSpec `json:"execution,omitempty"`
 }
 
 type ArtifactPackageItem struct {
@@ -64,11 +66,17 @@ type ArtifactPackageItem struct {
 }
 
 type ArtifactPackageGroup struct {
-	Group   string                `json:"group"`
-	Targets []ArtifactTarget      `json:"targets"`
-	Items   []ArtifactPackageItem `json:"items"`
-	Repo    map[string]any        `json:"repo,omitempty"`
-	Backend map[string]any        `json:"backend,omitempty"`
+	Group     string                 `json:"group"`
+	Targets   []ArtifactTarget       `json:"targets"`
+	Items     []ArtifactPackageItem  `json:"items"`
+	Repo      map[string]any         `json:"repo,omitempty"`
+	Backend   map[string]any         `json:"backend,omitempty"`
+	Execution *ArtifactExecutionSpec `json:"execution,omitempty"`
+}
+
+type ArtifactExecutionSpec struct {
+	Parallelism int `json:"parallelism,omitempty"`
+	Retry       int `json:"retry,omitempty"`
 }
 
 type WorkflowPhase struct {

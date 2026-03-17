@@ -139,11 +139,11 @@ func TestCLIContractUsesSingleErrorLineWithoutAutoUsage(t *testing.T) {
 func TestCLIContractHelpTokenIsNotHijackedFromFlagValues(t *testing.T) {
 	t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "server.json"))
 
-	out, err := runWithCapturedStdout([]string{"source", "set", "http://127.0.0.1:8080/help"})
+	out, err := runWithCapturedStdout([]string{"server", "remote", "set", "http://127.0.0.1:8080/help"})
 	if err != nil {
-		t.Fatalf("expected source set success, got %v", err)
+		t.Fatalf("expected server remote set success, got %v", err)
 	}
-	if !strings.Contains(out, "source default set: http://127.0.0.1:8080/help") {
+	if !strings.Contains(out, "server remote set: http://127.0.0.1:8080/help") {
 		t.Fatalf("unexpected output: %q", out)
 	}
 }
@@ -185,6 +185,7 @@ func TestCLIContractHelpRoutesViaBinary(t *testing.T) {
 		wantStdout string
 	}{
 		{name: "root help flag", args: []string{"--help"}, wantStdout: "deck [command]"},
+		{name: "root help includes version", args: []string{"--help"}, wantStdout: "version"},
 		{name: "help bundle", args: []string{"help", "bundle"}, wantStdout: "deck bundle [command]"},
 		{name: "nested server help", args: []string{"server", "health", "--help"}, wantStdout: "deck server health [flags]"},
 	}
@@ -202,6 +203,20 @@ func TestCLIContractHelpRoutesViaBinary(t *testing.T) {
 				t.Fatalf("expected empty stderr for %v, got %q", tc.args, res.stderr)
 			}
 		})
+	}
+}
+
+func TestCLIContractVersionCommandViaBinary(t *testing.T) {
+	binaryPath := buildDeckBinary(t, "deck-version-bin")
+	res := runDeckBinary(t, binaryPath, "version")
+	if res.exitCode != 0 {
+		t.Fatalf("expected zero exit, got %d stderr=%q", res.exitCode, res.stderr)
+	}
+	if res.stdout != "deck dev\n" {
+		t.Fatalf("unexpected stdout: %q", res.stdout)
+	}
+	if res.stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", res.stderr)
 	}
 }
 

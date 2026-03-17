@@ -1,10 +1,10 @@
 package askcontext
 
 type AskCommandMetadata struct {
-	Short string
-	Plan  AskPlanCommandMetadata
-	Auth  AskAuthCommandMetadata
-	Flags []CLIFlag
+	Short  string
+	Plan   AskPlanCommandMetadata
+	Config AskConfigCommandMetadata
+	Flags  []CLIFlag
 }
 
 type AskPlanCommandMetadata struct {
@@ -13,7 +13,7 @@ type AskPlanCommandMetadata struct {
 	Flags []CLIFlag
 }
 
-type AskAuthCommandMetadata struct {
+type AskConfigCommandMetadata struct {
 	Short string
 }
 
@@ -29,7 +29,7 @@ func AskCommandMeta() AskCommandMetadata {
 				{Name: "--plan-dir", Description: "Directory for ask plan artifacts."},
 			},
 		},
-		Auth: AskAuthCommandMetadata{Short: "Manage global ask authentication and defaults"},
+		Config: AskConfigCommandMetadata{Short: "Manage global ask config defaults and api key"},
 		Flags: []CLIFlag{
 			{Name: "--write", Description: "Write generated workflow files into the current workspace."},
 			{Name: "--from", Description: "Load additional request details from a text or markdown file."},

@@ -43,6 +43,20 @@
           "items": {
             "additionalProperties": false,
             "properties": {
+              "execution": {
+                "additionalProperties": false,
+                "properties": {
+                  "parallelism": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "retry": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              },
               "group": {
                 "minLength": 1,
                 "type": "string"
@@ -166,6 +180,20 @@
                 "additionalProperties": true,
                 "type": "object"
               },
+              "execution": {
+                "additionalProperties": false,
+                "properties": {
+                  "parallelism": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "retry": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              },
               "group": {
                 "minLength": 1,
                 "type": "string"
@@ -232,6 +260,20 @@
             "properties": {
               "backend": {
                 "additionalProperties": true,
+                "type": "object"
+              },
+              "execution": {
+                "additionalProperties": false,
+                "properties": {
+                  "parallelism": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "retry": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
                 "type": "object"
               },
               "group": {
