@@ -16,7 +16,7 @@ import (
 func newServerCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "server",
-		Short: "Run and inspect the local content server",
+		Short: "Run the local content server and manage remote lookup defaults",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
@@ -28,6 +28,7 @@ func newServerCommand() *cobra.Command {
 		newServerDownCommand(),
 		newServerHealthCommand(),
 		newServerLogsCommand(),
+		newServerRemoteCommand(),
 	)
 
 	return cmd
@@ -120,7 +121,7 @@ func newServerDownCommand() *cobra.Command {
 func newServerHealthCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "health",
-		Short: "Probe the configured or explicit server",
+		Short: "Probe an explicit server or the saved remote server URL",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			server, err := cmdFlagValue(cmd, "server")
@@ -130,7 +131,7 @@ func newServerHealthCommand() *cobra.Command {
 			return executeHealth(server)
 		},
 	}
-	cmd.Flags().String("server", "", "server base URL (defaults to the saved source URL)")
+	cmd.Flags().String("server", "", "server base URL (defaults to the saved remote server URL)")
 	return cmd
 }
 
@@ -169,6 +170,96 @@ func newServerLogsCommand() *cobra.Command {
 	cmd.Flags().String("unit", "deck-server.service", "systemd unit for journal logs")
 	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
 	return cmd
+}
+
+func newServerRemoteCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "remote",
+		Short: "Manage the saved remote server URL for scenario lookup",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return cmd.Help()
+		},
+	}
+
+	cmd.AddCommand(
+		newServerRemoteSetCommand(),
+		newServerRemoteShowCommand(),
+		newServerRemoteUnsetCommand(),
+	)
+
+	return cmd
+}
+
+func newServerRemoteSetCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "set <url>",
+		Short: "Save the default remote server URL for scenario lookup",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return executeServerRemoteSet(args[0])
+		},
+	}
+	return cmd
+}
+
+func newServerRemoteShowCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show",
+		Short: "Show the effective saved remote server URL",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return executeServerRemoteShow()
+		},
+	}
+	return cmd
+}
+
+func newServerRemoteUnsetCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "unset",
+		Short: "Clear the saved remote server URL",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return executeServerRemoteUnset()
+		},
+	}
+	return cmd
+}
+
+func executeServerRemoteSet(rawURL string) error {
+	resolved := strings.TrimRight(strings.TrimSpace(rawURL), "/")
+	if err := validateSourceURL(resolved); err != nil {
+		return err
+	}
+	if err := saveSourceDefaults(sourceDefaults{URL: resolved}); err != nil {
+		return err
+	}
+	return stdoutPrintf("server remote set: %s\n", resolved)
+}
+
+func executeServerRemoteShow() error {
+	resolved, source, err := resolveSourceURL("")
+	if err != nil {
+		return err
+	}
+	if resolved == "" {
+		if err := stdoutPrintln("remote="); err != nil {
+			return err
+		}
+		return stdoutPrintln("origin=none")
+	}
+	if err := stdoutPrintf("remote=%s\n", resolved); err != nil {
+		return err
+	}
+	return stdoutPrintf("origin=%s\n", source)
+}
+
+func executeServerRemoteUnset() error {
+	if err := clearSourceDefaults(); err != nil {
+		return err
+	}
+	return stdoutPrintln("server remote cleared")
 }
 
 type serverUpOptions struct {

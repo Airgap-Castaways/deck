@@ -7,23 +7,23 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 ## Default local flow
 
 - `init`: create starter workflow files under `workflows/`
-- `list`: list available scenarios from the local workspace or the saved remote source
-- `completion`: generate shell completion for bash, zsh, fish, and PowerShell
-- `version`: show the current `deck` build version and metadata
 - `lint`: validate a workflow file or workspace against the workflow and step schemas
 - `prepare`: gather artifacts into `outputs/`, refresh the local `deck` binary, and write `.deck/manifest.json`
 - `plan`: inspect which apply steps would run or skip before execution
 - `apply`: execute the `apply` workflow locally
 
-## Optional site-local helpers
+## Additional helpers
 
-- `source set`: save the default remote source URL used for server-backed scenario lookup
-- `source show`: show the effective default remote source URL
-- `source unset`: clear the saved default remote source URL
+- `list`: list available scenarios from the local workspace or the saved remote server
+- `server remote set`: save the default remote server URL used for server-backed scenario lookup
+- `server remote show`: show the effective default remote server URL
+- `server remote unset`: clear the saved remote server URL
 - `server up`: expose a prepared bundle root over HTTP inside the air gap when a shared local source is useful
 - `server down`: stop a daemonized local server started with `deck server up -d`
-- `server health`: check `/healthz` on an explicit or saved source URL
+- `server health`: check `/healthz` on an explicit server or the saved remote server URL
 - `server logs`: read local server audit logs from file or journal
+- `version`: show the current `deck` build version and metadata
+- `completion`: generate shell completion for bash, zsh, fish, and PowerShell
 
 ## Optional AI-ready authoring helper
 
@@ -91,7 +91,7 @@ deck apply --scenario apply --source local
 Optional site-local helper example:
 
 ```bash
-deck source set http://127.0.0.1:8080
+deck server remote set http://127.0.0.1:8080
 deck list --source server
 deck server up --root ./bundle --addr :8080
 deck server health --server http://127.0.0.1:8080
@@ -139,7 +139,7 @@ Optional ask augmentation config example:
 - `prepare` expects a workflow tree rooted at `workflows/` with entrypoints under `workflows/scenarios/`.
 - scenario entrypoints live under `workflows/scenarios/`
 - `plan` and `apply` accept `--scenario` for named scenarios and `--workflow` for an explicit path or URL.
-- `--source` controls whether `--scenario` resolves from the local workspace or the saved remote source.
+- `--source` controls whether `--scenario` resolves from the local workspace or the saved remote server.
 - workspace-local metadata stays under `./.deck/`, while user-global config, state, cache, and run history use standard XDG locations.
 - `ask` workspace context lives under `./.deck/ask/`, while saved ask auth/defaults live under `~/.config/deck/config.json` as the top-level `ask` object.
 - `deck ask plan` writes plan artifacts under `./.deck/plan/` by default (`<timestamp>-<slug>.md`, `<timestamp>-<slug>.json`, `latest.md`, `latest.json`).

@@ -29,7 +29,7 @@ type scenarioEntry struct {
 func newListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List available scenarios from local workflows or the saved remote source",
+		Short: "List available scenarios from local workflows or the saved remote server",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			source, err := cmdFlagValue(cmd, "source")
@@ -108,7 +108,7 @@ func discoverScenarioEntries(source string) ([]scenarioEntry, error) {
 				entries = append(entries, serverEntries...)
 			}
 		case source == scenarioSourceServer:
-			return nil, errors.New("saved source is required; set one with \"deck source set <url>\"")
+			return nil, errors.New("saved remote server URL is required; set one with \"deck server remote set <url>\"")
 		}
 	}
 

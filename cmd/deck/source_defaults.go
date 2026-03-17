@@ -49,7 +49,7 @@ func resolveSourceURL(explicit string) (string, string, error) {
 		return "", "", nil
 	}
 	if err := validateSourceURL(defaults.URL); err != nil {
-		return "", "", fmt.Errorf("invalid saved default source: %w", err)
+		return "", "", fmt.Errorf("invalid saved remote server URL: %w", err)
 	}
 	return defaults.URL, "config", nil
 }
@@ -60,7 +60,7 @@ func resolveRequiredSourceURL(explicit string) (string, string, error) {
 		return "", "", err
 	}
 	if resolved == "" {
-		return "", "", errors.New("--server is required or set a default with \"deck source set <url>\"")
+		return "", "", errors.New("--server is required or set a default with \"deck server remote set <url>\"")
 	}
 	return resolved, source, nil
 }

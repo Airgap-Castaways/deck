@@ -74,40 +74,40 @@ func TestHealth(t *testing.T) {
 	})
 }
 
-func TestSourceDefaultCommands(t *testing.T) {
+func TestServerRemoteCommands(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "server.json")
 	t.Setenv("DECK_SERVER_CONFIG_PATH", configPath)
 
-	out, err := runWithCapturedStdout([]string{"source", "show"})
+	out, err := runWithCapturedStdout([]string{"server", "remote", "show"})
 	if err != nil {
-		t.Fatalf("source show failed: %v", err)
+		t.Fatalf("server remote show failed: %v", err)
 	}
-	if out != "source=\norigin=none\n" {
-		t.Fatalf("unexpected empty source show output: %q", out)
+	if out != "remote=\norigin=none\n" {
+		t.Fatalf("unexpected empty remote show output: %q", out)
 	}
 
-	out, err = runWithCapturedStdout([]string{"source", "set", "http://127.0.0.1:8080/"})
+	out, err = runWithCapturedStdout([]string{"server", "remote", "set", "http://127.0.0.1:8080/"})
 	if err != nil {
-		t.Fatalf("source set failed: %v", err)
+		t.Fatalf("server remote set failed: %v", err)
 	}
-	if out != "source default set: http://127.0.0.1:8080\n" {
-		t.Fatalf("unexpected source set output: %q", out)
+	if out != "server remote set: http://127.0.0.1:8080\n" {
+		t.Fatalf("unexpected server remote set output: %q", out)
 	}
 
-	out, err = runWithCapturedStdout([]string{"source", "show"})
+	out, err = runWithCapturedStdout([]string{"server", "remote", "show"})
 	if err != nil {
-		t.Fatalf("source show after set failed: %v", err)
+		t.Fatalf("server remote show after set failed: %v", err)
 	}
-	if out != "source=http://127.0.0.1:8080\norigin=config\n" {
-		t.Fatalf("unexpected saved source show output: %q", out)
+	if out != "remote=http://127.0.0.1:8080\norigin=config\n" {
+		t.Fatalf("unexpected saved remote show output: %q", out)
 	}
 
-	out, err = runWithCapturedStdout([]string{"source", "unset"})
+	out, err = runWithCapturedStdout([]string{"server", "remote", "unset"})
 	if err != nil {
-		t.Fatalf("source unset failed: %v", err)
+		t.Fatalf("server remote unset failed: %v", err)
 	}
-	if out != "source default cleared\n" {
-		t.Fatalf("unexpected source unset output: %q", out)
+	if out != "server remote cleared\n" {
+		t.Fatalf("unexpected server remote unset output: %q", out)
 	}
 	if _, statErr := os.Stat(configPath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected config file removal, got %v", statErr)
@@ -146,8 +146,8 @@ func TestHealthUsesSavedDefaultServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if _, err := runWithCapturedStdout([]string{"source", "set", srv.URL}); err != nil {
-		t.Fatalf("source set failed: %v", err)
+	if _, err := runWithCapturedStdout([]string{"server", "remote", "set", srv.URL}); err != nil {
+		t.Fatalf("server remote set failed: %v", err)
 	}
 
 	out, err := runWithCapturedStdout([]string{"server", "health"})
@@ -313,13 +313,23 @@ func TestLegacyServiceSurfaceRemoved(t *testing.T) {
 	}
 }
 
-func TestSourceUsage(t *testing.T) {
-	out, err := runWithCapturedStdout([]string{"source"})
+func TestServerRemoteUsage(t *testing.T) {
+	out, err := runWithCapturedStdout([]string{"server", "remote"})
 	if err != nil {
 		t.Fatalf("expected help output, got %v", err)
 	}
-	if !strings.Contains(out, "deck source [command]") {
+	if !strings.Contains(out, "deck server remote [command]") {
 		t.Fatalf("unexpected output: %q", out)
+	}
+}
+
+func TestSourceCommandRemoved(t *testing.T) {
+	err := run([]string{"source"})
+	if err == nil {
+		t.Fatalf("expected unknown command error")
+	}
+	if !strings.Contains(err.Error(), `unknown command "source" for "deck"`) {
+		t.Fatalf("unexpected error: %q", err.Error())
 	}
 }
 
