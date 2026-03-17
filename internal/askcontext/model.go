@@ -97,5 +97,21 @@ type StepKindContext struct {
 	AllowedRoles []string
 	Actions      []string
 	Outputs      []string
+	MinimalShape string
+	CuratedShape string
+	KeyFields    []StepFieldContext
+	ActionGuides []StepActionContext
 	Notes        []string
+}
+
+type StepFieldContext struct {
+	Path        string
+	Description string
+	Example     string
+}
+
+type StepActionContext struct {
+	Action  string
+	Note    string
+	Example string
 }

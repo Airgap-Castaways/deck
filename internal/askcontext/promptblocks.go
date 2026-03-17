@@ -34,6 +34,7 @@ func PolicyPromptBlock() PromptBlock {
 	b.WriteString("Workflow authoring policy:\n")
 	b.WriteString("- Prefer typed steps over Command whenever a typed step expresses the change clearly.\n")
 	b.WriteString("- Prefer workflows/vars.yaml for repeated configurable values instead of scattering literals across steps.\n")
+	b.WriteString("- Do not replace schema-typed arrays or objects with string templates. Keep arrays as YAML arrays and objects as YAML objects so schema validation still passes.\n")
 	b.WriteString("- Split repeated logic into reusable components and import them under phases[].imports.\n")
 	b.WriteString("- Use prepare for online collection or offline artifact preparation and apply for local node changes.\n")
 	return PromptBlock{Topic: TopicPolicy, Title: "Workflow authoring policy", Content: strings.TrimSpace(b.String())}
@@ -127,6 +128,7 @@ func VarsGuidanceBlock() string {
 	b.WriteString(strings.Join(manifest.Vars.PreferFor, ", "))
 	b.WriteString("\n- Avoid vars.yaml for: ")
 	b.WriteString(strings.Join(manifest.Vars.AvoidFor, ", "))
+	b.WriteString("\n- Keep schema-typed arrays/objects inline as real YAML arrays/objects when the step schema requires them.")
 	b.WriteString("\n- Example vars keys: ")
 	b.WriteString(strings.Join(manifest.Vars.ExampleKeys, ", "))
 	return strings.TrimSpace(b.String())
@@ -185,12 +187,62 @@ func RelevantStepKindsBlock(prompt string) string {
 			b.WriteString(strings.Join(step.Actions, ", "))
 		}
 		b.WriteString("\n")
+		for _, field := range step.KeyFields {
+			b.WriteString("  - ")
+			b.WriteString(field.Path)
+			b.WriteString(": ")
+			b.WriteString(field.Description)
+			if field.Example != "" {
+				b.WriteString(" Example: ")
+				b.WriteString(field.Example)
+			}
+			b.WriteString("\n")
+		}
+		if step.Kind == "Packages" {
+			b.WriteString("  - spec.packages must stay a real YAML array, not a quoted template string.\n")
+		}
+		if step.Kind == "Repository" {
+			b.WriteString("  - spec.repositories must stay a real YAML array of repository objects, not a scalar shortcut.\n")
+		}
+		for _, action := range step.ActionGuides {
+			if !containsAction(step.Actions, action.Action) {
+				continue
+			}
+			b.WriteString("  - action ")
+			b.WriteString(action.Action)
+			if action.Note != "" {
+				b.WriteString(": ")
+				b.WriteString(action.Note)
+			}
+			b.WriteString("\n")
+			if action.Example != "" {
+				b.WriteString("    example:\n")
+				for _, line := range strings.Split(action.Example, "\n") {
+					line = strings.TrimRight(line, " ")
+					if strings.TrimSpace(line) == "" {
+						continue
+					}
+					b.WriteString("      ")
+					b.WriteString(line)
+					b.WriteString("\n")
+				}
+			}
+		}
 	}
 	return strings.TrimSpace(b.String())
 }
 
 func RelevantStepKindsPromptBlock(prompt string) PromptBlock {
 	return PromptBlock{Topic: TopicTypedSteps, Title: "Relevant typed steps", Content: RelevantStepKindsBlock(prompt)}
+}
+
+func containsAction(actions []string, want string) bool {
+	for _, action := range actions {
+		if action == want {
+			return true
+		}
+	}
+	return false
 }
 
 func RelevantStepKinds(prompt string) []StepKindContext {

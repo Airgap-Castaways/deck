@@ -86,7 +86,7 @@ func buildManifest() Manifest {
 			Path:        pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowVarsRel),
 			Summary:     "Prefer workflows/vars.yaml for configurable values that would otherwise be repeated inline across steps or files.",
 			PreferFor:   []string{"package lists", "repository URLs", "service names", "paths and ports that may vary by environment"},
-			AvoidFor:    []string{"runtime-only outputs registered from previous steps", "tiny one-off literals with no reuse value"},
+			AvoidFor:    []string{"runtime-only outputs registered from previous steps", "tiny one-off literals with no reuse value", "typed step fields whose schema expects a native YAML array or object but the template engine would turn into a string"},
 			ExampleKeys: []string{"dockerRepoURL", "dockerPackages", "containerRuntimeConfigPath"},
 		},
 		StepKinds: buildStepKinds(),
@@ -121,6 +121,10 @@ func buildStepKinds() []StepKindContext {
 			AllowedRoles: sortedKeys(contract.Roles),
 			Actions:      sortedActionKeys(contract.Actions),
 			Outputs:      sortedKeys(contract.Outputs),
+			MinimalShape: strings.TrimSpace(meta.MinimalExample),
+			CuratedShape: strings.TrimSpace(meta.CuratedExample),
+			KeyFields:    buildStepKeyFields(kind, meta),
+			ActionGuides: buildStepActionGuides(meta),
 			Notes:        append([]string(nil), meta.Notes...),
 		}
 		for _, action := range ctx.Actions {
@@ -128,6 +132,45 @@ func buildStepKinds() []StepKindContext {
 		}
 		ctx.Outputs = dedupe(ctx.Outputs)
 		out = append(out, ctx)
+	}
+	return out
+}
+
+func buildStepKeyFields(kind string, meta schemadoc.ToolMetadata) []StepFieldContext {
+	preferred := map[string][]string{
+		"Packages":   {"spec.action", "spec.packages", "spec.source", "spec.distro", "spec.repo", "spec.excludeRepos"},
+		"Repository": {"spec.action", "spec.format", "spec.path", "spec.repositories", "spec.refreshCache", "spec.replaceExisting"},
+		"Service":    {"spec.name", "spec.action", "spec.enabled"},
+		"File":       {"spec.action", "spec.path", "spec.content", "spec.source", "spec.output"},
+	}
+	keys := preferred[kind]
+	if len(keys) == 0 {
+		keys = []string{"spec.action", "spec.path", "spec.source", "spec.content"}
+	}
+	out := make([]StepFieldContext, 0, len(keys))
+	for _, key := range keys {
+		field, ok := meta.FieldDocs[key]
+		if !ok {
+			continue
+		}
+		out = append(out, StepFieldContext{Path: key, Description: field.Description, Example: field.Example})
+	}
+	return out
+}
+
+func buildStepActionGuides(meta schemadoc.ToolMetadata) []StepActionContext {
+	keys := make([]string, 0, len(meta.ActionExamples))
+	for action := range meta.ActionExamples {
+		keys = append(keys, action)
+	}
+	sort.Strings(keys)
+	out := make([]StepActionContext, 0, len(keys))
+	for _, action := range keys {
+		out = append(out, StepActionContext{
+			Action:  action,
+			Note:    strings.TrimSpace(meta.ActionNotes[action]),
+			Example: strings.TrimSpace(meta.ActionExamples[action]),
+		})
 	}
 	return out
 }

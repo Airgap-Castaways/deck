@@ -138,6 +138,26 @@ func TestRelevantStepKindsMatchesDockerRequest(t *testing.T) {
 	if !contains(joined, "Packages") {
 		t.Fatalf("expected Packages in relevant steps, got %v", joined)
 	}
+	if !contains(joined, "Repository") {
+		t.Fatalf("expected Repository in relevant steps, got %v", joined)
+	}
+}
+
+func TestRelevantStepKindsBlockIncludesTypedShapeGuidance(t *testing.T) {
+	block := RelevantStepKindsBlock("install docker packages on rocky9 using repository")
+	for _, want := range []string{
+		"spec.packages",
+		"real YAML array",
+		"spec.repositories",
+		"action install",
+		"action configure",
+		"source:\n",
+		"spec.format",
+	} {
+		if !strings.Contains(block, want) {
+			t.Fatalf("expected %q in typed step guidance block, got %q", want, block)
+		}
+	}
 }
 
 func TestDocBlocksExposeAskContext(t *testing.T) {
