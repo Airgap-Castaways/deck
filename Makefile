@@ -8,6 +8,7 @@ GOLANGCI_LINT_VERSION ?= latest
 GOVULNCHECK ?= $(BIN_DIR)/govulncheck
 GOVULNCHECK_PKG ?= golang.org/x/vuln/cmd/govulncheck
 GOVULNCHECK_VERSION ?= v1.1.4
+GOVULNCHECK_GOTOOLCHAIN ?= go1.25.8
 BUILDINFO_PKG ?= github.com/taedi90/deck/internal/buildinfo
 VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf unknown)
@@ -44,14 +45,14 @@ lint:
 vuln:
 	@if [ ! -x "$(GOVULNCHECK)" ]; then \
 		mkdir -p "$(BIN_DIR)"; \
-		GOBIN="$(abspath $(BIN_DIR))" $(GO) install $(GOVULNCHECK_PKG)@$(GOVULNCHECK_VERSION); \
+		GOBIN="$(abspath $(BIN_DIR))" GOTOOLCHAIN="$(GOVULNCHECK_GOTOOLCHAIN)" $(GO) install $(GOVULNCHECK_PKG)@$(GOVULNCHECK_VERSION); \
 	fi
 	$(GOVULNCHECK) ./...
 
 vuln-ai:
 	@if [ ! -x "$(GOVULNCHECK)" ]; then \
 		mkdir -p "$(BIN_DIR)"; \
-		GOBIN="$(abspath $(BIN_DIR))" $(GO) install $(GOVULNCHECK_PKG)@$(GOVULNCHECK_VERSION); \
+		GOBIN="$(abspath $(BIN_DIR))" GOTOOLCHAIN="$(GOVULNCHECK_GOTOOLCHAIN)" $(GO) install $(GOVULNCHECK_PKG)@$(GOVULNCHECK_VERSION); \
 	fi
 	$(GOVULNCHECK) -tags ai ./...
 
