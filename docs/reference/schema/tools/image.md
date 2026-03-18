@@ -151,5 +151,4 @@ spec:
 
 ## Related
 
-- `../index.md`
-- `../examples/image.md`
+- [Schema Reference](../README.md)

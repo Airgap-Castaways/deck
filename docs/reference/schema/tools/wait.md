@@ -245,5 +245,4 @@ spec:
 
 ## Related
 
-- `../index.md`
-- `../examples/wait.md`
+- [Schema Reference](../README.md)

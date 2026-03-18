@@ -66,5 +66,4 @@ spec:
 
 ## Related
 
-- `../index.md`
-- `../examples/package-cache.md`
+- [Schema Reference](../README.md)

@@ -17,8 +17,19 @@
 - Runtime: Linux target, Vagrant VM for CI E2E
 - Language: Go
 - Package manager: Go modules
-- Test runners: `go test`, `deck workflow validate`, Vagrant scenario tests
+- Test runners: `make test`, `make test-ai`, Vagrant scenario tests
 - Formatting/linting: `gofmt`, `golangci-lint`
+
+## Testing
+
+| Change area | Commands |
+|---|---|
+| Any Go change | `make test && make lint` |
+| AI build tag (`//go:build ai`) | `make test-ai` |
+| Schema gen (`cmd/schema-gen/`, `internal/schemadoc/`) | `make generate && git diff --exit-code` |
+| Step kind logic or workflow YAML | `make build` then `deck lint` against files in `test/workflows/scenarios/` and `docs/user-guide/examples/` |
+| CLI surface (`cmd/deck/`) | `make build && ./bin/deck --help && ./bin/deck version` |
+| Full CI parity (Linux, Vagrant required) | `make build lint test test-ai` then Vagrant E2E under `test/e2e/vagrant/` |
 
 ## Coding Principles
 1) Think before coding

@@ -65,5 +65,4 @@ spec:
 
 ## Related
 
-- `../index.md`
-- `../examples/kernel-module.md`
+- [Schema Reference](../README.md)

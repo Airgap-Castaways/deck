@@ -56,15 +56,26 @@ These commands are additive. They do not replace the default local execution pat
 
 ## Shell completion
 
-- `completion` is the only completion entrypoint, so normal command stdout stays reserved for command results.
-- Supported shells: `bash`, `zsh`, `fish`, `powershell`
+`deck completion` is the only completion entrypoint. Supported shells: `bash`, `zsh`, `fish`, `powershell`.
+
+### Immediate sourcing
+
+To enable completion for your current shell session:
 
 ```bash
-deck completion bash
-deck completion zsh
-deck completion fish
-deck completion powershell
+source <(deck completion bash)
+source <(deck completion zsh)
+deck completion fish | source
 ```
+
+### Persistent registration
+
+To enable completion for all future shell sessions, add the sourcing command to your shell's initialization file:
+
+- **Bash**: Add `source <(deck completion bash)` to `~/.bashrc`.
+- **Zsh**: Add `source <(deck completion zsh)` to `~/.zshrc`.
+- **Fish**: Create a file at `~/.config/fish/completions/deck.fish` containing `deck completion fish | source`.
+- **PowerShell**: Add `deck completion powershell | Out-String | Invoke-Expression` to your `$PROFILE`.
 
 ## Other lifecycle commands
 

@@ -66,5 +66,4 @@ spec:
 
 ## Related
 
-- `../index.md`
-- `../examples/service.md`
+- [Schema Reference](../README.md)

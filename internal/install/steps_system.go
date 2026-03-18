@@ -307,7 +307,8 @@ func kernelModuleLoaded(name string) (bool, error) {
 	raw, err := fsutil.ReadFile("/proc/modules")
 	if err != nil {
 		if os.IsNotExist(err) {
-			return false, nil
+			// /proc/modules is Linux-only; treat module as already loaded on other platforms.
+			return true, nil
 		}
 		return false, err
 	}

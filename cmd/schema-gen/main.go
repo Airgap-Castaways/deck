@@ -69,6 +69,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	componentFragmentSchemaMap, err := readSchemaMap(componentFragmentSchemaPath)
+	if err != nil {
+		return err
+	}
 	toolDefinitionSchemaMap, err := readSchemaMap(toolDefinitionSchemaPath)
 	if err != nil {
 		return err
@@ -82,7 +86,7 @@ func run() error {
 		return err
 	}
 
-	if err := writeGeneratedSchemaDocs(root, workflowSchemaMap, toolDefinitionSchemaMap, toolPages); err != nil {
+	if err := writeGeneratedSchemaDocs(root, workflowSchemaMap, componentFragmentSchemaMap, toolDefinitionSchemaMap, toolPages); err != nil {
 		return err
 	}
 	if err := writeFile(filepath.Join(root, "schemas", "README.md"), renderSchemasReadme(tools)); err != nil {
@@ -94,28 +98,25 @@ func run() error {
 	return nil
 }
 
-func writeGeneratedSchemaDocs(root string, workflowSchema, toolDefinitionSchema map[string]any, toolPages []schemadoc.PageInput) error {
-	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "index.md"), schemadoc.RenderSchemaIndex("schemas/deck-workflow.schema.json", "schemas/deck-tooldefinition.schema.json", toolPages)); err != nil {
+func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSchema, toolDefinitionSchema map[string]any, toolPages []schemadoc.PageInput) error {
+	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "README.md"), schemadoc.RenderSchemaIndex("schemas/deck-workflow.schema.json", "schemas/deck-tooldefinition.schema.json", toolPages)); err != nil {
 		return err
 	}
 	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "workflow.md"), schemadoc.RenderWorkflowPage("schemas/deck-workflow.schema.json", workflowSchema, schemadoc.WorkflowMeta())); err != nil {
 		return err
 	}
+	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "component-fragment.md"), schemadoc.RenderComponentFragmentPage("schemas/deck-component-fragment.schema.json", componentFragmentSchema, schemadoc.ComponentFragmentMeta())); err != nil {
+		return err
+	}
 	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "tool-definition.md"), schemadoc.RenderToolDefinitionPage("schemas/deck-tooldefinition.schema.json", toolDefinitionSchema, schemadoc.ToolDefinitionMeta())); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "tools", "index.md"), schemadoc.RenderToolsIndex(toolPages)); err != nil {
-		return err
-	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "examples", "index.md"), schemadoc.RenderExamplesIndex(toolPages)); err != nil {
+	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "tools", "README.md"), schemadoc.RenderToolsIndex(toolPages)); err != nil {
 		return err
 	}
 	for _, page := range toolPages {
 		name := strings.TrimSuffix(filepath.Base(page.SchemaPath), ".schema.json") + ".md"
 		if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "tools", name), schemadoc.RenderToolPage(page)); err != nil {
-			return err
-		}
-		if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "examples", name), schemadoc.RenderToolExamplePage(page)); err != nil {
 			return err
 		}
 	}

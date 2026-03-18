@@ -60,5 +60,4 @@ spec:
 
 ## Related
 
-- `../index.md`
-- `../examples/sysctl.md`
+- [Schema Reference](../README.md)

@@ -2,7 +2,7 @@
 
 This document explains the architectural shape of `deck`.
 
-`deck` is a local-first workflow tool for air-gapped and operationally constrained environments. It is not built as a general-purpose IaC control plane. The design starts from a simpler assumption: collect what you need while connected, carry it across the boundary as an explicit bundle, and execute locally on the machine that needs the change.
+`deck` is a local-first workflow tool for air-gapped and operationally constrained environments. The design starts from a simple assumption: collect what you need while connected, carry it across the boundary as an explicit, verifiable bundle, and execute it locally on the machine that needs the change.
 
 For workflow fields, CLI flags, and bundle layout details, see the reference docs. This document focuses on the larger structure behind those details.
 
@@ -251,7 +251,6 @@ This keeps the system easier to recover and reason about during real operations.
 - a generic cloud provisioning framework
 - a long-lived reconciliation controller
 - an SSH-first orchestration tool
-- a replacement for every existing IaC or CM system
 
 It is a structured workflow runner for a narrower class of operational problems where disconnected execution, explicit handoff, and operator clarity matter more than broad platform coverage.
 
@@ -283,7 +282,7 @@ New capabilities should follow the same shape.
 
 ## Related references
 
-- `docs/concepts/why-deck.md`
-- `docs/reference/workflow-model.md`
-- `docs/reference/bundle-layout.md`
-- `docs/reference/cli.md`
+- [Why Deck?](why-deck.md)
+- [Workflow Model](../reference/workflow-model.md)
+- [Bundle Layout](../reference/bundle-layout.md)
+- [CLI Reference](../reference/cli.md)

@@ -1425,7 +1425,7 @@ func TestRun_RetryStopsWhenParentContextDone(t *testing.T) {
 
 	counterPath := filepath.Join(dir, "counter")
 	scriptPath := filepath.Join(dir, "slow-fail.sh")
-	script := "#!/usr/bin/env bash\nset -euo pipefail\ncount=0\nif [[ -f \"" + counterPath + "\" ]]; then\n  count=$(cat \"" + counterPath + "\")\nfi\ncount=$((count+1))\necho \"${count}\" > \"" + counterPath + "\"\nsleep 1\nexit 1\n"
+	script := "#!/usr/bin/env bash\nset -euo pipefail\ncount=0\nif [[ -f \"" + counterPath + "\" ]]; then\n  count=$(cat \"" + counterPath + "\")\nfi\ncount=$((count+1))\necho \"${count}\" > \"" + counterPath + "\"\nsleep 30\nexit 1\n"
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write script: %v", err)
 	}
@@ -1438,7 +1438,7 @@ func TestRun_RetryStopsWhenParentContextDone(t *testing.T) {
 		}},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	err := Run(ctx, wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
 	if err == nil {

@@ -77,5 +77,4 @@ spec:
 
 ## Related
 
-- `../index.md`
-- `../examples/systemd-unit.md`
+- [Schema Reference](../README.md)

@@ -29,10 +29,6 @@ func TestGeneratedToolPagesExist(t *testing.T) {
 		if _, err := os.Stat(page); err != nil {
 			t.Fatalf("tool page missing for %s: %v", kind, err)
 		}
-		examplesPage := filepath.Join("..", "docs", "reference", "schema", "examples", trimSchemaSuffix(file)+".md")
-		if _, err := os.Stat(examplesPage); err != nil {
-			t.Fatalf("examples page missing for %s: %v", kind, err)
-		}
 	}
 }
 

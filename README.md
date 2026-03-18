@@ -4,132 +4,83 @@
 
 [Korean README](./README.ko.md) | [Documentation](./docs/README.md)
 
-`deck` is a workflow tool built for air-gapped and operationally constrained environments. Write a YAML workflow, lint it, bundle everything the site needs, carry it in, and run it locally on the target machine.
+**Structured workflows for air-gapped operations : prepare, bundle, and apply in one binary!**
 
 <br clear="right" />
 
-## Why deck exists
+## What is deck?
 
-Operational procedures for disconnected sites — Kubernetes bootstraps, package installs, host configuration — often start as shell scripts and grow until they are too large to review confidently. `deck` gives those procedures a cleaner shape: typed steps with visible intent, lint validation before transport, and a self-contained bundle that travels with the workflow.
+Operational procedures for disconnected sites—such as Kubernetes bootstraps, package installations, and host configuration—often start as shell scripts. Over time, these scripts grow until they become too large and complex to review confidently. 
 
-It is built for sites with no SSH-driven orchestration, no internet access, and a local human in the loop. If your environment looks more like a cloud deployment with live APIs and central controllers, deck is probably not the right fit.
-
-## Core flow
-
-1. Write or adapt YAML workflows for the maintenance session.
-2. Validate the workflow shape before transport or execution.
-3. Build a self-contained bundle with the workflow, artifacts, and `deck` binary.
-4. Carry the bundle into the site through the approved path.
-5. Run `deck` locally on the machine that needs the change.
-
-## Minimal workflow
-
-Prefer typed steps for common host changes. Keep `Command` for the cases where no supported step kind fits yet.
-
-```yaml
-role: apply
-version: v1alpha1
-steps:
-  - id: write-repo-config
-    apiVersion: deck/v1alpha1
-    kind: File
-    spec:
-      action: write
-      path: /etc/example.repo
-      content: |
-        [offline-base]
-        name=offline-base
-        baseurl=file:///srv/offline-repo
-        enabled=1
-        gpgcheck=0
-```
-
-## Install
-
-Requirements:
-
-- Go 1.23+
-- Linux target environment
-
-```bash
-# run from source
-go run ./cmd/deck --help
-
-# generate shell completion
-go run ./cmd/deck completion bash
-
-# show build version
-go run ./cmd/deck version
-
-# install the binary
-go install ./cmd/deck
-
-# verify
-deck --help
-deck version
-```
+`deck` provides a cleaner, structured alternative. It replaces fragile Bash scripts with typed steps, validates your workflows before execution, and packs everything needed into a self-contained bundle that can be securely transported and run locally on the target machine.
 
 ## Quick Start
 
+Create a workflow, validate it, bundle it, and run it on your target machine.
+
 ```bash
+# 1. Initialize a new demo project
 deck init --out ./demo
-deck lint
-deck lint --file ./demo/workflows/scenarios/apply.yaml
 
 cd ./demo
+
+# 2. Validate the generated workflows
+deck lint
+
+# 3. Prepare artifacts defined in the workflows
 deck prepare
+
+# 4. Build a self-contained bundle
 deck bundle build --out ./bundle.tar
+
+# 5. Run the workflow locally on the target machine
 deck apply
 ```
 
-Start with `docs/tutorials/quick-start.md` for the guided walkthrough.
+For a detailed walkthrough, start with the [Quick Start Guide](docs/getting-started/quick-start.md).
 
-## Shell completion
+## Core Features
 
-```bash
-deck completion bash
-deck completion zsh
-deck completion fish
-deck completion powershell
-```
+- **Typed steps**: File, Package, Service — step kinds that make intent visible without reading through shell syntax.
+- **Pre-flight validation**: Lint catches schema errors before you carry the bundle into the site.
+- **Self-contained bundle**: Workflows, artifacts, and the `deck` binary in a single archive. No dependency surprises on site.
+- **Air-gap native**: No SSH, no control plane, no internet access assumed at execution time.
 
-Completion output goes to stdout. Help is shown only when requested with `--help`. Command and flag errors are written to stderr without automatic usage output.
+## Installation
 
-## Learn more
+Requirements:
 
-- Docs home: `docs/README.md`
-- Why deck: `docs/concepts/why-deck.md`
-- Workflow model: `docs/reference/workflow-model.md`
-- CLI reference: `docs/reference/cli.md`
-- Versioning: `docs/development/versioning.md`
-- Example workflows: `docs/examples/README.md`
-
-## Contributing and validation
-
-Before sending changes, run the checks that match your work:
+- Go 1.25+ (Any OS for build and prepare)
+- Linux target environment (RHEL, Ubuntu) for the `apply` step
 
 ```bash
-go build -o ./deck ./cmd/deck
-./deck --help
-./deck completion bash
-./deck completion zsh
-./deck completion fish
-./deck completion powershell
-go test ./...
-./deck lint
-./deck lint --file docs/examples/vagrant-smoke-install.yaml
-./deck lint --file test/workflows/scenarios/control-plane-bootstrap.yaml
-./deck lint --file test/workflows/scenarios/worker-join.yaml
-./deck lint --file test/workflows/scenarios/node-reset.yaml
+# Build and install from source
+go install ./cmd/deck
 
-# linux host with libvirt-backed vagrant
-bash test/e2e/vagrant/run-scenario.sh --scenario k8s-control-plane-bootstrap
-bash test/e2e/vagrant/run-scenario.sh --scenario k8s-worker-join
-bash test/e2e/vagrant/run-scenario.sh --scenario k8s-node-reset
+# Verify
+deck version
 ```
 
-The maintained Kubernetes regression layout lives under `test/workflows/`, with scenario entrypoints in `test/workflows/scenarios/`, reusable fragments in `test/workflows/components/`, and shared defaults in `test/workflows/vars.yaml`.
-Local Vagrant runs keep machine state in `test/vagrant/.vagrant/`, reuse scenario caches under `test/artifacts/cache/bundles/<scenario>/`, and reuse run artifacts under `test/artifacts/runs/<scenario>/<run-id>/` unless you choose a different `--art-dir` or run with `--fresh`.
+### Shell Completion
+
+To enable shell completion in your current session, run:
+
+```bash
+source <(deck completion bash) # for bash
+source <(deck completion zsh)  # for zsh
+deck completion fish | source  # for fish
+```
+
+To make it persistent, add the relevant command to your shell's startup file (e.g., `~/.bashrc` or `~/.zshrc`). For detailed instructions for all supported shells, see the [CLI Reference](docs/reference/cli.md#shell-completion).
+
+## Documentation
+
+- [Getting Started](docs/getting-started/README.md)
+- [Core Concepts](docs/core-concepts/README.md)
+- [User Guide](docs/user-guide/README.md)
+- [Reference](docs/reference/README.md)
+- [Contributing](docs/contributing/README.md)
+
 ## License
 
 Apache-2.0. See `LICENSE`.

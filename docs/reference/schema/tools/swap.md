@@ -56,5 +56,4 @@ spec:
 
 ## Related
 
-- `../index.md`
-- `../examples/swap.md`
+- [Schema Reference](../README.md)

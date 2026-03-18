@@ -69,5 +69,4 @@ spec:
 
 ## Related
 
-- `../index.md`
-- `../examples/containerd.md`
+- [Schema Reference](../README.md)

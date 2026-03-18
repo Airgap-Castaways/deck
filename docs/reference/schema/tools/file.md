@@ -251,5 +251,4 @@ spec:
 
 ## Related
 
-- `../index.md`
-- `../examples/file.md`
+- [Schema Reference](../README.md)
