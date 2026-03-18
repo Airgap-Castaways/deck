@@ -56,6 +56,7 @@ func TestRunArtifactJobGroupParallelism(t *testing.T) {
 func TestRunArtifactJobGroupCancelsSiblingsOnFailure(t *testing.T) {
 	canceled := make(chan struct{}, 1)
 	started := make(chan struct{}, 1)
+	releaseFailure := make(chan struct{})
 	group := artifactJobGroup{
 		Kind:      "package",
 		Name:      "cancel",
@@ -64,6 +65,7 @@ func TestRunArtifactJobGroupCancelsSiblingsOnFailure(t *testing.T) {
 			{
 				Label: "fail-fast",
 				Run: func(ctx context.Context) ([]string, error) {
+					<-releaseFailure
 					return nil, fmt.Errorf("boom")
 				},
 			},
@@ -90,6 +92,7 @@ func TestRunArtifactJobGroupCancelsSiblingsOnFailure(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatalf("expected sibling job to start")
 	}
+	close(releaseFailure)
 	select {
 	case <-canceled:
 	case <-time.After(2 * time.Second):
