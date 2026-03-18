@@ -66,8 +66,6 @@ func runPrepareWithOptions(cmd *cobra.Command, opts prepareOptions) error {
 		Clean:        opts.clean,
 		VarOverrides: varsAsAnyMap(opts.varOverrides),
 		Stdout:       stdoutWriter(),
-		Diagnosticf: func(level int, format string, args ...any) error {
-			return verbosef(level, format, args...)
-		},
+		Diagnosticf:  verbosef,
 	})
 }

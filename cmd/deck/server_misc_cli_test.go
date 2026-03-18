@@ -768,7 +768,7 @@ func TestRunWorkflowBundleVerifyJSON(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "deck: bundle verify manifestEntries=") {
+	if !strings.Contains(res.stderr, "deck: bundle verify manifestEntries=1 files=1 images=0 packages=0 other=0") {
 		t.Fatalf("expected manifest count diagnostic, got %q", res.stderr)
 	}
 }
@@ -794,7 +794,7 @@ func TestRunWorkflowBundleBuildSuccess(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected build success, got %v", res.err)
 	}
-	for _, want := range []string{"deck: bundle build manifest=", "entries=1", "deck: bundle build archiveSize="} {
+	for _, want := range []string{"deck: bundle build manifest=", "entries=1", "deck: bundle build manifest files=1 images=0 packages=0 other=0", "deck: bundle build archiveSize="} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 		}

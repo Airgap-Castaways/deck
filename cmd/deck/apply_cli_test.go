@@ -551,6 +551,16 @@ func TestPlanJSONAndVerboseDiagnostics(t *testing.T) {
 	if step.ID != "guarded" || step.Action != "run" || step.When != "vars.run == \"yes\"" || step.Retry != 2 || step.Timeout != "30s" {
 		t.Fatalf("unexpected step payload: %+v", step)
 	}
+
+	res = execute([]string{"plan", "--workflow", wfPath, "--v=3", "--var", "run=yes"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	for _, want := range []string{"deck: plan workflowVars=run runtimeVars=- completedSteps=0", "deck: plan stepEval step=guarded whenEvaluated=true registerKeys=-"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+		}
+	}
 }
 
 func TestApplyVerboseDiagnostics(t *testing.T) {

@@ -71,6 +71,12 @@ Global `--v=<n>` writes diagnostics to stderr without changing stdout result con
 - `--v=2`: per-step apply diagnostics, plan evaluation details, and deeper bundle/prepare/health inspection counts
 - `--v=3`: contract notes, lint finding hints, and the most detailed plan/lint traces
 
+In practice:
+
+- `deck plan --v=3` adds workflow/runtime var traces and per-step evaluation details
+- `deck prepare --v=2` adds artifact group and cache reuse/fetch diagnostics
+- `deck bundle build --v=2` and `deck bundle verify --v=2` add manifest entry breakdowns
+
 ## Shell completion
 
 `deck completion` is the only completion entrypoint. Supported shells: `bash`, `zsh`, `fish`, `powershell`.

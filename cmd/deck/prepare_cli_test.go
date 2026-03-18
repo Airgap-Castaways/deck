@@ -92,7 +92,7 @@ func TestRunPrepareDryRunDoesNotWrite(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nartifacts:\n  files:\n    - group: base\n      items:\n        - id: seed\n          source:\n            path: files/source.bin\n          output:\n            path: seed.bin\n"), 0o644); err != nil {
 		t.Fatalf("write prepare workflow: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
@@ -131,7 +131,7 @@ func TestRunPrepareVerboseDiagnostics(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nartifacts:\n  files:\n    - group: base\n      items:\n        - id: seed\n          source:\n            path: files/source.bin\n          output:\n            path: seed.bin\n"), 0o644); err != nil {
 		t.Fatalf("write prepare workflow: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
@@ -166,7 +166,7 @@ func TestRunPrepareVerboseDiagnostics(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	for _, want := range []string{"deck: prepare workflowIncludes=3"} {
+	for _, want := range []string{"deck: prepare workflowIncludes=3", "deck: prepare artifactGroups=1", "deck: prepare artifactGroup kind=file name=base jobs=1 parallelism=1 retry=0", "deck: prepare cacheArtifact step=file-base-seed type=file action=FETCH", "deck: prepare cachePlan fetch=1 reuse=0"} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 		}

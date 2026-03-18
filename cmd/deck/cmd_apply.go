@@ -204,6 +204,11 @@ func executeDiff(ctx context.Context, workflowPath, selectedPhase, output string
 		runtimeVarKeys = append(runtimeVarKeys, key)
 	}
 	slices.Sort(runtimeVarKeys)
+	workflowVarKeys := make([]string, 0, len(applyExecutionWorkflow.Vars))
+	for key := range applyExecutionWorkflow.Vars {
+		workflowVarKeys = append(workflowVarKeys, key)
+	}
+	slices.Sort(workflowVarKeys)
 	report := planReport{
 		WorkflowPath:   resolvedRequest.WorkflowPath,
 		SelectedPhase:  resolvedRequest.SelectedPhase,
@@ -212,8 +217,14 @@ func executeDiff(ctx context.Context, workflowPath, selectedPhase, output string
 		Summary:        summary,
 		Steps:          steps,
 	}
+	if err := verbosef(3, "deck: plan workflowVars=%s runtimeVars=%s completedSteps=%d\n", joinOrDash(workflowVarKeys), joinOrDash(runtimeVarKeys), len(state.CompletedSteps)); err != nil {
+		return err
+	}
 	for _, s := range steps {
 		if err := verbosef(2, "deck: plan step=%s kind=%s phase=%s action=%s reason=%s when=%q retry=%d timeout=%q register=%d\n", s.ID, s.Kind, s.Phase, s.Action, s.Reason, s.When, s.Retry, s.Timeout, len(s.Register)); err != nil {
+			return err
+		}
+		if err := verbosef(3, "deck: plan stepEval step=%s whenEvaluated=%t registerKeys=%s\n", s.ID, s.WhenEvaluated, joinOrDash(sortedRegisterKeys(s.Register))); err != nil {
 			return err
 		}
 	}
@@ -254,6 +265,25 @@ func displayValueOrDash(value string) string {
 		return "-"
 	}
 	return trimmed
+}
+
+func sortedRegisterKeys(values map[string]string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func joinOrDash(values []string) string {
+	if len(values) == 0 {
+		return "-"
+	}
+	return strings.Join(values, ",")
 }
 
 type applyOptions struct {
