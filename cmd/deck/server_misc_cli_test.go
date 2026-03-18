@@ -149,6 +149,28 @@ func TestServerRemoteCommands(t *testing.T) {
 	if _, statErr := os.Stat(configPath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected config file removal, got %v", statErr)
 	}
+
+	res := execute([]string{"server", "remote", "set", "http://127.0.0.1:9090", "--v=1"})
+	if res.err != nil {
+		t.Fatalf("server remote verbose set failed: %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "deck: server remote set url=http://127.0.0.1:9090 config=") {
+		t.Fatalf("unexpected verbose set stderr: %q", res.stderr)
+	}
+	res = execute([]string{"server", "remote", "show", "--v=1"})
+	if res.err != nil {
+		t.Fatalf("server remote verbose show failed: %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "deck: server remote show config=") || !strings.Contains(res.stderr, "origin=config") {
+		t.Fatalf("unexpected verbose show stderr: %q", res.stderr)
+	}
+	res = execute([]string{"server", "remote", "unset", "--v=1"})
+	if res.err != nil {
+		t.Fatalf("server remote verbose unset failed: %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "deck: server remote unset config=") {
+		t.Fatalf("unexpected verbose unset stderr: %q", res.stderr)
+	}
 }
 
 func TestSourceDefaultsReadLegacyHomePath(t *testing.T) {

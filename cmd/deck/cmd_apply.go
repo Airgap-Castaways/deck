@@ -785,9 +785,22 @@ func writeLintReport(output string, report lintReport) error {
 			return err
 		}
 	}
+	if err := verbosef(3, "deck: lint contract importRule=%s topLevelModes=%s\n", report.Contracts.ImportRule, strings.Join(report.Contracts.TopLevelModes, ",")); err != nil {
+		return err
+	}
+	for _, note := range report.Contracts.InvariantNotes {
+		if err := verbosef(3, "deck: lint invariant=%s\n", note); err != nil {
+			return err
+		}
+	}
 	for _, finding := range report.Findings {
 		if err := verbosef(2, "deck: lint finding code=%s severity=%s path=%s phase=%s step=%s kind=%s\n", finding.Code, finding.Severity, displayValueOrDash(finding.Path), displayValueOrDash(finding.Phase), displayValueOrDash(finding.StepID), displayValueOrDash(finding.Kind)); err != nil {
 			return err
+		}
+		if strings.TrimSpace(finding.Hint) != "" {
+			if err := verbosef(3, "deck: lint findingHint code=%s hint=%s\n", finding.Code, finding.Hint); err != nil {
+				return err
+			}
 		}
 	}
 	if output == "json" {

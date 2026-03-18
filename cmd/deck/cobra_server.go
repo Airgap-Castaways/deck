@@ -237,6 +237,13 @@ func executeServerRemoteSet(rawURL string) error {
 	if err := validateSourceURL(resolved); err != nil {
 		return err
 	}
+	configPath, err := sourceDefaultsPath()
+	if err != nil {
+		return err
+	}
+	if err := verbosef(1, "deck: server remote set url=%s config=%s\n", resolved, configPath); err != nil {
+		return err
+	}
 	if err := saveSourceDefaults(sourceDefaults{URL: resolved}); err != nil {
 		return err
 	}
@@ -244,8 +251,15 @@ func executeServerRemoteSet(rawURL string) error {
 }
 
 func executeServerRemoteShow() error {
+	configPath, err := sourceDefaultsPath()
+	if err != nil {
+		return err
+	}
 	resolved, source, err := resolveSourceURL("")
 	if err != nil {
+		return err
+	}
+	if err := verbosef(1, "deck: server remote show config=%s resolved=%s origin=%s\n", configPath, displayValueOrDash(resolved), displayValueOrDash(source)); err != nil {
 		return err
 	}
 	if resolved == "" {
@@ -261,6 +275,13 @@ func executeServerRemoteShow() error {
 }
 
 func executeServerRemoteUnset() error {
+	configPath, err := sourceDefaultsPath()
+	if err != nil {
+		return err
+	}
+	if err := verbosef(1, "deck: server remote unset config=%s\n", configPath); err != nil {
+		return err
+	}
 	if err := clearSourceDefaults(); err != nil {
 		return err
 	}
