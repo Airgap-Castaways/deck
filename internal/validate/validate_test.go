@@ -673,6 +673,37 @@ phases:
 		}
 	})
 
+	t.Run("tool schema rejects invalid register output key for action", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: copy-file
+        apiVersion: deck/v1alpha1
+        kind: File
+        register:
+          copiedPath: path
+        spec:
+          action: copy
+          src: /tmp/source.txt
+          dest: /tmp/dest.txt
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected schema/register validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
 	t.Run("tool schema invalid step spec", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
@@ -1583,8 +1614,8 @@ phases:
 		if err == nil {
 			t.Fatalf("expected register output error")
 		}
-		if got := err.Error(); !strings.Contains(got, "E_REGISTER_OUTPUT_NOT_FOUND") {
-			t.Fatalf("expected E_REGISTER_OUTPUT_NOT_FOUND, got %v", err)
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
 

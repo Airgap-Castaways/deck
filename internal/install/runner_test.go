@@ -69,13 +69,13 @@ func TestRun_InstallTools(t *testing.T) {
 				{ID: "sysctl", Kind: "Sysctl", Spec: map[string]any{"writeFile": sysctlPath, "values": map[string]any{"net.ipv4.ip_forward": "1"}}},
 				{ID: "modprobe", Kind: "KernelModule", Spec: map[string]any{"name": "overlay", "persistFile": modprobePath}},
 				{ID: "run-cmd", Kind: "Command", Spec: map[string]any{"command": []any{"true"}}},
-				{ID: "kubeadm-init", Kind: "Kubeadm", Spec: map[string]any{"action": "init", "mode": "stub", "outputJoinFile": joinPath}},
-				{ID: "kubeadm-join", Kind: "Kubeadm", Spec: map[string]any{"action": "join", "mode": "stub", "joinFile": joinPath}},
+				{ID: "kubeadm-init", Kind: "Kubeadm", Spec: map[string]any{"action": "init", "outputJoinFile": joinPath}},
+				{ID: "kubeadm-join", Kind: "Kubeadm", Spec: map[string]any{"action": "join", "joinFile": joinPath}},
 			},
 		}},
 	}
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath, kubeadmMode: "stub"}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -1651,14 +1651,14 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 		Phases: []config.Phase{{
 			Name: "install",
 			Steps: []config.Step{
-				{ID: "init", Kind: "Kubeadm", Spec: map[string]any{"action": "init", "mode": "stub", "outputJoinFile": joinPath}, Register: map[string]string{"workerJoinFile": "joinFile"}},
+				{ID: "init", Kind: "Kubeadm", Spec: map[string]any{"action": "init", "outputJoinFile": joinPath}, Register: map[string]string{"workerJoinFile": "joinFile"}},
 				{ID: "use-register", Kind: "File", When: "vars.role == \"control-plane\"", Spec: map[string]any{"action": "write", "path": registeredOutputPath, "content": "{{ .runtime.workerJoinFile }}"}},
 				{ID: "skip-worker", Kind: "File", When: "vars.role == \"worker\"", Spec: map[string]any{"action": "write", "path": skippedOutputPath, "content": "worker"}},
 			},
 		}},
 	}
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath, kubeadmMode: "stub"}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -4309,7 +4309,6 @@ func TestRun_Kubeadm(t *testing.T) {
 					Kind: "Kubeadm",
 					Spec: map[string]any{
 						"action":                "reset",
-						"mode":                  "stub",
 						"force":                 true,
 						"criSocket":             "unix:///run/containerd/containerd.sock",
 						"extraArgs":             []any{"--cleanup-tmp-dir"},
@@ -4322,7 +4321,7 @@ func TestRun_Kubeadm(t *testing.T) {
 			}},
 		}
 
-		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath, kubeadmMode: "stub"}); err != nil {
 			t.Fatalf("expected stub reset success, got %v", err)
 		}
 

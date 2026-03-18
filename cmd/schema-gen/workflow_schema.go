@@ -121,7 +121,7 @@ func workflowImportSchema() map[string]any {
 }
 
 func stepBaseSchema() map[string]any {
-	return map[string]any{
+	root := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
 		"required":             []any{"id", "kind", "spec"},
@@ -141,6 +141,59 @@ func stepBaseSchema() map[string]any {
 			"spec":    map[string]any{"type": "object"},
 		},
 	}
+	root["allOf"] = registerContractClauses()
+	return root
+}
+
+func registerContractClauses() []any {
+	defs := workflowexec.StepDefinitions()
+	clauses := make([]any, 0, len(defs))
+	for _, def := range defs {
+		if len(def.Actions) == 0 {
+			clauses = append(clauses, map[string]any{
+				"if": map[string]any{
+					"properties": map[string]any{"kind": map[string]any{"const": def.Kind}},
+					"required":   []any{"kind"},
+				},
+				"then": map[string]any{
+					"properties": map[string]any{"register": registerValueSchema(def.Outputs)},
+				},
+			})
+			continue
+		}
+		for _, action := range def.Actions {
+			clauses = append(clauses, map[string]any{
+				"if": map[string]any{
+					"properties": map[string]any{
+						"kind": map[string]any{"const": def.Kind},
+						"spec": map[string]any{
+							"properties": map[string]any{"action": map[string]any{"const": action.Name}},
+							"required":   []any{"action"},
+						},
+					},
+					"required": []any{"kind", "spec"},
+				},
+				"then": map[string]any{
+					"properties": map[string]any{"register": registerValueSchema(action.Outputs)},
+				},
+			})
+		}
+	}
+	return clauses
+}
+
+func registerValueSchema(outputs []string) map[string]any {
+	root := map[string]any{
+		"type":          "object",
+		"propertyNames": map[string]any{"pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+	}
+	if len(outputs) == 0 {
+		root["maxProperties"] = 0
+		root["additionalProperties"] = false
+		return root
+	}
+	root["additionalProperties"] = map[string]any{"enum": toAnySlice(outputs)}
+	return root
 }
 
 func patchArtifactsSchema(node any) {
