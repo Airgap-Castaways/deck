@@ -56,11 +56,11 @@ spec:
 | `spec.action` | `string` | yes | `` | `download, install` | Selects whether to collect packages during prepare (`download`) or install them on the node (`install`). | `install` |
 | `spec.backend` | `object` | no | `` | `` | Container-based download backend for `download`. Enables package resolution inside a distro-specific container image when the host OS differs from the target. | `{mode:container,runtime:docker,image:rockylinux:9}` |
 | `spec.distro` | `object` | no | `` | `` | Target distribution hint used by `download` to select the correct package manager and resolver backend. | `{family:rhel,release:rocky9}` |
-| `spec.excludeRepos` | `array<string>` | no | `` | `` | Repository identifiers to exclude from package resolution. Useful for suppressing online repos during an offline install. | `[updates]` |
+| `spec.excludeRepos` | `array<string>` | no | `` | `` | Repository selectors to exclude from package resolution. For apt, selectors match repo file paths; for dnf, they match repo IDs. | `[updates]` |
 | `spec.output` | `object` | no | `` | `` | Optional bundle output settings for `download`. When set, `output.dir` changes the directory where downloaded package artifacts are written. | `{dir:packages/kubernetes}` |
 | `spec.packages` | `array<string>` | yes | `` | `` | Package names to download or install. Use the same list in both `download` and `install` steps to keep offline parity. | `[kubelet,kubeadm,kubectl]` |
 | `spec.repo` | `object` | no | `` | `` | Package manager repository settings applied before `download`. Currently supports RPM module stream configuration. | `{type:yum,modules:[...]}` |
-| `spec.restrictToRepos` | `array<string>` | no | `` | `` | Limit package manager visibility to these repository identifiers during the operation. Prevents accidental pulls from other configured repos. | `[offline-kubernetes]` |
+| `spec.restrictToRepos` | `array<string>` | no | `` | `` | Limit package manager visibility to these repository selectors during the operation. For apt, use repo file paths or globs; for dnf, use repo IDs. Prevents accidental pulls from other configured repos. | `[offline-kubernetes]` |
 | `spec.source` | `object` | no | `` | `` | Local repository source for `install`. Points to a pre-prepared on-disk package repo instead of relying on configured package manager sources. | `{type:local-repo,path:/opt/deck/repos/kubernetes}` |
 
 ## Nested Objects

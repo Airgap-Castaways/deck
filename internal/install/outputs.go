@@ -2,6 +2,7 @@ package install
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/taedi90/deck/internal/config"
 	"github.com/taedi90/deck/internal/workflowexec"
@@ -11,9 +12,21 @@ func stepOutputs(kind string, rendered map[string]any) map[string]any {
 	outputs := map[string]any{}
 	switch kind {
 	case "File":
-		if stringValue(rendered, "action") == "copy" {
+		action := stringValue(rendered, "action")
+		if action == "copy" {
 			if dest := stringValue(rendered, "dest"); dest != "" {
 				outputs["dest"] = dest
+			}
+			break
+		}
+		if action == "download" {
+			path := stringValue(mapValue(rendered, "output"), "path")
+			if path == "" {
+				path = filepath.ToSlash(filepath.Join("files", inferDownloadFileName(stringValue(mapValue(rendered, "source"), "path"), stringValue(mapValue(rendered, "source"), "url"))))
+			}
+			if path != "" {
+				outputs["path"] = path
+				outputs["artifacts"] = []string{path}
 			}
 			break
 		}
@@ -29,6 +42,8 @@ func stepOutputs(kind string, rendered map[string]any) map[string]any {
 	case "Service":
 		if name := stringValue(rendered, "name"); name != "" {
 			outputs["name"] = name
+		} else if names := stringSlice(rendered["names"]); len(names) > 0 {
+			outputs["names"] = names
 		}
 	case "KernelModule":
 		if name := stringValue(rendered, "name"); name != "" {

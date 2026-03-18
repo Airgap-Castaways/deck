@@ -23,6 +23,7 @@ id: example-kubeadm
 kind: Kubeadm
 spec:
   action: init
+  mode: real
   outputJoinFile: /tmp/deck/join.txt
 ```
 

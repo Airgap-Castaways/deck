@@ -1966,6 +1966,62 @@ func TestRun_FileRespectsParentContext(t *testing.T) {
 	}
 }
 
+func TestRun_FileDownloadRegistersOutputs(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("payload"))
+	}))
+	defer srv.Close()
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:       "download",
+				Kind:     "File",
+				Spec:     map[string]any{"action": "download", "source": map[string]any{"url": srv.URL + "/files/payload.txt"}},
+				Register: map[string]string{"downloadPath": "path", "downloadArtifacts": "artifacts"},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	stateRaw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	var st State
+	if err := json.Unmarshal(stateRaw, &st); err != nil {
+		t.Fatalf("parse state: %v", err)
+	}
+	if st.RuntimeVars["downloadPath"] != "files/payload.txt" {
+		t.Fatalf("expected registered path, got %#v", st.RuntimeVars["downloadPath"])
+	}
+	artifacts, ok := st.RuntimeVars["downloadArtifacts"].([]any)
+	if !ok || len(artifacts) != 1 || artifacts[0] != "files/payload.txt" {
+		t.Fatalf("expected registered artifacts, got %#v", st.RuntimeVars["downloadArtifacts"])
+	}
+}
+
 func TestResolveSourceBytes_PreservesContextCancellation(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(250 * time.Millisecond)
@@ -2800,6 +2856,65 @@ func TestServiceStep(t *testing.T) {
 	})
 }
 
+func TestRun_ServiceRegistersNamesOutput(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	logPath := filepath.Join(dir, "systemctl.log")
+	script := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + logPath + "\"\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write systemctl script: %v", err)
+	}
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:       "service",
+				Kind:     "Service",
+				Spec:     map[string]any{"names": []any{"firewalld", "ufw"}, "state": "restarted", "ignoreMissing": true},
+				Register: map[string]string{"managedServices": "names"},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	stateRaw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	var st State
+	if err := json.Unmarshal(stateRaw, &st); err != nil {
+		t.Fatalf("parse state: %v", err)
+	}
+	services, ok := st.RuntimeVars["managedServices"].([]any)
+	if !ok || len(services) != 2 || services[0] != "firewalld" || services[1] != "ufw" {
+		t.Fatalf("expected registered service names, got %#v", st.RuntimeVars["managedServices"])
+	}
+}
+
 func TestEnsureDirStep(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "a", "b")
@@ -3496,6 +3611,36 @@ func TestRepoConfigStep(t *testing.T) {
 			t.Fatalf("runRepoConfig failed: %v", err)
 		}
 		if len(calls) != 2 || calls[0] != "apt-get clean" || calls[1] != "apt-get update" {
+			t.Fatalf("unexpected refresh command sequence: %#v", calls)
+		}
+	})
+
+	t.Run("refresh cache honors update false and implicit enabled", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "repo", "offline.list")
+		origRun := repoConfigRunTimedCommand
+		t.Cleanup(func() { repoConfigRunTimedCommand = origRun })
+		calls := make([]string, 0)
+		repoConfigRunTimedCommand = func(name string, args []string, timeout time.Duration) error {
+			calls = append(calls, name+" "+strings.Join(args, " "))
+			return nil
+		}
+
+		spec := map[string]any{
+			"format": "apt",
+			"path":   target,
+			"refreshCache": map[string]any{
+				"clean":  true,
+				"update": false,
+			},
+			"repositories": []any{map[string]any{
+				"baseurl": "http://repo.local/apt/bookworm",
+			}},
+		}
+		if err := runRepoConfig(spec); err != nil {
+			t.Fatalf("runRepoConfig failed: %v", err)
+		}
+		if len(calls) != 1 || calls[0] != "apt-get clean" {
 			t.Fatalf("unexpected refresh command sequence: %#v", calls)
 		}
 	})

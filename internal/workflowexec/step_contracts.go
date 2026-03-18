@@ -30,7 +30,7 @@ func stepContracts() map[string]StepContract {
 		"Swap":         simpleStep("swap.schema.json", setOf("apply"), nil),
 		"KernelModule": simpleStep("kernel-module.schema.json", setOf("apply"), setOf("name", "names")),
 		"Command":      simpleStep("command.schema.json", setOf("apply"), nil),
-		"Service":      simpleStep("service.schema.json", setOf("apply"), setOf("name")),
+		"Service":      simpleStep("service.schema.json", setOf("apply"), setOf("name", "names")),
 		"Sysctl":       simpleStep("sysctl.schema.json", setOf("apply"), nil),
 		"File": familyStep("file.schema.json", setOf("prepare", "apply"), map[string]ActionContract{
 			"download": {Outputs: setOf("path", "artifacts"), Roles: setOf("prepare", "apply")},

@@ -648,14 +648,25 @@ func refreshRepoMetadata(spec map[string]any, format string) error {
 	if !ok {
 		return nil
 	}
-	if enabled, exists := refresh["enabled"].(bool); !exists || !enabled {
+	enabled := true
+	if value, exists := refresh["enabled"].(bool); exists {
+		enabled = value
+	}
+	if !enabled {
 		return nil
 	}
 	clean, _ := refresh["clean"].(bool)
+	update := true
+	if value, exists := refresh["update"].(bool); exists {
+		update = value
+	}
+	if !clean && !update {
+		return nil
+	}
 	return runPackageCacheCommands(
 		repoConfigFormatToPackageManager(format),
 		clean,
-		true,
+		update,
 		packageRepoPolicy{},
 		commandTimeoutWithDefault(spec, defaultPackageCacheTimeout),
 		repoConfigRunTimedCommand,

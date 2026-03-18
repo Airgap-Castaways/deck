@@ -56,7 +56,7 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.apply` | `boolean` | no | `false` | `` | Run `sysctl -p <writeFile>` after writing the file to apply the values immediately without a reboot. Defaults to `false`. | `true` |
 | `spec.values` | `object` | yes | `` | `` | Map of sysctl key-value pairs to write and optionally apply. | `{net.ipv4.ip_forward:1,net.bridge.bridge-nf-call-iptables:1}` |
-| `spec.writeFile` | `string` | yes | `` | `` | Path to the sysctl drop-in file written with the given values. Must be under `/etc/sysctl.d/`. | `/etc/sysctl.d/99-k8s.conf` |
+| `spec.writeFile` | `string` | yes | `` | `` | Path to the sysctl file written with the given values. A drop-in under `/etc/sysctl.d/` is the common choice. | `/etc/sysctl.d/99-k8s.conf` |
 
 ## Related
 

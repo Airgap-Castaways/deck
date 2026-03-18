@@ -70,8 +70,8 @@ spec:
 | `spec.disableExisting` | `boolean` | no | `` | `` | Disable all existing repository definitions before writing the new one. Prevents conflicts from online repos during offline installs. | `true` |
 | `spec.format` | `string` | no | `` | `apt, yum` | Repository file format to write. `apt` produces a sources.list entry; `yum` produces a `.repo` file. | `apt` |
 | `spec.mode` | `string` | no | `` | `` | File permissions applied to the generated repository file in octal notation. | `0644` |
-| `spec.path` | `string` | no | `` | `` | Explicit output path for the generated repository file. Defaults to a path derived from the first repository id when omitted. | `/etc/apt/sources.list.d/offline.list` |
-| `spec.refreshCache` | `object` | no | `` | `` | Optional package metadata refresh that runs after repository files are written. Equivalent to a follow-up `PackageCache` step. | `{clean:true,update:true}` |
+| `spec.path` | `string` | no | `` | `` | Explicit output path for the generated repository file. Defaults to `/etc/apt/sources.list.d/deck-offline.list` for apt or `/etc/yum.repos.d/deck-offline.repo` for yum when omitted. | `/etc/apt/sources.list.d/offline.list` |
+| `spec.refreshCache` | `object` | no | `` | `` | Optional package metadata refresh that runs after repository files are written. The block is enabled by default when present, and behaves like a follow-up `PackageCache` step. | `{clean:true,update:true}` |
 | `spec.replaceExisting` | `boolean` | no | `` | `` | Replace an existing repository file at the target path before writing the new definition. | `true` |
 | `spec.repositories` | `array<object>` | no | `` | `` | Repository entries to write. Each entry maps to one repository block in the generated file. | `[{id:offline,baseurl:http://repo.local/debian}]` |
 
