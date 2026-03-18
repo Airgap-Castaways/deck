@@ -59,7 +59,7 @@ func TestVersionCommandJSON(t *testing.T) {
 	buildinfo.Variant = "ai"
 	buildinfo.Dirty = "false"
 
-	out, err := runWithCapturedStdout([]string{"version", "--json"})
+	out, err := runWithCapturedStdout([]string{"version", "-o", "json"})
 	if err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
@@ -329,7 +329,13 @@ func TestRunWorkflowRunDryRunWithNonInstallPhaseName(t *testing.T) {
 	if strings.Contains(planOut, "install phase not found") {
 		t.Fatalf("plan must not require install phase, got %q", planOut)
 	}
+	if !strings.Contains(planOut, "PLAN workflow=") {
+		t.Fatalf("expected plan header, got %q", planOut)
+	}
 	if !strings.Contains(planOut, "run-true Command RUN") {
 		t.Fatalf("expected plan output, got %q", planOut)
+	}
+	if !strings.Contains(planOut, "SUMMARY steps=1 run=1 skip=0") {
+		t.Fatalf("expected plan summary, got %q", planOut)
 	}
 }

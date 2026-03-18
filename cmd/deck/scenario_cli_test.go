@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -109,5 +110,39 @@ func TestResolveApplyWorkflowAndBundleRejectsAmbiguousSourceSelection(t *testing
 	}
 	if err.Error() != "apply with --source server requires --scenario or --workflow" {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestListVerboseDiagnosticsDoNotPolluteJSON(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir scenarios: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write scenario: %v", err)
+	}
+
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWD) }()
+
+	res := execute([]string{"list", "--source", "local", "-o", "json", "--v=1"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "deck: list source=local output=json") {
+		t.Fatalf("expected diagnostics on stderr, got %q", res.stderr)
+	}
+	var entries []scenarioEntry
+	if err := json.Unmarshal([]byte(res.stdout), &entries); err != nil {
+		t.Fatalf("stdout must stay valid json: %v\nstdout=%q", err, res.stdout)
+	}
+	if len(entries) != 1 || entries[0].Name != "apply" {
+		t.Fatalf("unexpected entries: %#v", entries)
 	}
 }

@@ -56,11 +56,16 @@ func newPrepareCommand() *cobra.Command {
 }
 
 func runPrepareWithOptions(cmd *cobra.Command, opts prepareOptions) error {
+	if err := verbosef(1, "deck: prepare root=%s dryRun=%t refresh=%t clean=%t\n", opts.preparedRoot, opts.dryRun, opts.refresh, opts.clean); err != nil {
+		return err
+	}
 	return preparecli.Run(cmd.Context(), preparecli.Options{
 		PreparedRoot: opts.preparedRoot,
 		DryRun:       opts.dryRun,
 		Refresh:      opts.refresh,
 		Clean:        opts.clean,
 		VarOverrides: varsAsAnyMap(opts.varOverrides),
+		Stdout:       stdoutWriter(),
+		Diagnosticf:  verbosef,
 	})
 }

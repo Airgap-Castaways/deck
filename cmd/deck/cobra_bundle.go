@@ -34,10 +34,15 @@ func newBundleVerifyCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeBundleVerify(file, args)
+			output, err := cmdFlagValue(cmd, "output")
+			if err != nil {
+				return err
+			}
+			return executeBundleVerify(file, args, output)
 		},
 	}
 	cmd.Flags().String("file", "", "bundle path (directory or bundle.tar)")
+	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
 	return cmd
 }
 

@@ -465,6 +465,9 @@ func TestPlan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
+	if !strings.Contains(before, "SUMMARY steps=1 run=1 skip=0") {
+		t.Fatalf("expected summary in plan output, got %q", before)
+	}
 	if !strings.Contains(before, "RUN") {
 		t.Fatalf("expected RUN in plan output, got %q", before)
 	}
@@ -490,6 +493,92 @@ func TestPlan(t *testing.T) {
 	}
 	if !strings.Contains(after, "SKIP") {
 		t.Fatalf("expected SKIP in plan output after apply run, got %q", after)
+	}
+	if !strings.Contains(after, "SUMMARY steps=1 run=0 skip=1 skipCompleted=1") {
+		t.Fatalf("expected completed summary in plan output, got %q", after)
+	}
+}
+
+func TestPlanJSONAndVerboseDiagnostics(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	wfPath := filepath.Join(t.TempDir(), "apply-plan.json.yaml")
+	writeWorkflowYAML(t, wfPath, "role: apply\nversion: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: guarded\n        apiVersion: deck/v1alpha1\n        kind: Command\n        when: vars.run == \"yes\"\n        retry: 2\n        timeout: 30s\n        spec:\n          command: [\"true\"]\n")
+
+	res := execute([]string{"plan", "--workflow", wfPath, "-o", "json", "--v=2", "--var", "run=yes"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "deck: plan workflow=") {
+		t.Fatalf("expected plan diagnostics on stderr, got %q", res.stderr)
+	}
+	if !strings.Contains(res.stderr, "deck: plan step=guarded") {
+		t.Fatalf("expected verbose step diagnostics on stderr, got %q", res.stderr)
+	}
+	var payload struct {
+		WorkflowPath   string   `json:"workflowPath"`
+		SelectedPhase  string   `json:"selectedPhase"`
+		StatePath      string   `json:"statePath"`
+		RuntimeVarKeys []string `json:"runtimeVarKeys"`
+		Summary        struct {
+			TotalSteps     int `json:"totalSteps"`
+			RunSteps       int `json:"runSteps"`
+			SkipSteps      int `json:"skipSteps"`
+			CompletedSteps int `json:"completedSteps"`
+		} `json:"summary"`
+		Steps []struct {
+			Phase   string `json:"phase"`
+			ID      string `json:"id"`
+			Kind    string `json:"kind"`
+			Action  string `json:"action"`
+			When    string `json:"when"`
+			Retry   int    `json:"retry"`
+			Timeout string `json:"timeout"`
+		} `json:"steps"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &payload); err != nil {
+		t.Fatalf("parse plan json: %v stdout=%q", err, res.stdout)
+	}
+	if payload.WorkflowPath != wfPath {
+		t.Fatalf("unexpected workflow path: %q", payload.WorkflowPath)
+	}
+	if payload.Summary.TotalSteps != 1 || payload.Summary.RunSteps != 1 || payload.Summary.SkipSteps != 0 {
+		t.Fatalf("unexpected summary: %+v", payload.Summary)
+	}
+	if len(payload.Steps) != 1 {
+		t.Fatalf("unexpected steps: %+v", payload.Steps)
+	}
+	step := payload.Steps[0]
+	if step.ID != "guarded" || step.Action != "run" || step.When != "vars.run == \"yes\"" || step.Retry != 2 || step.Timeout != "30s" {
+		t.Fatalf("unexpected step payload: %+v", step)
+	}
+
+	res = execute([]string{"plan", "--workflow", wfPath, "--v=3", "--var", "run=yes"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	for _, want := range []string{"deck: plan workflowVars=run runtimeVars=- completedSteps=0", "deck: plan stepEval step=guarded whenEvaluated=true registerKeys=-"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+		}
+	}
+}
+
+func TestApplyVerboseDiagnostics(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	wfPath := filepath.Join(t.TempDir(), "apply-verbose.yaml")
+	writeWorkflowYAML(t, wfPath, "role: apply\nversion: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: verbose-step\n        kind: Command\n        retry: 1\n        spec:\n          command: [\"true\"]\n")
+
+	res := execute([]string{"apply", "--workflow", wfPath, "--v=2"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	if res.stdout != "apply: ok\n" {
+		t.Fatalf("unexpected stdout: %q", res.stdout)
+	}
+	for _, want := range []string{"deck: apply workflow=", "deck: apply runlog=", "deck: apply step=verbose-step kind=Command phase=install status=started attempt=1", "deck: apply step=verbose-step kind=Command phase=install status=succeeded attempt=1"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+		}
 	}
 }
 

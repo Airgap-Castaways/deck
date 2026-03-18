@@ -35,6 +35,43 @@ func TestHealth(t *testing.T) {
 		}
 	})
 
+	t.Run("json output", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/healthz" {
+				t.Fatalf("unexpected path: %s", r.URL.Path)
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		res := execute([]string{"server", "health", "--server", srv.URL, "-o", "json", "--v=1"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		if !strings.Contains(res.stderr, "deck: server health server=") {
+			t.Fatalf("expected diagnostics on stderr, got %q", res.stderr)
+		}
+		var payload struct {
+			Status     string `json:"status"`
+			Server     string `json:"server"`
+			HealthURL  string `json:"healthUrl"`
+			HTTPStatus int    `json:"httpStatus"`
+		}
+		if err := json.Unmarshal([]byte(res.stdout), &payload); err != nil {
+			t.Fatalf("parse health json: %v stdout=%q", err, res.stdout)
+		}
+		if payload.Status != "ok" || payload.Server != srv.URL || payload.HealthURL != srv.URL+"/healthz" || payload.HTTPStatus != http.StatusOK {
+			t.Fatalf("unexpected payload: %+v", payload)
+		}
+		res = execute([]string{"server", "health", "--server", srv.URL, "-o", "json", "--v=2"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		if !strings.Contains(res.stderr, "deck: server health url=") || !strings.Contains(res.stderr, "deck: server health httpStatus=200") {
+			t.Fatalf("expected v2 diagnostics on stderr, got %q", res.stderr)
+		}
+	})
+
 	t.Run("non-200 fails", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/healthz" {
@@ -111,6 +148,28 @@ func TestServerRemoteCommands(t *testing.T) {
 	}
 	if _, statErr := os.Stat(configPath); !os.IsNotExist(statErr) {
 		t.Fatalf("expected config file removal, got %v", statErr)
+	}
+
+	res := execute([]string{"server", "remote", "set", "http://127.0.0.1:9090", "--v=1"})
+	if res.err != nil {
+		t.Fatalf("server remote verbose set failed: %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "deck: server remote set url=http://127.0.0.1:9090 config=") {
+		t.Fatalf("unexpected verbose set stderr: %q", res.stderr)
+	}
+	res = execute([]string{"server", "remote", "show", "--v=1"})
+	if res.err != nil {
+		t.Fatalf("server remote verbose show failed: %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "deck: server remote show config=") || !strings.Contains(res.stderr, "origin=config") {
+		t.Fatalf("unexpected verbose show stderr: %q", res.stderr)
+	}
+	res = execute([]string{"server", "remote", "unset", "--v=1"})
+	if res.err != nil {
+		t.Fatalf("server remote verbose unset failed: %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "deck: server remote unset config=") {
+		t.Fatalf("unexpected verbose unset stderr: %q", res.stderr)
 	}
 }
 
@@ -203,6 +262,64 @@ func TestLogs(t *testing.T) {
 		}
 	})
 
+	t.Run("file json keeps diagnostics on stderr", func(t *testing.T) {
+		root := t.TempDir()
+		logDir := filepath.Join(root, ".deck", "logs")
+		if err := os.MkdirAll(logDir, 0o755); err != nil {
+			t.Fatalf("mkdir log dir: %v", err)
+		}
+		logPath := filepath.Join(logDir, "server-audit.log")
+		line := `{"ts":"2026-03-05T12:01:00Z","schema_version":1,"source":"server","event_type":"http_request","level":"info","message":"current","job_id":"current"}` + "\n"
+		if err := os.WriteFile(logPath, []byte(line), 0o644); err != nil {
+			t.Fatalf("write log: %v", err)
+		}
+
+		res := execute([]string{"server", "logs", "--root", root, "--source", "file", "-o", "json", "--v=1"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		if !strings.Contains(res.stderr, "deck: server logs file=") || !strings.Contains(res.stderr, "deck: server logs records=1") {
+			t.Fatalf("expected diagnostics on stderr, got %q", res.stderr)
+		}
+		var records []map[string]any
+		if err := json.Unmarshal([]byte(res.stdout), &records); err != nil {
+			t.Fatalf("parse logs json: %v stdout=%q", err, res.stdout)
+		}
+		if len(records) != 1 || records[0]["job_id"] != "current" {
+			t.Fatalf("unexpected records: %+v", records)
+		}
+	})
+
+	t.Run("source all reports skipped server at v2", func(t *testing.T) {
+		root := t.TempDir()
+		t.Setenv("HOME", t.TempDir())
+		t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+		t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "server.json"))
+		t.Setenv("DECK_SERVER_URL", "")
+		if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+			t.Fatalf("mkdir scenarios: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+			t.Fatalf("write scenario: %v", err)
+		}
+		oldWD, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("getwd: %v", err)
+		}
+		if err := os.Chdir(root); err != nil {
+			t.Fatalf("chdir: %v", err)
+		}
+		defer func() { _ = os.Chdir(oldWD) }()
+
+		res := execute([]string{"list", "--source", "all", "-o", "json", "--v=2"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		if !strings.Contains(res.stderr, "deck: list server skipped reason=no-remote") {
+			t.Fatalf("expected skipped server diagnostic, got %q", res.stderr)
+		}
+	})
+
 	t.Run("journal missing suggests one command", func(t *testing.T) {
 		t.Setenv("PATH", t.TempDir())
 		_, err := runWithCapturedStdout([]string{"server", "logs", "--source", "journal", "--unit", "deck-server.service"})
@@ -261,6 +378,31 @@ func TestCache(t *testing.T) {
 		}
 	})
 
+	t.Run("list json keeps diagnostics on stderr", func(t *testing.T) {
+		res := execute([]string{"cache", "list", "-o", "json", "--v=1"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		if !strings.Contains(res.stderr, "deck: cache list root=") || !strings.Contains(res.stderr, "deck: cache list entries=") {
+			t.Fatalf("expected diagnostics on stderr, got %q", res.stderr)
+		}
+		var entries []struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal([]byte(res.stdout), &entries); err != nil {
+			t.Fatalf("decode json: %v stdout=%q", err, res.stdout)
+		}
+		found := false
+		for _, e := range entries {
+			if e.Path == "packages/p.deb" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("expected packages/p.deb in output, got %q", res.stdout)
+		}
+	})
+
 	t.Run("clean dry-run older-than", func(t *testing.T) {
 		out, err := runWithCapturedStdout([]string{"cache", "clean", "--older-than", "1h", "--dry-run"})
 		if err != nil {
@@ -271,6 +413,21 @@ func TestCache(t *testing.T) {
 		}
 		if strings.Contains(out, stateDir) {
 			t.Fatalf("expected state dir excluded from plan, got %q", out)
+		}
+	})
+
+	t.Run("clean dry-run diagnostics", func(t *testing.T) {
+		res := execute([]string{"cache", "clean", "--older-than", "1h", "--dry-run", "--v=2"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		if !strings.Contains(res.stdout, packagesDir) {
+			t.Fatalf("expected packages dir in plan, got %q", res.stdout)
+		}
+		for _, want := range []string{"deck: cache clean root=", "deck: cache clean matches=1", "deck: cache clean path="} {
+			if !strings.Contains(res.stderr, want) {
+				t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+			}
 		}
 	})
 }
@@ -341,7 +498,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
-		if out != fmt.Sprintf("lint: ok (%s)\n", wf) {
+		if out != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=artifacts,phases,steps\n", wf) {
 			t.Fatalf("unexpected output: %q", out)
 		}
 	})
@@ -351,8 +508,117 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
-		if out != fmt.Sprintf("lint: ok (%s)\n", wf) {
+		if out != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=artifacts,phases,steps\n", wf) {
 			t.Fatalf("unexpected output: %q", out)
+		}
+	})
+
+	t.Run("lint json output", func(t *testing.T) {
+		res := execute([]string{"lint", "--file", wf, "-o", "json"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		var payload struct {
+			Status     string   `json:"status"`
+			Mode       string   `json:"mode"`
+			Entrypoint string   `json:"entrypoint"`
+			Workflows  []string `json:"workflows"`
+			Summary    struct {
+				WorkflowCount int `json:"workflowCount"`
+				WarningCount  int `json:"warningCount"`
+				ErrorCount    int `json:"errorCount"`
+			} `json:"summary"`
+			Contracts struct {
+				SupportedVersion string   `json:"supportedVersion"`
+				SupportedRoles   []string `json:"supportedRoles"`
+				TopLevelModes    []string `json:"topLevelModes"`
+				ImportRule       string   `json:"importRule"`
+				InvariantNotes   []string `json:"invariantNotes"`
+			} `json:"contracts"`
+			Findings []any `json:"findings"`
+		}
+		if err := json.Unmarshal([]byte(res.stdout), &payload); err != nil {
+			t.Fatalf("parse lint json: %v stdout=%q", err, res.stdout)
+		}
+		if payload.Status != "ok" || payload.Mode != "file" || payload.Entrypoint != wf || payload.Summary.WorkflowCount != 1 {
+			t.Fatalf("unexpected payload: %+v", payload)
+		}
+		if payload.Summary.WarningCount != 1 || payload.Summary.ErrorCount != 0 {
+			t.Fatalf("unexpected summary counts: %+v", payload.Summary)
+		}
+		if len(payload.Workflows) != 1 || payload.Workflows[0] != wf {
+			t.Fatalf("unexpected workflows: %+v", payload.Workflows)
+		}
+		if payload.Contracts.SupportedVersion != "v1alpha1" || len(payload.Contracts.SupportedRoles) != 2 || len(payload.Contracts.TopLevelModes) != 3 || len(payload.Contracts.InvariantNotes) == 0 {
+			t.Fatalf("unexpected contracts: %+v", payload.Contracts)
+		}
+		if len(payload.Findings) != 1 {
+			t.Fatalf("unexpected findings: %+v", payload.Findings)
+		}
+		finding, ok := payload.Findings[0].(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected finding payload type: %#v", payload.Findings[0])
+		}
+		if finding["code"] != "W_COMMAND_OPAQUE" || finding["severity"] != "warning" || finding["stepId"] != "validate-run" || finding["kind"] != "Command" {
+			t.Fatalf("unexpected finding payload: %+v", finding)
+		}
+		if res.stderr != "" {
+			t.Fatalf("expected empty stderr, got %q", res.stderr)
+		}
+	})
+
+	t.Run("lint verbose diagnostics stay on stderr", func(t *testing.T) {
+		res := execute([]string{"lint", "--file", wf, "--v=2"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		if res.stdout != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=artifacts,phases,steps\n", wf) {
+			t.Fatalf("unexpected stdout: %q", res.stdout)
+		}
+		for _, want := range []string{"deck: lint root=", "scenario=", fmt.Sprintf("deck: lint workflow=%s", wf), "deck: lint finding code=W_COMMAND_OPAQUE severity=warning"} {
+			if !strings.Contains(res.stderr, want) {
+				t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+			}
+		}
+	})
+
+	t.Run("lint workspace verbose traces imported workflows", func(t *testing.T) {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+			t.Fatalf("mkdir scenarios: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(root, "workflows", "components", "shared"), 0o755); err != nil {
+			t.Fatalf("mkdir components: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "workflows", "vars.yaml"), []byte("{}\n"), 0o644); err != nil {
+			t.Fatalf("write vars: %v", err)
+		}
+		preparePath := filepath.Join(root, "workflows", "scenarios", "prepare.yaml")
+		if err := os.WriteFile(preparePath, []byte("role: prepare\nversion: v1alpha1\nphases:\n  - name: prepare\n    imports:\n      - path: shared/checks.yaml\n"), 0o644); err != nil {
+			t.Fatalf("write prepare: %v", err)
+		}
+		componentPath := filepath.Join(root, "workflows", "components", "shared", "checks.yaml")
+		if err := os.WriteFile(componentPath, []byte("steps:\n  - id: imported-file\n    kind: File\n    spec:\n      source:\n        path: files/source.bin\n      output:\n        path: imported.bin\n"), 0o644); err != nil {
+			t.Fatalf("write component: %v", err)
+		}
+
+		oldWD, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("getwd: %v", err)
+		}
+		if err := os.Chdir(root); err != nil {
+			t.Fatalf("chdir: %v", err)
+		}
+		defer func() { _ = os.Chdir(oldWD) }()
+
+		res := execute([]string{"lint", "prepare", "--root", root, "--v=2"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		for _, want := range []string{"deck: lint workflow=", filepath.ToSlash(preparePath), filepath.ToSlash(componentPath)} {
+			if !strings.Contains(res.stderr, want) {
+				t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+			}
 		}
 	})
 
@@ -381,7 +647,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
-		if out != "lint: ok (1 workflows)\n" {
+		if out != "lint: ok (1 workflows)\nSUMMARY mode=workspace workflows=1 warnings=0 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=artifacts,phases,steps\n" {
 			t.Fatalf("unexpected output: %q", out)
 		}
 	})
@@ -403,8 +669,33 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
-		if out != "lint: ok (1 workflows)\n" {
+		if out != "lint: ok (1 workflows)\nSUMMARY mode=scenario workflows=1 warnings=0 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=artifacts,phases,steps\n" {
 			t.Fatalf("unexpected output: %q", out)
+		}
+	})
+
+	t.Run("lint warns about remote artifact integrity gaps", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "prepare.yaml")
+		writeWorkflowYAML(t, path, "role: prepare\nversion: v1alpha1\nartifacts:\n  files:\n    - group: base\n      items:\n        - id: rpm\n          source:\n            url: https://example.com/pkg.rpm\n          output:\n            path: pkg.rpm\n")
+
+		res := execute([]string{"lint", "--file", path, "-o", "json"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		var payload struct {
+			Summary struct {
+				WarningCount int `json:"warningCount"`
+			} `json:"summary"`
+			Findings []map[string]any `json:"findings"`
+		}
+		if err := json.Unmarshal([]byte(res.stdout), &payload); err != nil {
+			t.Fatalf("parse lint json: %v stdout=%q", err, res.stdout)
+		}
+		if payload.Summary.WarningCount != 1 {
+			t.Fatalf("unexpected warning count: %+v", payload.Summary)
+		}
+		if len(payload.Findings) != 1 || payload.Findings[0]["code"] != "W_ARTIFACT_INTEGRITY_MISSING" {
+			t.Fatalf("unexpected findings: %+v", payload.Findings)
 		}
 	})
 
@@ -451,6 +742,37 @@ func TestRunWorkflowBundleVerifySuccess(t *testing.T) {
 	}
 }
 
+func TestRunWorkflowBundleVerifyJSON(t *testing.T) {
+	bundleDir := t.TempDir()
+	createValidBundleManifest(t, bundleDir)
+
+	res := execute([]string{"bundle", "verify", "--file", bundleDir, "-o", "json", "--v=1"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "deck: bundle verify path=") {
+		t.Fatalf("expected diagnostics on stderr, got %q", res.stderr)
+	}
+	var payload struct {
+		Status string `json:"status"`
+		Path   string `json:"path"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &payload); err != nil {
+		t.Fatalf("parse bundle verify json: %v stdout=%q", err, res.stdout)
+	}
+	if payload.Status != "ok" || payload.Path != bundleDir {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+
+	res = execute([]string{"bundle", "verify", "--file", bundleDir, "-o", "json", "--v=2"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "deck: bundle verify manifestEntries=1 files=1 images=0 packages=0 other=0") {
+		t.Fatalf("expected manifest count diagnostic, got %q", res.stderr)
+	}
+}
+
 func TestRunWorkflowBundleBuildSuccess(t *testing.T) {
 	bundleDir := t.TempDir()
 	createValidBundleManifest(t, bundleDir)
@@ -466,6 +788,16 @@ func TestRunWorkflowBundleBuildSuccess(t *testing.T) {
 	}
 	if _, err := os.Stat(archivePath); err != nil {
 		t.Fatalf("expected archive file, got %v", err)
+	}
+
+	res := execute([]string{"bundle", "build", "--root", bundleDir, "--out", archivePath, "--v=2"})
+	if res.err != nil {
+		t.Fatalf("expected build success, got %v", res.err)
+	}
+	for _, want := range []string{"deck: bundle build manifest=", "entries=1", "deck: bundle build manifest files=1 images=0 packages=0 other=0", "deck: bundle build archiveSize="} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+		}
 	}
 }
 

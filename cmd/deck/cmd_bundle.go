@@ -138,17 +138,52 @@ func defaultDeckignoreContent() string {
 	}, "\n")
 }
 
-func executeBundleVerify(filePath string, positionalArgs []string) error {
+type bundleVerifyReport struct {
+	Status string `json:"status"`
+	Path   string `json:"path"`
+}
+
+type bundleManifestSummary struct {
+	Entries  int
+	Files    int
+	Images   int
+	Packages int
+	Other    int
+}
+
+func executeBundleVerify(filePath string, positionalArgs []string, output string) error {
+	resolvedOutput, err := resolveOutputFormat(output)
+	if err != nil {
+		return err
+	}
 	resolvedPath, err := resolveBundlePathArg(filePath, positionalArgs, "bundle verify accepts a single <path>")
 	if err != nil {
 		return err
 	}
-
-	if err := bundle.VerifyManifest(resolvedPath); err != nil {
+	if err := verbosef(1, "deck: bundle verify path=%s\n", resolvedPath); err != nil {
 		return err
 	}
 
-	return stdoutPrintf("bundle verify: ok (%s)\n", resolvedPath)
+	if err := bundle.VerifyManifest(resolvedPath); err != nil {
+		_ = verbosef(2, "deck: bundle verify error=%v\n", err)
+		return err
+	}
+	entries, err := bundle.InspectManifest(resolvedPath)
+	if err != nil {
+		return err
+	}
+	summary := summarizeBundleManifest(entries)
+	if err := verbosef(2, "deck: bundle verify manifestEntries=%d files=%d images=%d packages=%d other=%d\n", summary.Entries, summary.Files, summary.Images, summary.Packages, summary.Other); err != nil {
+		return err
+	}
+	report := bundleVerifyReport{Status: "ok", Path: resolvedPath}
+	if resolvedOutput == "json" {
+		enc := stdoutJSONEncoder()
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
+	}
+
+	return stdoutPrintf("bundle verify: ok (%s)\n", report.Path)
 }
 
 func executeBundleBuild(root string, out string) error {
@@ -159,9 +194,32 @@ func executeBundleBuild(root string, out string) error {
 	if strings.TrimSpace(out) == "" {
 		return errors.New("--out is required")
 	}
+	if err := verbosef(1, "deck: bundle build root=%s out=%s\n", resolvedRoot, strings.TrimSpace(out)); err != nil {
+		return err
+	}
+	manifestPath := filepath.Join(resolvedRoot, ".deck", "manifest.json")
+	entries, err := bundle.InspectManifest(resolvedRoot)
+	if err != nil {
+		if err := verbosef(2, "deck: bundle build manifestInspectError=%v\n", err); err != nil {
+			return err
+		}
+	} else {
+		summary := summarizeBundleManifest(entries)
+		if err := verbosef(1, "deck: bundle build manifest=%s entries=%d\n", manifestPath, summary.Entries); err != nil {
+			return err
+		}
+		if err := verbosef(2, "deck: bundle build manifest files=%d images=%d packages=%d other=%d\n", summary.Files, summary.Images, summary.Packages, summary.Other); err != nil {
+			return err
+		}
+	}
 
 	if err := bundle.CollectArchive(resolvedRoot, out); err != nil {
 		return err
+	}
+	if info, err := os.Stat(out); err == nil {
+		if err := verbosef(2, "deck: bundle build archiveSize=%d\n", info.Size()); err != nil {
+			return err
+		}
 	}
 
 	return stdoutPrintf("bundle build: ok (%s -> %s)\n", resolvedRoot, out)
@@ -179,4 +237,22 @@ func resolveBundlePathArg(filePath string, positionalArgs []string, tooManyArgsE
 		return "", errors.New("bundle path is required")
 	}
 	return resolvedPath, nil
+}
+
+func summarizeBundleManifest(entries []bundle.ManifestEntry) bundleManifestSummary {
+	summary := bundleManifestSummary{Entries: len(entries)}
+	for _, entry := range entries {
+		path := strings.TrimSpace(entry.Path)
+		switch {
+		case strings.HasPrefix(path, "outputs/files/") || strings.HasPrefix(path, "files/"):
+			summary.Files++
+		case strings.HasPrefix(path, "outputs/images/") || strings.HasPrefix(path, "images/"):
+			summary.Images++
+		case strings.HasPrefix(path, "outputs/packages/") || strings.HasPrefix(path, "packages/"):
+			summary.Packages++
+		default:
+			summary.Other++
+		}
+	}
+	return summary
 }

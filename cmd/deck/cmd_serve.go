@@ -107,37 +107,69 @@ func executeServe(root string, addr string, auditMaxSizeMB int, auditMaxFiles in
 	}
 }
 
-func executeHealth(server string) error {
+type healthReport struct {
+	Status     string `json:"status"`
+	Server     string `json:"server"`
+	HealthURL  string `json:"healthUrl"`
+	HTTPStatus int    `json:"httpStatus"`
+}
+
+func executeHealth(server string, output string) error {
+	resolvedOutput, err := resolveOutputFormat(output)
+	if err != nil {
+		return err
+	}
 	resolvedServer, _, err := resolveRequiredSourceURL(server)
 	if err != nil {
+		return err
+	}
+	if err := verbosef(1, "deck: server health server=%s\n", resolvedServer); err != nil {
 		return err
 	}
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	healthURL := strings.TrimRight(resolvedServer, "/") + "/healthz"
+	if err := verbosef(2, "deck: server health url=%s\n", healthURL); err != nil {
+		return err
+	}
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, healthURL, nil)
 	if err != nil {
 		return fmt.Errorf("health: build request: %w", err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		_ = verbosef(2, "deck: server health requestError=%v\n", err)
 		return fmt.Errorf("health: request failed: %w", err)
 	}
 	defer closeSilently(resp.Body)
 	if resp.StatusCode != http.StatusOK {
+		_ = verbosef(2, "deck: server health httpStatus=%d\n", resp.StatusCode)
 		return fmt.Errorf("health: unexpected status %d", resp.StatusCode)
 	}
+	if err := verbosef(2, "deck: server health httpStatus=%d\n", resp.StatusCode); err != nil {
+		return err
+	}
+	report := healthReport{Status: "ok", Server: resolvedServer, HealthURL: healthURL, HTTPStatus: resp.StatusCode}
+	if resolvedOutput == "json" {
+		enc := stdoutJSONEncoder()
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
+	}
 
-	return stdoutPrintf("health: ok (%s)\n", resolvedServer)
+	return stdoutPrintf("health: ok (%s)\n", report.Server)
 }
 
 func executeLogs(root string, source string, path string, unit string, output string) error {
 	resolvedSource := strings.ToLower(strings.TrimSpace(source))
+	resolvedOutput, err := resolveOutputFormat(output)
+	if err != nil {
+		return err
+	}
+	if err := verbosef(1, "deck: server logs root=%s source=%s path=%s unit=%s output=%s\n", strings.TrimSpace(root), resolvedSource, strings.TrimSpace(path), strings.TrimSpace(unit), strings.TrimSpace(output)); err != nil {
+		return err
+	}
 	if resolvedSource != "file" && resolvedSource != "journal" && resolvedSource != "both" {
 		return errors.New("--source must be file, journal, or both")
-	}
-	if output != "text" && output != "json" {
-		return errors.New("--output must be text or json")
 	}
 
 	records := []ctrllogs.LogRecord{}
@@ -146,8 +178,14 @@ func executeLogs(root string, source string, path string, unit string, output st
 		if err != nil {
 			return err
 		}
+		if err := verbosef(1, "deck: server logs file=%s\n", logPath); err != nil {
+			return err
+		}
 		fileRecords, err := readLogsFile(logPath)
 		if err != nil {
+			return err
+		}
+		if err := verbosef(1, "deck: server logs fileRecords=%d\n", len(fileRecords)); err != nil {
 			return err
 		}
 		records = append(records, fileRecords...)
@@ -157,15 +195,24 @@ func executeLogs(root string, source string, path string, unit string, output st
 		if resolvedUnit == "" {
 			return errors.New("--unit is required when --source includes journal")
 		}
+		if err := verbosef(1, "deck: server logs unit=%s\n", resolvedUnit); err != nil {
+			return err
+		}
 		journalRecords, err := readControlLogsJournal(resolvedUnit, 50, 0)
 		if err != nil {
 			return fmt.Errorf("logs: %w\nsuggestion: %s", err, suggestJournalctlCommand(resolvedUnit))
 		}
+		if err := verbosef(1, "deck: server logs journalRecords=%d\n", len(journalRecords)); err != nil {
+			return err
+		}
 		records = append(records, journalRecords...)
 	}
+	if err := verbosef(1, "deck: server logs records=%d\n", len(records)); err != nil {
+		return err
+	}
 
-	if output == "json" {
-		enc := json.NewEncoder(os.Stdout)
+	if resolvedOutput == "json" {
+		enc := stdoutJSONEncoder()
 		return enc.Encode(records)
 	}
 	for _, record := range records {

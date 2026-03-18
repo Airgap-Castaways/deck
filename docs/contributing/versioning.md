@@ -41,7 +41,7 @@ The CLI exposes:
 
 ```bash
 deck version
-deck version --json
+deck version -o json
 ```
 
 Examples:
