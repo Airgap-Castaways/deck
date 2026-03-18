@@ -168,5 +168,4 @@ spec:
 
 ## Related
 
-- `../index.md`
-- `../examples/kubeadm.md`
+- [Schema Reference](../README.md)

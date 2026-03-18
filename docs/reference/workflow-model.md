@@ -134,6 +134,6 @@ Validating before transport is one of the main reasons to use a workflow model i
 ## Related references
 
 - `../concepts/why-deck.md`
-- `schema-reference.md`
+- [Schema Reference](schema/README.md)
 - `bundle-layout.md`
 - `../../schemas/deck-workflow.schema.json`

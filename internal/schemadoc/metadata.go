@@ -593,3 +593,21 @@ func ToolDefinitionMeta() PageMetadata {
 		},
 	}
 }
+
+func ComponentFragmentMeta() PageMetadata {
+	return PageMetadata{
+		Title:            "Component Fragment Schema",
+		Summary:          "Reference for reusable workflow component fragments located under `workflows/components/`.",
+		MinimalExample:   "steps:\n  - id: example-step\n    kind: Command\n    spec:\n      command: [echo, hello]\n",
+		RealisticExample: "steps:\n  - id: write-config\n    kind: File\n    spec:\n      action: write\n      path: /etc/example.conf\n      content: hello\n  - id: restart-service\n    kind: Service\n    spec:\n      name: example\n      state: restarted\n",
+		FieldDocs: map[string]FieldDoc{
+			"steps": {Description: "Ordered list of workflow steps contained in this fragment.", Example: "[{id:example,kind:Command,spec:{...}}]"},
+		},
+		Notes: []string{
+			"Component fragments are stored in the `workflows/components/` directory of your workspace.",
+			"They contain only a `steps:` list and follow a restricted schema compared to full scenarios.",
+			"Fragments are imported into a scenario phase using `phases[].imports`.",
+			"For more details on where fragments fit in the project, see the [Workspace Layout](../../workspace-layout.md).",
+		},
+	}
+}

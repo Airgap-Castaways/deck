@@ -12,11 +12,11 @@ Build a portable bundle in the connected environment, move it into the air gap, 
 
 The repository includes examples you can read and adapt:
 
-- `../examples/offline-k8s-control-plane.yaml`
-- `../examples/offline-k8s-worker.yaml`
-- `../examples/offline-repo-preinstall.yaml`
-- `../examples/offline-containerd-mirror.yaml`
-- `../examples/offline-verify-images.yaml`
+- `examples/offline-k8s-control-plane.yaml`
+- `examples/offline-k8s-worker.yaml`
+- `examples/offline-repo-preinstall.yaml`
+- `examples/offline-containerd-mirror.yaml`
+- `examples/offline-verify-images.yaml`
 
 Read them before adapting. They show how typed steps express intent more clearly than equivalent shell.
 
@@ -83,5 +83,5 @@ deck lint --file ./workflows/scenarios/apply.yaml
 For planning and diagnostics, also review:
 
 - `../reference/workflow-model.md`
-- `../reference/schema-reference.md`
+- [Schema & Tools](../reference/schema/README.md)
 - `../reference/server-audit-log.md`

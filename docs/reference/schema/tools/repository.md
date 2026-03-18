@@ -119,5 +119,4 @@ spec:
 
 ## Related
 
-- `../index.md`
-- `../examples/repository.md`
+- [Schema Reference](../README.md)
