@@ -1,7 +1,5 @@
 package workflowexec
 
-import "sort"
-
 type StepContract struct {
 	SchemaFile string
 	Roles      map[string]bool
@@ -15,58 +13,23 @@ type ActionContract struct {
 }
 
 func stepContracts() map[string]StepContract {
-	return map[string]StepContract{
-		"Checks":    simpleStep("checks.schema.json", setOf("prepare"), setOf("passed", "failedChecks")),
-		"Artifacts": simpleStep("artifacts.schema.json", setOf("apply"), nil),
-		"Packages": familyStep("packages.schema.json", setOf("prepare", "apply"), map[string]ActionContract{
-			"download": {Outputs: setOf("artifacts"), Roles: setOf("prepare")},
-			"install":  {Outputs: nil, Roles: setOf("apply")},
-		}),
-		"Directory":    simpleStep("directory.schema.json", setOf("apply"), setOf("path")),
-		"Symlink":      simpleStep("symlink.schema.json", setOf("apply"), setOf("path")),
-		"SystemdUnit":  simpleStep("systemd-unit.schema.json", setOf("apply"), setOf("path")),
-		"Containerd":   simpleStep("containerd.schema.json", setOf("apply"), setOf("path")),
-		"PackageCache": simpleStep("package-cache.schema.json", setOf("apply"), nil),
-		"Swap":         simpleStep("swap.schema.json", setOf("apply"), nil),
-		"KernelModule": simpleStep("kernel-module.schema.json", setOf("apply"), setOf("name", "names")),
-		"Command":      simpleStep("command.schema.json", setOf("apply"), nil),
-		"Service":      simpleStep("service.schema.json", setOf("apply"), setOf("name", "names")),
-		"Sysctl":       simpleStep("sysctl.schema.json", setOf("apply"), nil),
-		"File": familyStep("file.schema.json", setOf("prepare", "apply"), map[string]ActionContract{
-			"download": {Outputs: setOf("path", "artifacts"), Roles: setOf("prepare", "apply")},
-			"write":    {Outputs: setOf("path"), Roles: setOf("apply")},
-			"copy":     {Outputs: setOf("dest"), Roles: setOf("apply")},
-			"edit":     {Outputs: setOf("path"), Roles: setOf("apply")},
-		}),
-		"Repository": familyStep("repository.schema.json", setOf("apply"), map[string]ActionContract{
-			"configure": {Outputs: setOf("path"), Roles: setOf("apply")},
-		}),
-		"Image": familyStep("image.schema.json", setOf("prepare", "apply"), map[string]ActionContract{
-			"download": {Outputs: setOf("artifacts"), Roles: setOf("prepare")},
-			"verify":   {Outputs: nil, Roles: setOf("apply")},
-		}),
-		"Wait": familyStep("wait.schema.json", setOf("apply"), map[string]ActionContract{
-			"serviceActive":  {Outputs: nil, Roles: setOf("apply")},
-			"commandSuccess": {Outputs: nil, Roles: setOf("apply")},
-			"fileExists":     {Outputs: nil, Roles: setOf("apply")},
-			"fileAbsent":     {Outputs: nil, Roles: setOf("apply")},
-			"tcpPortClosed":  {Outputs: nil, Roles: setOf("apply")},
-			"tcpPortOpen":    {Outputs: nil, Roles: setOf("apply")},
-		}),
-		"Kubeadm": familyStep("kubeadm.schema.json", setOf("apply"), map[string]ActionContract{
-			"init":  {Outputs: setOf("joinFile"), Roles: setOf("apply")},
-			"join":  {Outputs: nil, Roles: setOf("apply")},
-			"reset": {Outputs: nil, Roles: setOf("apply")},
-		}),
+	contracts := make(map[string]StepContract, len(StepDefinitions()))
+	for _, def := range StepDefinitions() {
+		actions := map[string]ActionContract{}
+		for _, action := range def.Actions {
+			actions[action.Name] = ActionContract{
+				Outputs: setOf(action.Outputs...),
+				Roles:   setOf(action.Roles...),
+			}
+		}
+		contracts[def.Kind] = StepContract{
+			SchemaFile: def.SchemaFile,
+			Roles:      setOf(def.Roles...),
+			Outputs:    setOf(def.Outputs...),
+			Actions:    actions,
+		}
 	}
-}
-
-func simpleStep(schema string, roles map[string]bool, outputs map[string]bool) StepContract {
-	return StepContract{SchemaFile: schema, Roles: roles, Outputs: outputs}
-}
-
-func familyStep(schema string, roles map[string]bool, actions map[string]ActionContract) StepContract {
-	return StepContract{SchemaFile: schema, Roles: roles, Actions: actions}
+	return contracts
 }
 
 func StepSchemaFile(kind string) (string, bool) {
@@ -83,12 +46,11 @@ func StepContractForKind(kind string) (StepContract, bool) {
 }
 
 func StepKinds() []string {
-	contracts := stepContracts()
-	kinds := make([]string, 0, len(contracts))
-	for kind := range contracts {
-		kinds = append(kinds, kind)
+	defs := StepDefinitions()
+	kinds := make([]string, 0, len(defs))
+	for _, def := range defs {
+		kinds = append(kinds, def.Kind)
 	}
-	sort.Strings(kinds)
 	return kinds
 }
 
