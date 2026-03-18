@@ -7,9 +7,9 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 ## Default local flow
 
 - `init`: create starter workflow files under `workflows/`
-- `lint`: validate a workflow file or workspace against the workflow and step schemas
+- `lint`: validate a workflow file or workspace against the workflow and step schemas (`-o text|json`)
 - `prepare`: gather artifacts into `outputs/`, refresh the local `deck` binary, and write `.deck/manifest.json`
-- `plan`: inspect which apply steps would run or skip before execution
+- `plan`: inspect which apply steps would run or skip before execution (`-o text|json`)
 - `apply`: execute the `apply` workflow locally
 
 ## Additional helpers
@@ -20,9 +20,9 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 - `server remote unset`: clear the saved remote server URL
 - `server up`: expose a prepared bundle root over HTTP inside the air gap when a shared local source is useful
 - `server down`: stop a daemonized local server started with `deck server up -d`
-- `server health`: check `/healthz` on an explicit server or the saved remote server URL
+- `server health`: check `/healthz` on an explicit server or the saved remote server URL (`-o text|json`)
 - `server logs`: read local server audit logs from file or journal
-- `version`: show the current `deck` build version and metadata
+- `version`: show the current `deck` build version and metadata (`-o text|json`)
 - `completion`: generate shell completion for bash, zsh, fish, and PowerShell
 
 ## Optional AI-ready authoring helper
@@ -53,6 +53,22 @@ You can override `provider`, `model`, and `endpoint` per run, or save defaults w
 - `trace`: `debug` plus classifier/route system prompts and user prompts
 
 These commands are additive. They do not replace the default local execution path.
+
+`deck lint -o json` returns a structured report with the validated workflow list, summary counts, supported workflow contracts, and an empty `findings` array when the run passes cleanly.
+
+`deck plan -o json` returns the resolved workflow path, state path, runtime var keys, per-step actions, and a summary section.
+
+`deck server health -o json` returns the resolved server URL, `/healthz` URL, and HTTP status.
+
+`deck bundle verify -o json` returns the verified bundle path and final status.
+
+`deck cache list -o json` and `deck server logs -o json` keep machine-readable output on stdout while `--v=<n>` sends path and count diagnostics to stderr.
+
+Global `--v=<n>` writes diagnostics to stderr without changing stdout result contracts. Current levels follow this pattern:
+
+- `--v=0`: result only
+- `--v=1`: workflow/source/path decisions and high-level execution context
+- `--v=2`: per-step apply diagnostics and plan evaluation details
 
 ## Shell completion
 
@@ -87,15 +103,18 @@ To enable completion for all future shell sessions, add the sourcing command to 
 ```bash
 deck init --out ./demo
 deck version
+deck version -o json
 deck list --source local
 deck completion bash > ./deck.bash
 deck lint --file ./demo/workflows/scenarios/apply.yaml
+deck lint --file ./demo/workflows/scenarios/apply.yaml -o json
 deck lint --file ./demo/workflows/scenarios/prepare.yaml
 
 cd ./demo
 deck prepare
 deck bundle build --out ./bundle.tar
 deck plan --scenario apply --source local
+deck plan --scenario apply --source local -o json
 deck apply --scenario apply --source local
 ```
 
@@ -106,6 +125,10 @@ deck server remote set http://127.0.0.1:8080
 deck list --source server
 deck server up --root ./bundle --addr :8080
 deck server health --server http://127.0.0.1:8080
+deck server health --server http://127.0.0.1:8080 -o json
+deck server logs --root ./bundle --source file -o json --v=1
+deck bundle verify --file ./bundle -o json
+deck cache list -o json --v=1
 deck plan --scenario apply --source server
 
 deck ask config set --provider openai --model gpt-5.4 --endpoint https://api.openai.com/v1 --api-key "$DECK_ASK_API_KEY"

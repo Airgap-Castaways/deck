@@ -9,6 +9,7 @@ const (
 
 func newRootCommand() *cobra.Command {
 	cobra.EnableCommandSorting = false
+	setCLIVerbosity(0)
 
 	cmd := &cobra.Command{
 		Use:                "deck",
@@ -18,6 +19,7 @@ func newRootCommand() *cobra.Command {
 		SilenceUsage:       true,
 		DisableSuggestions: true,
 	}
+	cmd.PersistentFlags().IntVar(&cliVerbosity, "v", 0, "diagnostic verbosity level")
 
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	cmd.SetHelpCommandGroupID(commandGroupAdditional)

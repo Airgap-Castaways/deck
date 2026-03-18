@@ -27,6 +27,7 @@ type Options struct {
 	Clean        bool
 	VarOverrides map[string]any
 	Stdout       io.Writer
+	Diagnosticf  func(format string, args ...any) error
 }
 
 type preparedManifest struct {
@@ -47,6 +48,9 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	if err := emitDiagnostic(opts, "deck: prepare workflow=%s\n", filepath.ToSlash(prepareWorkflowPath)); err != nil {
+		return err
+	}
 	workflowRootDirPath, err := workspacepaths.LocateWorkflowTreeRoot(prepareWorkflowPath)
 	if err != nil {
 		return err
@@ -55,9 +59,19 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	if varsWorkflowPath != "" {
+		if err := emitDiagnostic(opts, "deck: prepare vars=%s\n", filepath.ToSlash(varsWorkflowPath)); err != nil {
+			return err
+		}
+	}
 	applyWorkflowPath, err := resolveOptionalApplyWorkflowPath(workflowRootDirPath)
 	if err != nil {
 		return err
+	}
+	if applyWorkflowPath != "" {
+		if err := emitDiagnostic(opts, "deck: prepare apply=%s\n", filepath.ToSlash(applyWorkflowPath)); err != nil {
+			return err
+		}
 	}
 	resolvedPreparedRoot := strings.TrimSpace(opts.PreparedRoot)
 	if resolvedPreparedRoot == "" {
@@ -66,6 +80,9 @@ func Run(ctx context.Context, opts Options) error {
 	resolvedPreparedRootAbs, err := filepath.Abs(resolvedPreparedRoot)
 	if err != nil {
 		return fmt.Errorf("resolve --root: %w", err)
+	}
+	if err := emitDiagnostic(opts, "deck: prepare preparedRoot=%s\n", filepath.ToSlash(resolvedPreparedRootAbs)); err != nil {
+		return err
 	}
 	preparedRoot, err := fsutil.NewPreparedRoot(resolvedPreparedRootAbs)
 	if err != nil {
@@ -77,6 +94,9 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	if opts.DryRun {
+		if err := emitDiagnostic(opts, "deck: prepare dry-run outputsRoot=%s\n", filepath.ToSlash(preparedRoot.Abs())); err != nil {
+			return err
+		}
 		for _, line := range []string{
 			fmt.Sprintf("PREPARE_WORKFLOW=%s", filepath.ToSlash(prepareWorkflowPath)),
 			fmt.Sprintf("WORKFLOW_INCLUDE=%s", filepath.ToSlash(prepareWorkflowPath)),
@@ -105,6 +125,9 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	if opts.Clean {
+		if err := emitDiagnostic(opts, "deck: prepare cleaning preparedRoot=%s\n", filepath.ToSlash(preparedRoot.Abs())); err != nil {
+			return err
+		}
 		if err := preparedHostPath.RemoveAll(); err != nil {
 			return fmt.Errorf("reset prepared root: %w", err)
 		}
@@ -119,6 +142,9 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	if strings.TrimSpace(prepareWorkflow.Role) != "prepare" {
 		return fmt.Errorf("prepare workflow role must be prepare: %s", prepareWorkflowPath)
+	}
+	if err := emitDiagnostic(opts, "deck: prepare role=%s refresh=%t clean=%t\n", strings.TrimSpace(prepareWorkflow.Role), opts.Refresh, opts.Clean); err != nil {
+		return err
 	}
 
 	if err := prepare.Run(ctx, prepareWorkflow, prepare.RunOptions{BundleRoot: preparedRoot.Abs(), ForceRedownload: opts.Refresh}); err != nil {
@@ -145,8 +171,18 @@ func Run(ctx context.Context, opts Options) error {
 	if err := writePreparedManifest(filepath.Join(workspaceRoot, ".deck", "manifest.json"), manifest); err != nil {
 		return err
 	}
+	if err := emitDiagnostic(opts, "deck: prepare manifestEntries=%d workspaceRoot=%s\n", len(manifest.Entries), filepath.ToSlash(workspaceRoot)); err != nil {
+		return err
+	}
 
 	return printLine(opts.Stdout, fmt.Sprintf("prepare: ok (%s)", preparedRoot.Abs()))
+}
+
+func emitDiagnostic(opts Options, format string, args ...any) error {
+	if opts.Diagnosticf == nil {
+		return nil
+	}
+	return opts.Diagnosticf(format, args...)
 }
 
 func printLine(w io.Writer, line string) error {

@@ -128,10 +128,15 @@ func newServerHealthCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeHealth(server)
+			output, err := cmdFlagValue(cmd, "output")
+			if err != nil {
+				return err
+			}
+			return executeHealth(server, output)
 		},
 	}
 	cmd.Flags().String("server", "", "server base URL (defaults to the saved remote server URL)")
+	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
 	return cmd
 }
 

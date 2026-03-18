@@ -1,7 +1,8 @@
 package main
 
 import (
-	"encoding/json"
+	"errors"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -9,24 +10,31 @@ import (
 )
 
 func newVersionCommand() *cobra.Command {
-	var jsonOutput bool
-
 	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Show deck build version",
 		Args:  cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			if !jsonOutput {
-				return stdoutPrintf("%s\n", buildinfo.Summary())
-			}
-
-			raw, err := json.MarshalIndent(buildinfo.Current(), "", "  ")
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			output, err := cmdFlagValue(cmd, "output")
 			if err != nil {
 				return err
 			}
-			return stdoutPrintf("%s\n", raw)
+			resolvedOutput := strings.ToLower(strings.TrimSpace(output))
+			if resolvedOutput == "" {
+				resolvedOutput = "text"
+			}
+			if resolvedOutput != "text" && resolvedOutput != "json" {
+				return errors.New("--output must be text or json")
+			}
+			if resolvedOutput == "text" {
+				return stdoutPrintf("%s\n", buildinfo.Summary())
+			}
+
+			enc := stdoutJSONEncoder()
+			enc.SetIndent("", "  ")
+			return enc.Encode(buildinfo.Current())
 		},
 	}
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "print version details as json")
+	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
 	return cmd
 }

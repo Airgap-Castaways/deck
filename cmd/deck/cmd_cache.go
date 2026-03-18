@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -29,12 +28,18 @@ func executeCacheList(output string) error {
 	if err != nil {
 		return err
 	}
+	if err := verbosef(1, "deck: cache list root=%s output=%s\n", root, strings.TrimSpace(output)); err != nil {
+		return err
+	}
 	entries, err := listCacheEntries(root)
 	if err != nil {
 		return err
 	}
+	if err := verbosef(1, "deck: cache list entries=%d\n", len(entries)); err != nil {
+		return err
+	}
 	if output == "json" {
-		enc := json.NewEncoder(os.Stdout)
+		enc := stdoutJSONEncoder()
 		return enc.Encode(entries)
 	}
 	for _, e := range entries {
@@ -50,6 +55,9 @@ func executeCacheClean(olderThan string, dryRun bool) error {
 	if err != nil {
 		return err
 	}
+	if err := verbosef(1, "deck: cache clean root=%s olderThan=%s dryRun=%t\n", root, strings.TrimSpace(olderThan), dryRun); err != nil {
+		return err
+	}
 	cutoff, hasCutoff, err := parseOlderThan(olderThan)
 	if err != nil {
 		return err
@@ -58,7 +66,13 @@ func executeCacheClean(olderThan string, dryRun bool) error {
 	if err != nil {
 		return err
 	}
+	if err := verbosef(1, "deck: cache clean matches=%d\n", len(plan)); err != nil {
+		return err
+	}
 	for _, p := range plan {
+		if err := verbosef(2, "deck: cache clean path=%s\n", p); err != nil {
+			return err
+		}
 		if err := stdoutPrintln(p); err != nil {
 			return err
 		}

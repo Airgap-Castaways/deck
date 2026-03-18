@@ -25,11 +25,16 @@ func newLintCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeLint(cmd.Context(), root, file, scenario)
+			output, err := cmdFlagValue(cmd, "output")
+			if err != nil {
+				return err
+			}
+			return executeLint(cmd.Context(), root, file, scenario, output)
 		},
 	}
 	cmd.Flags().String("root", ".", "workspace root containing workflows/")
 	cmd.Flags().StringP("file", "f", "", "path or URL to workflow file")
+	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
 	return cmd
 }
 

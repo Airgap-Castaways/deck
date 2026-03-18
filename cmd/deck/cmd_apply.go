@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -85,6 +85,13 @@ func runDiffWithOptions(ctx context.Context, opts diffOptions) error {
 }
 
 func executeDiff(ctx context.Context, workflowPath, selectedPhase, output string, varOverrides map[string]any) error {
+	resolvedOutput := strings.ToLower(strings.TrimSpace(output))
+	if resolvedOutput == "" {
+		resolvedOutput = "text"
+	}
+	if resolvedOutput != "text" && resolvedOutput != "json" {
+		return errors.New("--output must be text or json")
+	}
 	resolvedRequest, err := applycli.ResolveExecutionRequest(ctx, applycli.ExecutionRequestOptions{
 		CommandName:                  "diff",
 		WorkflowPath:                 workflowPath,
@@ -96,6 +103,9 @@ func executeDiff(ctx context.Context, workflowPath, selectedPhase, output string
 		StatePathFromExecutionTarget: true,
 	})
 	if err != nil {
+		return err
+	}
+	if err := verbosef(1, "deck: plan workflow=%s phase=%s state=%s\n", resolvedRequest.WorkflowPath, resolvedRequest.SelectedPhase, resolvedRequest.StatePath); err != nil {
 		return err
 	}
 	applyExecutionWorkflow := resolvedRequest.ExecutionWorkflow
@@ -114,20 +124,60 @@ func executeDiff(ctx context.Context, workflowPath, selectedPhase, output string
 	}
 	statePath := resolvedRequest.StatePath
 	ctxData := map[string]any{"bundleRoot": "", "stateFile": statePath}
-	type diffStep struct {
-		Phase  string `json:"phase,omitempty"`
-		ID     string `json:"id"`
-		Kind   string `json:"kind"`
-		Action string `json:"action"`
-		Reason string `json:"reason,omitempty"`
+	type planStep struct {
+		Phase         string            `json:"phase,omitempty"`
+		ID            string            `json:"id"`
+		Kind          string            `json:"kind"`
+		Action        string            `json:"action"`
+		Reason        string            `json:"reason,omitempty"`
+		When          string            `json:"when,omitempty"`
+		Retry         int               `json:"retry,omitempty"`
+		Timeout       string            `json:"timeout,omitempty"`
+		Register      map[string]string `json:"register,omitempty"`
+		WhenEvaluated bool              `json:"whenEvaluated,omitempty"`
 	}
-	steps := make([]diffStep, 0)
+	type planSummary struct {
+		TotalSteps      int `json:"totalSteps"`
+		RunSteps        int `json:"runSteps"`
+		SkipSteps       int `json:"skipSteps"`
+		SkipCompleted   int `json:"skipCompleted"`
+		SkipWhen        int `json:"skipWhen"`
+		PhaseCount      int `json:"phaseCount"`
+		CompletedSteps  int `json:"completedSteps"`
+		RuntimeVarCount int `json:"runtimeVarCount"`
+	}
+	type planReport struct {
+		WorkflowPath   string      `json:"workflowPath"`
+		SelectedPhase  string      `json:"selectedPhase,omitempty"`
+		StatePath      string      `json:"statePath"`
+		RuntimeVarKeys []string    `json:"runtimeVarKeys,omitempty"`
+		Summary        planSummary `json:"summary"`
+		Steps          []planStep  `json:"steps"`
+	}
+	steps := make([]planStep, 0)
+	summary := planSummary{PhaseCount: len(applyExecutionWorkflow.Phases), CompletedSteps: len(state.CompletedSteps), RuntimeVarCount: len(runtimeVars)}
 	for _, phase := range applyExecutionWorkflow.Phases {
 		for _, step := range phase.Steps {
-			entry := diffStep{Phase: phase.Name, ID: step.ID, Kind: step.Kind}
+			entry := planStep{
+				Phase:   phase.Name,
+				ID:      step.ID,
+				Kind:    step.Kind,
+				When:    strings.TrimSpace(step.When),
+				Retry:   step.Retry,
+				Timeout: strings.TrimSpace(step.Timeout),
+			}
+			if len(step.Register) > 0 {
+				entry.Register = make(map[string]string, len(step.Register))
+				for key, value := range step.Register {
+					entry.Register[key] = value
+				}
+			}
+			summary.TotalSteps++
 			if completed[step.ID] {
 				entry.Action = "skip"
 				entry.Reason = "completed"
+				summary.SkipSteps++
+				summary.SkipCompleted++
 				steps = append(steps, entry)
 				continue
 			}
@@ -135,28 +185,49 @@ func executeDiff(ctx context.Context, workflowPath, selectedPhase, output string
 			if evalErr != nil {
 				return fmt.Errorf("WHEN_EVAL_ERROR: step %s (%s): %w", step.ID, step.Kind, evalErr)
 			}
+			entry.WhenEvaluated = true
 			if !ok {
 				entry.Action = "skip"
 				entry.Reason = "when"
+				summary.SkipSteps++
+				summary.SkipWhen++
 				steps = append(steps, entry)
 				continue
 			}
 			entry.Action = "run"
+			summary.RunSteps++
 			steps = append(steps, entry)
 		}
 	}
+	runtimeVarKeys := make([]string, 0, len(runtimeVars))
+	for key := range runtimeVars {
+		runtimeVarKeys = append(runtimeVarKeys, key)
+	}
+	slices.Sort(runtimeVarKeys)
+	report := planReport{
+		WorkflowPath:   resolvedRequest.WorkflowPath,
+		SelectedPhase:  resolvedRequest.SelectedPhase,
+		StatePath:      statePath,
+		RuntimeVarKeys: runtimeVarKeys,
+		Summary:        summary,
+		Steps:          steps,
+	}
+	for _, s := range steps {
+		if err := verbosef(2, "deck: plan step=%s kind=%s phase=%s action=%s reason=%s when=%q retry=%d timeout=%q register=%d\n", s.ID, s.Kind, s.Phase, s.Action, s.Reason, s.When, s.Retry, s.Timeout, len(s.Register)); err != nil {
+			return err
+		}
+	}
 
-	if output == "json" {
-		payload := struct {
-			Phase     string     `json:"phase"`
-			StatePath string     `json:"statePath"`
-			Steps     []diffStep `json:"steps"`
-		}{Phase: resolvedRequest.SelectedPhase, StatePath: statePath, Steps: steps}
-		enc := json.NewEncoder(os.Stdout)
-		return enc.Encode(payload)
+	if resolvedOutput == "json" {
+		enc := stdoutJSONEncoder()
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
 	}
 	multiPhase := len(applyExecutionWorkflow.Phases) > 1
 	currentPhase := ""
+	if err := stdoutPrintf("PLAN workflow=%s state=%s selectedPhase=%s runtimeVars=%d completed=%d\n", resolvedRequest.WorkflowPath, statePath, displayValueOrDash(resolvedRequest.SelectedPhase), len(runtimeVarKeys), len(state.CompletedSteps)); err != nil {
+		return err
+	}
 	for _, s := range steps {
 		if multiPhase && s.Phase != currentPhase {
 			currentPhase = s.Phase
@@ -174,7 +245,15 @@ func executeDiff(ctx context.Context, workflowPath, selectedPhase, output string
 			return err
 		}
 	}
-	return nil
+	return stdoutPrintf("SUMMARY steps=%d run=%d skip=%d skipCompleted=%d skipWhen=%d phases=%d\n", summary.TotalSteps, summary.RunSteps, summary.SkipSteps, summary.SkipCompleted, summary.SkipWhen, summary.PhaseCount)
+}
+
+func displayValueOrDash(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "-"
+	}
+	return trimmed
 }
 
 type applyOptions struct {
@@ -280,6 +359,9 @@ func executeApply(ctx context.Context, workflowPath, bundleRoot, selectedPhase, 
 	if err != nil {
 		return err
 	}
+	if err := verbosef(1, "deck: apply workflow=%s phase=%s state=%s bundle=%s dryRun=%t prefetch=%t\n", resolvedRequest.WorkflowPath, resolvedRequest.SelectedPhase, resolvedRequest.StatePath, strings.TrimSpace(bundleRoot), dryRun, prefetch); err != nil {
+		return err
+	}
 
 	wf := resolvedRequest.Workflow
 	applyExecutionWorkflow := resolvedRequest.ExecutionWorkflow
@@ -291,6 +373,10 @@ func executeApply(ctx context.Context, workflowPath, bundleRoot, selectedPhase, 
 	if err != nil {
 		return err
 	}
+	if err := verbosef(1, "deck: apply runlog=%s\n", runLogger.Dir()); err != nil {
+		return err
+	}
+	eventSink := combineStepEventSinks(runLogger.EventSink(), verboseApplyStepSink())
 	defer func() {
 		status := "ok"
 		if err != nil {
@@ -305,17 +391,66 @@ func executeApply(ctx context.Context, workflowPath, bundleRoot, selectedPhase, 
 	if prefetch {
 		prefetchWorkflow := applycli.BuildPrefetchWorkflow(wf)
 		if len(prefetchWorkflow.Phases) > 0 && len(prefetchWorkflow.Phases[0].Steps) > 0 {
-			if err := install.Run(ctx, prefetchWorkflow, install.RunOptions{BundleRoot: bundleRoot, StatePath: statePath, EventSink: runLogger.EventSink()}); err != nil {
+			if err := verbosef(1, "deck: apply prefetchSteps=%d\n", len(prefetchWorkflow.Phases[0].Steps)); err != nil {
+				return err
+			}
+			if err := install.Run(ctx, prefetchWorkflow, install.RunOptions{BundleRoot: bundleRoot, StatePath: statePath, EventSink: eventSink}); err != nil {
 				return err
 			}
 		}
 	}
 
-	if err := install.Run(ctx, applyExecutionWorkflow, install.RunOptions{BundleRoot: bundleRoot, StatePath: statePath, EventSink: runLogger.EventSink()}); err != nil {
+	if err := install.Run(ctx, applyExecutionWorkflow, install.RunOptions{BundleRoot: bundleRoot, StatePath: statePath, EventSink: eventSink}); err != nil {
 		return err
 	}
 
 	return stdoutPrintln("apply: ok")
+}
+
+func combineStepEventSinks(sinks ...install.StepEventSink) install.StepEventSink {
+	filtered := make([]install.StepEventSink, 0, len(sinks))
+	for _, sink := range sinks {
+		if sink != nil {
+			filtered = append(filtered, sink)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return func(event install.StepEvent) {
+		for _, sink := range filtered {
+			sink(event)
+		}
+	}
+}
+
+func verboseApplyStepSink() install.StepEventSink {
+	if cliVerbosity < 1 {
+		return nil
+	}
+	return func(event install.StepEvent) {
+		status := strings.TrimSpace(event.Status)
+		level := 1
+		if status == "started" {
+			level = 2
+		}
+		parts := []string{
+			fmt.Sprintf("deck: apply step=%s", strings.TrimSpace(event.StepID)),
+			fmt.Sprintf("kind=%s", strings.TrimSpace(event.Kind)),
+			fmt.Sprintf("phase=%s", displayValueOrDash(event.Phase)),
+			fmt.Sprintf("status=%s", displayValueOrDash(status)),
+		}
+		if event.Attempt > 0 {
+			parts = append(parts, fmt.Sprintf("attempt=%d", event.Attempt))
+		}
+		if strings.TrimSpace(event.Reason) != "" {
+			parts = append(parts, fmt.Sprintf("reason=%s", strings.TrimSpace(event.Reason)))
+		}
+		if strings.TrimSpace(event.Error) != "" {
+			parts = append(parts, fmt.Sprintf("error=%s", strings.TrimSpace(event.Error)))
+		}
+		_ = verbosef(level, "%s\n", strings.Join(parts, " "))
+	}
 }
 
 func resolvePlanWorkflowPath(workflowPath, scenario, source string) (string, error) {
@@ -490,9 +625,56 @@ func runApplyDryRun(wf *config.Workflow, selectedPhaseName string, bundleRoot st
 	return nil
 }
 
-func executeLint(ctx context.Context, root string, file string, scenario string) error {
+type lintReport struct {
+	Status     string        `json:"status"`
+	Mode       string        `json:"mode"`
+	Root       string        `json:"root,omitempty"`
+	Entrypoint string        `json:"entrypoint,omitempty"`
+	Scenario   string        `json:"scenario,omitempty"`
+	Workflows  []string      `json:"workflows"`
+	Summary    lintSummary   `json:"summary"`
+	Contracts  lintContracts `json:"contracts"`
+	Findings   []lintFinding `json:"findings"`
+}
+
+type lintSummary struct {
+	WorkflowCount int `json:"workflowCount"`
+	WarningCount  int `json:"warningCount"`
+	ErrorCount    int `json:"errorCount"`
+}
+
+type lintContracts struct {
+	SupportedVersion string   `json:"supportedVersion"`
+	SupportedRoles   []string `json:"supportedRoles"`
+	TopLevelModes    []string `json:"topLevelModes"`
+	ImportRule       string   `json:"importRule"`
+	InvariantNotes   []string `json:"invariantNotes"`
+}
+
+type lintFinding struct {
+	Severity string `json:"severity"`
+	Code     string `json:"code"`
+	Message  string `json:"message"`
+	Hint     string `json:"hint,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Phase    string `json:"phase,omitempty"`
+	StepID   string `json:"stepId,omitempty"`
+	Kind     string `json:"kind,omitempty"`
+}
+
+func executeLint(ctx context.Context, root string, file string, scenario string, output string) error {
+	resolvedOutput := strings.ToLower(strings.TrimSpace(output))
+	if resolvedOutput == "" {
+		resolvedOutput = "text"
+	}
+	if resolvedOutput != "text" && resolvedOutput != "json" {
+		return errors.New("--output must be text or json")
+	}
 	resolvedFile := strings.TrimSpace(file)
 	resolvedScenario := strings.TrimSpace(scenario)
+	if err := verbosef(1, "deck: lint root=%s file=%s scenario=%s\n", strings.TrimSpace(root), resolvedFile, resolvedScenario); err != nil {
+		return err
+	}
 	if resolvedScenario != "" {
 		if resolvedFile != "" {
 			return fmt.Errorf("lint accepts either --file or a scenario name, not both")
@@ -501,22 +683,28 @@ func executeLint(ctx context.Context, root string, file string, scenario string)
 		if err != nil {
 			return err
 		}
+		if err := verbosef(1, "deck: lint entrypoint=%s\n", resolvedPath); err != nil {
+			return err
+		}
 		files, err := validate.Entrypoint(resolvedPath)
 		if err != nil {
 			return err
 		}
-		return stdoutPrintf("lint: ok (%d workflows)\n", len(files))
+		return writeLintReport(resolvedOutput, lintReport{Mode: "scenario", Root: strings.TrimSpace(root), Entrypoint: resolvedPath, Scenario: resolvedScenario, Workflows: files, Summary: lintSummary{WorkflowCount: len(files)}})
 	}
 	if resolvedFile != "" {
 		if isLocalComponentWorkflowPath(resolvedFile) {
 			return fmt.Errorf("lint entrypoints must live under workflows/scenarios/: %s", resolvedFile)
 		}
 		if isLocalScenarioWorkflowPath(resolvedFile) {
+			if err := verbosef(1, "deck: lint entrypoint=%s\n", resolvedFile); err != nil {
+				return err
+			}
 			files, err := validate.Entrypoint(resolvedFile)
 			if err != nil {
 				return err
 			}
-			return stdoutPrintf("lint: ok (%d workflows)\n", len(files))
+			return writeLintReport(resolvedOutput, lintReport{Mode: "entrypoint", Entrypoint: resolvedFile, Workflows: files, Summary: lintSummary{WorkflowCount: len(files)}})
 		}
 		if err := validate.File(resolvedFile); err != nil {
 			return err
@@ -528,14 +716,57 @@ func executeLint(ctx context.Context, root string, file string, scenario string)
 		if err := validate.Workflow(resolvedFile, wf); err != nil {
 			return err
 		}
-		return stdoutPrintf("lint: ok (%s)\n", resolvedFile)
+		return writeLintReport(resolvedOutput, lintReport{Mode: "file", Entrypoint: resolvedFile, Workflows: []string{resolvedFile}, Summary: lintSummary{WorkflowCount: 1}})
 	}
 
 	files, err := validate.Workspace(root)
 	if err != nil {
 		return err
 	}
-	return stdoutPrintf("lint: ok (%d workflows)\n", len(files))
+	if err := verbosef(1, "deck: lint workspace=%s workflows=%d\n", strings.TrimSpace(root), len(files)); err != nil {
+		return err
+	}
+	return writeLintReport(resolvedOutput, lintReport{Mode: "workspace", Root: strings.TrimSpace(root), Workflows: files, Summary: lintSummary{WorkflowCount: len(files)}})
+}
+
+func writeLintReport(output string, report lintReport) error {
+	if len(report.Workflows) == 0 {
+		report.Workflows = []string{}
+	}
+	if len(report.Findings) == 0 {
+		report.Findings = []lintFinding{}
+	}
+	if report.Contracts.SupportedVersion == "" {
+		report.Contracts = lintContracts{
+			SupportedVersion: validate.SupportedWorkflowVersion(),
+			SupportedRoles:   validate.SupportedWorkflowRoles(),
+			TopLevelModes:    validate.WorkflowTopLevelModes(),
+			ImportRule:       validate.WorkflowImportRule(),
+			InvariantNotes:   validate.WorkflowInvariantNotes(),
+		}
+	}
+	if report.Summary.WorkflowCount == 0 {
+		report.Summary.WorkflowCount = len(report.Workflows)
+	}
+	report.Status = "ok"
+	if err := verbosef(2, "deck: lint summary mode=%s workflows=%d warnings=%d errors=%d version=%s\n", report.Mode, report.Summary.WorkflowCount, report.Summary.WarningCount, report.Summary.ErrorCount, report.Contracts.SupportedVersion); err != nil {
+		return err
+	}
+	if output == "json" {
+		enc := stdoutJSONEncoder()
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
+	}
+	if report.Summary.WorkflowCount == 1 && report.Entrypoint != "" && report.Mode == "file" {
+		if err := stdoutPrintf("lint: ok (%s)\n", report.Entrypoint); err != nil {
+			return err
+		}
+	} else {
+		if err := stdoutPrintf("lint: ok (%d workflows)\n", report.Summary.WorkflowCount); err != nil {
+			return err
+		}
+	}
+	return stdoutPrintf("SUMMARY mode=%s workflows=%d warnings=%d errors=%d supportedVersion=%s roles=%s topLevelModes=%s\n", report.Mode, report.Summary.WorkflowCount, report.Summary.WarningCount, report.Summary.ErrorCount, report.Contracts.SupportedVersion, strings.Join(report.Contracts.SupportedRoles, ","), strings.Join(report.Contracts.TopLevelModes, ","))
 }
 
 func resolveLintScenarioPath(root string, scenario string) (string, error) {

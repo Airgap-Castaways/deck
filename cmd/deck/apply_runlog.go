@@ -62,6 +62,13 @@ type applyRunLogger struct {
 	events    *os.File
 }
 
+func (l *applyRunLogger) Dir() string {
+	if l == nil {
+		return ""
+	}
+	return l.dir
+}
+
 func newApplyRunLogger(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (*applyRunLogger, error) {
 	runsRoot, err := userdirs.RunsRoot()
 	if err != nil {
@@ -128,7 +135,7 @@ func (l *applyRunLogger) EventSink() install.StepEventSink {
 	}
 	return func(event install.StepEvent) {
 		if err := l.writeEvent(event); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "deck: write run event log: %v\n", err)
+			_ = stderrPrintf("deck: write run event log: %v\n", err)
 		}
 	}
 }

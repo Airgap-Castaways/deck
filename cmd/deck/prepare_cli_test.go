@@ -125,6 +125,44 @@ func TestRunPrepareDryRunDoesNotWrite(t *testing.T) {
 	}
 }
 
+func TestRunPrepareVerboseDiagnostics(t *testing.T) {
+	root := t.TempDir()
+	workflowsDir := filepath.Join(root, "workflows")
+	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "prepare.yaml"), []byte("role: prepare\nversion: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
+		t.Fatalf("write prepare workflow: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("role: apply\nversion: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("x: y\n"), 0o644); err != nil {
+		t.Fatalf("write vars workflow: %v", err)
+	}
+	originalCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(originalCWD) })
+
+	res := execute([]string{"prepare", "--dry-run", "--v=1"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	if !strings.Contains(res.stdout, "PREPARE_WORKFLOW=") {
+		t.Fatalf("unexpected stdout: %q", res.stdout)
+	}
+	for _, want := range []string{"deck: prepare root=", "deck: prepare workflow=", "deck: prepare vars=", "deck: prepare apply=", "deck: prepare preparedRoot=", "deck: prepare dry-run outputsRoot="} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+		}
+	}
+}
+
 func TestRunPrepareSucceedsWithoutApplyWorkflow(t *testing.T) {
 	root := t.TempDir()
 	workflowsDir := filepath.Join(root, "workflows")

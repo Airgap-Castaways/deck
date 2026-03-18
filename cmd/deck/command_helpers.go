@@ -1,11 +1,18 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+)
+
+var (
+	cliStdout    io.Writer = os.Stdout
+	cliStderr    io.Writer = os.Stderr
+	cliVerbosity int
 )
 
 type varFlag struct {
@@ -65,13 +72,52 @@ func varsAsAnyMap(vars map[string]string) map[string]any {
 	return converted
 }
 
+func setCLIWriters(stdout io.Writer, stderr io.Writer) {
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+	cliStdout = stdout
+	cliStderr = stderr
+}
+
+func stdoutWriter() io.Writer {
+	return cliStdout
+}
+
+func stdoutJSONEncoder() *json.Encoder {
+	return json.NewEncoder(stdoutWriter())
+}
+
+func setCLIVerbosity(level int) {
+	if level < 0 {
+		level = 0
+	}
+	cliVerbosity = level
+}
+
+func verbosef(level int, format string, args ...any) error {
+	if cliVerbosity < level {
+		return nil
+	}
+	_, err := fmt.Fprintf(cliStderr, format, args...)
+	return err
+}
+
 func stdoutPrintf(format string, args ...any) error {
-	_, err := fmt.Fprintf(os.Stdout, format, args...)
+	_, err := fmt.Fprintf(stdoutWriter(), format, args...)
 	return err
 }
 
 func stdoutPrintln(args ...any) error {
-	_, err := fmt.Fprintln(os.Stdout, args...)
+	_, err := fmt.Fprintln(stdoutWriter(), args...)
+	return err
+}
+
+func stderrPrintf(format string, args ...any) error {
+	_, err := fmt.Fprintf(cliStderr, format, args...)
 	return err
 }
 

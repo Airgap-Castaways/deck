@@ -138,17 +138,38 @@ func defaultDeckignoreContent() string {
 	}, "\n")
 }
 
-func executeBundleVerify(filePath string, positionalArgs []string) error {
+type bundleVerifyReport struct {
+	Status string `json:"status"`
+	Path   string `json:"path"`
+}
+
+func executeBundleVerify(filePath string, positionalArgs []string, output string) error {
+	resolvedOutput := strings.ToLower(strings.TrimSpace(output))
+	if resolvedOutput == "" {
+		resolvedOutput = "text"
+	}
+	if resolvedOutput != "text" && resolvedOutput != "json" {
+		return errors.New("--output must be text or json")
+	}
 	resolvedPath, err := resolveBundlePathArg(filePath, positionalArgs, "bundle verify accepts a single <path>")
 	if err != nil {
+		return err
+	}
+	if err := verbosef(1, "deck: bundle verify path=%s\n", resolvedPath); err != nil {
 		return err
 	}
 
 	if err := bundle.VerifyManifest(resolvedPath); err != nil {
 		return err
 	}
+	report := bundleVerifyReport{Status: "ok", Path: resolvedPath}
+	if resolvedOutput == "json" {
+		enc := stdoutJSONEncoder()
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
+	}
 
-	return stdoutPrintf("bundle verify: ok (%s)\n", resolvedPath)
+	return stdoutPrintf("bundle verify: ok (%s)\n", report.Path)
 }
 
 func executeBundleBuild(root string, out string) error {
@@ -158,6 +179,9 @@ func executeBundleBuild(root string, out string) error {
 	}
 	if strings.TrimSpace(out) == "" {
 		return errors.New("--out is required")
+	}
+	if err := verbosef(1, "deck: bundle build root=%s out=%s\n", resolvedRoot, strings.TrimSpace(out)); err != nil {
+		return err
 	}
 
 	if err := bundle.CollectArchive(resolvedRoot, out); err != nil {

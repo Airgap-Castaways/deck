@@ -30,6 +30,8 @@ func execute(args []string) cliResult {
 	root := newRootCommand()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	setCLIWriters(&stdout, &stderr)
+	defer setCLIWriters(os.Stdout, os.Stderr)
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs(args)

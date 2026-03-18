@@ -54,6 +54,9 @@ func executeList(source, output string) error {
 	if err != nil {
 		return err
 	}
+	if err := verbosef(1, "deck: list source=%s output=%s\n", resolvedSource, strings.TrimSpace(output)); err != nil {
+		return err
+	}
 	if output != "text" && output != "json" {
 		return errors.New("--output must be text or json")
 	}
@@ -64,7 +67,7 @@ func executeList(source, output string) error {
 	}
 
 	if output == "json" {
-		enc := json.NewEncoder(os.Stdout)
+		enc := stdoutJSONEncoder()
 		enc.SetIndent("", "  ")
 		return enc.Encode(entries)
 	}
