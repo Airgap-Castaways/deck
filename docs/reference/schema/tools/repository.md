@@ -68,7 +68,7 @@ spec:
 | `spec.backupPaths` | `array<string>` | no | `` | `` | Paths to back up before modifying. Backed-up files are saved with a `.bak` suffix. | `[/etc/apt/sources.list]` |
 | `spec.cleanupPaths` | `array<string>` | no | `` | `` | Paths to remove before writing the new repository definition. | `[/etc/apt/sources.list.d/ubuntu.list]` |
 | `spec.disableExisting` | `boolean` | no | `` | `` | Disable all existing repository definitions before writing the new one. Prevents conflicts from online repos during offline installs. | `true` |
-| `spec.format` | `string` | no | `` | `apt, yum` | Repository file format to write. `apt` produces a sources.list entry; `yum` produces a `.repo` file. | `apt` |
+| `spec.format` | `string` | no | `` | `auto, apt, yum` | Repository file format to write. `auto` detects from the host family, `apt` produces a sources.list entry, and `yum` produces a `.repo` file. | `apt` |
 | `spec.mode` | `string` | no | `` | `` | File permissions applied to the generated repository file in octal notation. | `0644` |
 | `spec.path` | `string` | no | `` | `` | Explicit output path for the generated repository file. Defaults to `/etc/apt/sources.list.d/deck-offline.list` for apt or `/etc/yum.repos.d/deck-offline.repo` for yum when omitted. | `/etc/apt/sources.list.d/offline.list` |
 | `spec.refreshCache` | `object` | no | `` | `` | Optional package metadata refresh that runs after repository files are written. The block is enabled by default when present, and behaves like a follow-up `PackageCache` step. | `{clean:true,update:true}` |

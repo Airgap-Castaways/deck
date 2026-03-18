@@ -8,7 +8,7 @@ Download or verify container images.
 - kind: `Image`
 - visibility: `public`
 - schema: `../../../schemas/tools/image.schema.json`
-- category: `prepare`
+- category: `containers`
 - actions: `download`, `verify`
 
 ## When To Use
@@ -58,11 +58,10 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.action` | `string` | yes | `` | `download, verify` | Chooses whether the step downloads images into the bundle or verifies their presence on the node. | `verify` |
 | `spec.auth` | `array<object>` | no | `` | `` | Optional registry authentication entries for `download`. Match each private registry with credentials while leaving public registries to the default keychain. | `[{registry:registry.example.com,basic:{username:robot,password:${REGISTRY_PASSWORD}}}]` |
-| `spec.backend` | `object` | no | `` | `` | Backend-specific settings such as runtime or transport configuration. | `{runtime:containerd}` |
+| `spec.backend` | `object` | no | `` | `` | Backend-specific download settings such as image transfer engine configuration. Applies to `download` only. | `{engine:go-containerregistry}` |
 | `spec.command` | `array<string>` | no | `` | `` | Optional image-listing command used by `verify` when the default runtime command is not appropriate. | `[ctr,-n,k8s.io,images,list,-q]` |
 | `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download or verify. | `[registry.k8s.io/pause:3.9]` |
 | `spec.output` | `object` | no | `` | `` | Bundle output settings for `download`. Deck writes one tar archive per image under `output.dir`. | `{dir:images/control-plane}` |
-| `spec.runtime` | `object` | no | `` | `` | Container runtime configuration used when pulling or verifying images. | `{socket:unix:///run/containerd/containerd.sock}` |
 
 ## Nested Objects
 
@@ -72,6 +71,12 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.auth[].basic.password` | `string` | yes | `` | `` | Registry password or access token paired with `basic.username`. | `${REGISTRY_PASSWORD}` |
 | `spec.auth[].basic.username` | `string` | yes | `` | `` | Registry username used for basic authentication. | `robot` |
+
+### `spec.backend`
+
+| Key | Type | Required | Default | Enum | Description | Example |
+|---|---|---:|---|---|---|---|
+| `spec.backend.engine` | `string` | no | `` | `go-containerregistry` | Image download engine. Currently only `go-containerregistry` is supported. | `go-containerregistry` |
 
 ### `spec.output`
 

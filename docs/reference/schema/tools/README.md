@@ -35,7 +35,7 @@ Reference documentation for each typed workflow step supported by deck.
 
 ## [Image](image.md)
 
-- **Category**: `prepare`
+- **Category**: `containers`
 - **Summary**: Download or verify container images.
 
 ## [KernelModule](kernel-module.md)

@@ -471,12 +471,6 @@ func actionRequiredFields(spec map[string]any, action string) []string {
 			for _, item := range toStrings(thenNode["required"]) {
 				required = append(required, prefixSpec(item))
 			}
-			for _, anyRaw := range toAnySliceFromUnknown(thenNode["anyOf"]) {
-				choice, _ := anyRaw.(map[string]any)
-				for _, item := range toStrings(choice["required"]) {
-					required = append(required, prefixSpec(item))
-				}
-			}
 		}
 		enumActions := toStrings(mapValue(ifNode, "properties", "action", "enum"))
 		for _, enumAction := range enumActions {

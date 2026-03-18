@@ -33,11 +33,13 @@ type editFileSpec struct {
 	Path   string             `json:"path"`
 	Backup *bool              `json:"backup"`
 	Edits  []editFileEditSpec `json:"edits"`
+	Mode   string             `json:"mode"`
 }
 
 type copyFileSpec struct {
 	Src  string `json:"src"`
 	Dest string `json:"dest"`
+	Mode string `json:"mode"`
 }
 
 type writeFileSpec struct {
@@ -102,7 +104,10 @@ func runEditFile(spec map[string]any) error {
 		}
 	}
 
-	return hostPath.WriteFile([]byte(updated), filemode.PublishedArtifact)
+	if err := hostPath.WriteFile([]byte(updated), filemode.PublishedArtifact); err != nil {
+		return err
+	}
+	return applyOptionalFileMode(hostPath, strings.TrimSpace(decoded.Mode))
 }
 
 func runCopyFile(spec map[string]any) error {
@@ -128,7 +133,10 @@ func runCopyFile(spec map[string]any) error {
 	if err != nil {
 		return err
 	}
-	return destPath.WriteFile(content, filemode.PublishedArtifact)
+	if err := destPath.WriteFile(content, filemode.PublishedArtifact); err != nil {
+		return err
+	}
+	return applyOptionalFileMode(destPath, strings.TrimSpace(decoded.Mode))
 }
 
 func runEnsureDir(spec map[string]any) error {
@@ -241,16 +249,18 @@ func runWriteFile(spec map[string]any) error {
 	if err := hostfs.WriteFileIfChanged(hostPath, []byte(content), 0o644); err != nil {
 		return err
 	}
-	if modeRaw := strings.TrimSpace(decoded.Mode); modeRaw != "" {
-		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
-		if err != nil {
-			return fmt.Errorf("invalid mode: %w", err)
-		}
-		if err := hostPath.Chmod(os.FileMode(modeVal)); err != nil {
-			return err
-		}
+	return applyOptionalFileMode(hostPath, strings.TrimSpace(decoded.Mode))
+}
+
+func applyOptionalFileMode(path hostfs.HostPath, modeRaw string) error {
+	if strings.TrimSpace(modeRaw) == "" {
+		return nil
 	}
-	return nil
+	modeVal, err := strconv.ParseUint(strings.TrimSpace(modeRaw), 8, 32)
+	if err != nil {
+		return fmt.Errorf("invalid mode: %w", err)
+	}
+	return path.Chmod(os.FileMode(modeVal))
 }
 
 func runTemplateFile(spec map[string]any) error {

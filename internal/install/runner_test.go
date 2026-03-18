@@ -519,7 +519,7 @@ func TestRun_Wait(t *testing.T) {
 				Steps: []config.Step{{
 					ID:   "wait-file",
 					Kind: "Wait",
-					Spec: map[string]any{"action": "fileExists", "path": target, "state": "exists", "type": "file", "pollInterval": "10ms", "timeout": "1s"},
+					Spec: map[string]any{"action": "fileExists", "path": target, "type": "file", "pollInterval": "10ms", "timeout": "1s"},
 				}},
 			}},
 		}
@@ -549,7 +549,7 @@ func TestRun_Wait(t *testing.T) {
 				Steps: []config.Step{{
 					ID:   "wait-absent",
 					Kind: "Wait",
-					Spec: map[string]any{"action": "fileAbsent", "path": target, "state": "absent", "pollInterval": "10ms", "timeout": "1s"},
+					Spec: map[string]any{"action": "fileAbsent", "path": target, "pollInterval": "10ms", "timeout": "1s"},
 				}},
 			}},
 		}
@@ -579,7 +579,7 @@ func TestRun_Wait(t *testing.T) {
 				Steps: []config.Step{{
 					ID:   "wait-non-empty",
 					Kind: "Wait",
-					Spec: map[string]any{"action": "fileExists", "path": target, "state": "exists", "type": "file", "nonEmpty": true, "pollInterval": "10ms", "timeout": "1s"},
+					Spec: map[string]any{"action": "fileExists", "path": target, "type": "file", "nonEmpty": true, "pollInterval": "10ms", "timeout": "1s"},
 				}},
 			}},
 		}
@@ -610,7 +610,7 @@ func TestRun_Wait(t *testing.T) {
 					ID:      "wait-type",
 					Kind:    "Wait",
 					Timeout: "80ms",
-					Spec:    map[string]any{"action": "fileExists", "path": target, "state": "exists", "type": "file", "pollInterval": "10ms"},
+					Spec:    map[string]any{"action": "fileExists", "path": target, "type": "file", "pollInterval": "10ms"},
 				}},
 			}},
 		}
@@ -2728,6 +2728,36 @@ func TestEditFileSupportsAppendOperation(t *testing.T) {
 	}
 }
 
+func TestFileModeAppliesToCopyAndEdit(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	dest := filepath.Join(dir, "dest.txt")
+	if err := os.WriteFile(src, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write src: %v", err)
+	}
+	if err := runCopyFile(map[string]any{"src": src, "dest": dest, "mode": "0600"}); err != nil {
+		t.Fatalf("runCopyFile failed: %v", err)
+	}
+	if info, err := os.Stat(dest); err != nil {
+		t.Fatalf("stat dest: %v", err)
+	} else if info.Mode().Perm() != 0o600 {
+		t.Fatalf("expected dest mode 0600, got %o", info.Mode().Perm())
+	}
+
+	if err := runEditFile(map[string]any{
+		"path":  dest,
+		"mode":  "0640",
+		"edits": []any{map[string]any{"match": "hello", "with": "deck", "op": "replace"}},
+	}); err != nil {
+		t.Fatalf("runEditFile failed: %v", err)
+	}
+	if info, err := os.Stat(dest); err != nil {
+		t.Fatalf("stat edited dest: %v", err)
+	} else if info.Mode().Perm() != 0o640 {
+		t.Fatalf("expected edited dest mode 0640, got %o", info.Mode().Perm())
+	}
+}
+
 func TestServiceStep(t *testing.T) {
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
@@ -3942,7 +3972,7 @@ func TestRun_WaitRequiresExplicitAction(t *testing.T) {
 			Steps: []config.Step{{
 				ID:   "wait-file",
 				Kind: "Wait",
-				Spec: map[string]any{"path": target, "state": "exists", "timeout": "10ms"},
+				Spec: map[string]any{"path": target, "timeout": "10ms"},
 			}},
 		}},
 	}

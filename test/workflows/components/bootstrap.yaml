@@ -96,7 +96,6 @@ steps:
       action: fileExists
       timeout: 5m
       path: /etc/kubernetes/admin.conf
-      state: exists
       type: file
       nonEmpty: true
   - id: bootstrap-offline-guard

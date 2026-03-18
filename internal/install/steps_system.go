@@ -23,10 +23,7 @@ type kernelModuleSpec struct {
 func runSysctl(spec map[string]any) error {
 	path := stringValue(spec, "writeFile")
 	if path == "" {
-		path = stringValue(spec, "dest")
-	}
-	if path == "" {
-		return fmt.Errorf("%s: Sysctl requires writeFile or dest", errCodeInstallSysctlPathMiss)
+		return fmt.Errorf("%s: Sysctl requires writeFile", errCodeInstallSysctlPathMiss)
 	}
 	hostPath, err := hostfs.NewHostPath(path)
 	if err != nil {

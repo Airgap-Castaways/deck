@@ -67,7 +67,6 @@ spec:
 | `spec.path` | `string` | no | `` | `` | Filesystem path to check. Required for `fileExists` and `fileAbsent`. | `/etc/kubernetes/admin.conf` |
 | `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
 | `spec.port` | `string` | no | `` | `` | TCP port number to check. Required for `tcpPortOpen` and `tcpPortClosed`. | `6443` |
-| `spec.state` | `string` | no | `` | `` | Deprecated field from the pre-action Wait schema. Use the `action` field instead (`fileExists` or `fileAbsent`). | `exists` |
 | `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
 | `spec.type` | `string` | no | `` | `any, file, dir` | Restricts the path check to a specific filesystem entry type. `file` matches regular files only, `dir` matches directories, `any` matches either. Defaults to `any`. | `file` |
 

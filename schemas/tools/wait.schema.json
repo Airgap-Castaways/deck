@@ -158,9 +158,6 @@
         "port": {
           "type": "string"
         },
-        "state": {
-          "type": "string"
-        },
         "timeout": {
           "pattern": "^[0-9]+(ms|s|m|h)$",
           "type": "string"

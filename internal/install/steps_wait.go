@@ -13,7 +13,6 @@ import (
 
 type waitSpec struct {
 	Action       string   `json:"action"`
-	State        string   `json:"state"`
 	Interval     string   `json:"interval"`
 	PollInterval string   `json:"pollInterval"`
 	InitialDelay string   `json:"initialDelay"`

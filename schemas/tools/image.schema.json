@@ -68,6 +68,66 @@
           }
         },
         {
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "download"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "command"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "verify"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "auth"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "backend"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "output"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
           "if": {
             "properties": {
               "action": {
@@ -130,7 +190,15 @@
           "type": "array"
         },
         "backend": {
-          "additionalProperties": true,
+          "additionalProperties": false,
+          "properties": {
+            "engine": {
+              "enum": [
+                "go-containerregistry"
+              ],
+              "type": "string"
+            }
+          },
           "type": "object"
         },
         "command": {
@@ -155,10 +223,6 @@
               "type": "string"
             }
           },
-          "type": "object"
-        },
-        "runtime": {
-          "additionalProperties": true,
           "type": "object"
         }
       },

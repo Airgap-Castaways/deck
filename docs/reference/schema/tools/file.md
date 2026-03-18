@@ -65,7 +65,7 @@ spec:
 | `spec.dest` | `string` | no | `` | `` | Destination path on the node. Required for `copy`. | `/home/vagrant/.kube/config` |
 | `spec.edits` | `array<object>` | no | `` | `` | Ordered list of match/replace rules applied sequentially to the file. Required for `edit`. | `[{match:SystemdCgroup = false,with:SystemdCgroup = true}]` |
 | `spec.fetch` | `object` | no | `` | `` | Optional download transport settings applied to `download` fetches. | `{offlineOnly:true}` |
-| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after writing. | `0644` |
+| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, or `edit` actions complete. | `0644` |
 | `spec.output` | `object` | no | `` | `` | Optional output target inside the bundle for the downloaded file. When omitted, deck writes to `files/<basename>`. | `{path:files/bin/runc}` |
 | `spec.path` | `string` | no | `` | `` | Destination path on the node. Required for `write` and `edit`. | `/etc/containerd/config.toml` |
 | `spec.source` | `object` | no | `` | `` | Download source descriptor. `path` or `bundle` may be combined with `url` to allow an online fallback when local resolution fails. | `{url:https://example.invalid/file.tar.gz}` |
@@ -78,7 +78,7 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.output.chmod` | `string` | no | `` | `` | File permissions applied to the downloaded output file in octal notation. | `0755` |
-| `spec.output.path` | `string` | yes | `` | `` | Bundle-relative path where the downloaded file is written. Defaults to `files/<basename>` when omitted. | `files/bin/runc` |
+| `spec.output.path` | `string` | no | `` | `` | Bundle-relative path where the downloaded file is written. Defaults to `files/<basename>` when omitted. | `files/bin/runc` |
 
 ### `spec.source`
 
@@ -143,7 +143,7 @@ spec:
 ```
 ### `download`
 
-Use `download` to pull or bundle a source into a staged output target during prepare.
+Use `download` to pull or bundle a source into a staged output target. This is most common in prepare, but apply can also stage bundle outputs for later steps.
 
 - required fields: `spec.source`
 
@@ -213,15 +213,13 @@ spec:
 
 Use `write` to write inline content or a rendered template to a destination path on the node.
 
-- required fields: `spec.path`, `spec.content`, `spec.contentFromTemplate`
+- required fields: `spec.path`
 
 #### Fields
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.action` | `string` | yes | `` | `download, write, copy, edit` | Selects the file operation. Each action changes which sibling fields are required. | `copy` |
-| `spec.content` | `string` | no | `` | `` | Inline file content written verbatim to `path`. Used with `write`. | `[offline-base]\nbaseurl=http://repo.local` |
-| `spec.contentFromTemplate` | `string` | no | `` | `` | Inline multi-line content rendered with the current vars before writing. Use this instead of `content` when the body includes template expressions such as `{{ .vars.* }}`. | `[Service]\nEnvironment=ROLE={{ .vars.role }}` |
 | `spec.path` | `string` | no | `` | `` | Destination path on the node. Required for `write` and `edit`. | `/etc/containerd/config.toml` |
 
 #### Rules

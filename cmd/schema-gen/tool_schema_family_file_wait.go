@@ -109,6 +109,7 @@ func patchWaitSpec(node any) {
 	spec["required"] = []any{"action"}
 	props := propertyMap(spec)
 	setMap(props, "action", map[string]any{"type": "string", "enum": []any{"serviceActive", "commandSuccess", "fileExists", "fileAbsent", "tcpPortClosed", "tcpPortOpen"}})
+	delete(props, "state")
 	mergeMap(props, "interval", map[string]any{"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"})
 	mergeMap(props, "initialDelay", map[string]any{"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"})
 	mergeMap(props, "timeout", map[string]any{"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"})
@@ -177,7 +178,7 @@ func patchFileOutput(node any) {
 	}
 	output["type"] = "object"
 	output["additionalProperties"] = false
-	output["required"] = []any{"path"}
+	delete(output, "required")
 	output["properties"] = map[string]any{
 		"path":  map[string]any{"type": "string", "minLength": 1},
 		"chmod": map[string]any{"type": "string", "pattern": "^[0-7]{4}$"},
