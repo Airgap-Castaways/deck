@@ -840,6 +840,35 @@ phases:
 		}
 	})
 
+	t.Run("tool schema rejects Wait fileExists with tcp fields", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: bad-wait-mix
+        apiVersion: deck/v1alpha1
+        kind: Wait
+        spec:
+          action: fileExists
+          path: /tmp/target
+          port: "6443"
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
 	t.Run("tool schema valid Symlink", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
@@ -1049,6 +1078,67 @@ phases:
         spec:
           source:
             url: https://example.invalid/runc
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects File write with both content fields", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: write-file
+        apiVersion: deck/v1alpha1
+        kind: File
+        spec:
+          action: write
+          path: /etc/example.conf
+          content: plain text
+          contentFromTemplate: |
+            templated {{ .vars.role }}
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects File write with copy-only fields", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: write-file
+        apiVersion: deck/v1alpha1
+        kind: File
+        spec:
+          action: write
+          path: /etc/example.conf
+          content: plain text
+          src: /tmp/source.txt
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			t.Fatalf("write file: %v", err)

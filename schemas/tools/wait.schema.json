@@ -34,6 +34,273 @@
       "additionalProperties": false,
       "allOf": [
         {
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "commandSuccess"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "name"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "path"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "type"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "nonEmpty"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "address"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "port"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "fileAbsent"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "name"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "command"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "nonEmpty"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "address"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "port"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "fileExists"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "name"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "command"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "address"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "port"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "serviceActive"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "command"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "path"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "type"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "nonEmpty"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "address"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "port"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "tcpPortClosed"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "name"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "command"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "path"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "type"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "nonEmpty"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "tcpPortOpen"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "name"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "command"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "path"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "type"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "nonEmpty"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
           "if": {
             "properties": {
               "action": {

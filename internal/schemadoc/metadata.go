@@ -42,7 +42,7 @@ var commonFieldDocs = map[string]FieldDoc{
 	"when":       {Description: "CEL expression evaluated at runtime. The step is skipped when the expression evaluates to false.", Example: "vars.skipKubeadm != 'true'"},
 	"retry":      {Description: "Number of times to retry the step after a failure before marking it as failed.", Example: "3"},
 	"timeout":    {Description: "Maximum duration allowed for the step before it is cancelled. Accepts Go duration strings.", Example: "5m"},
-	"register":   {Description: "Map of variable names to step output keys. Exported values are available to later steps as runtime vars.", Example: "{joinCmd: joinCommand}"},
+	"register":   {Description: "Map of variable names to step output keys. Exported values are available to later steps as runtime vars.", Example: "{outputPath:path}"},
 	"metadata":   {Description: "Optional free-form annotation map attached to the step for tooling or audit purposes.", Example: "{owner: platform-team}"},
 }
 
@@ -575,7 +575,7 @@ func WorkflowMeta() PageMetadata {
 			"steps[].when":                   {Description: "CEL expression evaluated at runtime. The step is skipped when the expression evaluates to false.", Example: "vars.skipSetup != 'true'"},
 			"steps[].retry":                  {Description: "Number of times to retry the step after a failure before marking it as failed.", Example: "3"},
 			"steps[].timeout":                {Description: "Maximum duration for the step. Accepts Go duration strings.", Example: "5m"},
-			"steps[].register":               {Description: "Map of variable names to step output keys. Exported values are available to later steps as runtime vars.", Example: "{joinCmd: joinCommand}"},
+			"steps[].register":               {Description: "Map of variable names to step output keys. Exported values are available to later steps as runtime vars.", Example: "{outputPath:path}"},
 			"phases[].name":                  {Description: "Stable phase name used for ordering and selective execution.", Example: "install"},
 			"phases[].imports":               {Description: "Component fragment imports that expand into this phase before step execution.", Example: "[{path:k8s/containerd-kubelet.yaml}]"},
 		},
