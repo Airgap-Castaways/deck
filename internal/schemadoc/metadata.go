@@ -524,7 +524,6 @@ var toolMetadata = map[string]ToolMetadata{
 			"spec.initialDelay": {Description: "Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable.", Example: "1s"},
 			"spec.timeout":      {Description: "Maximum total duration to wait before failing the step.", Example: "5m"},
 			"spec.pollInterval": {Description: "Deprecated alias for `interval`. Use `interval` instead.", Example: "2s"},
-			"spec.state":        {Description: "Deprecated field from the pre-action Wait schema. Use the `action` field instead (`fileExists` or `fileAbsent`).", Example: "exists"},
 		},
 		Notes: []string{
 			"`Wait` bridges convergence gaps between steps. It should not replace the configuration action itself.",
