@@ -192,7 +192,18 @@ func generateKubeadmToolSchema() map[string]any {
 		},
 		"allOf": []any{
 			conditionalRequired("init", []string{"outputJoinFile"}, nil),
-			conditionalRequired("join", []string{"joinFile"}, nil),
+			map[string]any{
+				"if": map[string]any{
+					"properties": map[string]any{"action": map[string]any{"const": "join"}},
+					"required":   []any{"action"},
+				},
+				"then": map[string]any{
+					"oneOf": []any{
+						map[string]any{"required": []any{"joinFile"}},
+						map[string]any{"required": []any{"configFile"}},
+					},
+				},
+			},
 			conditionalRequired("reset", nil, nil),
 		},
 	})

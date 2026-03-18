@@ -62,8 +62,17 @@
             ]
           },
           "then": {
-            "required": [
-              "joinFile"
+            "oneOf": [
+              {
+                "required": [
+                  "joinFile"
+                ]
+              },
+              {
+                "required": [
+                  "configFile"
+                ]
+              }
             ]
           }
         },
