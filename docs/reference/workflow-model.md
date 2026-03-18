@@ -21,6 +21,52 @@ Phase imports resolve from `workflows/components/`. Write component-relative pat
 
 `workflows/components/` files are step fragments. They contain only `steps:` and may reference shared `vars.*`, but shared defaults should stay in `workflows/vars.yaml` or the importing scenario `vars:` block.
 
+## Variables
+
+Variables flow from three sources, in order of precedence:
+
+1. `vars:` block in the scenario file (highest)
+2. `workflows/vars.yaml` (shared defaults)
+3. runtime-registered step outputs via `register`
+
+**`workflows/vars.yaml`** — define shared defaults once:
+
+```yaml
+osFamily: debian
+clusterName: prod-k8s
+```
+
+**Scenario `vars:` block** — override or extend for the specific scenario:
+
+```yaml
+role: apply
+version: v1alpha1
+vars:
+  clusterName: staging-k8s   # overrides vars.yaml
+```
+
+**Template interpolation** — use `{{ .vars.NAME }}` inside string fields:
+
+```yaml
+- id: write-hostname
+  kind: File
+  spec:
+    action: write
+    path: /etc/hostname
+    content: "{{ .vars.clusterName }}\n"
+```
+
+**CEL expressions** — use `vars.NAME` (no braces) in `when:` conditions:
+
+```yaml
+- id: install-rhel-packages
+  kind: Packages
+  spec:
+    action: install
+    names: [kubeadm, kubelet, kubectl]
+  when: vars.osFamily == "rhel"
+```
+
 ## Minimal workflow
 
 ```yaml
@@ -61,33 +107,88 @@ Every step is centered on:
 
 Optional execution controls:
 
-- `when`: conditional execution expression
-- `retry`: retry count
+- `when`: CEL expression; the step is skipped when it evaluates to false
+- `retry`: retry count on failure
 - `timeout`: duration string such as `30s` or `5m`
 - `register`: export step outputs into later runtime values
 
+### `when` — conditional execution
+
+`when` takes a CEL expression. Use `vars.` to reference variables defined in `vars:` or `vars.yaml`.
+
+```yaml
+steps:
+  - id: add-debian-repo
+    kind: Repository
+    spec:
+      type: apt
+      name: offline-base
+      baseurl: file:///srv/offline-repo
+    when: vars.osFamily == "debian"
+
+  - id: add-rhel-repo
+    kind: Repository
+    spec:
+      type: yum
+      name: offline-base
+      baseurl: file:///srv/offline-repo
+    when: vars.osFamily == "rhel"
+```
+
+### `register` — capture step output
+
+`register` maps a variable name to a step output key. The exported value is available to later steps via `vars.`.
+
+```yaml
+steps:
+  - id: get-join-cmd
+    kind: Kubeadm
+    spec:
+      action: token-create
+    register:
+      joinCmd: joinCommand
+
+  - id: join-node
+    kind: Kubeadm
+    spec:
+      action: join
+      command: "{{ .vars.joinCmd }}"
+```
+
 ## Phases
 
-Use phases when the procedure has natural boundaries.
+Use phases when the procedure has natural boundaries — a host-prereqs block that must complete before a runtime block, for example. For simple apply workflows with a handful of steps, flat `steps:` is fine.
 
-`artifacts` is the preferred prepare authoring mode. Use `steps` or `phases` for `apply`, or for older prepare workflows that have not been migrated yet.
+Each phase can import component fragments, include inline steps, or both.
 
-That keeps large workflows readable and lets the operator see the intended order without reading every command detail.
+```yaml
+role: apply
+version: v1alpha1
+phases:
+  - name: host-prereqs
+    imports:
+      - path: k8s/prereq.yaml
+      - path: repo/offline-repo.yaml
+  - name: runtime
+    imports:
+      - path: k8s/containerd-kubelet.yaml
+  - name: verify
+    steps:
+      - id: check-node-ready
+        kind: Command
+        spec:
+          command: [kubectl, get, nodes]
+```
 
-Typical examples:
+Import paths are relative to `workflows/components/`. Write `k8s/prereq.yaml`, not `../components/k8s/prereq.yaml`.
 
-- `prepare`
-- `install`
-- `verify`
-- `cleanup`
+`artifacts` is the preferred authoring mode for `role: prepare`. Use `steps` or `phases` for `role: apply`.
 
-Named phases keep large workflows readable and let the operator see the intended order without reading every command detail.
+## Step kinds
 
-## Prefer typed steps
+Typed steps make the workflow easier to scan, validate, and evolve. Use `Command` only when no supported kind fits.
 
-Typed steps are the center of the model. They make the workflow easier to scan, easier to validate, and easier to evolve than shell-heavy procedures.
-
-Supported step kinds:
+Supported kinds:
 
 - `Artifacts`
 - `Command`

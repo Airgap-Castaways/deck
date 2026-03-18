@@ -4,7 +4,7 @@
 
 [Korean README](./README.ko.md) | [Documentation](./docs/README.md)
 
-**A tool that converts air-gapped network operation procedures running on Bash into verifiable bundle-based workflows.**
+**Structured workflows for air-gapped operations : prepare, bundle, and apply in one binary!**
 
 <br clear="right" />
 
@@ -14,26 +14,26 @@ Operational procedures for disconnected sites—such as Kubernetes bootstraps, p
 
 `deck` provides a cleaner, structured alternative. It replaces fragile Bash scripts with typed steps, validates your workflows before execution, and packs everything needed into a self-contained bundle that can be securely transported and run locally on the target machine.
 
-## How to use it? (Quick Start)
+## Quick Start
 
 Create a workflow, validate it, bundle it, and run it on your target machine.
 
 ```bash
-# Initialize a new demo project
+# 1. Initialize a new demo project
 deck init --out ./demo
 
 cd ./demo
 
-# Validate the generated workflows
+# 2. Validate the generated workflows
 deck lint
 
-# Prepare artifacts defined in the workflows
+# 3. Prepare artifacts defined in the workflows
 deck prepare
 
-# Build a self-contained bundle
+# 4. Build a self-contained bundle
 deck bundle build --out ./bundle.tar
 
-# Run the workflow locally
+# 5. Run the workflow locally on the target machine
 deck apply
 ```
 
@@ -41,10 +41,10 @@ For a detailed walkthrough, start with the [Quick Start Guide](docs/getting-star
 
 ## Core Features
 
-- **Typed Workflow Steps:** Replace arbitrary shell commands with explicit, typed steps for common host changes, making your intent visible and reviewable.
-- **Pre-flight Validation:** Catch errors before you step into the datacenter. `deck` lints and validates workflow structure before transport or execution.
-- **Self-contained Bundles:** Build a single archive containing your workflows, required artifacts, and the `deck` binary itself. No missing dependencies on site.
-- **Air-gap Native:** Designed specifically for environments with no SSH-driven orchestration, no internet access, and a local human in the loop.
+- **Typed steps**: File, Package, Service — step kinds that make intent visible without reading through shell syntax.
+- **Pre-flight validation**: Lint catches schema errors before you carry the bundle into the site.
+- **Self-contained bundle**: Workflows, artifacts, and the `deck` binary in a single archive. No dependency surprises on site.
+- **Air-gap native**: No SSH, no control plane, no internet access assumed at execution time.
 
 ## Installation
 
@@ -54,10 +54,10 @@ Requirements:
 - Linux target environment (RHEL, Ubuntu) for the `apply` step
 
 ```bash
-# Install the binary
-go install github.com/taedi90/deck/cmd/deck@latest
+# Build and install from source
+go install ./cmd/deck
 
-# Verify installation
+# Verify
 deck version
 ```
 

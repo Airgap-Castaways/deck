@@ -48,7 +48,6 @@ These directories hold the source material for your workflows.
 
 This directory is managed by `deck` and should not be edited manually.
 - `manifest.json`: Tracks every file in the workspace for integrity and versioning.
-- `ask/`: Local context used by the AI authoring helper (`deck ask`).
 - `runs/`: Local execution history for the workspace.
 
 ## Related References

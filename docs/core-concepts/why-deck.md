@@ -24,7 +24,7 @@ These assumptions make sense in a cloud environment, but they create massive fri
 
 `deck` was built specifically for these disconnected environments.
 
-## The response
+## How deck addresses this
 
 `deck` splits the workflow into distinct, manageable phases:
 
