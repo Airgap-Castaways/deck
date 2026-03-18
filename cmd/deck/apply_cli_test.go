@@ -574,7 +574,11 @@ func TestResolveApplyBundleRootPrecedence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve cwd candidate: %v", err)
 	}
-	if resolved != root {
+	rootResolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatalf("eval symlinks on root: %v", err)
+	}
+	if resolved != rootResolved {
 		t.Fatalf("expected cwd bundle root, got %s", resolved)
 	}
 }
