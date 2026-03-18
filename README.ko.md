@@ -70,7 +70,7 @@ source <(deck completion zsh)  # zsh 사용 시
 deck completion fish | source  # fish 사용 시
 ```
 
-영구적으로 적용하려면 위 명령어를 `~/.bashrc` 또는 `~/.zshrc` 파일 끝에 추가하세요.
+영구적으로 적용하려면, 사용하는 셸의 시작 파일(예: `~/.bashrc`, `~/.zshrc`)에 해당 명령어를 추가하세요. 지원되는 모든 셸에 대한 자세한 내용은 [CLI 레퍼런스](docs/reference/cli.md#shell-completion)를 참고하세요.
 
 ## 상세 문서
 
