@@ -439,7 +439,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
-		if out != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=0 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=artifacts,phases,steps\n", wf) {
+		if out != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=artifacts,phases,steps\n", wf) {
 			t.Fatalf("unexpected output: %q", out)
 		}
 	})
@@ -449,7 +449,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
-		if out != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=0 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=artifacts,phases,steps\n", wf) {
+		if out != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=artifacts,phases,steps\n", wf) {
 			t.Fatalf("unexpected output: %q", out)
 		}
 	})
@@ -484,7 +484,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if payload.Status != "ok" || payload.Mode != "file" || payload.Entrypoint != wf || payload.Summary.WorkflowCount != 1 {
 			t.Fatalf("unexpected payload: %+v", payload)
 		}
-		if payload.Summary.WarningCount != 0 || payload.Summary.ErrorCount != 0 {
+		if payload.Summary.WarningCount != 1 || payload.Summary.ErrorCount != 0 {
 			t.Fatalf("unexpected summary counts: %+v", payload.Summary)
 		}
 		if len(payload.Workflows) != 1 || payload.Workflows[0] != wf {
@@ -493,8 +493,15 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if payload.Contracts.SupportedVersion != "v1alpha1" || len(payload.Contracts.SupportedRoles) != 2 || len(payload.Contracts.TopLevelModes) != 3 || len(payload.Contracts.InvariantNotes) == 0 {
 			t.Fatalf("unexpected contracts: %+v", payload.Contracts)
 		}
-		if len(payload.Findings) != 0 {
+		if len(payload.Findings) != 1 {
 			t.Fatalf("unexpected findings: %+v", payload.Findings)
+		}
+		finding, ok := payload.Findings[0].(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected finding payload type: %#v", payload.Findings[0])
+		}
+		if finding["code"] != "W_COMMAND_OPAQUE" || finding["severity"] != "warning" || finding["stepId"] != "validate-run" || finding["kind"] != "Command" {
+			t.Fatalf("unexpected finding payload: %+v", finding)
 		}
 		if res.stderr != "" {
 			t.Fatalf("expected empty stderr, got %q", res.stderr)
@@ -506,7 +513,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
-		if res.stdout != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=0 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=artifacts,phases,steps\n", wf) {
+		if res.stdout != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=artifacts,phases,steps\n", wf) {
 			t.Fatalf("unexpected stdout: %q", res.stdout)
 		}
 		if !strings.Contains(res.stderr, "deck: lint root=") || !strings.Contains(res.stderr, "scenario=") {
@@ -563,6 +570,31 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		}
 		if out != "lint: ok (1 workflows)\nSUMMARY mode=scenario workflows=1 warnings=0 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=artifacts,phases,steps\n" {
 			t.Fatalf("unexpected output: %q", out)
+		}
+	})
+
+	t.Run("lint warns about remote artifact integrity gaps", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "prepare.yaml")
+		writeWorkflowYAML(t, path, "role: prepare\nversion: v1alpha1\nartifacts:\n  files:\n    - group: base\n      items:\n        - id: rpm\n          source:\n            url: https://example.com/pkg.rpm\n          output:\n            path: pkg.rpm\n")
+
+		res := execute([]string{"lint", "--file", path, "-o", "json"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		var payload struct {
+			Summary struct {
+				WarningCount int `json:"warningCount"`
+			} `json:"summary"`
+			Findings []map[string]any `json:"findings"`
+		}
+		if err := json.Unmarshal([]byte(res.stdout), &payload); err != nil {
+			t.Fatalf("parse lint json: %v stdout=%q", err, res.stdout)
+		}
+		if payload.Summary.WarningCount != 1 {
+			t.Fatalf("unexpected warning count: %+v", payload.Summary)
+		}
+		if len(payload.Findings) != 1 || payload.Findings[0]["code"] != "W_ARTIFACT_INTEGRITY_MISSING" {
+			t.Fatalf("unexpected findings: %+v", payload.Findings)
 		}
 	})
 

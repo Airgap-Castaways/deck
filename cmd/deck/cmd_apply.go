@@ -748,6 +748,34 @@ func writeLintReport(output string, report lintReport) error {
 	if report.Summary.WorkflowCount == 0 {
 		report.Summary.WorkflowCount = len(report.Workflows)
 	}
+	if len(report.Findings) == 0 {
+		findings, err := validate.AnalyzeFiles(report.Workflows)
+		if err != nil {
+			return err
+		}
+		for _, finding := range findings {
+			report.Findings = append(report.Findings, lintFinding{
+				Severity: finding.Severity,
+				Code:     finding.Code,
+				Message:  finding.Message,
+				Hint:     finding.Hint,
+				Path:     finding.Path,
+				Phase:    finding.Phase,
+				StepID:   finding.StepID,
+				Kind:     finding.Kind,
+			})
+		}
+	}
+	report.Summary.WarningCount = 0
+	report.Summary.ErrorCount = 0
+	for _, finding := range report.Findings {
+		switch strings.ToLower(strings.TrimSpace(finding.Severity)) {
+		case "error":
+			report.Summary.ErrorCount++
+		default:
+			report.Summary.WarningCount++
+		}
+	}
 	report.Status = "ok"
 	if err := verbosef(2, "deck: lint summary mode=%s workflows=%d warnings=%d errors=%d version=%s\n", report.Mode, report.Summary.WorkflowCount, report.Summary.WarningCount, report.Summary.ErrorCount, report.Contracts.SupportedVersion); err != nil {
 		return err

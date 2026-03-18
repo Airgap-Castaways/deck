@@ -54,7 +54,7 @@ You can override `provider`, `model`, and `endpoint` per run, or save defaults w
 
 These commands are additive. They do not replace the default local execution path.
 
-`deck lint -o json` returns a structured report with the validated workflow list, summary counts, supported workflow contracts, and an empty `findings` array when the run passes cleanly.
+`deck lint -o json` returns a structured report with the validated workflow list, summary counts, supported workflow contracts, and warning-level `findings` such as opaque `Command` steps or remote artifacts without integrity checks.
 
 `deck plan -o json` returns the resolved workflow path, state path, runtime var keys, per-step actions, and a summary section.
 
