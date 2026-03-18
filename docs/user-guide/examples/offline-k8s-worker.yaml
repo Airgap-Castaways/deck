@@ -62,6 +62,5 @@ phases:
         kind: Kubeadm
         spec:
           action: join
-          mode: real
           joinFile: /tmp/deck/join-real.txt
           extraArgs: ["--cri-socket", "unix:///run/containerd/containerd.sock", "--ignore-preflight-errors=Swap"]

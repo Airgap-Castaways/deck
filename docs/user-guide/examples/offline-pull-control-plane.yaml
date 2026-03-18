@@ -93,7 +93,6 @@ phases:
         kind: Kubeadm
         spec:
           action: init
-          mode: real
           outputJoinFile: /tmp/deck/join.txt
           criSocket: unix:///run/containerd/containerd.sock
           ignorePreflightErrors: [Swap]

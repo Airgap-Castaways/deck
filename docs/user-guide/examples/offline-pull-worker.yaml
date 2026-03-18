@@ -93,6 +93,5 @@ phases:
         kind: Kubeadm
         spec:
           action: join
-          mode: real
           joinFile: "{{ .vars.joinFile }}"
           extraArgs: ["--cri-socket", "unix:///run/containerd/containerd.sock", "--ignore-preflight-errors=Swap"]

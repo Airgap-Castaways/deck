@@ -62,7 +62,6 @@ phases:
         kind: Kubeadm
         spec:
           action: init
-          mode: real
           outputJoinFile: /tmp/deck/join-real.txt
           podNetworkCIDR: 10.244.0.0/16
           criSocket: unix:///run/containerd/containerd.sock

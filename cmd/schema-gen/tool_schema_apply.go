@@ -213,14 +213,13 @@ func generateKernelModuleToolSchema() map[string]any {
 }
 
 func generateKubeadmToolSchema() map[string]any {
-	root := stepEnvelopeSchema("Kubeadm", "KubeadmStep", "Runs kubeadm operations through action-specific modes.", "public")
+	root := stepEnvelopeSchema("Kubeadm", "KubeadmStep", "Runs kubeadm operations through action-specific subcommands.", "public")
 	props := propertyMap(root)
-	initAllowed := []string{"action", "mode", "configFile", "configTemplate", "pullImages", "outputJoinFile", "kubernetesVersion", "advertiseAddress", "podNetworkCIDR", "criSocket", "ignorePreflightErrors", "extraArgs", "skipIfAdminConfExists"}
-	joinAllowed := []string{"action", "mode", "configFile", "joinFile", "asControlPlane", "extraArgs"}
-	resetAllowed := []string{"action", "mode", "force", "ignoreErrors", "stopKubelet", "criSocket", "extraArgs", "removePaths", "removeFiles", "cleanupContainers", "restartRuntimeService"}
+	initAllowed := []string{"action", "configFile", "configTemplate", "pullImages", "outputJoinFile", "kubernetesVersion", "advertiseAddress", "podNetworkCIDR", "criSocket", "ignorePreflightErrors", "extraArgs", "skipIfAdminConfExists"}
+	joinAllowed := []string{"action", "configFile", "joinFile", "asControlPlane", "extraArgs"}
+	resetAllowed := []string{"action", "force", "ignoreErrors", "stopKubelet", "criSocket", "extraArgs", "removePaths", "removeFiles", "cleanupContainers", "restartRuntimeService"}
 	specProps := map[string]any{
 		"action":                enumStringSchema("init", "join", "reset"),
-		"mode":                  enumStringSchema("stub", "real"),
 		"configFile":            map[string]any{"type": "string"},
 		"configTemplate":        map[string]any{"type": "string"},
 		"pullImages":            map[string]any{"type": "boolean"},

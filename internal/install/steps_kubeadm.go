@@ -60,10 +60,7 @@ func runKubeadmInit(ctx context.Context, spec map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("decode KubeadmInit spec: %w", err)
 	}
-	mode := strings.TrimSpace(decoded.Mode)
-	if mode == "" {
-		mode = "stub"
-	}
+	mode := kubeadmMode(decoded.Mode)
 	if mode == "stub" {
 		return runKubeadmInitStub(decoded)
 	}
@@ -90,10 +87,7 @@ func runKubeadmJoin(ctx context.Context, spec map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("decode KubeadmJoin spec: %w", err)
 	}
-	mode := strings.TrimSpace(decoded.Mode)
-	if mode == "" {
-		mode = "stub"
-	}
+	mode := kubeadmMode(decoded.Mode)
 	if mode == "stub" {
 		return runKubeadmJoinStub(decoded)
 	}
@@ -382,10 +376,7 @@ func runKubeadmReset(ctx context.Context, spec map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("decode KubeadmReset spec: %w", err)
 	}
-	mode := strings.TrimSpace(decoded.Mode)
-	if mode == "" {
-		mode = "stub"
-	}
+	mode := kubeadmMode(decoded.Mode)
 	if mode == "stub" {
 		return runKubeadmResetStub(decoded)
 	}
@@ -455,6 +446,14 @@ func runKubeadmResetStub(spec kubeadmResetSpec) error {
 	_ = strings.TrimSpace(spec.CriSocket)
 	_ = strings.TrimSpace(spec.RestartRuntimeService)
 	return nil
+}
+
+func kubeadmMode(raw string) string {
+	mode := strings.TrimSpace(raw)
+	if mode == "" {
+		return "real"
+	}
+	return mode
 }
 
 func removeResetPaths(paths []string) error {

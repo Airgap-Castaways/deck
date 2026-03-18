@@ -1194,7 +1194,6 @@ phases:
         kind: Kubeadm
         spec:
           action: init
-          mode: real
           outputJoinFile: /tmp/deck/join.txt
           configFile: /tmp/deck/kubeadm-init.yaml
           configTemplate: default
@@ -1227,9 +1226,37 @@ phases:
         kind: Kubeadm
         spec:
           action: init
-          mode: real
           outputJoinFile: /tmp/deck/join.txt
           pullImages: "yes"
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects Kubeadm stub mode", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: kubeadm-init
+        apiVersion: deck/v1alpha1
+        kind: Kubeadm
+        spec:
+          action: init
+          mode: stub
+          outputJoinFile: /tmp/deck/join.txt
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			t.Fatalf("write file: %v", err)
@@ -1257,7 +1284,6 @@ phases:
         kind: Kubeadm
         spec:
           action: join
-          mode: real
           configFile: /tmp/deck/kubeadm-join.yaml
           asControlPlane: true
           extraArgs: [--skip-phases=preflight]
@@ -1284,7 +1310,6 @@ phases:
         kind: Kubeadm
         spec:
           action: join
-          mode: real
           joinFile: /tmp/deck/join.txt
           configFile: /tmp/deck/kubeadm-join.yaml
 `)
@@ -1341,7 +1366,6 @@ phases:
         kind: Kubeadm
         spec:
           action: join
-          mode: real
           joinFile: /tmp/deck/join.txt
           force: true
 `)

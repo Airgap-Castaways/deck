@@ -3,7 +3,6 @@ steps:
     kind: Kubeadm
     spec:
       action: reset
-      mode: real
       force: true
       ignoreErrors: true
       criSocket: unix:///run/containerd/containerd.sock
@@ -70,7 +69,6 @@ steps:
     timeout: 20m
     spec:
       action: init
-      mode: real
       configTemplate: default
       configFile: /tmp/deck/kubeadm-init.yaml
       pullImages: true

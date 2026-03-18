@@ -272,21 +272,20 @@ var toolMetadata = map[string]ToolMetadata{
 		Category:       "kubernetes",
 		Summary:        "Run kubeadm init, join, or reset actions.",
 		WhenToUse:      "Use this for bootstrap lifecycle steps after host prerequisites are ready.",
-		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-kubeadm\nkind: Kubeadm\nspec:\n  action: init\n  mode: real\n  outputJoinFile: /tmp/deck/join.txt\n",
-		CuratedExample: "kind: Kubeadm\nspec:\n  action: init\n  mode: real\n  outputJoinFile: /tmp/deck/join.txt\n  podNetworkCIDR: 10.244.0.0/16\n  criSocket: unix:///run/containerd/containerd.sock\n  ignorePreflightErrors: [Swap]\n",
+		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-kubeadm\nkind: Kubeadm\nspec:\n  action: init\n  outputJoinFile: /tmp/deck/join.txt\n",
+		CuratedExample: "kind: Kubeadm\nspec:\n  action: init\n  outputJoinFile: /tmp/deck/join.txt\n  podNetworkCIDR: 10.244.0.0/16\n  criSocket: unix:///run/containerd/containerd.sock\n  ignorePreflightErrors: [Swap]\n",
 		ActionNotes: map[string]string{
 			"init":  "`init` bootstraps a new control plane and writes a join artifact for worker nodes.",
 			"join":  "`join` consumes either a prepared join command file or a kubeadm JoinConfiguration file and adds the node to an existing cluster.",
 			"reset": "`reset` tears down kubeadm-managed state before rebuilding or reprovisioning.",
 		},
 		ActionExamples: map[string]string{
-			"init":  "kind: Kubeadm\nspec:\n  action: init\n  mode: real\n  outputJoinFile: /tmp/deck/join.txt\n  podNetworkCIDR: 10.244.0.0/16\n",
+			"init":  "kind: Kubeadm\nspec:\n  action: init\n  outputJoinFile: /tmp/deck/join.txt\n  podNetworkCIDR: 10.244.0.0/16\n",
 			"join":  "kind: Kubeadm\nspec:\n  action: join\n  configFile: /tmp/deck/kubeadm-join.yaml\n  extraArgs: [--skip-phases=preflight]\n",
-			"reset": "kind: Kubeadm\nspec:\n  action: reset\n  mode: real\n  force: true\n  removePaths: [/etc/cni/net.d, /var/lib/etcd]\n",
+			"reset": "kind: Kubeadm\nspec:\n  action: reset\n  force: true\n  removePaths: [/etc/cni/net.d, /var/lib/etcd]\n",
 		},
 		FieldDocs: map[string]FieldDoc{
 			"spec.action":                {Description: "Selects the kubeadm subcommand to run: `init`, `join`, or `reset`.", Example: "init"},
-			"spec.mode":                  {Description: "`real` runs kubeadm normally. `stub` performs a dry-run contract check without executing kubeadm. Defaults to `stub`.", Example: "real"},
 			"spec.outputJoinFile":        {Description: "Path where the generated join command is written after `init`. Worker nodes read this file to join the cluster.", Example: "/tmp/deck/join.txt"},
 			"spec.joinFile":              {Description: "Path to the join command file produced by a prior `init` run. For `join`, provide this or `configFile`.", Example: "/tmp/deck/join.txt"},
 			"spec.configFile":            {Description: "Path to an explicit kubeadm config file passed with `--config`. For `join`, provide this or `joinFile`. For `init`, combine it with `configTemplate` or a pre-rendered kubeadm config.", Example: "/tmp/deck/kubeadm.conf"},
@@ -313,7 +312,6 @@ var toolMetadata = map[string]ToolMetadata{
 			"Kubeadm fields are action-scoped: validation rejects `join`-only fields on `init`, `init`-only fields on `reset`, and other cross-action mixes.",
 			"When `skipIfAdminConfExists` skips `init`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.",
 			"Place host preparation steps (`Containerd`, `Swap`, `KernelModule`, `Sysctl`) before `Kubeadm` so bootstrap failures point to the correct step.",
-			"Use `mode: stub` in CI or dry-run contexts where a real cluster is not available.",
 		},
 	},
 

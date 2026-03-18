@@ -2,7 +2,7 @@
   "$id": "https://deck.local/schemas/tools/kubeadm.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Runs kubeadm operations through action-specific modes.",
+  "description": "Runs kubeadm operations through action-specific subcommands.",
   "properties": {
     "apiVersion": {
       "const": "deck/v1alpha1"
@@ -358,13 +358,6 @@
           "type": "string"
         },
         "kubernetesVersion": {
-          "type": "string"
-        },
-        "mode": {
-          "enum": [
-            "stub",
-            "real"
-          ],
           "type": "string"
         },
         "outputJoinFile": {
