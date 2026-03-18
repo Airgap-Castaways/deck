@@ -54,11 +54,12 @@ func executeList(source, output string) error {
 	if err != nil {
 		return err
 	}
-	if err := verbosef(1, "deck: list source=%s output=%s\n", resolvedSource, strings.TrimSpace(output)); err != nil {
+	resolvedOutput, err := resolveOutputFormat(output)
+	if err != nil {
 		return err
 	}
-	if output != "text" && output != "json" {
-		return errors.New("--output must be text or json")
+	if err := verbosef(1, "deck: list source=%s output=%s\n", resolvedSource, strings.TrimSpace(output)); err != nil {
+		return err
 	}
 
 	entries, err := discoverScenarioEntries(resolvedSource)
@@ -69,7 +70,7 @@ func executeList(source, output string) error {
 		return err
 	}
 
-	if output == "json" {
+	if resolvedOutput == "json" {
 		enc := stdoutJSONEncoder()
 		enc.SetIndent("", "  ")
 		return enc.Encode(entries)

@@ -85,12 +85,9 @@ func runDiffWithOptions(ctx context.Context, opts diffOptions) error {
 }
 
 func executeDiff(ctx context.Context, workflowPath, selectedPhase, output string, varOverrides map[string]any) error {
-	resolvedOutput := strings.ToLower(strings.TrimSpace(output))
-	if resolvedOutput == "" {
-		resolvedOutput = "text"
-	}
-	if resolvedOutput != "text" && resolvedOutput != "json" {
-		return errors.New("--output must be text or json")
+	resolvedOutput, err := resolveOutputFormat(output)
+	if err != nil {
+		return err
 	}
 	resolvedRequest, err := applycli.ResolveExecutionRequest(ctx, applycli.ExecutionRequestOptions{
 		CommandName:                  "diff",
@@ -693,12 +690,9 @@ type lintFinding struct {
 }
 
 func executeLint(ctx context.Context, root string, file string, scenario string, output string) error {
-	resolvedOutput := strings.ToLower(strings.TrimSpace(output))
-	if resolvedOutput == "" {
-		resolvedOutput = "text"
-	}
-	if resolvedOutput != "text" && resolvedOutput != "json" {
-		return errors.New("--output must be text or json")
+	resolvedOutput, err := resolveOutputFormat(output)
+	if err != nil {
+		return err
 	}
 	resolvedFile := strings.TrimSpace(file)
 	resolvedScenario := strings.TrimSpace(scenario)

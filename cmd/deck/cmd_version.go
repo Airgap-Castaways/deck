@@ -1,9 +1,6 @@
 package main
 
 import (
-	"errors"
-	"strings"
-
 	"github.com/spf13/cobra"
 
 	"github.com/taedi90/deck/internal/buildinfo"
@@ -19,12 +16,9 @@ func newVersionCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resolvedOutput := strings.ToLower(strings.TrimSpace(output))
-			if resolvedOutput == "" {
-				resolvedOutput = "text"
-			}
-			if resolvedOutput != "text" && resolvedOutput != "json" {
-				return errors.New("--output must be text or json")
+			resolvedOutput, err := resolveOutputFormat(output)
+			if err != nil {
+				return err
 			}
 			if resolvedOutput == "text" {
 				return stdoutPrintf("%s\n", buildinfo.Summary())

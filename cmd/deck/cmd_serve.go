@@ -115,12 +115,9 @@ type healthReport struct {
 }
 
 func executeHealth(server string, output string) error {
-	resolvedOutput := strings.ToLower(strings.TrimSpace(output))
-	if resolvedOutput == "" {
-		resolvedOutput = "text"
-	}
-	if resolvedOutput != "text" && resolvedOutput != "json" {
-		return errors.New("--output must be text or json")
+	resolvedOutput, err := resolveOutputFormat(output)
+	if err != nil {
+		return err
 	}
 	resolvedServer, _, err := resolveRequiredSourceURL(server)
 	if err != nil {
@@ -164,14 +161,15 @@ func executeHealth(server string, output string) error {
 
 func executeLogs(root string, source string, path string, unit string, output string) error {
 	resolvedSource := strings.ToLower(strings.TrimSpace(source))
+	resolvedOutput, err := resolveOutputFormat(output)
+	if err != nil {
+		return err
+	}
 	if err := verbosef(1, "deck: server logs root=%s source=%s path=%s unit=%s output=%s\n", strings.TrimSpace(root), resolvedSource, strings.TrimSpace(path), strings.TrimSpace(unit), strings.TrimSpace(output)); err != nil {
 		return err
 	}
 	if resolvedSource != "file" && resolvedSource != "journal" && resolvedSource != "both" {
 		return errors.New("--source must be file, journal, or both")
-	}
-	if output != "text" && output != "json" {
-		return errors.New("--output must be text or json")
 	}
 
 	records := []ctrllogs.LogRecord{}
@@ -213,7 +211,7 @@ func executeLogs(root string, source string, path string, unit string, output st
 		return err
 	}
 
-	if output == "json" {
+	if resolvedOutput == "json" {
 		enc := stdoutJSONEncoder()
 		return enc.Encode(records)
 	}

@@ -72,6 +72,17 @@ func varsAsAnyMap(vars map[string]string) map[string]any {
 	return converted
 }
 
+func resolveOutputFormat(output string) (string, error) {
+	resolvedOutput := strings.ToLower(strings.TrimSpace(output))
+	if resolvedOutput == "" {
+		resolvedOutput = "text"
+	}
+	if resolvedOutput != "text" && resolvedOutput != "json" {
+		return "", errors.New("--output must be text or json")
+	}
+	return resolvedOutput, nil
+}
+
 func setCLIWriters(stdout io.Writer, stderr io.Writer) {
 	if stdout == nil {
 		stdout = os.Stdout

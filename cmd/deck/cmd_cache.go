@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,8 +19,9 @@ type cacheEntry struct {
 }
 
 func executeCacheList(output string) error {
-	if output != "text" && output != "json" {
-		return errors.New("--output must be text or json")
+	resolvedOutput, err := resolveOutputFormat(output)
+	if err != nil {
+		return err
 	}
 
 	root, err := defaultDeckCacheRoot()
@@ -38,7 +38,7 @@ func executeCacheList(output string) error {
 	if err := verbosef(1, "deck: cache list entries=%d\n", len(entries)); err != nil {
 		return err
 	}
-	if output == "json" {
+	if resolvedOutput == "json" {
 		enc := stdoutJSONEncoder()
 		return enc.Encode(entries)
 	}

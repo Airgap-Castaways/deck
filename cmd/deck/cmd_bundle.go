@@ -152,12 +152,9 @@ type bundleManifestSummary struct {
 }
 
 func executeBundleVerify(filePath string, positionalArgs []string, output string) error {
-	resolvedOutput := strings.ToLower(strings.TrimSpace(output))
-	if resolvedOutput == "" {
-		resolvedOutput = "text"
-	}
-	if resolvedOutput != "text" && resolvedOutput != "json" {
-		return errors.New("--output must be text or json")
+	resolvedOutput, err := resolveOutputFormat(output)
+	if err != nil {
+		return err
 	}
 	resolvedPath, err := resolveBundlePathArg(filePath, positionalArgs, "bundle verify accepts a single <path>")
 	if err != nil {
