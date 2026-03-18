@@ -277,7 +277,7 @@ var toolMetadata = map[string]ToolMetadata{
 		ActionExamples: map[string]string{
 			"init":  "kind: Kubeadm\nspec:\n  action: init\n  mode: real\n  outputJoinFile: /tmp/deck/join.txt\n  podNetworkCIDR: 10.244.0.0/16\n",
 			"join":  "kind: Kubeadm\nspec:\n  action: join\n  configFile: /tmp/deck/kubeadm-join.yaml\n  extraArgs: [--skip-phases=preflight]\n",
-			"reset": "kind: Kubeadm\nspec:\n  action: reset\n  force: true\n  removePaths: [/etc/cni/net.d, /var/lib/etcd]\n",
+			"reset": "kind: Kubeadm\nspec:\n  action: reset\n  mode: real\n  force: true\n  removePaths: [/etc/cni/net.d, /var/lib/etcd]\n",
 		},
 		FieldDocs: map[string]FieldDoc{
 			"spec.action":                {Description: "Selects the kubeadm subcommand to run: `init`, `join`, or `reset`.", Example: "init"},
@@ -305,6 +305,7 @@ var toolMetadata = map[string]ToolMetadata{
 		},
 		Notes: []string{
 			"The action controls the contract: `init` requires `outputJoinFile`, `join` requires exactly one of `joinFile` or `configFile`, and `reset` focuses on cleanup fields.",
+			"Kubeadm fields are action-scoped: validation rejects `join`-only fields on `init`, `init`-only fields on `reset`, and other cross-action mixes.",
 			"When `skipIfAdminConfExists` skips `init`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.",
 			"Place host preparation steps (`Containerd`, `Swap`, `KernelModule`, `Sysctl`) before `Kubeadm` so bootstrap failures point to the correct step.",
 			"Use `mode: stub` in CI or dry-run contexts where a real cluster is not available.",

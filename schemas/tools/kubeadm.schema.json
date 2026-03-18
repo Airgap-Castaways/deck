@@ -54,6 +54,69 @@
           "if": {
             "properties": {
               "action": {
+                "const": "init"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "joinFile"
+                  ]
+                },
+                {
+                  "required": [
+                    "asControlPlane"
+                  ]
+                },
+                {
+                  "required": [
+                    "force"
+                  ]
+                },
+                {
+                  "required": [
+                    "ignoreErrors"
+                  ]
+                },
+                {
+                  "required": [
+                    "stopKubelet"
+                  ]
+                },
+                {
+                  "required": [
+                    "removePaths"
+                  ]
+                },
+                {
+                  "required": [
+                    "removeFiles"
+                  ]
+                },
+                {
+                  "required": [
+                    "cleanupContainers"
+                  ]
+                },
+                {
+                  "required": [
+                    "restartRuntimeService"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "action": {
                 "const": "join"
               }
             },
@@ -62,15 +125,105 @@
             ]
           },
           "then": {
-            "oneOf": [
+            "allOf": [
               {
-                "required": [
-                  "joinFile"
-                ]
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "configTemplate"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "pullImages"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "outputJoinFile"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "kubernetesVersion"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "advertiseAddress"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "podNetworkCIDR"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "criSocket"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "ignorePreflightErrors"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "skipIfAdminConfExists"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "force"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "ignoreErrors"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "stopKubelet"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "removePaths"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "removeFiles"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "cleanupContainers"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "restartRuntimeService"
+                      ]
+                    }
+                  ]
+                }
               },
               {
-                "required": [
-                  "configFile"
+                "oneOf": [
+                  {
+                    "required": [
+                      "joinFile"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "configFile"
+                    ]
+                  }
                 ]
               }
             ]
@@ -88,7 +241,65 @@
             ]
           },
           "then": {
-            "required": []
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "configFile"
+                  ]
+                },
+                {
+                  "required": [
+                    "configTemplate"
+                  ]
+                },
+                {
+                  "required": [
+                    "pullImages"
+                  ]
+                },
+                {
+                  "required": [
+                    "outputJoinFile"
+                  ]
+                },
+                {
+                  "required": [
+                    "kubernetesVersion"
+                  ]
+                },
+                {
+                  "required": [
+                    "advertiseAddress"
+                  ]
+                },
+                {
+                  "required": [
+                    "podNetworkCIDR"
+                  ]
+                },
+                {
+                  "required": [
+                    "ignorePreflightErrors"
+                  ]
+                },
+                {
+                  "required": [
+                    "skipIfAdminConfExists"
+                  ]
+                },
+                {
+                  "required": [
+                    "joinFile"
+                  ]
+                },
+                {
+                  "required": [
+                    "asControlPlane"
+                  ]
+                }
+              ]
+            }
           }
         }
       ],

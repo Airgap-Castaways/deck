@@ -893,6 +893,45 @@ func TestRun_KubeadmMissingFileErrorCode(t *testing.T) {
 	}
 }
 
+func TestRun_KubeadmRequiresExplicitAction(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "join",
+				Kind: "Kubeadm",
+				Spec: map[string]any{"joinFile": filepath.Join(dir, "join.txt")},
+			}},
+		}},
+	}
+
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath})
+	if err == nil {
+		t.Fatalf("expected explicit action error")
+	}
+	if !strings.Contains(err.Error(), "unsupported Kubeadm action") {
+		t.Fatalf("expected unsupported Kubeadm action error, got %v", err)
+	}
+}
+
 func TestRun_Image(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		dir := t.TempDir()

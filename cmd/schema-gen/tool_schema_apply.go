@@ -162,6 +162,9 @@ func generateKernelModuleToolSchema() map[string]any {
 func generateKubeadmToolSchema() map[string]any {
 	root := stepEnvelopeSchema("Kubeadm", "KubeadmStep", "Runs kubeadm operations through action-specific modes.", "public")
 	props := propertyMap(root)
+	initAllowed := []string{"action", "mode", "configFile", "configTemplate", "pullImages", "outputJoinFile", "kubernetesVersion", "advertiseAddress", "podNetworkCIDR", "criSocket", "ignorePreflightErrors", "extraArgs", "skipIfAdminConfExists"}
+	joinAllowed := []string{"action", "mode", "configFile", "joinFile", "asControlPlane", "extraArgs"}
+	resetAllowed := []string{"action", "mode", "force", "ignoreErrors", "stopKubelet", "criSocket", "extraArgs", "removePaths", "removeFiles", "cleanupContainers", "restartRuntimeService"}
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
@@ -192,20 +195,59 @@ func generateKubeadmToolSchema() map[string]any {
 		},
 		"allOf": []any{
 			conditionalRequired("init", []string{"outputJoinFile"}, nil),
+			forbidFieldsOutsideAction("init", initAllowed),
 			map[string]any{
 				"if": map[string]any{
 					"properties": map[string]any{"action": map[string]any{"const": "join"}},
 					"required":   []any{"action"},
 				},
 				"then": map[string]any{
-					"oneOf": []any{
-						map[string]any{"required": []any{"joinFile"}},
-						map[string]any{"required": []any{"configFile"}},
+					"allOf": []any{
+						forbidFieldsOutsideActionThen(joinAllowed),
+						map[string]any{"oneOf": []any{
+							map[string]any{"required": []any{"joinFile"}},
+							map[string]any{"required": []any{"configFile"}},
+						}},
 					},
 				},
 			},
-			conditionalRequired("reset", nil, nil),
+			map[string]any{
+				"if": map[string]any{
+					"properties": map[string]any{"action": map[string]any{"const": "reset"}},
+					"required":   []any{"action"},
+				},
+				"then": forbidFieldsOutsideActionThen(resetAllowed),
+			},
 		},
 	})
 	return root
+}
+
+func forbidFieldsOutsideAction(action string, allowed []string) map[string]any {
+	return map[string]any{
+		"if": map[string]any{
+			"properties": map[string]any{"action": map[string]any{"const": action}},
+			"required":   []any{"action"},
+		},
+		"then": forbidFieldsOutsideActionThen(allowed),
+	}
+}
+
+func forbidFieldsOutsideActionThen(allowed []string) map[string]any {
+	allowedSet := map[string]bool{}
+	for _, field := range allowed {
+		allowedSet[field] = true
+	}
+	allFields := []string{"action", "mode", "configFile", "configTemplate", "pullImages", "outputJoinFile", "kubernetesVersion", "advertiseAddress", "podNetworkCIDR", "criSocket", "ignorePreflightErrors", "extraArgs", "skipIfAdminConfExists", "joinFile", "asControlPlane", "force", "ignoreErrors", "stopKubelet", "removePaths", "removeFiles", "cleanupContainers", "restartRuntimeService"}
+	forbidden := make([]any, 0)
+	for _, field := range allFields {
+		if !allowedSet[field] {
+			forbidden = append(forbidden, map[string]any{"required": []any{field}})
+		}
+	}
+	return map[string]any{
+		"not": map[string]any{
+			"anyOf": forbidden,
+		},
+	}
 }
