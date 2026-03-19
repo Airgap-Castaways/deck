@@ -12,7 +12,7 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "Artifacts"
+                  "const": "Artifact"
                 }
               },
               "required": [
@@ -24,34 +24,6 @@
                 "register": {
                   "additionalProperties": false,
                   "maxProperties": 0,
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "Checks"
-                }
-              },
-              "required": [
-                "kind"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": {
-                    "enum": [
-                      "failedChecks",
-                      "passed"
-                    ]
-                  },
                   "propertyNames": {
                     "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                   },
@@ -251,6 +223,34 @@
             "if": {
               "properties": {
                 "kind": {
+                  "const": "HostCheck"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": {
+                    "enum": [
+                      "failedChecks",
+                      "passed"
+                    ]
+                  },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
                   "const": "ImageDownload"
                 }
               },
@@ -405,31 +405,7 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "PackageCache"
-                }
-              },
-              "required": [
-                "kind"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": false,
-                  "maxProperties": 0,
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "PackagesDownload"
+                  "const": "PackageDownload"
                 }
               },
               "required": [
@@ -456,7 +432,7 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "PackagesInstall"
+                  "const": "PackageInstall"
                 }
               },
               "required": [
@@ -480,7 +456,7 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "Repository"
+                  "const": "RepositoryConfigure"
                 }
               },
               "required": [
@@ -495,6 +471,30 @@
                       "path"
                     ]
                   },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "RepositoryRefresh"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
                   "propertyNames": {
                     "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                   },
@@ -637,7 +637,7 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "WaitCommandSuccess"
+                  "const": "WaitCommand"
                 }
               },
               "required": [
@@ -789,8 +789,7 @@
           },
           "kind": {
             "enum": [
-              "Artifacts",
-              "Checks",
+              "Artifact",
               "Command",
               "Containerd",
               "Directory",
@@ -798,22 +797,23 @@
               "FileDownload",
               "FileEdit",
               "FileWrite",
+              "HostCheck",
               "ImageDownload",
               "ImageVerify",
               "KernelModule",
               "KubeadmInit",
               "KubeadmJoin",
               "KubeadmReset",
-              "PackageCache",
-              "PackagesDownload",
-              "PackagesInstall",
-              "Repository",
+              "PackageDownload",
+              "PackageInstall",
+              "RepositoryConfigure",
+              "RepositoryRefresh",
               "Service",
               "Swap",
               "Symlink",
               "Sysctl",
               "SystemdUnit",
-              "WaitCommandSuccess",
+              "WaitCommand",
               "WaitFileAbsent",
               "WaitFileExists",
               "WaitServiceActive",

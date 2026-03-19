@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
@@ -362,9 +361,6 @@ func runRepoConfig(ctx context.Context, spec map[string]any) error {
 			return err
 		}
 	}
-	if err := refreshRepoMetadata(ctx, spec, format); err != nil {
-		return err
-	}
 
 	return nil
 }
@@ -656,37 +652,4 @@ func disableYumRepoPaths(patterns []string, keepPath string) error {
 		}
 	}
 	return nil
-}
-
-func refreshRepoMetadata(ctx context.Context, spec map[string]any, format string) error {
-	refresh, ok := spec["refreshCache"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	enabled := true
-	if value, exists := refresh["enabled"].(bool); exists {
-		enabled = value
-	}
-	if !enabled {
-		return nil
-	}
-	clean, _ := refresh["clean"].(bool)
-	update := true
-	if value, exists := refresh["update"].(bool); exists {
-		update = value
-	}
-	if !clean && !update {
-		return nil
-	}
-	return runPackageCacheCommands(
-		repoConfigFormatToPackageManager(format),
-		clean,
-		update,
-		packageRepoPolicy{},
-		commandTimeoutWithDefault(spec, defaultPackageCacheTimeout),
-		func(name string, args []string, timeout time.Duration) error {
-			return repoConfigRunTimedCommand(ctx, name, args, timeout)
-		},
-		"repo metadata refresh",
-	)
 }

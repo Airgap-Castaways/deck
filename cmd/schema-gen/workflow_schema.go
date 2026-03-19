@@ -44,7 +44,7 @@ func generateWorkflowSchema() (map[string]any, error) {
 	mergeMap(props, "artifacts", map[string]any{"description": "Declarative prepare artifact inventory. Prefer this over legacy prepare download steps in new role: prepare workflows."})
 	setMap(props, "steps", map[string]any{"type": "array", "minItems": 1, "items": stepBaseSchema()})
 	setMap(props, "phases", map[string]any{"type": "array", "minItems": 1, "items": phases})
-	patchArtifactsSchema(props["artifacts"])
+	patchArtifactSchema(props["artifacts"])
 
 	return root, nil
 }
@@ -176,7 +176,7 @@ func registerValueSchema(outputs []string) map[string]any {
 	return root
 }
 
-func patchArtifactsSchema(node any) {
+func patchArtifactSchema(node any) {
 	artifacts, ok := node.(map[string]any)
 	if !ok {
 		return

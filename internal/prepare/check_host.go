@@ -15,7 +15,7 @@ type checksRuntime struct {
 	currentGOARCH func() string
 }
 
-func defaultChecksRuntime() checksRuntime {
+func defaultHostCheckRuntime() checksRuntime {
 	return checksRuntime{
 		readHostFile:  os.ReadFile,
 		currentGOOS:   func() string { return runtime.GOOS },
@@ -23,23 +23,23 @@ func defaultChecksRuntime() checksRuntime {
 	}
 }
 
-func resolveChecksRuntime(opts RunOptions) checksRuntime {
+func resolveHostCheckRuntime(opts RunOptions) checksRuntime {
 	if opts.checksRuntime.readHostFile == nil || opts.checksRuntime.currentGOOS == nil || opts.checksRuntime.currentGOARCH == nil {
-		return defaultChecksRuntime()
+		return defaultHostCheckRuntime()
 	}
 	return opts.checksRuntime
 }
 
 type checksSpec struct {
-	Checks   []string `json:"Checks"`
+	Checks   []string `json:"checks"`
 	Binaries []string `json:"binaries"`
 	FailFast *bool    `json:"failFast"`
 }
 
-func runChecksDecoded(runner CommandRunner, decoded checksSpec, deps checksRuntime) (map[string]any, error) {
+func runHostCheckDecoded(runner CommandRunner, decoded checksSpec, deps checksRuntime) (map[string]any, error) {
 	checks := decoded.Checks
 	if len(checks) == 0 {
-		return nil, fmt.Errorf("%s: Checks requires checks", errCodePrepareChecksFailed)
+		return nil, fmt.Errorf("%s: HostCheck requires checks", errCodePrepareHostCheckFailed)
 	}
 	host := detectHostFacts(deps)
 
@@ -52,7 +52,7 @@ func runChecksDecoded(runner CommandRunner, decoded checksSpec, deps checksRunti
 	fail := func(name, reason string) error {
 		failed = append(failed, name+":"+reason)
 		if failFast {
-			return fmt.Errorf("%s: %s", errCodePrepareChecksFailed, strings.Join(failed, ", "))
+			return fmt.Errorf("%s: %s", errCodePrepareHostCheckFailed, strings.Join(failed, ", "))
 		}
 		return nil
 	}
@@ -86,17 +86,17 @@ func runChecksDecoded(runner CommandRunner, decoded checksSpec, deps checksRunti
 					return nil, err
 				}
 			}
-		case "Swap":
+		case "swap":
 			raw, err := deps.readHostFile("/proc/swaps")
 			if err != nil {
-				if err := fail("Swap", "cannot read /proc/swaps"); err != nil {
+				if err := fail("swap", "cannot read /proc/swaps"); err != nil {
 					return nil, err
 				}
 				break
 			}
 			lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
 			if len(lines) > 1 {
-				if err := fail("Swap", "swap enabled"); err != nil {
+				if err := fail("swap", "swap enabled"); err != nil {
 					return nil, err
 				}
 			}
@@ -127,7 +127,7 @@ func runChecksDecoded(runner CommandRunner, decoded checksSpec, deps checksRunti
 	}
 
 	if len(failed) > 0 {
-		return map[string]any{"passed": false, "failedChecks": failed, "host": host}, fmt.Errorf("%s: %s", errCodePrepareChecksFailed, strings.Join(failed, ", "))
+		return map[string]any{"passed": false, "failedChecks": failed, "host": host}, fmt.Errorf("%s: %s", errCodePrepareHostCheckFailed, strings.Join(failed, ", "))
 	}
 	return map[string]any{"passed": true, "failedChecks": []string{}, "host": host}, nil
 }

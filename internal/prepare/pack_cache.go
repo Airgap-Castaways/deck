@@ -28,7 +28,7 @@ var (
 )
 
 type packCacheState struct {
-	Artifacts []packCacheArtifactState `json:"artifacts"`
+	Artifact []packCacheArtifactState `json:"artifacts"`
 }
 
 type packCacheArtifactState struct {
@@ -40,7 +40,7 @@ type packCacheArtifactState struct {
 
 type PackCachePlan struct {
 	WorkflowSHA256 string                  `json:"workflow_sha256"`
-	Artifacts      []packCacheArtifactPlan `json:"artifacts"`
+	Artifact       []packCacheArtifactPlan `json:"artifacts"`
 }
 
 type packCacheArtifactPlan struct {
@@ -53,14 +53,14 @@ type packCacheArtifactPlan struct {
 
 func ComputePackCachePlan(prevState packCacheState, workflowBytes []byte, effectiveVars map[string]any, steps []config.Step) PackCachePlan {
 	workflowSHA := computeWorkflowSHA256(workflowBytes)
-	currentArtifacts := collectPackCacheArtifacts(steps, effectiveVars)
+	currentArtifact := collectPackCacheArtifact(steps, effectiveVars)
 	prevByIdentity := map[string]packCacheArtifactState{}
-	for _, item := range prevState.Artifacts {
+	for _, item := range prevState.Artifact {
 		prevByIdentity[packCacheIdentity(item.StepID, item.Type)] = item
 	}
 
-	artifacts := make([]packCacheArtifactPlan, 0, len(currentArtifacts))
-	for _, item := range currentArtifacts {
+	artifacts := make([]packCacheArtifactPlan, 0, len(currentArtifact))
+	for _, item := range currentArtifact {
 		action := packCacheActionFetch
 		if prev, ok := prevByIdentity[packCacheIdentity(item.StepID, item.Type)]; ok {
 			if prev.CacheKey == item.CacheKey && equalStringMap(prev.InputVars, item.InputVars) {
@@ -78,13 +78,13 @@ func ComputePackCachePlan(prevState packCacheState, workflowBytes []byte, effect
 
 	return PackCachePlan{
 		WorkflowSHA256: workflowSHA,
-		Artifacts:      artifacts,
+		Artifact:       artifacts,
 	}
 }
 
 func packCacheStateFromPlan(plan PackCachePlan) packCacheState {
-	artifacts := make([]packCacheArtifactState, 0, len(plan.Artifacts))
-	for _, item := range plan.Artifacts {
+	artifacts := make([]packCacheArtifactState, 0, len(plan.Artifact))
+	for _, item := range plan.Artifact {
 		artifacts = append(artifacts, packCacheArtifactState{
 			StepID:    item.StepID,
 			Type:      item.Type,
@@ -92,7 +92,7 @@ func packCacheStateFromPlan(plan PackCachePlan) packCacheState {
 			InputVars: cloneStringMap(item.InputVars),
 		})
 	}
-	return packCacheState{Artifacts: artifacts}
+	return packCacheState{Artifact: artifacts}
 }
 
 func defaultPackCacheStatePath(workflowSHA string) (string, error) {
@@ -123,7 +123,7 @@ func loadPackCacheState(path string) (packCacheState, error) {
 				return packCacheState{}, legacyErr
 			}
 			if !found {
-				return packCacheState{Artifacts: []packCacheArtifactState{}}, nil
+				return packCacheState{Artifact: []packCacheArtifactState{}}, nil
 			}
 			raw = legacyRaw
 		} else {
@@ -135,8 +135,8 @@ func loadPackCacheState(path string) (packCacheState, error) {
 	if err := json.Unmarshal(raw, &st); err != nil {
 		return packCacheState{}, fmt.Errorf("parse pack cache state: %w", err)
 	}
-	if st.Artifacts == nil {
-		st.Artifacts = []packCacheArtifactState{}
+	if st.Artifact == nil {
+		st.Artifact = []packCacheArtifactState{}
 	}
 	return st, nil
 }
@@ -167,7 +167,7 @@ func computeWorkflowSHA256(workflowBytes []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func collectPackCacheArtifacts(steps []config.Step, effectiveVars map[string]any) []packCacheArtifactState {
+func collectPackCacheArtifact(steps []config.Step, effectiveVars map[string]any) []packCacheArtifactState {
 	out := make([]packCacheArtifactState, 0)
 	for _, step := range steps {
 		artifactType, ok := stepArtifactType(step.Kind)
@@ -196,7 +196,7 @@ func collectPackCacheArtifacts(steps []config.Step, effectiveVars map[string]any
 
 func stepArtifactType(kind string) (string, bool) {
 	switch kind {
-	case "PackagesDownload":
+	case "PackageDownload":
 		return "package", true
 	case "ImageDownload":
 		return "image", true

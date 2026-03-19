@@ -145,9 +145,9 @@ Another reason for this design is to reduce user confusion. `deck` tries to give
 
 ## Noun-family step taxonomy
 
-The typed step model is intentionally organized around noun families rather than a large list of narrowly action-specific verbs.
+The typed step model is intentionally organized around noun families rather than a large list of unrelated verbs.
 
-Families such as `File`, `Packages`, `Image`, `Repository`, and `Wait` can hold a small set of related actions without forcing the user to learn a different top-level step kind for every operation. That keeps the schema surface smaller, step discovery simpler, and related behavior grouped under one predictable model.
+Families such as `File`, `Package`, `Image`, `Repository`, and `Wait` group concrete kinds like `FileDownload`, `PackageInstall`, `ImageVerify`, `RepositoryRefresh`, and `WaitFileExists`. That keeps the schema surface explicit without fragmenting the human-facing docs into dozens of unrelated pages.
 
 When a capability fits an existing family cleanly, extending that family is usually preferred over creating a new unrelated step kind.
 

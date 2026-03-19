@@ -13,9 +13,9 @@ func executeStep(ctx context.Context, kind string, spec map[string]any, execCtx 
 	}
 
 	switch kind {
-	case "Artifacts":
-		return runInstallArtifacts(ctx, spec)
-	case "PackagesInstall":
+	case "Artifact":
+		return runInstallArtifact(ctx, spec)
+	case "PackageInstall":
 		return runInstallPackages(ctx, spec)
 	case "FileDownload":
 		_, err := runFileDownload(ctx, execCtx.BundleRoot, spec)
@@ -36,13 +36,13 @@ func executeStep(ctx context.Context, kind string, spec map[string]any, execCtx 
 		return runSymlink(spec)
 	case "SystemdUnit":
 		return runSystemdUnit(ctx, spec)
-	case "Repository":
+	case "RepositoryConfigure":
 		return runRepoConfig(ctx, spec)
-	case "PackageCache":
-		return runPackageCache(ctx, spec)
+	case "RepositoryRefresh":
+		return runRepositoryRefresh(ctx, spec)
 	case "Containerd":
 		return runContainerdConfig(ctx, spec)
-	case "Swap":
+	case "swap":
 		return runSwap(ctx, spec)
 	case "KernelModule":
 		return runKernelModule(ctx, spec)
@@ -60,13 +60,13 @@ func executeStep(ctx context.Context, kind string, spec map[string]any, execCtx 
 		return runKubeadmJoin(ctx, spec)
 	case "KubeadmReset":
 		return runKubeadmReset(ctx, spec)
-	case "WaitServiceActive", "WaitCommandSuccess", "WaitFileExists", "WaitFileAbsent", "WaitTCPPortOpen", "WaitTCPPortClosed":
+	case "WaitServiceActive", "WaitCommand", "WaitFileExists", "WaitFileAbsent", "WaitTCPPortOpen", "WaitTCPPortClosed":
 		decoded, err := workflowexec.DecodeSpec[waitSpec](spec)
 		if err != nil {
 			return fmt.Errorf("decode wait spec: %w", err)
 		}
 		return runWaitDecoded(ctx, kind, decoded, commandTimeout(spec))
-	case "Checks", "PackagesDownload", "ImageDownload":
+	case "HostCheck", "PackageDownload", "ImageDownload":
 		return fmt.Errorf("%s: unsupported step kind %s for apply", errCodeInstallKindUnsupported, kind)
 	default:
 		return fmt.Errorf("%s: unsupported step kind %s", errCodeInstallKindUnsupported, kind)

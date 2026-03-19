@@ -81,7 +81,7 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.source.bundle.path` | `string` | yes | `` | `` | Relative path within the bundle root to the source file. | `bin/linux/amd64/runc` |
-| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from (`files`, `images`, or `packages`). | `files` |
+| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from (`files`, `images`, or `package`). | `files` |
 
 
 ### Notes

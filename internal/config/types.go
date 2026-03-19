@@ -4,14 +4,14 @@ type Workflow struct {
 	Role           string         `yaml:"role" json:"-"`
 	Version        string         `yaml:"version" json:"version"`
 	Vars           map[string]any `yaml:"vars" json:"vars,omitempty"`
-	Artifacts      *ArtifactsSpec `yaml:"artifacts,omitempty" json:"artifacts,omitempty"`
+	Artifact       *ArtifactSpec  `yaml:"artifacts,omitempty" json:"artifacts,omitempty"`
 	Phases         []Phase        `yaml:"phases,omitempty" json:"phases,omitempty"`
 	Steps          []Step         `yaml:"steps,omitempty" json:"-"`
 	StateKey       string         `yaml:"-" json:"-"`
 	WorkflowSHA256 string         `yaml:"-" json:"-"`
 }
 
-type ArtifactsSpec struct {
+type ArtifactSpec struct {
 	Files    []ArtifactFileGroup    `yaml:"files,omitempty" json:"files,omitempty"`
 	Images   []ArtifactImageGroup   `yaml:"images,omitempty" json:"images,omitempty"`
 	Packages []ArtifactPackageGroup `yaml:"packages,omitempty" json:"packages,omitempty"`

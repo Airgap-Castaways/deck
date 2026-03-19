@@ -58,7 +58,7 @@
       "type": "object"
     }
   },
-  "$id": "https://deck.local/schemas/tools/artifacts.schema.json",
+  "$id": "https://deck.local/schemas/tools/artifact.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Installs or extracts per-architecture artifacts during apply.",
@@ -70,7 +70,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "Artifacts"
+      "const": "Artifact"
     },
     "metadata": {
       "additionalProperties": true,
@@ -268,7 +268,7 @@
     "kind",
     "spec"
   ],
-  "title": "ArtifactsStep",
+  "title": "ArtifactStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

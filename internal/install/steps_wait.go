@@ -96,7 +96,7 @@ func waitConditionMet(ctx context.Context, kind string, spec waitSpec) (bool, er
 			return false, nil
 		}
 		return false, err
-	case "WaitCommandSuccess":
+	case "WaitCommand":
 		cmd := spec.Command
 		if len(cmd) == 0 {
 			return false, fmt.Errorf("wait.command-success requires command")

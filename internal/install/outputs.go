@@ -30,7 +30,7 @@ func stepOutputs(kind string, rendered map[string]any) map[string]any {
 		} else if path := stringValue(rendered, "path"); path != "" {
 			outputs["path"] = path
 		}
-	case "Directory", "Symlink", "SystemdUnit", "Repository", "Containerd":
+	case "Directory", "Symlink", "SystemdUnit", "RepositoryConfigure", "Containerd":
 		if path := stringValue(rendered, "path"); path != "" {
 			outputs["path"] = path
 		}

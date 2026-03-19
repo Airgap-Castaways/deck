@@ -3,15 +3,10 @@
 
 Reference documentation for each typed workflow step supported by deck.
 
-## [Artifacts](artifacts.md)
+## [Artifact](artifact.md)
 
-- **Summary**: Reference for the `Artifacts` family of typed workflow steps.
-- **Kinds**: `Artifacts`
-
-## [Checks](checks.md)
-
-- **Summary**: Reference for the `Checks` family of typed workflow steps.
-- **Kinds**: `Checks`
+- **Summary**: Reference for the `Artifact` family of typed workflow steps.
+- **Kinds**: `Artifact`
 
 ## [Command](command.md)
 
@@ -33,6 +28,11 @@ Reference documentation for each typed workflow step supported by deck.
 - **Summary**: Reference for the `File` family of typed workflow steps.
 - **Kinds**: `FileDownload`, `FileWrite`, `FileCopy`, `FileEdit`
 
+## [HostCheck](host-check.md)
+
+- **Summary**: Reference for the `HostCheck` family of typed workflow steps.
+- **Kinds**: `HostCheck`
+
 ## [Image](image.md)
 
 - **Summary**: Reference for the `Image` family of typed workflow steps.
@@ -48,20 +48,15 @@ Reference documentation for each typed workflow step supported by deck.
 - **Summary**: Reference for the `Kubeadm` family of typed workflow steps.
 - **Kinds**: `KubeadmInit`, `KubeadmJoin`, `KubeadmReset`
 
-## [PackageCache](package-cache.md)
+## [Package](package.md)
 
-- **Summary**: Reference for the `PackageCache` family of typed workflow steps.
-- **Kinds**: `PackageCache`
-
-## [Packages](packages.md)
-
-- **Summary**: Reference for the `Packages` family of typed workflow steps.
-- **Kinds**: `PackagesDownload`, `PackagesInstall`
+- **Summary**: Reference for the `Package` family of typed workflow steps.
+- **Kinds**: `PackageDownload`, `PackageInstall`
 
 ## [Repository](repository.md)
 
 - **Summary**: Reference for the `Repository` family of typed workflow steps.
-- **Kinds**: `Repository`
+- **Kinds**: `RepositoryConfigure`, `RepositoryRefresh`
 
 ## [Service](service.md)
 
@@ -91,5 +86,5 @@ Reference documentation for each typed workflow step supported by deck.
 ## [Wait](wait.md)
 
 - **Summary**: Reference for the `Wait` family of typed workflow steps.
-- **Kinds**: `WaitServiceActive`, `WaitCommandSuccess`, `WaitFileExists`, `WaitFileAbsent`, `WaitTCPPortOpen`, `WaitTCPPortClosed`
+- **Kinds**: `WaitServiceActive`, `WaitCommand`, `WaitFileExists`, `WaitFileAbsent`, `WaitTCPPortOpen`, `WaitTCPPortClosed`
 

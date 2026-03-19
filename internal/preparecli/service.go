@@ -126,10 +126,10 @@ func Run(ctx context.Context, opts Options) error {
 			}
 		}
 	}
-	if len(planDiagnostics.CachePlan.Artifacts) > 0 {
+	if len(planDiagnostics.CachePlan.Artifact) > 0 {
 		fetchCount := 0
 		reuseCount := 0
-		for _, artifact := range planDiagnostics.CachePlan.Artifacts {
+		for _, artifact := range planDiagnostics.CachePlan.Artifact {
 			switch strings.TrimSpace(artifact.Action) {
 			case "REUSE":
 				reuseCount++
@@ -250,11 +250,11 @@ func workflowIncludeCount(prepareWorkflowPath, varsWorkflowPath, applyWorkflowPa
 }
 
 func summarizeArtifactGroups(wf *config.Workflow) []prepare.ArtifactGroupDiagnostic {
-	if wf == nil || wf.Artifacts == nil {
+	if wf == nil || wf.Artifact == nil {
 		return nil
 	}
-	summary := make([]prepare.ArtifactGroupDiagnostic, 0, len(wf.Artifacts.Files)+len(wf.Artifacts.Images)+len(wf.Artifacts.Packages))
-	for _, group := range wf.Artifacts.Files {
+	summary := make([]prepare.ArtifactGroupDiagnostic, 0, len(wf.Artifact.Files)+len(wf.Artifact.Images)+len(wf.Artifact.Packages))
+	for _, group := range wf.Artifact.Files {
 		summary = append(summary, prepare.ArtifactGroupDiagnostic{
 			Kind:        "file",
 			Name:        strings.TrimSpace(group.Group),
@@ -263,7 +263,7 @@ func summarizeArtifactGroups(wf *config.Workflow) []prepare.ArtifactGroupDiagnos
 			Retry:       normalizeRetry(group.Execution),
 		})
 	}
-	for _, group := range wf.Artifacts.Images {
+	for _, group := range wf.Artifact.Images {
 		summary = append(summary, prepare.ArtifactGroupDiagnostic{
 			Kind:        "image",
 			Name:        strings.TrimSpace(group.Group),
@@ -272,7 +272,7 @@ func summarizeArtifactGroups(wf *config.Workflow) []prepare.ArtifactGroupDiagnos
 			Retry:       normalizeRetry(group.Execution),
 		})
 	}
-	for _, group := range wf.Artifacts.Packages {
+	for _, group := range wf.Artifact.Packages {
 		summary = append(summary, prepare.ArtifactGroupDiagnostic{
 			Kind:        "package",
 			Name:        strings.TrimSpace(group.Group),
@@ -311,13 +311,13 @@ func summarizeArtifactGroupsFromFile(path string) ([]prepare.ArtifactGroupDiagno
 		return nil, fmt.Errorf("read workflow file: %w", err)
 	}
 	var partial struct {
-		Artifacts *config.ArtifactsSpec `yaml:"artifacts"`
+		Artifact *config.ArtifactSpec `yaml:"artifacts"`
 	}
 	dec := yaml.NewDecoder(strings.NewReader(string(raw)))
 	if err := dec.Decode(&partial); err != nil {
 		return nil, fmt.Errorf("parse workflow artifacts: %w", err)
 	}
-	return summarizeArtifactGroups(&config.Workflow{Artifacts: partial.Artifacts}), nil
+	return summarizeArtifactGroups(&config.Workflow{Artifact: partial.Artifact}), nil
 }
 
 func printLine(w io.Writer, line string) error {

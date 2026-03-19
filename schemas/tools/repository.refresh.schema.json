@@ -1,8 +1,8 @@
 {
-  "$id": "https://deck.local/schemas/tools/wait.command-success.schema.json",
+  "$id": "https://deck.local/schemas/tools/repository.refresh.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Waits until a command exits successfully.",
+  "description": "Refreshes package metadata and can restrict or exclude repos during refresh.",
   "properties": {
     "apiVersion": {
       "const": "deck/v1alpha1"
@@ -11,7 +11,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "WaitCommandSuccess"
+      "const": "RepositoryRefresh"
     },
     "metadata": {
       "additionalProperties": true,
@@ -32,34 +32,58 @@
     },
     "spec": {
       "additionalProperties": false,
+      "anyOf": [
+        {
+          "properties": {
+            "clean": {
+              "const": true
+            }
+          },
+          "required": [
+            "clean"
+          ]
+        },
+        {
+          "properties": {
+            "update": {
+              "const": true
+            }
+          },
+          "required": [
+            "update"
+          ]
+        }
+      ],
       "properties": {
-        "command": {
+        "clean": {
+          "type": "boolean"
+        },
+        "excludeRepos": {
           "items": {
+            "minLength": 1,
             "type": "string"
           },
-          "minItems": 1,
           "type": "array"
         },
-        "initialDelay": {
-          "pattern": "^[0-9]+(ms|s|m|h)$",
+        "manager": {
+          "enum": [
+            "auto",
+            "apt",
+            "dnf"
+          ],
           "type": "string"
         },
-        "interval": {
-          "pattern": "^[0-9]+(ms|s|m|h)$",
-          "type": "string"
+        "restrictToRepos": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
         },
-        "pollInterval": {
-          "pattern": "^[0-9]+(ms|s|m|h)$",
-          "type": "string"
-        },
-        "timeout": {
-          "pattern": "^[0-9]+(ms|s|m|h)$",
-          "type": "string"
+        "update": {
+          "type": "boolean"
         }
       },
-      "required": [
-        "command"
-      ],
       "type": "object"
     },
     "timeout": {
@@ -75,7 +99,7 @@
     "kind",
     "spec"
   ],
-  "title": "WaitCommandSuccessStep",
+  "title": "RepositoryRefreshStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

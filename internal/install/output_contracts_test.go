@@ -29,7 +29,7 @@ func TestStepOutputsCoverApplyContracts(t *testing.T) {
 		{name: "file copy dest", kind: "FileCopy", spec: map[string]any{"src": "/tmp/source", "dest": "/tmp/copied"}, output: []string{"dest"}},
 		{name: "file edit path", kind: "FileEdit", spec: map[string]any{"path": "/tmp/edited", "edits": []any{map[string]any{"match": "x"}}}, output: []string{"path"}},
 		{name: "file download outputs", kind: "FileDownload", spec: map[string]any{"source": map[string]any{"url": "https://example.invalid/payload.txt"}}, output: []string{"path", "artifacts"}},
-		{name: "repository path", kind: "Repository", spec: map[string]any{"path": "/etc/apt/sources.list.d/offline.list", "repositories": []any{map[string]any{"id": "offline"}}}, output: []string{"path"}},
+		{name: "repository path", kind: "RepositoryConfigure", spec: map[string]any{"path": "/etc/apt/sources.list.d/offline.list", "repositories": []any{map[string]any{"id": "offline"}}}, output: []string{"path"}},
 		{name: "service name", kind: "Service", spec: map[string]any{"name": "containerd"}, output: []string{"name"}},
 		{name: "service names", kind: "Service", spec: map[string]any{"names": []any{"containerd", "kubelet"}}, output: []string{"names"}},
 		{name: "kernel module name", kind: "KernelModule", spec: map[string]any{"name": "overlay"}, output: []string{"name"}},

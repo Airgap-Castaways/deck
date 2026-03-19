@@ -198,11 +198,11 @@ func RelevantStepKindsBlock(prompt string) string {
 			}
 			b.WriteString("\n")
 		}
-		if step.Kind == "PackagesInstall" || step.Kind == "PackagesDownload" {
+		if step.Kind == "PackageInstall" || step.Kind == "PackageDownload" {
 			b.WriteString("  - spec.packages must stay a real YAML array, not a quoted template string.\n")
 			b.WriteString("  - Do not set spec.packages to `{{ .vars.* }}` or any other whole-value template expression; inline the package list as YAML items instead.\n")
 		}
-		if step.Kind == "Repository" {
+		if step.Kind == "RepositoryConfigure" {
 			b.WriteString("  - spec.repositories must stay a real YAML array of repository objects, not a scalar shortcut.\n")
 			b.WriteString("  - Do not set spec.repositories to `{{ .vars.* }}` or any other whole-value template expression; inline repository objects as YAML list items instead.\n")
 		}
@@ -277,17 +277,17 @@ func RelevantStepKinds(prompt string) []StepKindContext {
 			}
 		}
 		if strings.Contains(lower, "repo") || strings.Contains(lower, "Repository") {
-			if step.Kind == "Repository" {
+			if step.Kind == "RepositoryConfigure" || step.Kind == "RepositoryRefresh" {
 				score += 60
 			}
 		}
 		if strings.Contains(lower, "docker") || strings.Contains(lower, "package") || strings.Contains(lower, "dnf") {
-			if step.Kind == "PackagesInstall" || step.Kind == "PackagesDownload" || step.Kind == "Repository" || step.Kind == "Service" {
+			if step.Kind == "PackageInstall" || step.Kind == "PackageDownload" || step.Kind == "RepositoryConfigure" || step.Kind == "RepositoryRefresh" || step.Kind == "Service" {
 				score += 30
 			}
 		}
 		if strings.Contains(lower, "file") || strings.Contains(lower, "config") {
-			if strings.HasPrefix(step.Kind, "file.") || step.Kind == "Directory" {
+			if strings.HasPrefix(step.Kind, "File") || step.Kind == "Directory" {
 				score += 20
 			}
 		}
@@ -311,7 +311,7 @@ func RelevantStepKinds(prompt string) []StepKindContext {
 	}
 	if len(out) == 0 {
 		for _, kind := range manifest.StepKinds {
-			if kind.Kind == "File" || kind.Kind == "Repository" || kind.Kind == "Service" || kind.Kind == "Command" {
+			if kind.Kind == "FileWrite" || kind.Kind == "RepositoryConfigure" || kind.Kind == "Service" || kind.Kind == "Command" {
 				out = append(out, kind)
 			}
 		}

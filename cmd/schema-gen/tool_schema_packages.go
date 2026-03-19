@@ -1,7 +1,7 @@
 package main
 
-func generatePackageCacheToolSchema() map[string]any {
-	root := stepEnvelopeSchema("PackageCache", "PackageCacheStep", "Refreshes package metadata and can restrict or exclude repos during refresh.", "public")
+func generateRepositoryRefreshToolSchema() map[string]any {
+	root := stepEnvelopeSchema("RepositoryRefresh", "RepositoryRefreshStep", "Refreshes package metadata and can restrict or exclude repos during refresh.", "public")
 	props := propertyMap(root)
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
@@ -21,8 +21,8 @@ func generatePackageCacheToolSchema() map[string]any {
 	return root
 }
 
-func generatePackagesDownloadToolSchema() map[string]any {
-	root := stepEnvelopeSchema("PackagesDownload", "PackagesDownloadStep", "Downloads packages into bundle output storage.", "public")
+func generatePackageDownloadToolSchema() map[string]any {
+	root := stepEnvelopeSchema("PackageDownload", "PackageDownloadStep", "Downloads packages into bundle output storage.", "public")
 	props := propertyMap(root)
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
@@ -75,8 +75,8 @@ func generatePackagesDownloadToolSchema() map[string]any {
 	return root
 }
 
-func generatePackagesInstallToolSchema() map[string]any {
-	root := stepEnvelopeSchema("PackagesInstall", "PackagesInstallStep", "Installs packages on the local node.", "public")
+func generatePackageInstallToolSchema() map[string]any {
+	root := stepEnvelopeSchema("PackageInstall", "PackageInstallStep", "Installs packages on the local node.", "public")
 	props := propertyMap(root)
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
@@ -97,8 +97,8 @@ func generatePackagesInstallToolSchema() map[string]any {
 	return root
 }
 
-func generateRepositoryToolSchema() map[string]any {
-	root := stepEnvelopeSchema("Repository", "RepositoryStep", "Configures repository definitions on the local node.", "public")
+func generateRepositoryConfigureToolSchema() map[string]any {
+	root := stepEnvelopeSchema("RepositoryConfigure", "RepositoryConfigureStep", "Configures repository definitions on the local node.", "public")
 	props := propertyMap(root)
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
@@ -112,15 +112,6 @@ func generateRepositoryToolSchema() map[string]any {
 			"disableExisting": map[string]any{"type": "boolean"},
 			"backupPaths":     stringArraySchema(0, false),
 			"cleanupPaths":    stringArraySchema(0, false),
-			"refreshCache": map[string]any{
-				"type":                 "object",
-				"additionalProperties": false,
-				"properties": map[string]any{
-					"enabled": map[string]any{"type": "boolean"},
-					"clean":   map[string]any{"type": "boolean"},
-					"update":  map[string]any{"type": "boolean"},
-				},
-			},
 			"repositories": map[string]any{
 				"type":     "array",
 				"minItems": 1,

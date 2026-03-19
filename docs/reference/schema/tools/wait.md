@@ -6,7 +6,7 @@ Reference for the `Wait` family of typed workflow steps.
 ## Summary
 
 - family: `wait`
-- kinds: `WaitServiceActive`, `WaitCommandSuccess`, `WaitFileExists`, `WaitFileAbsent`, `WaitTCPPortOpen`, `WaitTCPPortClosed`
+- kinds: `WaitServiceActive`, `WaitCommand`, `WaitFileExists`, `WaitFileAbsent`, `WaitTCPPortOpen`, `WaitTCPPortClosed`
 
 ## Shared Step Fields
 
@@ -15,7 +15,7 @@ Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`,
 ## Supported Kinds
 
 - `WaitServiceActive`: Wait until a systemd service reports active.
-- `WaitCommandSuccess`: Wait until a command exits successfully.
+- `WaitCommand`: Wait until a command exits successfully.
 - `WaitFileExists`: Wait until a file or directory exists.
 - `WaitFileAbsent`: Wait until a file or directory is absent.
 - `WaitTCPPortOpen`: Wait until a TCP port opens.
@@ -57,11 +57,11 @@ spec:
 - Keep waits specific so failures identify exactly which dependency did not become ready within the timeout.
 - Use `initialDelay` when a service emits a transient non-active state immediately after being started.
 
-## `WaitCommandSuccess`
+## `WaitCommand`
 
 Wait until a command exits successfully.
 
-- schema: `../../../schemas/tools/wait.command-success.schema.json`
+- schema: `../../../schemas/tools/wait.command.schema.json`
 
 ### When To Use
 
@@ -70,11 +70,12 @@ Use this when a dependent step should wait for a local command-based condition t
 ### Example
 
 ```yaml
-kind: WaitCommandSuccess
+apiVersion: deck/v1alpha1
+id: example-waitcommand
+kind: WaitCommand
 spec:
-  command: [test, -f, /etc/kubernetes/admin.conf]
-  interval: 2s
-  timeout: 2m
+    command:
+        - example
 ```
 
 ### Spec Fields

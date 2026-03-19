@@ -47,7 +47,7 @@ spec:
 | `spec.configTemplate` | `string` | no | `` | `` | For `init`, use `default` for the deck-managed kubeadm config template. Any other non-empty value is written literally as inline kubeadm YAML content to `configFile`. | `default` |
 | `spec.criSocket` | `string` | no | `` | `` | CRI socket path passed to kubeadm. Required when multiple container runtimes are installed on the node. | `unix:///run/containerd/containerd.sock` |
 | `spec.extraArgs` | `array<string>` | no | `` | `` | Additional flags passed directly to the kubeadm subcommand as `--key=value` pairs. | `[--skip-phases=addon/kube-proxy]` |
-| `spec.ignorePreflightErrors` | `array<string>` | no | `` | `` | Kubeadm preflight check names to suppress. Use sparingly and only for known-safe deviations. | `[Swap]` |
+| `spec.ignorePreflightErrors` | `array<string>` | no | `` | `` | Kubeadm preflight check names to suppress. Use sparingly and only for known-safe deviations. | `[swap]` |
 | `spec.kubernetesVersion` | `string` | no | `` | `` | Kubernetes version string passed to kubeadm. Accepts the `{{ .vars.* }}` template syntax. | `v1.30.1` |
 | `spec.outputJoinFile` | `string` | yes | `` | `` | Path where the generated join command is written after `init`. Worker nodes read this file to join the cluster. | `/tmp/deck/join.txt` |
 | `spec.podNetworkCIDR` | `string` | no | `` | `` | CIDR range for the pod network passed to `init`. Must not overlap with node or service CIDRs. | `10.244.0.0/16` |

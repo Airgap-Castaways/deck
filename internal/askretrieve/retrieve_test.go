@@ -116,7 +116,7 @@ func TestRetrieveIncludesAskContextChunks(t *testing.T) {
 		}
 	}
 	for _, chunk := range result.Chunks {
-		if chunk.ID == "typed-steps" && !containsString(chunk.Content, "PackagesInstall") {
+		if chunk.ID == "typed-steps" && !containsString(chunk.Content, "PackageInstall") {
 			t.Fatalf("expected packages.install in typed-step chunk, got %q", chunk.Content)
 		}
 	}

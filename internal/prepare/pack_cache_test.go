@@ -29,14 +29,14 @@ func TestPackCacheInvalidation(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "artifact-a",
-					Kind: "PackagesDownload",
+					Kind: "PackageDownload",
 					Spec: map[string]any{
 						"packages": []any{"containerd-{{ .vars.pkgA }}"},
 					},
 				},
 				{
 					ID:   "artifact-b",
-					Kind: "PackagesDownload",
+					Kind: "PackageDownload",
 					Spec: map[string]any{
 						"packages": []any{"iptables-{{ .vars.pkgB }}"},
 					},
@@ -59,19 +59,19 @@ func TestPackCacheInvalidation(t *testing.T) {
 		t.Fatalf("loadPackCacheState failed: %v", err)
 	}
 
-	if len(prevState.Artifacts) != 2 {
-		t.Fatalf("expected two artifact states, got %d", len(prevState.Artifacts))
+	if len(prevState.Artifact) != 2 {
+		t.Fatalf("expected two artifact states, got %d", len(prevState.Artifact))
 	}
 
 	wf.Vars["pkgB"] = "gamma"
 	plan := ComputePackCachePlan(prevState, workflowBytes, wf.Vars, wf.Phases[0].Steps)
 
-	if len(plan.Artifacts) != 2 {
-		t.Fatalf("expected two plan artifacts, got %d", len(plan.Artifacts))
+	if len(plan.Artifact) != 2 {
+		t.Fatalf("expected two plan artifacts, got %d", len(plan.Artifact))
 	}
 
 	actions := map[string]string{}
-	for _, artifact := range plan.Artifacts {
+	for _, artifact := range plan.Artifact {
 		actions[artifact.StepID] = artifact.Action
 	}
 
@@ -98,7 +98,7 @@ func TestRun_PackCacheRoleGate(t *testing.T) {
 				Name: "prepare",
 				Steps: []config.Step{{
 					ID:   "artifact-a",
-					Kind: "PackagesDownload",
+					Kind: "PackageDownload",
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
 					},
@@ -130,7 +130,7 @@ func TestRun_PackCacheRoleGate(t *testing.T) {
 				Name: "prepare",
 				Steps: []config.Step{{
 					ID:   "artifact-a",
-					Kind: "PackagesDownload",
+					Kind: "PackageDownload",
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
 					},

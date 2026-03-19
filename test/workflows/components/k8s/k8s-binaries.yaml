@@ -1,6 +1,6 @@
 steps:
   - id: install-k8s-binaries
-    kind: Artifacts
+    kind: Artifact
     spec:
       artifacts:
         - source:

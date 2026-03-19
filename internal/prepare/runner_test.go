@@ -25,7 +25,7 @@ import (
 
 func nilContextForPrepareTest() context.Context { return nil }
 
-func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
+func TestRun_PrepareArtifactAndManifest(t *testing.T) {
 	imageOps := stubImageDownloadOps()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -54,14 +54,14 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 					},
 					{
 						ID:   "download-os-packages",
-						Kind: "PackagesDownload",
+						Kind: "PackageDownload",
 						Spec: map[string]any{
 							"packages": []any{"containerd", "iptables"},
 						},
 					},
 					{
 						ID:   "download-k8s-packages",
-						Kind: "PackagesDownload",
+						Kind: "PackageDownload",
 						Spec: map[string]any{
 							"packages": []any{"kubelet"},
 						},
@@ -140,7 +140,7 @@ func TestRun_PrepareArtifactGroupsExecution(t *testing.T) {
 	bundle := t.TempDir()
 	wf := &config.Workflow{
 		Version: "v1",
-		Artifacts: &config.ArtifactsSpec{
+		Artifact: &config.ArtifactSpec{
 			Files: []config.ArtifactFileGroup{{
 				Group:     "binaries",
 				Execution: &config.ArtifactExecutionSpec{Parallelism: 2, Retry: 1},
@@ -203,7 +203,7 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "pkg",
-					Kind: "PackagesDownload",
+					Kind: "PackageDownload",
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
@@ -290,7 +290,7 @@ func TestRun_PackagesContainerBackend(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "k8s-pkgs",
-					Kind: "PackagesDownload",
+					Kind: "PackageDownload",
 					Spec: map[string]any{
 						"packages": []any{"kubelet", "kubeadm"},
 						"backend": map[string]any{
@@ -323,7 +323,7 @@ func TestRun_PackagesContainerRuntimeMissing(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "pkg",
-					Kind: "PackagesDownload",
+					Kind: "PackageDownload",
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
@@ -346,7 +346,7 @@ func TestRun_PackagesContainerRuntimeMissing(t *testing.T) {
 	}
 }
 
-func TestRun_PackagesContainerNoArtifacts(t *testing.T) {
+func TestRun_PackagesContainerNoArtifact(t *testing.T) {
 	bundle := t.TempDir()
 
 	wf := &config.Workflow{
@@ -356,7 +356,7 @@ func TestRun_PackagesContainerNoArtifacts(t *testing.T) {
 			Steps: []config.Step{
 				{
 					ID:   "pkg",
-					Kind: "PackagesDownload",
+					Kind: "PackageDownload",
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
@@ -370,7 +370,7 @@ func TestRun_PackagesContainerNoArtifacts(t *testing.T) {
 		}},
 	}
 
-	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &noArtifactsRunner{}})
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &noArtifactRunner{}})
 	if err == nil {
 		t.Fatalf("expected no artifacts error")
 	}
@@ -379,7 +379,7 @@ func TestRun_PackagesContainerNoArtifacts(t *testing.T) {
 	}
 }
 
-func TestRun_PackagesDownloadUsesOutputDir(t *testing.T) {
+func TestRun_PackageDownloadUsesOutputDir(t *testing.T) {
 	bundle := t.TempDir()
 	wf := &config.Workflow{
 		Version: "v1",
@@ -387,7 +387,7 @@ func TestRun_PackagesDownloadUsesOutputDir(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "pkg",
-				Kind: "PackagesDownload",
+				Kind: "PackageDownload",
 				Spec: map[string]any{
 					"packages": []any{"containerd"},
 					"output":   map[string]any{"dir": "packages/custom"},
@@ -721,7 +721,7 @@ func TestRun_RetrySemantics(t *testing.T) {
 				Name: "prepare",
 				Steps: []config.Step{{
 					ID:    "retry-packages",
-					Kind:  "PackagesDownload",
+					Kind:  "PackageDownload",
 					Retry: 1,
 					Spec: map[string]any{
 						"packages": []any{"containerd"},
@@ -782,7 +782,7 @@ func TestRun_WhenInvalidExpression(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "bad-when",
-				Kind: "PackagesDownload",
+				Kind: "PackageDownload",
 				When: "vars.role = \"worker\"",
 				Spec: map[string]any{"packages": []any{"containerd"}},
 			}},
@@ -857,7 +857,7 @@ func TestDownloadURLToFile_RejectsNilContext(t *testing.T) {
 	}
 }
 
-func TestRun_ChecksStep(t *testing.T) {
+func TestRun_HostCheckStep(t *testing.T) {
 	t.Run("pass and register", func(t *testing.T) {
 		bundle := t.TempDir()
 		wf := &config.Workflow{
@@ -868,16 +868,16 @@ func TestRun_ChecksStep(t *testing.T) {
 				Steps: []config.Step{
 					{
 						ID:       "host-check",
-						Kind:     "Checks",
+						Kind:     "HostCheck",
 						Register: map[string]string{"hostPassed": "passed"},
 						Spec: map[string]any{
-							"Checks":   []any{"os", "arch", "binaries"},
+							"checks":   []any{"os", "arch", "binaries"},
 							"binaries": []any{"docker"},
 						},
 					},
 					{
 						ID:   "runtime-branch",
-						Kind: "PackagesDownload",
+						Kind: "PackageDownload",
 						When: "runtime.hostPassed == true && vars.want == \"ok\" && runtime.host.os.family == \"debian\" && runtime.host.arch == \"arm64\"",
 						Spec: map[string]any{
 							"packages": []any{"containerd"},
@@ -920,9 +920,9 @@ func TestRun_ChecksStep(t *testing.T) {
 				Name: "prepare",
 				Steps: []config.Step{{
 					ID:   "host-check",
-					Kind: "Checks",
+					Kind: "HostCheck",
 					Spec: map[string]any{
-						"Checks":   []any{"os", "arch", "binaries", "Swap", "kernelModules"},
+						"checks":   []any{"os", "arch", "binaries", "swap", "kernelModules"},
 						"binaries": []any{"missing-bin"},
 						"failFast": false,
 					},
@@ -968,7 +968,7 @@ func TestRun_PackagesKubernetesSetRepoModeAptFlatGeneratesMetadata(t *testing.T)
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "pkgs",
-				Kind: "PackagesDownload",
+				Kind: "PackageDownload",
 				Spec: map[string]any{
 					"packages": []any{"containerd"},
 					"distro": map[string]any{
@@ -1013,7 +1013,7 @@ func TestRun_PackagesKubernetesSetRepoModeYumGeneratesRepodata(t *testing.T) {
 			Name: "prepare",
 			Steps: []config.Step{{
 				ID:   "pkgs",
-				Kind: "PackagesDownload",
+				Kind: "PackageDownload",
 				Spec: map[string]any{
 					"packages": []any{"containerd"},
 					"distro": map[string]any{
@@ -1074,16 +1074,16 @@ func (n *noRuntimeRunner) Run(_ context.Context, _ string, _ ...string) error {
 	return nil
 }
 
-type noArtifactsRunner struct{}
+type noArtifactRunner struct{}
 
-func (n *noArtifactsRunner) LookPath(file string) (string, error) {
+func (n *noArtifactRunner) LookPath(file string) (string, error) {
 	if file == "docker" || file == "podman" {
 		return "/usr/bin/" + file, nil
 	}
 	return "", fmt.Errorf("not found")
 }
 
-func (n *noArtifactsRunner) Run(_ context.Context, _ string, _ ...string) error {
+func (n *noArtifactRunner) Run(_ context.Context, _ string, _ ...string) error {
 	return nil
 }
 

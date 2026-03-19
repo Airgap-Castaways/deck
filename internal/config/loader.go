@@ -226,20 +226,20 @@ func canonicalWorkflowBytes(wf *Workflow) ([]byte, error) {
 		return nil, fmt.Errorf("workflow is nil")
 	}
 	type canonicalWorkflow struct {
-		Role      string         `json:"role"`
-		Version   string         `json:"version"`
-		Vars      map[string]any `json:"vars,omitempty"`
-		Artifacts *ArtifactsSpec `json:"artifacts,omitempty"`
-		Phases    []Phase        `json:"phases,omitempty"`
-		Steps     []Step         `json:"steps,omitempty"`
+		Role     string         `json:"role"`
+		Version  string         `json:"version"`
+		Vars     map[string]any `json:"vars,omitempty"`
+		Artifact *ArtifactSpec  `json:"artifacts,omitempty"`
+		Phases   []Phase        `json:"phases,omitempty"`
+		Steps    []Step         `json:"steps,omitempty"`
 	}
 	payload := canonicalWorkflow{
-		Role:      wf.Role,
-		Version:   wf.Version,
-		Vars:      wf.Vars,
-		Artifacts: wf.Artifacts,
-		Phases:    wf.Phases,
-		Steps:     wf.Steps,
+		Role:     wf.Role,
+		Version:  wf.Version,
+		Vars:     wf.Vars,
+		Artifact: wf.Artifact,
+		Phases:   wf.Phases,
+		Steps:    wf.Steps,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -252,8 +252,8 @@ func workflowHasMultipleModes(wf *Workflow) bool {
 	if wf == nil {
 		return false
 	}
-	hasArtifacts := wf.Artifacts != nil && (len(wf.Artifacts.Files) > 0 || len(wf.Artifacts.Images) > 0 || len(wf.Artifacts.Packages) > 0)
-	return modeCount(hasArtifacts, len(wf.Phases) > 0, len(wf.Steps) > 0) > 1
+	hasArtifact := wf.Artifact != nil && (len(wf.Artifact.Files) > 0 || len(wf.Artifact.Images) > 0 || len(wf.Artifact.Packages) > 0)
+	return modeCount(hasArtifact, len(wf.Phases) > 0, len(wf.Steps) > 0) > 1
 }
 
 func modeCount(flags ...bool) int {

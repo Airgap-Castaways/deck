@@ -7,13 +7,13 @@
 - `role`: required, either `prepare` or `apply`
 - `version`: currently `v1alpha1`
 - `vars`: optional variable map
-- `artifacts`: declarative prepare artifact inventory for `role: prepare`
+- `artifact`: declarative prepare artifact inventory for `role: prepare`
 - `steps`: top-level step list
 - `phases`: named phase list for more structured execution
 
 The schema allows one execution mode at a time:
 
-- `artifacts` for declarative prepare workflows
+- `artifact` for declarative prepare workflows
 - top-level `steps`
 - named `phases`
 
@@ -62,7 +62,7 @@ vars:
 
 ```yaml
 - id: install-rhel-packages
-  kind: PackagesInstall
+  kind: PackageInstall
   spec:
     names: [kubeadm, kubelet, kubectl]
   when: vars.osFamily == "rhel"
@@ -120,7 +120,7 @@ Optional execution controls:
 ```yaml
 steps:
   - id: add-debian-repo
-    kind: Repository
+    kind: RepositoryConfigure
     spec:
       type: apt
       name: offline-base
@@ -128,7 +128,7 @@ steps:
     when: vars.osFamily == "debian"
 
   - id: add-rhel-repo
-    kind: Repository
+    kind: RepositoryConfigure
     spec:
       type: yum
       name: offline-base
@@ -183,7 +183,7 @@ phases:
 
 Import paths are relative to `workflows/components/`. Write `k8s/prereq.yaml`, not `../components/k8s/prereq.yaml`.
 
-`artifacts` is the preferred authoring mode for `role: prepare`. Use `steps` or `phases` for `role: apply`.
+`artifact` is the preferred authoring mode for `role: prepare`. Use `steps` or `phases` for `role: apply`.
 
 ## Step kinds
 
@@ -191,28 +191,27 @@ Typed steps make the workflow easier to scan, validate, and evolve. Use `Command
 
 Supported kinds:
 
-- `Artifacts`
+- `Artifact`
+- `HostCheck`
 - `Command`
 - `Containerd`
 - `Directory`
-- `File`
-- `Image`
-- `Checks`
+- `FileDownload`, `FileWrite`, `FileCopy`, `FileEdit`
+- `ImageDownload`, `ImageVerify`
 - `KernelModule`
-- `Kubeadm`
-- `PackageCache`
-- `Packages`
-- `Repository`
-- `Sysctl`
+- `KubeadmInit`, `KubeadmJoin`, `KubeadmReset`
+- `PackageDownload`, `PackageInstall`
+- `RepositoryConfigure`, `RepositoryRefresh`
 - `Service`
 - `Swap`
 - `Symlink`
+- `Sysctl`
 - `SystemdUnit`
-- `Wait`
+- `WaitCommand`, `WaitFileExists`, `WaitFileAbsent`, `WaitServiceActive`, `WaitTCPPortOpen`, `WaitTCPPortClosed`
 
 ## Prepare semantics
 
-`role: prepare` can use top-level `artifacts` to declare artifact inventory instead of writing repeated download steps.
+`role: prepare` can use top-level `artifact` to declare artifact inventory instead of writing repeated download steps.
 
 - `artifacts.files[*].items[*].output.path` is relative to the `files/` bundle root, so use `bin/kubeadm`, not `files/bin/kubeadm`
 - `artifacts.images` declares image groups and lets the engine choose bundle tar layout

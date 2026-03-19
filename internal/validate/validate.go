@@ -398,11 +398,11 @@ func validateWorkflowMode(wf *config.Workflow) error {
 	if wf == nil {
 		return nil
 	}
-	hasArtifacts := wf.Artifacts != nil && (len(wf.Artifacts.Files) > 0 || len(wf.Artifacts.Images) > 0 || len(wf.Artifacts.Packages) > 0)
+	hasArtifact := wf.Artifact != nil && (len(wf.Artifact.Files) > 0 || len(wf.Artifact.Images) > 0 || len(wf.Artifact.Packages) > 0)
 	hasPhases := len(wf.Phases) > 0
 	hasSteps := len(wf.Steps) > 0
 	modeCount := 0
-	if hasArtifacts {
+	if hasArtifact {
 		modeCount++
 	}
 	if hasPhases {
@@ -414,7 +414,7 @@ func validateWorkflowMode(wf *config.Workflow) error {
 	if modeCount > 1 {
 		return fmt.Errorf("workflow cannot set multiple execution modes")
 	}
-	if hasArtifacts && strings.TrimSpace(wf.Role) != "prepare" {
+	if hasArtifact && strings.TrimSpace(wf.Role) != "prepare" {
 		return fmt.Errorf("E_SCHEMA_INVALID: artifacts is only supported for role prepare")
 	}
 	return nil
@@ -526,7 +526,12 @@ func validateSemantics(wf *config.Workflow) error {
 
 	for _, step := range workflowSteps(wf) {
 		if _, hasLegacyAction := step.Spec["action"]; hasLegacyAction {
-			return fmt.Errorf("E_SCHEMA_INVALID: step %s (%s): spec.action is no longer supported; move the operation into kind (for example `file.download`)", step.ID, step.Kind)
+			return fmt.Errorf("E_SCHEMA_INVALID: step %s (%s): spec.action is no longer supported; move the operation into kind (for example `FileDownload`)", step.ID, step.Kind)
+		}
+		if step.Kind == "RepositoryConfigure" {
+			if _, hasRefreshCache := step.Spec["refreshCache"]; hasRefreshCache {
+				return fmt.Errorf("E_SCHEMA_INVALID: step %s (%s): spec.refreshCache is no longer supported; use a separate `RepositoryRefresh` step", step.ID, step.Kind)
+			}
 		}
 
 		if strings.TrimSpace(step.When) != "" {
@@ -573,13 +578,13 @@ func validateSemantics(wf *config.Workflow) error {
 }
 
 func validatePrepareSemantics(wf *config.Workflow) error {
-	if wf == nil || wf.Artifacts == nil {
+	if wf == nil || wf.Artifact == nil {
 		return nil
 	}
 	fileOutputs := make(map[string]string)
 	imageOutputs := make(map[string]string)
 	packageRoots := make(map[string]string)
-	for _, group := range wf.Artifacts.Files {
+	for _, group := range wf.Artifact.Files {
 		if err := validateArtifactExecution(group.Execution, fmt.Sprintf("artifacts.files group %s", group.Group)); err != nil {
 			return err
 		}
@@ -608,7 +613,7 @@ func validatePrepareSemantics(wf *config.Workflow) error {
 			}
 		}
 	}
-	for _, group := range wf.Artifacts.Packages {
+	for _, group := range wf.Artifact.Packages {
 		if err := validateArtifactExecution(group.Execution, fmt.Sprintf("artifacts.packages group %s", group.Group)); err != nil {
 			return err
 		}
@@ -650,7 +655,7 @@ func validatePrepareSemantics(wf *config.Workflow) error {
 			packageRoots[root] = jobID
 		}
 	}
-	for _, group := range wf.Artifacts.Images {
+	for _, group := range wf.Artifact.Images {
 		if err := validateArtifactExecution(group.Execution, fmt.Sprintf("artifacts.images group %s", group.Group)); err != nil {
 			return err
 		}

@@ -18,13 +18,10 @@ phases:
       - id: configure-offline-repo-apt
         when: vars.osFamily == "debian"
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: RepositoryConfigure
         spec:
           format: apt
           replaceExisting: true
-          refreshCache:
-            enabled: true
-            clean: true
           repositories:
             - id: deck-os
               baseurl: http://{{ .vars.serverURL }}/packages/deb/{{ .vars.release }}
@@ -32,16 +29,21 @@ phases:
             - id: deck-k8s
               baseurl: http://{{ .vars.serverURL }}/packages/deb-k8s/{{ .vars.release }}
               trusted: true
+      - id: refresh-offline-repo-apt
+        when: vars.osFamily == "debian"
+        apiVersion: deck/v1alpha1
+        kind: RepositoryRefresh
+        spec:
+          manager: apt
+          clean: true
+          update: true
       - id: configure-offline-repo-yum
         when: vars.osFamily == "rhel"
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: RepositoryConfigure
         spec:
           format: yum
           replaceExisting: true
-          refreshCache:
-            enabled: true
-            clean: true
           repositories:
             - id: deck-os
               name: deck-os
@@ -53,9 +55,17 @@ phases:
               baseurl: http://{{ .vars.serverURL }}/packages/rpm-k8s/{{ .vars.release }}
               enabled: true
               gpgcheck: false
+      - id: refresh-offline-repo-yum
+        when: vars.osFamily == "rhel"
+        apiVersion: deck/v1alpha1
+        kind: RepositoryRefresh
+        spec:
+          manager: dnf
+          clean: true
+          update: true
       - id: install-k8s-deps
         apiVersion: deck/v1alpha1
-        kind: PackagesInstall
+        kind: PackageInstall
         spec:
           packages: [containerd, kubelet, kubeadm, kubectl]
       - id: configure-containerd-runtime

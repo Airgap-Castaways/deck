@@ -35,30 +35,30 @@ type artifactJobGroup struct {
 	Jobs      []artifactJob
 }
 
-func hasPrepareArtifacts(wf *config.Workflow) bool {
-	return wf != nil && wf.Artifacts != nil && (len(wf.Artifacts.Files) > 0 || len(wf.Artifacts.Images) > 0 || len(wf.Artifacts.Packages) > 0)
+func hasPrepareArtifact(wf *config.Workflow) bool {
+	return wf != nil && wf.Artifact != nil && (len(wf.Artifact.Files) > 0 || len(wf.Artifact.Images) > 0 || len(wf.Artifact.Packages) > 0)
 }
 
 func planArtifactJobGroups(wf *config.Workflow, bundleRoot string, opts RunOptions) ([]artifactJobGroup, error) {
-	if !hasPrepareArtifacts(wf) {
+	if !hasPrepareArtifact(wf) {
 		return nil, nil
 	}
-	groups := make([]artifactJobGroup, 0, len(wf.Artifacts.Files)+len(wf.Artifacts.Images)+len(wf.Artifacts.Packages))
-	for _, group := range wf.Artifacts.Files {
+	groups := make([]artifactJobGroup, 0, len(wf.Artifact.Files)+len(wf.Artifact.Images)+len(wf.Artifact.Packages))
+	for _, group := range wf.Artifact.Files {
 		planned, err := planFileArtifactGroup(wf, bundleRoot, group, opts)
 		if err != nil {
 			return nil, err
 		}
 		groups = append(groups, planned)
 	}
-	for _, group := range wf.Artifacts.Images {
+	for _, group := range wf.Artifact.Images {
 		planned, err := planImageArtifactGroup(wf, bundleRoot, group, opts)
 		if err != nil {
 			return nil, err
 		}
 		groups = append(groups, planned)
 	}
-	for _, group := range wf.Artifacts.Packages {
+	for _, group := range wf.Artifact.Packages {
 		planned, err := planPackageArtifactGroup(wf, bundleRoot, group, opts)
 		if err != nil {
 			return nil, err
@@ -196,11 +196,11 @@ func planPackageArtifactGroup(wf *config.Workflow, bundleRoot string, group conf
 		jobSpec := cloneMap(spec)
 		planned.Jobs = append(planned.Jobs, artifactJob{
 			Group:      group.Group,
-			Kind:       "PackagesDownload",
+			Kind:       "PackageDownload",
 			Label:      label,
 			OutputRoot: outputRoot,
 			Run: func(ctx context.Context) ([]string, error) {
-				return runPackagesDownload(ctx, opts.CommandRunnerOrDefault(), bundleRoot, cloneMap(jobSpec), "packages", opts)
+				return runPackageDownload(ctx, opts.CommandRunnerOrDefault(), bundleRoot, cloneMap(jobSpec), "packages", opts)
 			},
 			Cleanup: func() error { return cleanupPath(bundleRoot, outputRoot) },
 		})

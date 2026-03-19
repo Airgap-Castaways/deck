@@ -337,7 +337,7 @@ func planSlug(value string) string {
 	return slug
 }
 
-func savePlanArtifacts(root string, opts Options, plan askcontract.PlanResponse, markdown string) (string, string, error) {
+func savePlanArtifact(root string, opts Options, plan askcontract.PlanResponse, markdown string) (string, string, error) {
 	planDir, err := resolvePlanDir(root, opts.PlanDir)
 	if err != nil {
 		return "", "", err

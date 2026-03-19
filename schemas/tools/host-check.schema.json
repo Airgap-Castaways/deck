@@ -1,8 +1,8 @@
 {
-  "$id": "https://deck.local/schemas/tools/packages.install.schema.json",
+  "$id": "https://deck.local/schemas/tools/host-check.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Installs packages on the local node.",
+  "description": "Runs host checks before prepare execution.",
   "properties": {
     "apiVersion": {
       "const": "deck/v1alpha1"
@@ -11,7 +11,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "PackagesInstall"
+      "const": "HostCheck"
     },
     "metadata": {
       "additionalProperties": true,
@@ -33,46 +33,33 @@
     "spec": {
       "additionalProperties": false,
       "properties": {
-        "excludeRepos": {
+        "binaries": {
           "items": {
-            "minLength": 1,
             "type": "string"
           },
           "type": "array"
         },
-        "packages": {
+        "checks": {
           "items": {
+            "enum": [
+              "os",
+              "arch",
+              "kernelModules",
+              "swap",
+              "binaries"
+            ],
             "type": "string"
           },
           "minItems": 1,
           "type": "array"
         },
-        "restrictToRepos": {
-          "items": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "source": {
-          "additionalProperties": false,
-          "properties": {
-            "path": {
-              "type": "string"
-            },
-            "type": {
-              "const": "local-repo"
-            }
-          },
-          "required": [
-            "type",
-            "path"
-          ],
-          "type": "object"
+        "failFast": {
+          "default": true,
+          "type": "boolean"
         }
       },
       "required": [
-        "packages"
+        "checks"
       ],
       "type": "object"
     },
@@ -89,7 +76,7 @@
     "kind",
     "spec"
   ],
-  "title": "PackagesInstallStep",
+  "title": "HostCheckStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

@@ -1,8 +1,8 @@
 {
-  "$id": "https://deck.local/schemas/tools/repository.schema.json",
+  "$id": "https://deck.local/schemas/tools/package.install.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Configures repository definitions on the local node.",
+  "description": "Installs packages on the local node.",
   "properties": {
     "apiVersion": {
       "const": "deck/v1alpha1"
@@ -11,7 +11,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "Repository"
+      "const": "PackageInstall"
     },
     "metadata": {
       "additionalProperties": true,
@@ -33,65 +33,46 @@
     "spec": {
       "additionalProperties": false,
       "properties": {
-        "backupPaths": {
+        "excludeRepos": {
           "items": {
+            "minLength": 1,
             "type": "string"
           },
           "type": "array"
         },
-        "cleanupPaths": {
+        "packages": {
           "items": {
             "type": "string"
-          },
-          "type": "array"
-        },
-        "disableExisting": {
-          "type": "boolean"
-        },
-        "format": {
-          "enum": [
-            "auto",
-            "apt",
-            "yum"
-          ],
-          "type": "string"
-        },
-        "mode": {
-          "pattern": "^[0-7]{4}$",
-          "type": "string"
-        },
-        "path": {
-          "type": "string"
-        },
-        "refreshCache": {
-          "additionalProperties": false,
-          "properties": {
-            "clean": {
-              "type": "boolean"
-            },
-            "enabled": {
-              "type": "boolean"
-            },
-            "update": {
-              "type": "boolean"
-            }
-          },
-          "type": "object"
-        },
-        "replaceExisting": {
-          "type": "boolean"
-        },
-        "repositories": {
-          "items": {
-            "additionalProperties": true,
-            "type": "object"
           },
           "minItems": 1,
           "type": "array"
+        },
+        "restrictToRepos": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "source": {
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "const": "local-repo"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ],
+          "type": "object"
         }
       },
       "required": [
-        "repositories"
+        "packages"
       ],
       "type": "object"
     },
@@ -108,7 +89,7 @@
     "kind",
     "spec"
   ],
-  "title": "RepositoryStep",
+  "title": "PackageInstallStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

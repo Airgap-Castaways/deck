@@ -19,8 +19,8 @@ func runPrepareStep(ctx context.Context, runner CommandRunner, bundleRoot, kind 
 			return nil, nil, err
 		}
 		return []string{f}, map[string]any{"path": f, "artifacts": []string{f}}, nil
-	case "PackagesDownload":
-		files, err := runPackagesDownload(ctx, runner, bundleRoot, rendered, "packages", opts)
+	case "PackageDownload":
+		files, err := runPackageDownload(ctx, runner, bundleRoot, rendered, "packages", opts)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -31,12 +31,12 @@ func runPrepareStep(ctx context.Context, runner CommandRunner, bundleRoot, kind 
 			return nil, nil, err
 		}
 		return files, map[string]any{"artifacts": files}, nil
-	case "Checks":
+	case "HostCheck":
 		decoded, err := workflowexec.DecodeSpec[checksSpec](rendered)
 		if err != nil {
 			return nil, nil, fmt.Errorf("decode checks spec: %w", err)
 		}
-		outputs, err := runChecksDecoded(runner, decoded, resolveChecksRuntime(opts))
+		outputs, err := runHostCheckDecoded(runner, decoded, resolveHostCheckRuntime(opts))
 		if err != nil {
 			return nil, nil, err
 		}

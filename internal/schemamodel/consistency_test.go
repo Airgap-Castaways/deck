@@ -27,7 +27,7 @@ func TestWaitSchemaModelMatchesToolSchema(t *testing.T) {
 		typ  reflect.Type
 	}{
 		{file: "wait.service-active.schema.json", typ: reflect.TypeOf(WaitServiceActiveStepSpec{})},
-		{file: "wait.command-success.schema.json", typ: reflect.TypeOf(WaitCommandSuccessStepSpec{})},
+		{file: "wait.command.schema.json", typ: reflect.TypeOf(WaitCommandStepSpec{})},
 		{file: "wait.file-exists.schema.json", typ: reflect.TypeOf(WaitFileExistsStepSpec{})},
 		{file: "wait.file-absent.schema.json", typ: reflect.TypeOf(WaitFileAbsentStepSpec{})},
 		{file: "wait.tcp-port-open.schema.json", typ: reflect.TypeOf(WaitTCPPortStepSpec{})},

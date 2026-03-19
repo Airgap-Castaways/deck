@@ -21,7 +21,7 @@ phases:
       - id: apply-offline-repo-config-apt
         when: vars.osFamily == "debian"
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: RepositoryConfigure
         spec:
           format: apt
           replaceExisting: true
@@ -32,7 +32,7 @@ phases:
       - id: refresh-offline-repo-cache-apt
         when: vars.osFamily == "debian"
         apiVersion: deck/v1alpha1
-        kind: PackageCache
+        kind: RepositoryRefresh
         spec:
           manager: apt
           clean: true
@@ -42,7 +42,7 @@ phases:
       - id: apply-offline-repo-config-yum
         when: vars.osFamily == "rhel"
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: RepositoryConfigure
         spec:
           format: yum
           replaceExisting: true
@@ -56,7 +56,7 @@ phases:
       - id: refresh-offline-repo-cache-yum
         when: vars.osFamily == "rhel"
         apiVersion: deck/v1alpha1
-        kind: PackageCache
+        kind: RepositoryRefresh
         spec:
           manager: dnf
           clean: true

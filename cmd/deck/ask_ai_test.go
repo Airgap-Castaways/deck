@@ -237,7 +237,7 @@ func TestAskReviewMode(t *testing.T) {
 	}
 }
 
-func TestAskPlanWritesArtifacts(t *testing.T) {
+func TestAskPlanWritesArtifact(t *testing.T) {
 	t.Setenv("DECK_ASK_API_KEY", "env-key")
 	root := t.TempDir()
 	oldWD, err := os.Getwd()

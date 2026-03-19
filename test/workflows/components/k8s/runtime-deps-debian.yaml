@@ -1,6 +1,6 @@
 steps:
   - id: install-runtime-deps-debian
-    kind: Artifacts
+    kind: Artifact
     timeout: 20m
     spec:
       artifacts:

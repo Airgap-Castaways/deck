@@ -1,15 +1,15 @@
 package schemamodel
 
 type WorkflowDocument struct {
-	Role      string            `json:"role"`
-	Version   string            `json:"version"`
-	Vars      map[string]any    `json:"vars,omitempty"`
-	Artifacts *ArtifactsSpec    `json:"artifacts,omitempty"`
-	Phases    []WorkflowPhase   `json:"phases,omitempty"`
-	Steps     []WorkflowStepRef `json:"steps,omitempty"`
+	Role     string            `json:"role"`
+	Version  string            `json:"version"`
+	Vars     map[string]any    `json:"vars,omitempty"`
+	Artifact *ArtifactSpec     `json:"artifacts,omitempty"`
+	Phases   []WorkflowPhase   `json:"phases,omitempty"`
+	Steps    []WorkflowStepRef `json:"steps,omitempty"`
 }
 
-type ArtifactsSpec struct {
+type ArtifactSpec struct {
 	Files    []ArtifactFileGroup    `json:"files,omitempty"`
 	Images   []ArtifactImageGroup   `json:"images,omitempty"`
 	Packages []ArtifactPackageGroup `json:"packages,omitempty"`
@@ -134,7 +134,7 @@ type ToolDefinitionRequires struct {
 }
 
 type ToolDefinitionOutputContract struct {
-	Artifacts []string `json:"artifacts,omitempty"`
+	Artifact  []string `json:"artifacts,omitempty"`
 	StateKeys []string `json:"stateKeys,omitempty"`
 }
 

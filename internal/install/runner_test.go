@@ -92,7 +92,7 @@ func TestRun_InstallTools(t *testing.T) {
 		Phases: []config.Phase{{
 			Name: "install",
 			Steps: []config.Step{
-				{ID: "install-packages", Kind: "PackagesInstall", Spec: map[string]any{"packages": []any{"containerd"}}},
+				{ID: "install-packages", Kind: "PackageInstall", Spec: map[string]any{"packages": []any{"containerd"}}},
 				{ID: "write-file", Kind: "FileWrite", Spec: map[string]any{"path": fileA, "content": "hello world"}},
 				{ID: "edit-file", Kind: "FileEdit", Spec: map[string]any{"path": fileA, "edits": []any{map[string]any{"op": "replace", "match": "world", "with": "deck"}}}},
 				{ID: "copy-file", Kind: "FileCopy", Spec: map[string]any{"src": fileA, "dest": fileB}},
@@ -1388,7 +1388,7 @@ func TestRun_KubeadmRealModeSupportsImagePullAndConfigWrite(t *testing.T) {
 					"kubernetesVersion":     "v1.30.14",
 					"podNetworkCIDR":        "10.244.0.0/16",
 					"criSocket":             "unix:///run/containerd/containerd.sock",
-					"ignorePreflightErrors": []any{"Swap"},
+					"ignorePreflightErrors": []any{"swap"},
 					"extraArgs":             []any{"--skip-phases=addon/kube-proxy"},
 				},
 			}},
@@ -1425,7 +1425,7 @@ func TestRun_KubeadmRealModeSupportsImagePullAndConfigWrite(t *testing.T) {
 	if !strings.Contains(logText, "config images pull --kubernetes-version v1.30.14 --cri-socket unix:///run/containerd/containerd.sock") {
 		t.Fatalf("expected kubeadm image pull invocation, got %q", logText)
 	}
-	if !strings.Contains(logText, "init --config "+configPath+" --ignore-preflight-errors Swap --skip-phases=addon/kube-proxy") {
+	if !strings.Contains(logText, "init --config "+configPath+" --ignore-preflight-errors swap --skip-phases=addon/kube-proxy") {
 		t.Fatalf("expected kubeadm init args with config file only, got %q", logText)
 	}
 }
@@ -2018,7 +2018,7 @@ func TestRun_FileDownloadRegistersOutputs(t *testing.T) {
 				ID:       "download",
 				Kind:     "FileDownload",
 				Spec:     map[string]any{"source": map[string]any{"url": srv.URL + "/files/payload.txt"}},
-				Register: map[string]string{"downloadPath": "path", "downloadArtifacts": "artifacts"},
+				Register: map[string]string{"downloadPath": "path", "downloadArtifact": "artifacts"},
 			}},
 		}},
 	}
@@ -2037,9 +2037,9 @@ func TestRun_FileDownloadRegistersOutputs(t *testing.T) {
 	if st.RuntimeVars["downloadPath"] != "files/payload.txt" {
 		t.Fatalf("expected registered path, got %#v", st.RuntimeVars["downloadPath"])
 	}
-	artifacts, ok := st.RuntimeVars["downloadArtifacts"].([]any)
+	artifacts, ok := st.RuntimeVars["downloadArtifact"].([]any)
 	if !ok || len(artifacts) != 1 || artifacts[0] != "files/payload.txt" {
-		t.Fatalf("expected registered artifacts, got %#v", st.RuntimeVars["downloadArtifacts"])
+		t.Fatalf("expected registered artifacts, got %#v", st.RuntimeVars["downloadArtifact"])
 	}
 }
 
@@ -2310,7 +2310,7 @@ func TestRun_PackagesExecutesPackageManager(t *testing.T) {
 			Name: "install",
 			Steps: []config.Step{{
 				ID:   "install-pkgs",
-				Kind: "PackagesInstall",
+				Kind: "PackageInstall",
 				Spec: map[string]any{"packages": []any{"containerd", "kubelet"}},
 			}},
 		}},
@@ -2354,7 +2354,7 @@ func TestRun_PackagesSourcePathValidation(t *testing.T) {
 			Name: "install",
 			Steps: []config.Step{{
 				ID:   "install-pkgs",
-				Kind: "PackagesInstall",
+				Kind: "PackageInstall",
 				Spec: map[string]any{
 					"packages": []any{"containerd"},
 					"source":   map[string]any{"type": "local-repo", "path": filepath.Join(dir, "missing")},
@@ -2372,7 +2372,7 @@ func TestRun_PackagesSourcePathValidation(t *testing.T) {
 	}
 }
 
-func TestRun_PackagesInstallsFromLocalRepo(t *testing.T) {
+func TestRun_PackageInstallsFromLocalRepo(t *testing.T) {
 	dir := t.TempDir()
 	bundle := filepath.Join(dir, "bundle")
 	statePath := filepath.Join(dir, "state", "state.json")
@@ -2423,7 +2423,7 @@ func TestRun_PackagesInstallsFromLocalRepo(t *testing.T) {
 			Name: "install",
 			Steps: []config.Step{{
 				ID:   "install-pkgs",
-				Kind: "PackagesInstall",
+				Kind: "PackageInstall",
 				Spec: map[string]any{
 					"packages": []any{"containerd", "kubelet"},
 					"source":   map[string]any{"type": "local-repo", "path": repoDir},
@@ -2485,7 +2485,7 @@ func TestRun_PackagesTimeoutUsesTimeoutClassification(t *testing.T) {
 			Name: "install",
 			Steps: []config.Step{{
 				ID:      "install-pkgs",
-				Kind:    "PackagesInstall",
+				Kind:    "PackageInstall",
 				Timeout: "20ms",
 				Spec:    map[string]any{"packages": []any{"containerd"}},
 			}},
@@ -3063,7 +3063,7 @@ func TestRunCommandSupportsEnvAndSudo(t *testing.T) {
 	}
 }
 
-func TestInstallArtifactsStep_InstallsSingleFileWithMode(t *testing.T) {
+func TestInstallArtifactStep_InstallsSingleFileWithMode(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "kubelet")
 	if err := os.WriteFile(source, []byte("kubelet-binary"), 0o644); err != nil {
@@ -3085,8 +3085,8 @@ func TestInstallArtifactsStep_InstallsSingleFileWithMode(t *testing.T) {
 		}},
 	}
 
-	if err := runInstallArtifactsWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
-		t.Fatalf("runInstallArtifacts failed: %v", err)
+	if err := runInstallArtifactWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
+		t.Fatalf("runInstallArtifact failed: %v", err)
 	}
 
 	raw, err := os.ReadFile(target)
@@ -3105,7 +3105,7 @@ func TestInstallArtifactsStep_InstallsSingleFileWithMode(t *testing.T) {
 	}
 }
 
-func TestInstallArtifactsStep_InstallsBundleSource(t *testing.T) {
+func TestInstallArtifactStep_InstallsBundleSource(t *testing.T) {
 	dir := t.TempDir()
 	bundleRoot := filepath.Join(dir, "bundle")
 	sourcePath := filepath.Join(bundleRoot, "files", "bin", "tool")
@@ -3131,8 +3131,8 @@ func TestInstallArtifactsStep_InstallsBundleSource(t *testing.T) {
 		"fetch": map[string]any{"sources": []any{map[string]any{"type": "bundle", "path": bundleRoot}}},
 	}
 
-	if err := runInstallArtifactsWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
-		t.Fatalf("runInstallArtifacts failed: %v", err)
+	if err := runInstallArtifactWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
+		t.Fatalf("runInstallArtifact failed: %v", err)
 	}
 	raw, err := os.ReadFile(target)
 	if err != nil {
@@ -3143,7 +3143,7 @@ func TestInstallArtifactsStep_InstallsBundleSource(t *testing.T) {
 	}
 }
 
-func TestInstallArtifactsStep_ExtractsTarGzArtifact(t *testing.T) {
+func TestInstallArtifactStep_ExtractsTarGzArtifact(t *testing.T) {
 	dir := t.TempDir()
 	archivePath := filepath.Join(dir, "crictl.tar.gz")
 	if err := writeTarGzArchiveForTest(archivePath, map[string]string{"crictl": "binary"}); err != nil {
@@ -3165,8 +3165,8 @@ func TestInstallArtifactsStep_ExtractsTarGzArtifact(t *testing.T) {
 		}},
 	}
 
-	if err := runInstallArtifactsWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
-		t.Fatalf("runInstallArtifacts failed: %v", err)
+	if err := runInstallArtifactWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
+		t.Fatalf("runInstallArtifact failed: %v", err)
 	}
 
 	target := filepath.Join(destination, "crictl")
@@ -3186,7 +3186,7 @@ func TestInstallArtifactsStep_ExtractsTarGzArtifact(t *testing.T) {
 	}
 }
 
-func TestInstallArtifactsStep_SelectsSourceByArchitecture(t *testing.T) {
+func TestInstallArtifactStep_SelectsSourceByArchitecture(t *testing.T) {
 	dir := t.TempDir()
 	amd64Source := filepath.Join(dir, "kubeadm-amd64")
 	arm64Source := filepath.Join(dir, "kubeadm-arm64")
@@ -3210,8 +3210,8 @@ func TestInstallArtifactsStep_SelectsSourceByArchitecture(t *testing.T) {
 			"install": map[string]any{"path": target, "mode": "0755"},
 		}},
 	}
-	if err := runInstallArtifactsWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
-		t.Fatalf("runInstallArtifacts amd64 failed: %v", err)
+	if err := runInstallArtifactWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
+		t.Fatalf("runInstallArtifact amd64 failed: %v", err)
 	}
 	raw, err := os.ReadFile(target)
 	if err != nil {
@@ -3224,8 +3224,8 @@ func TestInstallArtifactsStep_SelectsSourceByArchitecture(t *testing.T) {
 	hostFactDetector = func() map[string]any {
 		return map[string]any{"arch": "arm64"}
 	}
-	if err := runInstallArtifactsWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
-		t.Fatalf("runInstallArtifacts arm64 failed: %v", err)
+	if err := runInstallArtifactWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
+		t.Fatalf("runInstallArtifact arm64 failed: %v", err)
 	}
 	raw, err = os.ReadFile(target)
 	if err != nil {
@@ -3236,7 +3236,7 @@ func TestInstallArtifactsStep_SelectsSourceByArchitecture(t *testing.T) {
 	}
 }
 
-func TestInstallArtifactsStep_SkipIfPresentExecutable(t *testing.T) {
+func TestInstallArtifactStep_SkipIfPresentExecutable(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "kubectl-source")
 	if err := os.WriteFile(source, []byte("new-content"), 0o644); err != nil {
@@ -3265,8 +3265,8 @@ func TestInstallArtifactsStep_SkipIfPresentExecutable(t *testing.T) {
 		}},
 	}
 
-	if err := runInstallArtifactsWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
-		t.Fatalf("runInstallArtifacts failed: %v", err)
+	if err := runInstallArtifactWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
+		t.Fatalf("runInstallArtifact failed: %v", err)
 	}
 	raw, err := os.ReadFile(target)
 	if err != nil {
@@ -3649,7 +3649,7 @@ func TestRepoConfigStep(t *testing.T) {
 		}
 	})
 
-	t.Run("refresh cache invokes apt commands", func(t *testing.T) {
+	t.Run("repository configure does not refresh cache inline", func(t *testing.T) {
 		dir := t.TempDir()
 		target := filepath.Join(dir, "repo", "offline.list")
 		origRun := repoConfigRunTimedCommand
@@ -3666,10 +3666,6 @@ func TestRepoConfigStep(t *testing.T) {
 		spec := map[string]any{
 			"format": "apt",
 			"path":   target,
-			"refreshCache": map[string]any{
-				"enabled": true,
-				"clean":   true,
-			},
 			"repositories": []any{map[string]any{
 				"baseurl": "http://repo.local/apt/bookworm",
 			}},
@@ -3677,12 +3673,12 @@ func TestRepoConfigStep(t *testing.T) {
 		if err := runRepoConfig(context.Background(), spec); err != nil {
 			t.Fatalf("runRepoConfig failed: %v", err)
 		}
-		if len(calls) != 2 || calls[0] != "apt-get clean" || calls[1] != "apt-get update" {
-			t.Fatalf("unexpected refresh command sequence: %#v", calls)
+		if len(calls) != 0 {
+			t.Fatalf("expected no refresh commands during configure: %#v", calls)
 		}
 	})
 
-	t.Run("refresh cache honors update false and implicit enabled", func(t *testing.T) {
+	t.Run("repository configure only writes repo files", func(t *testing.T) {
 		dir := t.TempDir()
 		target := filepath.Join(dir, "repo", "offline.list")
 		origRun := repoConfigRunTimedCommand
@@ -3696,10 +3692,6 @@ func TestRepoConfigStep(t *testing.T) {
 		spec := map[string]any{
 			"format": "apt",
 			"path":   target,
-			"refreshCache": map[string]any{
-				"clean":  true,
-				"update": false,
-			},
 			"repositories": []any{map[string]any{
 				"baseurl": "http://repo.local/apt/bookworm",
 			}},
@@ -3707,13 +3699,13 @@ func TestRepoConfigStep(t *testing.T) {
 		if err := runRepoConfig(context.Background(), spec); err != nil {
 			t.Fatalf("runRepoConfig failed: %v", err)
 		}
-		if len(calls) != 1 || calls[0] != "apt-get clean" {
-			t.Fatalf("unexpected refresh command sequence: %#v", calls)
+		if len(calls) != 0 {
+			t.Fatalf("expected no refresh command sequence: %#v", calls)
 		}
 	})
 }
 
-func TestPackageCacheStep(t *testing.T) {
+func TestRepositoryRefreshStep(t *testing.T) {
 	t.Run("apt clean only", func(t *testing.T) {
 		calls := make([]string, 0)
 		runner := func(name string, args []string, timeout time.Duration) error {
@@ -3722,8 +3714,8 @@ func TestPackageCacheStep(t *testing.T) {
 		}
 
 		spec := map[string]any{"manager": "apt", "clean": true}
-		if err := runPackageCacheWithRunner(spec, runner); err != nil {
-			t.Fatalf("runPackageCache failed: %v", err)
+		if err := runRepositoryRefreshWithRunner(spec, runner); err != nil {
+			t.Fatalf("runRepositoryRefresh failed: %v", err)
 		}
 
 		if len(calls) != 1 || calls[0] != "apt-get clean" {
@@ -3739,8 +3731,8 @@ func TestPackageCacheStep(t *testing.T) {
 		}
 
 		spec := map[string]any{"manager": "apt", "clean": true, "update": true}
-		if err := runPackageCacheWithRunner(spec, runner); err != nil {
-			t.Fatalf("runPackageCache failed: %v", err)
+		if err := runRepositoryRefreshWithRunner(spec, runner); err != nil {
+			t.Fatalf("runRepositoryRefresh failed: %v", err)
 		}
 
 		if len(calls) != 2 || calls[0] != "apt-get clean" || calls[1] != "apt-get update" {
@@ -3756,8 +3748,8 @@ func TestPackageCacheStep(t *testing.T) {
 		}
 
 		spec := map[string]any{"manager": "dnf", "clean": true}
-		if err := runPackageCacheWithRunner(spec, runner); err != nil {
-			t.Fatalf("runPackageCache failed: %v", err)
+		if err := runRepositoryRefreshWithRunner(spec, runner); err != nil {
+			t.Fatalf("runRepositoryRefresh failed: %v", err)
 		}
 
 		if len(calls) != 1 || calls[0] != "dnf clean all" {
@@ -3773,8 +3765,8 @@ func TestPackageCacheStep(t *testing.T) {
 		}
 
 		spec := map[string]any{"manager": "dnf", "update": true}
-		if err := runPackageCacheWithRunner(spec, runner); err != nil {
-			t.Fatalf("runPackageCache failed: %v", err)
+		if err := runRepositoryRefreshWithRunner(spec, runner); err != nil {
+			t.Fatalf("runRepositoryRefresh failed: %v", err)
 		}
 
 		if len(calls) != 1 || calls[0] != "dnf makecache -y" {
@@ -3801,8 +3793,8 @@ func TestPackageCacheStep(t *testing.T) {
 		}
 
 		spec := map[string]any{"manager": "auto", "update": true}
-		if err := runPackageCacheWithRunner(spec, runner); err != nil {
-			t.Fatalf("runPackageCache failed: %v", err)
+		if err := runRepositoryRefreshWithRunner(spec, runner); err != nil {
+			t.Fatalf("runRepositoryRefresh failed: %v", err)
 		}
 
 		if len(calls) != 1 || calls[0] != "dnf makecache -y" {
@@ -4032,7 +4024,7 @@ func TestRun_RepositoryRequiresExplicitAction(t *testing.T) {
 			Name: "install",
 			Steps: []config.Step{{
 				ID:   "repo-config",
-				Kind: "Repository",
+				Kind: "RepositoryConfigure",
 				Spec: map[string]any{
 					"format":       "apt",
 					"path":         target,

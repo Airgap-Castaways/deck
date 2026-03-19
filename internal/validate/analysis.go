@@ -70,8 +70,8 @@ func analyzeWorkflow(path string, wf *config.Workflow) []Finding {
 	for _, phase := range wf.Phases {
 		findings = append(findings, analyzeSteps(path, phase.Name, phase.Steps)...)
 	}
-	if wf.Artifacts != nil {
-		for _, group := range wf.Artifacts.Files {
+	if wf.Artifact != nil {
+		for _, group := range wf.Artifact.Files {
 			for _, item := range group.Items {
 				if strings.TrimSpace(item.Source.URL) == "" {
 					continue

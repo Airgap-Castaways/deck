@@ -20,7 +20,7 @@ type WaitServiceActiveStepSpec struct {
 	PollInterval string `json:"pollInterval,omitempty"`
 }
 
-type WaitCommandSuccessStepSpec struct {
+type WaitCommandStepSpec struct {
 	Interval     string   `json:"interval,omitempty"`
 	InitialDelay string   `json:"initialDelay,omitempty"`
 	Command      []string `json:"command,omitempty"`

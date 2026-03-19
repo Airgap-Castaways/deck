@@ -45,13 +45,13 @@ const (
 	errCodePrepareRuntimeMissing     = "E_PREPARE_RUNTIME_NOT_FOUND"
 	errCodePrepareRuntimeUnsupported = "E_PREPARE_RUNTIME_UNSUPPORTED"
 	errCodePrepareEngineUnsupported  = "E_PREPARE_ENGINE_UNSUPPORTED"
-	errCodePrepareArtifactsEmpty     = "E_PREPARE_NO_ARTIFACTS"
+	errCodePrepareArtifactEmpty      = "E_PREPARE_NO_ARTIFACTS"
 	errCodeArtifactSourceNotFound    = "E_PREPARE_SOURCE_NOT_FOUND"
 	errCodePrepareChecksumMismatch   = "E_PREPARE_CHECKSUM_MISMATCH"
 	errCodePrepareOfflinePolicyBlock = "E_PREPARE_OFFLINE_POLICY_BLOCK"
 	errCodePrepareConditionEval      = "E_CONDITION_EVAL"
 	errCodePrepareRegisterMissing    = "E_REGISTER_OUTPUT_NOT_FOUND"
-	errCodePrepareChecksFailed       = "E_PREPARE_CHECKHOST_FAILED"
+	errCodePrepareHostCheckFailed    = "E_PREPARE_CHECKHOST_FAILED"
 	errCodePrepareKindUnsupported    = "E_PREPARE_KIND_UNSUPPORTED"
 	packageCacheMetaFile             = ".deck-cache-packages.json"
 )
@@ -114,7 +114,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	}
 	ctxData := map[string]any{"bundleRoot": bundleRoot, "stateFile": ""}
 
-	if hasPrepareArtifacts(wf) {
+	if hasPrepareArtifact(wf) {
 		plannedGroups, err := planArtifactJobGroups(wf, bundleRoot, opts)
 		if err != nil {
 			return err
@@ -210,7 +210,7 @@ func prepareExecutionSteps(wf *config.Workflow) ([]config.Step, error) {
 	if wf == nil {
 		return nil, fmt.Errorf("workflow is nil")
 	}
-	if wf.Artifacts != nil && (len(wf.Artifacts.Files) > 0 || len(wf.Artifacts.Images) > 0 || len(wf.Artifacts.Packages) > 0) {
+	if wf.Artifact != nil && (len(wf.Artifact.Files) > 0 || len(wf.Artifact.Images) > 0 || len(wf.Artifact.Packages) > 0) {
 		return declaredPrepareSteps(wf)
 	}
 	preparePhase, found := findPhase(wf, "prepare")

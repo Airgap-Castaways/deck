@@ -31,7 +31,7 @@ type rpmModuleSpec struct {
 	Stream string
 }
 
-func runPackagesDownload(ctx context.Context, runner CommandRunner, bundleRoot string, spec map[string]any, defaultDir string, opts RunOptions) ([]string, error) {
+func runPackageDownload(ctx context.Context, runner CommandRunner, bundleRoot string, spec map[string]any, defaultDir string, opts RunOptions) ([]string, error) {
 	output := mapValue(spec, "output")
 	dir := stringValue(output, "dir")
 	if dir == "" {
@@ -74,7 +74,7 @@ func runPackagesDownload(ctx context.Context, runner CommandRunner, bundleRoot s
 				return nil, fmt.Errorf("packages action download repo.type must be apt-flat or yum")
 			}
 
-			if files, reused, err := tryReusePackageArtifacts(bundleRoot, repoRoot, packages, opts); err != nil {
+			if files, reused, err := tryReusePackageArtifact(bundleRoot, repoRoot, packages, opts); err != nil {
 				return nil, err
 			} else if reused {
 				return files, nil
@@ -84,13 +84,13 @@ func runPackagesDownload(ctx context.Context, runner CommandRunner, bundleRoot s
 			if err != nil {
 				return nil, err
 			}
-			if err := writePackageArtifactsMeta(bundleRoot, repoRoot, packages, files); err != nil {
+			if err := writePackageArtifactMeta(bundleRoot, repoRoot, packages, files); err != nil {
 				return nil, err
 			}
 			return files, nil
 		}
 
-		if files, reused, err := tryReusePackageArtifacts(bundleRoot, dir, packages, opts); err != nil {
+		if files, reused, err := tryReusePackageArtifact(bundleRoot, dir, packages, opts); err != nil {
 			return nil, err
 		} else if reused {
 			return files, nil
@@ -100,7 +100,7 @@ func runPackagesDownload(ctx context.Context, runner CommandRunner, bundleRoot s
 		if err != nil {
 			return nil, err
 		}
-		if err := writePackageArtifactsMeta(bundleRoot, dir, packages, files); err != nil {
+		if err := writePackageArtifactMeta(bundleRoot, dir, packages, files); err != nil {
 			return nil, err
 		}
 		return files, nil
@@ -155,7 +155,7 @@ func runContainerPackageRepoBuild(
 	if err != nil {
 		return nil, err
 	}
-	mounts, err := preparePackageCacheMounts(family, cacheKey)
+	mounts, err := prepareRepositoryRefreshMounts(family, cacheKey)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func runContainerPackageRepoBuild(
 	after, _ := listRelativeFiles(outAbs)
 	files := packageFilesFromDirListing(repoRoot, after)
 	if len(files) == 0 {
-		return nil, fmt.Errorf("%s: no package artifacts generated in %s", errCodePrepareArtifactsEmpty, repoRoot)
+		return nil, fmt.Errorf("%s: no package artifacts generated in %s", errCodePrepareArtifactEmpty, repoRoot)
 	}
 	return files, nil
 }
@@ -211,7 +211,7 @@ func runContainerPackageDownloadAll(ctx context.Context, runner CommandRunner, b
 	if err != nil {
 		return nil, err
 	}
-	mounts, err := preparePackageCacheMounts(family, cacheKey)
+	mounts, err := prepareRepositoryRefreshMounts(family, cacheKey)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func runContainerPackageDownloadAll(ctx context.Context, runner CommandRunner, b
 	after, _ := listRelativeFiles(outAbs)
 	files := packageFilesFromDirListing(dir, after)
 	if len(files) == 0 {
-		return nil, fmt.Errorf("%s: no package artifacts generated in %s", errCodePrepareArtifactsEmpty, dir)
+		return nil, fmt.Errorf("%s: no package artifacts generated in %s", errCodePrepareArtifactEmpty, dir)
 	}
 	return files, nil
 }
@@ -399,7 +399,7 @@ func packageDownloadCacheKey(spec map[string]any, family string, artifactRoot st
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func preparePackageCacheMounts(family string, cacheKey string) ([]packageCacheMount, error) {
+func prepareRepositoryRefreshMounts(family string, cacheKey string) ([]packageCacheMount, error) {
 	cacheRoot, err := userdirs.CacheRoot()
 	if err != nil {
 		return nil, err
@@ -409,7 +409,7 @@ func preparePackageCacheMounts(family string, cacheKey string) ([]packageCacheMo
 		if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("stat package cache root: %w", err)
 		}
-		legacyPath, ok, legacyErr := resolveLegacyPackageCacheRoot(cacheKey)
+		legacyPath, ok, legacyErr := resolveLegacyRepositoryRefreshRoot(cacheKey)
 		if legacyErr != nil {
 			return nil, legacyErr
 		}
@@ -501,7 +501,7 @@ func packageMetaFileAbs(bundleRoot, rootRel string) string {
 	return filepath.Join(bundleRoot, filepath.FromSlash(rootRel), packageCacheMetaFile)
 }
 
-func tryReusePackageArtifacts(bundleRoot, rootRel string, packages []string, opts RunOptions) ([]string, bool, error) {
+func tryReusePackageArtifact(bundleRoot, rootRel string, packages []string, opts RunOptions) ([]string, bool, error) {
 	if opts.ForceRedownload {
 		return nil, false, nil
 	}
@@ -539,7 +539,7 @@ func tryReusePackageArtifacts(bundleRoot, rootRel string, packages []string, opt
 	return files, true, nil
 }
 
-func writePackageArtifactsMeta(bundleRoot, rootRel string, packages, files []string) error {
+func writePackageArtifactMeta(bundleRoot, rootRel string, packages, files []string) error {
 	meta := packageCacheMeta{
 		Packages: normalizeStrings(packages),
 		Files:    normalizeStrings(files),

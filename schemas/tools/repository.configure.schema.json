@@ -1,8 +1,8 @@
 {
-  "$id": "https://deck.local/schemas/tools/checks.schema.json",
+  "$id": "https://deck.local/schemas/tools/repository.configure.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Runs host checks before prepare execution.",
+  "description": "Configures repository definitions on the local node.",
   "properties": {
     "apiVersion": {
       "const": "deck/v1alpha1"
@@ -11,7 +11,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "Checks"
+      "const": "RepositoryConfigure"
     },
     "metadata": {
       "additionalProperties": true,
@@ -33,33 +33,50 @@
     "spec": {
       "additionalProperties": false,
       "properties": {
-        "binaries": {
+        "backupPaths": {
           "items": {
             "type": "string"
           },
           "type": "array"
         },
-        "checks": {
+        "cleanupPaths": {
           "items": {
-            "enum": [
-              "os",
-              "arch",
-              "kernelModules",
-              "swap",
-              "binaries"
-            ],
             "type": "string"
+          },
+          "type": "array"
+        },
+        "disableExisting": {
+          "type": "boolean"
+        },
+        "format": {
+          "enum": [
+            "auto",
+            "apt",
+            "yum"
+          ],
+          "type": "string"
+        },
+        "mode": {
+          "pattern": "^[0-7]{4}$",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "replaceExisting": {
+          "type": "boolean"
+        },
+        "repositories": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
           },
           "minItems": 1,
           "type": "array"
-        },
-        "failFast": {
-          "default": true,
-          "type": "boolean"
         }
       },
       "required": [
-        "checks"
+        "repositories"
       ],
       "type": "object"
     },
@@ -76,7 +93,7 @@
     "kind",
     "spec"
   ],
-  "title": "ChecksStep",
+  "title": "RepositoryConfigureStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

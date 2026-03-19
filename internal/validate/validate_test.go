@@ -166,7 +166,7 @@ phases:
     steps:
       - id: install-packages
         apiVersion: deck/v1alpha1
-        kind: PackagesInstall
+        kind: PackageInstall
         spec:
           packages: [containerd]
 `)
@@ -179,7 +179,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema rejects Packages without explicit action", func(t *testing.T) {
+	t.Run("tool schema rejects removed Package family kind", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -206,7 +206,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema rejects Packages download with install-only source", func(t *testing.T) {
+	t.Run("tool schema rejects Package download with install-only source", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: prepare
@@ -216,7 +216,7 @@ phases:
     steps:
       - id: download-packages
         apiVersion: deck/v1alpha1
-        kind: PackagesDownload
+        kind: PackageDownload
         spec:
           packages: [containerd]
           source:
@@ -236,7 +236,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema rejects Packages install with download-only backend", func(t *testing.T) {
+	t.Run("tool schema rejects Package install with download-only backend", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -246,7 +246,7 @@ phases:
     steps:
       - id: install-packages
         apiVersion: deck/v1alpha1
-        kind: PackagesInstall
+        kind: PackageInstall
         spec:
           packages: [containerd]
           backend:
@@ -267,7 +267,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema valid PackageCache", func(t *testing.T) {
+	t.Run("tool schema valid RepositoryRefresh", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -277,7 +277,7 @@ phases:
     steps:
       - id: refresh-cache
         apiVersion: deck/v1alpha1
-        kind: PackageCache
+        kind: RepositoryRefresh
         spec:
           manager: auto
           clean: true
@@ -292,7 +292,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema valid InstallArtifacts", func(t *testing.T) {
+	t.Run("tool schema valid InstallArtifact", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -302,7 +302,7 @@ phases:
     steps:
       - id: install-artifacts
         apiVersion: deck/v1alpha1
-        kind: Artifacts
+        kind: Artifact
         spec:
           artifacts:
             - source:
@@ -335,7 +335,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema rejects invalid InstallArtifacts", func(t *testing.T) {
+	t.Run("tool schema rejects invalid InstallArtifact", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -345,7 +345,7 @@ phases:
     steps:
       - id: bad-install-artifacts
         apiVersion: deck/v1alpha1
-        kind: Artifacts
+        kind: Artifact
         spec:
           artifacts:
             - source:
@@ -369,7 +369,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema rejects invalid PackageCache", func(t *testing.T) {
+	t.Run("tool schema rejects invalid RepositoryRefresh", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -379,7 +379,7 @@ phases:
     steps:
       - id: bad-cache
         apiVersion: deck/v1alpha1
-        kind: PackageCache
+        kind: RepositoryRefresh
         spec:
           manager: yum
 `)
@@ -406,7 +406,7 @@ phases:
     steps:
       - id: install-packages-curl
         apiVersion: deck/v1alpha1
-        kind: PackagesInstall
+        kind: PackageInstall
         spec:
           packages: [curl]
 `)
@@ -419,7 +419,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema valid RepoConfig apt without path", func(t *testing.T) {
+	t.Run("tool schema rejects RepositoryConfigure refreshCache block", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: apply
@@ -429,7 +429,7 @@ phases:
     steps:
       - id: repo-apt
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: RepositoryConfigure
         spec:
           format: apt
           replaceExisting: true
@@ -446,8 +446,12 @@ phases:
 			t.Fatalf("write file: %v", err)
 		}
 
-		if err := File(path); err != nil {
-			t.Fatalf("expected no error, got %v", err)
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected schema error")
+		}
+		if !strings.Contains(err.Error(), "refreshCache") {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
@@ -920,7 +924,7 @@ phases:
     steps:
       - id: repo-config
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: RepositoryConfigure
         spec:
           format: apt
           repositories:
@@ -1185,7 +1189,7 @@ phases:
 		}
 	})
 
-	t.Run("tool schema valid Packages download output dir", func(t *testing.T) {
+	t.Run("tool schema valid Package download output dir", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`role: prepare
@@ -1195,7 +1199,7 @@ phases:
     steps:
       - id: download-packages
         apiVersion: deck/v1alpha1
-        kind: PackagesDownload
+        kind: PackageDownload
         spec:
           packages: [containerd]
           output:
@@ -1295,7 +1299,7 @@ phases:
           advertiseAddress: auto
           podNetworkCIDR: 10.244.0.0/16
           criSocket: unix:///run/containerd/containerd.sock
-          ignorePreflightErrors: [Swap]
+          ignorePreflightErrors: [swap]
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			t.Fatalf("write file: %v", err)
@@ -1620,7 +1624,7 @@ phases:
     steps:
       - id: c1
         apiVersion: deck/v1alpha1
-        kind: Checks
+        kind: HostCheck
         register:
           hostOk: passed
         spec:
@@ -1671,7 +1675,7 @@ phases:
     steps:
       - id: c1
         apiVersion: deck/v1alpha1
-        kind: Checks
+        kind: HostCheck
         register:
           host: passed
         spec:
@@ -1933,7 +1937,7 @@ steps:
       contentFromTemplate: |
         server = "http://registry.local"
   - id: repo-config
-    kind: Repository
+    kind: RepositoryConfigure
     spec:
       path: /etc/yum.repos.d/offline.repo
       repositories:

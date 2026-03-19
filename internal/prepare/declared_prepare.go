@@ -13,7 +13,7 @@ import (
 var prepareStepIDSanitizer = regexp.MustCompile(`[^a-z0-9-]+`)
 
 func declaredPrepareSteps(wf *config.Workflow) ([]config.Step, error) {
-	if wf == nil || wf.Artifacts == nil {
+	if wf == nil || wf.Artifact == nil {
 		return nil, nil
 	}
 	steps := make([]config.Step, 0)
@@ -41,7 +41,7 @@ func declaredPrepareSteps(wf *config.Workflow) ([]config.Step, error) {
 
 func declaredPrepareFileSteps(wf *config.Workflow) ([]config.Step, error) {
 	steps := make([]config.Step, 0)
-	for _, group := range wf.Artifacts.Files {
+	for _, group := range wf.Artifact.Files {
 		for _, target := range expandArtifactTargets(group.Targets) {
 			for _, item := range group.Items {
 				rendered, err := workflowexec.RenderSpecWithExtra(map[string]any{
@@ -72,7 +72,7 @@ func declaredPrepareFileSteps(wf *config.Workflow) ([]config.Step, error) {
 
 func declaredPrepareImageSteps(wf *config.Workflow) ([]config.Step, error) {
 	steps := make([]config.Step, 0)
-	for _, group := range wf.Artifacts.Images {
+	for _, group := range wf.Artifact.Images {
 		for _, target := range expandArtifactTargets(group.Targets) {
 			images := make([]any, 0, len(group.Items))
 			for _, item := range group.Items {
@@ -110,7 +110,7 @@ func declaredPrepareImageSteps(wf *config.Workflow) ([]config.Step, error) {
 
 func declaredPreparePackageSteps(wf *config.Workflow) ([]config.Step, error) {
 	steps := make([]config.Step, 0)
-	for _, group := range wf.Artifacts.Packages {
+	for _, group := range wf.Artifact.Packages {
 		for _, target := range expandArtifactTargets(group.Targets) {
 			packages := make([]any, 0, len(group.Items))
 			for _, item := range group.Items {
@@ -141,7 +141,7 @@ func declaredPreparePackageSteps(wf *config.Workflow) ([]config.Step, error) {
 			steps = append(steps, config.Step{
 				ID:         prepareSyntheticStepID("package", group.Group, target.Release, target),
 				APIVersion: "deck/v1alpha1",
-				Kind:       "PackagesDownload",
+				Kind:       "PackageDownload",
 				Spec:       spec,
 			})
 		}

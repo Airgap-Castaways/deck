@@ -49,8 +49,8 @@ var commonFieldDocs = map[string]FieldDoc{
 }
 
 var toolMetadata = map[string]ToolMetadata{
-	"Artifacts": {
-		Example: "kind: Artifacts\nspec:\n  artifacts:\n    - source:\n        amd64:\n          bundle:\n            root: files\n" +
+	"Artifact": {
+		Example: "kind: Artifact\nspec:\n  artifacts:\n    - source:\n        amd64:\n          bundle:\n            root: files\n" +
 			"            path: bin/linux/amd64/runc\n        arm64:\n          bundle:\n            root: files\n            path: bin/linux/arm64/runc\n" +
 			"      install:\n        path: /usr/local/sbin/runc\n        mode: \"0755\"\n",
 		FieldDocs: map[string]FieldDoc{
@@ -161,7 +161,7 @@ var toolMetadata = map[string]ToolMetadata{
 			"spec.source.path":         {Description: "Local filesystem path to use as the source during prepare.", Example: "/opt/cache/runc"},
 			"spec.source.sha256":       {Description: "Expected SHA-256 checksum. Fails the step if the fetched file does not match.", Example: "abc123..."},
 			"spec.source.bundle":       {Description: "Reference to a file already inside the bundle. Used to stage a bundle-resident file into a new output location.", Example: "{root:files,path:bin/linux/amd64/runc}"},
-			"spec.source.bundle.root":  {Description: "Bundle root category to read from (`files`, `images`, or `packages`).", Example: "files"},
+			"spec.source.bundle.root":  {Description: "Bundle root category to read from (`files`, `images`, or `package`).", Example: "files"},
 			"spec.source.bundle.path":  {Description: "Relative path within the bundle root to the source file.", Example: "bin/linux/amd64/runc"},
 			"spec.output":              {Description: "Optional output target inside the bundle for the downloaded file. When omitted, deck writes to `files/<basename>`.", Example: "{path:files/bin/runc}"},
 			"spec.output.path":         {Description: "Bundle-relative path where the downloaded file is written. Defaults to `files/<basename>` when omitted.", Example: "files/bin/runc"},
@@ -209,11 +209,11 @@ var toolMetadata = map[string]ToolMetadata{
 		},
 	},
 
-	"Checks": {
-		Example: "kind: Checks\nspec:\n  checks: [os, arch, swap]\n  failFast: true\n",
+	"HostCheck": {
+		Example: "kind: HostCheck\nspec:\n  checks: [os, arch, swap]\n  failFast: true\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.checks":   {Description: "Named checks to run. Supported values include `os`, `arch`, `swap`, `kernelModules`, and `binaries`.", Example: "[os,arch,swap]"},
-			"spec.binaries": {Description: "Binary names to verify are present in `PATH`. Used when `checks` includes `binaries`.", Example: "[kubeadm,kubelet,kubectl]"},
+			"spec.binaries": {Description: "Binary names to verify are present in `PATH`. Used when `host-check` includes `binaries`.", Example: "[kubeadm,kubelet,kubectl]"},
 			"spec.failFast": {Description: "Stop on the first failing check rather than running all checks. Defaults to `true`.", Example: "true"},
 		},
 	},
@@ -251,7 +251,7 @@ var toolMetadata = map[string]ToolMetadata{
 			"spec.podNetworkCIDR":        {Description: "CIDR range for the pod network passed to `init`. Must not overlap with node or service CIDRs.", Example: "10.244.0.0/16"},
 			"spec.criSocket":             {Description: "CRI socket path passed to kubeadm. Required when multiple container runtimes are installed on the node.", Example: "unix:///run/containerd/containerd.sock"},
 			"spec.pullImages":            {Description: "Pull required control-plane images before running `kubeadm init`. Requires network or a pre-configured mirror.", Example: "true"},
-			"spec.ignorePreflightErrors": {Description: "Kubeadm preflight check names to suppress. Use sparingly and only for known-safe deviations.", Example: "[Swap]"},
+			"spec.ignorePreflightErrors": {Description: "Kubeadm preflight check names to suppress. Use sparingly and only for known-safe deviations.", Example: "[swap]"},
 			"spec.extraArgs":             {Description: "Additional flags passed directly to the kubeadm subcommand as `--key=value` pairs.", Example: "[--skip-phases=addon/kube-proxy]"},
 			"spec.skipIfAdminConfExists": {Description: "Skip the `init` step if `/etc/kubernetes/admin.conf` already exists, treating the node as already bootstrapped. Defaults to `true`.", Example: "true"},
 			"spec.asControlPlane":        {Description: "When `true`, adds `--control-plane` so the node joins as an additional control-plane member rather than a worker.", Example: "false"},
@@ -271,8 +271,8 @@ var toolMetadata = map[string]ToolMetadata{
 		},
 	},
 
-	"PackageCache": {
-		Example: "kind: PackageCache\nspec:\n  manager: apt\n  clean: true\n  update: true\n  restrictToRepos:\n    - /etc/apt/sources.list.d/offline.list\n",
+	"RepositoryRefresh": {
+		Example: "kind: RepositoryRefresh\nspec:\n  manager: apt\n  clean: true\n  update: true\n  restrictToRepos:\n    - /etc/apt/sources.list.d/offline.list\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.manager":         {Description: "Package manager to use. `auto` detects from the host OS. Supports `apt` and `dnf`.", Example: "apt"},
 			"spec.clean":           {Description: "Run a cache clean before updating metadata (`apt clean` / `dnf clean all`).", Example: "true"},
@@ -282,17 +282,16 @@ var toolMetadata = map[string]ToolMetadata{
 		},
 	},
 
-	"Packages": {
+	"Package": {
 		ActionNotes: map[string]string{
 			"download": "`download` resolves and gathers packages into a prepare artifact set without installing them.",
 			"install":  "`install` applies packages on the node using the available package manager.",
 		},
 		ActionExamples: map[string]string{
-			"download": "kind: Packages\nspec:\n  action: download\n  packages: [podman]\n  distro:\n    family: rhel\n    release: rocky9\n  repo:\n    type: yum\n    modules:\n      - name: container-tools\n        stream: \"4.0\"\n  backend:\n    mode: container\n    runtime: docker\n    image: rockylinux:9\n",
-			"install":  "kind: Packages\nspec:\n  action: install\n  packages: [kubelet, kubeadm, kubectl]\n  source:\n    type: local-repo\n    path: /opt/deck/repos/kubernetes\n",
+			"download": "kind: Package\nspec:\n  action: download\n  packages: [podman]\n  distro:\n    family: rhel\n    release: rocky9\n  repo:\n    type: yum\n    modules:\n      - name: container-tools\n        stream: \"4.0\"\n  backend:\n    mode: container\n    runtime: docker\n    image: rockylinux:9\n",
+			"install":  "kind: Package\nspec:\n  action: install\n  packages: [kubelet, kubeadm, kubectl]\n  source:\n    type: local-repo\n    path: /opt/deck/repos/kubernetes\n",
 		},
 		FieldDocs: map[string]FieldDoc{
-			"spec.action":                {Description: "Selects whether to collect packages during prepare (`download`) or install them on the node (`install`).", Example: "install"},
 			"spec.packages":              {Description: "Package names to download or install. Use the same list in both `download` and `install` steps to keep offline parity.", Example: "[kubelet,kubeadm,kubectl]"},
 			"spec.source":                {Description: "Local repository source for `install`. Points to a pre-prepared on-disk package repo instead of relying on configured package manager sources.", Example: "{type:local-repo,path:/opt/deck/repos/kubernetes}"},
 			"spec.source.type":           {Description: "Source type. Currently `local-repo` is the only supported value.", Example: "local-repo"},
@@ -315,7 +314,7 @@ var toolMetadata = map[string]ToolMetadata{
 			"spec.output.dir":            {Description: "Bundle-relative directory used by `download` for downloaded package artifacts. Defaults to `packages` or a repo-derived path when omitted.", Example: "packages/kubernetes"},
 		},
 		Notes: []string{
-			"Use `Packages` with `Repository` and `PackageCache` for a complete typed package-management flow.",
+			"Use `PackageDownload` and `PackageInstall` with `RepositoryConfigure` and `RepositoryRefresh` for a complete typed package-management flow.",
 			"Keeping the same package list across `download` and `install` helps maintain offline parity.",
 			"Use `restrictToRepos` on the `install` step to prevent the node's default online repos from being consulted during an offline apply.",
 			"When `repo` is set for `download`, deck expects `repo.type` and `distro.release` so it can build an apt-flat or yum-style repository layout.",
@@ -325,28 +324,30 @@ var toolMetadata = map[string]ToolMetadata{
 
 	"Repository": {
 		ActionNotes: map[string]string{
-			"configure": "`configure` writes or rewrites repository definition files and optionally triggers a cache refresh.",
+			"configure": "`configure` writes or rewrites repository definition files.",
+			"refresh":   "`refresh` updates package metadata from configured repositories using explicit repo policy controls.",
 		},
 		ActionExamples: map[string]string{
-			"configure": "kind: Repository\nspec:\n  action: configure\n  format: apt\n  path: /etc/apt/sources.list.d/offline.list\n  repositories:\n    - id: offline\n      baseurl: http://repo.local/debian\n      trusted: true\n",
+			"configure": "kind: RepositoryConfigure\nspec:\n  action: configure\n  format: apt\n  path: /etc/apt/sources.list.d/offline.list\n  repositories:\n    - id: offline\n      baseurl: http://repo.local/debian\n      trusted: true\n",
+			"refresh":   "kind: RepositoryRefresh\nspec:\n  manager: apt\n  clean: true\n  update: true\n  restrictToRepos:\n    - /etc/apt/sources.list.d/offline.list\n",
 		},
 		FieldDocs: map[string]FieldDoc{
-			"spec.action":               {Description: "Operation to perform. Currently only `configure` is supported.", Example: "configure"},
-			"spec.format":               {Description: "Repository file format to write. `auto` detects from the host family, `apt` produces a sources.list entry, and `yum` produces a `.repo` file.", Example: "apt"},
-			"spec.path":                 {Description: "Explicit output path for the generated repository file. Defaults to `/etc/apt/sources.list.d/deck-offline.list` for apt or `/etc/yum.repos.d/deck-offline.repo` for yum when omitted.", Example: "/etc/apt/sources.list.d/offline.list"},
-			"spec.mode":                 {Description: "File permissions applied to the generated repository file in octal notation.", Example: "0644"},
-			"spec.replaceExisting":      {Description: "Replace an existing repository file at the target path before writing the new definition.", Example: "true"},
-			"spec.disableExisting":      {Description: "Disable all existing repository definitions before writing the new one. Prevents conflicts from online repos during offline installs.", Example: "true"},
-			"spec.backupPaths":          {Description: "Paths to back up before modifying. Backed-up files are saved with a `.bak` suffix.", Example: "[/etc/apt/sources.list]"},
-			"spec.cleanupPaths":         {Description: "Paths to remove before writing the new repository definition.", Example: "[/etc/apt/sources.list.d/ubuntu.list]"},
-			"spec.refreshCache":         {Description: "Optional package metadata refresh that runs after repository files are written. The block is enabled by default when present, and behaves like a follow-up `PackageCache` step.", Example: "{clean:true,update:true}"},
-			"spec.refreshCache.enabled": {Description: "Whether the refresh block should run. Defaults to `true` when `refreshCache` is present.", Example: "true"},
-			"spec.refreshCache.clean":   {Description: "Run the package-manager cache clean command before refreshing metadata.", Example: "true"},
-			"spec.refreshCache.update":  {Description: "Run the package-manager metadata update command after writing repo files. Defaults to `true` when omitted.", Example: "true"},
-			"spec.repositories":         {Description: "Repository entries to write. Each entry maps to one repository block in the generated file.", Example: "[{id:offline,baseurl:http://repo.local/debian}]"},
+			"spec.format":          {Description: "Repository file format to write. `auto` detects from the host family, `apt` produces a sources.list entry, and `yum` produces a `.repo` file.", Example: "apt"},
+			"spec.path":            {Description: "Explicit output path for the generated repository file. Defaults to `/etc/apt/sources.list.d/deck-offline.list` for apt or `/etc/yum.repos.d/deck-offline.repo` for yum when omitted.", Example: "/etc/apt/sources.list.d/offline.list"},
+			"spec.mode":            {Description: "File permissions applied to the generated repository file in octal notation.", Example: "0644"},
+			"spec.replaceExisting": {Description: "Replace an existing repository file at the target path before writing the new definition.", Example: "true"},
+			"spec.disableExisting": {Description: "Disable all existing repository definitions before writing the new one. Prevents conflicts from online repos during offline installs.", Example: "true"},
+			"spec.backupPaths":     {Description: "Paths to back up before modifying. Backed-up files are saved with a `.bak` suffix.", Example: "[/etc/apt/sources.list]"},
+			"spec.cleanupPaths":    {Description: "Paths to remove before writing the new repository definition.", Example: "[/etc/apt/sources.list.d/ubuntu.list]"},
+			"spec.repositories":    {Description: "Repository entries to write. Each entry maps to one repository block in the generated file.", Example: "[{id:offline,baseurl:http://repo.local/debian}]"},
+			"spec.manager":         {Description: "Package manager to use for repository metadata refresh. `auto` detects from the host OS. Supports `apt` and `dnf`.", Example: "apt"},
+			"spec.clean":           {Description: "Run a cache clean before updating metadata (`apt clean` / `dnf clean all`).", Example: "true"},
+			"spec.update":          {Description: "Fetch fresh package metadata from the configured repositories (`apt update` / `dnf makecache`).", Example: "true"},
+			"spec.restrictToRepos": {Description: "Limit the metadata update to these repository selectors. For apt, use repo file paths or globs; for dnf, use repo IDs. Prevents fetching from online repos during an offline install.", Example: "[/etc/apt/sources.list.d/offline.list]"},
+			"spec.excludeRepos":    {Description: "Repository selectors to skip during metadata update. For apt, selectors match repo file paths; for dnf, they match repo IDs.", Example: "[updates]"},
 		},
 		Notes: []string{
-			"`Repository` only writes repository definition files. Combine it with `PackageCache` when the package manager needs an explicit metadata refresh.",
+			"`RepositoryConfigure` only writes repository definition files. Use `RepositoryRefresh` when the package manager needs an explicit metadata refresh.",
 			"Keep repository definitions mirror-specific rather than mutating the host's default online sources.",
 		},
 	},
@@ -555,7 +556,7 @@ func WorkflowMeta() PageMetadata {
 			"phases[].imports":               {Description: "Component fragment imports that expand into this phase before step execution.", Example: "[{path:k8s/containerd-kubelet.yaml}]"},
 		},
 		Notes: []string{
-			"A workflow must define at least one of `artifacts`, `phases`, or `steps`.",
+			"A workflow must define at least one of `artifact`, `phases`, or `steps`.",
 			"A workflow cannot define both top-level `phases` and top-level `steps` at the same time.",
 			"Imports are only supported under `phases[].imports` and resolve from `workflows/components/`.",
 			"Artifact execution controls are opt-in and only affect `role: prepare` artifact jobs; they do not introduce general step-level parallelism.",

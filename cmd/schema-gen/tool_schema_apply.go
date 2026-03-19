@@ -1,7 +1,7 @@
 package main
 
-func generateArtifactsToolSchema() map[string]any {
-	root := stepEnvelopeSchema("Artifacts", "ArtifactsStep", "Installs or extracts per-architecture artifacts during apply.", "public")
+func generateArtifactToolSchema() map[string]any {
+	root := stepEnvelopeSchema("Artifact", "ArtifactStep", "Installs or extracts per-architecture artifacts during apply.", "public")
 	props := propertyMap(root)
 	setMap(props, "spec", artifactsToolSpecSchema())
 	root["$defs"] = map[string]any{"artifactSource": artifactSourceSchema()}
@@ -141,8 +141,8 @@ func imageOutputSchema() map[string]any {
 	}
 }
 
-func generateChecksToolSchema() map[string]any {
-	root := stepEnvelopeSchema("Checks", "ChecksStep", "Runs host checks before prepare execution.", "public")
+func generateHostCheckToolSchema() map[string]any {
+	root := stepEnvelopeSchema("HostCheck", "HostCheckStep", "Runs host checks before prepare execution.", "public")
 	props := propertyMap(root)
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",

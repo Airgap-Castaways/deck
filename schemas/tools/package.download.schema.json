@@ -1,5 +1,5 @@
 {
-  "$id": "https://deck.local/schemas/tools/packages.download.schema.json",
+  "$id": "https://deck.local/schemas/tools/package.download.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Downloads packages into bundle output storage.",
@@ -11,7 +11,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "PackagesDownload"
+      "const": "PackageDownload"
     },
     "metadata": {
       "additionalProperties": true,
@@ -145,7 +145,7 @@
     "kind",
     "spec"
   ],
-  "title": "PackagesDownloadStep",
+  "title": "PackageDownloadStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

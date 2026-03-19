@@ -153,8 +153,8 @@ func generateWaitServiceActiveToolSchema() map[string]any {
 	})
 }
 
-func generateWaitCommandSuccessToolSchema() map[string]any {
-	return generateWaitToolSchema("WaitCommandSuccess", "WaitCommandSuccessStep", "Waits until a command exits successfully.", []string{"command"}, map[string]any{
+func generateWaitCommandToolSchema() map[string]any {
+	return generateWaitToolSchema("WaitCommand", "WaitCommandStep", "Waits until a command exits successfully.", []string{"command"}, map[string]any{
 		"interval":     durationStringSchema(),
 		"initialDelay": durationStringSchema(),
 		"command":      stringArraySchema(1, false),

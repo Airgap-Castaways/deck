@@ -31,20 +31,20 @@ func TestRenderToolPageGroupsConcreteKindsByFamily(t *testing.T) {
 }
 
 func TestRenderToolPageConcreteKindSectionUsesNormalizedExample(t *testing.T) {
-	page := testFamilyPageInput(t, "packages")
+	page := testFamilyPageInput(t, "package")
 	rendered := string(RenderToolPage(page))
 
-	if !strings.Contains(rendered, "## `PackagesDownload`") || !strings.Contains(rendered, "## `PackagesInstall`") {
+	if !strings.Contains(rendered, "## `PackageDownload`") || !strings.Contains(rendered, "## `PackageInstall`") {
 		t.Fatalf("expected concrete kind sections:\n%s", rendered)
 	}
-	if !strings.Contains(rendered, "kind: PackagesInstall") {
+	if !strings.Contains(rendered, "kind: PackageInstall") {
 		t.Fatalf("expected normalized concrete kind example:\n%s", rendered)
 	}
 	if strings.Contains(rendered, "action:") {
 		t.Fatalf("did not expect legacy action selector in rendered page:\n%s", rendered)
 	}
 	if !strings.Contains(rendered, "outputs: `artifacts`") {
-		t.Fatalf("expected outputs section for packages.download:\n%s", rendered)
+		t.Fatalf("expected outputs section for PackageDownload:\n%s", rendered)
 	}
 }
 

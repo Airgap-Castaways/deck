@@ -6,17 +6,22 @@ Reference for the `Repository` family of typed workflow steps.
 ## Summary
 
 - family: `repository`
-- kinds: `Repository`
+- kinds: `RepositoryConfigure`, `RepositoryRefresh`
 
 ## Shared Step Fields
 
 Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema](../workflow.md).
 
-## `Repository`
+## Supported Kinds
+
+- `RepositoryConfigure`: Configure apt or yum repository definitions.
+- `RepositoryRefresh`: Refresh package metadata with repo filtering.
+
+## `RepositoryConfigure`
 
 Configure apt or yum repository definitions.
 
-- schema: `../../../schemas/tools/repository.schema.json`
+- schema: `../../../schemas/tools/repository.configure.schema.json`
 - outputs: `path`
 
 ### When To Use
@@ -26,12 +31,14 @@ Use this before refreshing caches or installing packages from a local mirror.
 ### Example
 
 ```yaml
-apiVersion: deck/v1alpha1
-id: example-repository
-kind: Repository
+kind: RepositoryConfigureConfigure
 spec:
-    repositories:
-        - {}
+  format: apt
+  path: /etc/apt/sources.list.d/offline.list
+  repositories:
+    - id: offline
+      baseurl: http://repo.local/debian
+      trusted: true
 ```
 
 ### Spec Fields
@@ -44,25 +51,49 @@ spec:
 | `spec.format` | `string` | no | `` | `auto, apt, yum` | Repository file format to write. `auto` detects from the host family, `apt` produces a sources.list entry, and `yum` produces a `.repo` file. | `apt` |
 | `spec.mode` | `string` | no | `` | `` | File permissions applied to the generated repository file in octal notation. | `0644` |
 | `spec.path` | `string` | no | `` | `` | Explicit output path for the generated repository file. Defaults to `/etc/apt/sources.list.d/deck-offline.list` for apt or `/etc/yum.repos.d/deck-offline.repo` for yum when omitted. | `/etc/apt/sources.list.d/offline.list` |
-| `spec.refreshCache` | `object` | no | `` | `` | Optional package metadata refresh that runs after repository files are written. The block is enabled by default when present, and behaves like a follow-up `PackageCache` step. | `{clean:true,update:true}` |
 | `spec.replaceExisting` | `boolean` | no | `` | `` | Replace an existing repository file at the target path before writing the new definition. | `true` |
 | `spec.repositories` | `array<object>` | yes | `` | `` | Repository entries to write. Each entry maps to one repository block in the generated file. | `[{id:offline,baseurl:http://repo.local/debian}]` |
 
-### Nested Objects
+### Notes
 
-### `spec.refreshCache`
+- `RepositoryConfigure` only writes repository definition files. Use `RepositoryRefresh` when the package manager needs an explicit metadata refresh.
+- Keep repository definitions mirror-specific rather than mutating the host's default online sources.
+
+## `RepositoryRefresh`
+
+Refresh package metadata with repo filtering.
+
+- schema: `../../../schemas/tools/repository.refresh.schema.json`
+
+### When To Use
+
+Use this after writing repo definitions and before package install steps that depend on fresh metadata.
+
+### Example
+
+```yaml
+kind: RepositoryRefreshRefresh
+spec:
+  manager: apt
+  clean: true
+  update: true
+  restrictToRepos:
+    - /etc/apt/sources.list.d/offline.list
+```
+
+### Spec Fields
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.refreshCache.clean` | `boolean` | no | `` | `` | Run the package-manager cache clean command before refreshing metadata. | `true` |
-| `spec.refreshCache.enabled` | `boolean` | no | `` | `` | Whether the refresh block should run. Defaults to `true` when `refreshCache` is present. | `true` |
-| `spec.refreshCache.update` | `boolean` | no | `` | `` | Run the package-manager metadata update command after writing repo files. Defaults to `true` when omitted. | `true` |
+| `spec.clean` | `boolean` | no | `` | `` | Run a cache clean before updating metadata (`apt clean` / `dnf clean all`). | `true` |
+| `spec.excludeRepos` | `array<string>` | no | `` | `` | Repository selectors to skip during metadata update. For apt, selectors match repo file paths; for dnf, they match repo IDs. | `[updates]` |
+| `spec.manager` | `string` | no | `` | `auto, apt, dnf` | Package manager to use. `auto` detects from the host OS. Supports `apt` and `dnf`. | `apt` |
+| `spec.restrictToRepos` | `array<string>` | no | `` | `` | Limit the metadata update to these repository selectors. For apt, use repo file paths or globs; for dnf, use repo IDs. Prevents fetching from online repos during an offline install. | `[/etc/apt/sources.list.d/offline.list]` |
+| `spec.update` | `boolean` | no | `` | `` | Fetch fresh package metadata from the configured repositories (`apt update` / `dnf makecache`). | `true` |
 
+### Validation Rules
 
-### Notes
-
-- `Repository` only writes repository definition files. Combine it with `PackageCache` when the package manager needs an explicit metadata refresh.
-- Keep repository definitions mirror-specific rather than mutating the host's default online sources.
+- At least one of the listed branches must match.
 
 ## Related
 

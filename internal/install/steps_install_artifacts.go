@@ -17,18 +17,18 @@ import (
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
-type installArtifactsSpec struct {
-	Fetch     installArtifactsFetchSpec `json:"fetch"`
-	Artifacts []installArtifactItemSpec `json:"artifacts"`
+type installArtifactSpec struct {
+	Fetch    installArtifactFetchSpec  `json:"fetch"`
+	Artifact []installArtifactItemSpec `json:"artifacts"`
 }
 
-type installArtifactsFetchSpec struct {
-	OfflineOnly bool                          `json:"offlineOnly"`
-	Strategy    string                        `json:"strategy"`
-	Sources     []installArtifactsFetchSource `json:"sources"`
+type installArtifactFetchSpec struct {
+	OfflineOnly bool                         `json:"offlineOnly"`
+	Strategy    string                       `json:"strategy"`
+	Sources     []installArtifactFetchSource `json:"sources"`
 }
 
-type installArtifactsFetchSource struct {
+type installArtifactFetchSource struct {
 	Type string `json:"type"`
 	Path string `json:"path"`
 	URL  string `json:"url"`
@@ -74,30 +74,30 @@ type installArtifactExtractSpec struct {
 	Mode        string   `json:"mode"`
 }
 
-func runInstallArtifacts(ctx context.Context, spec map[string]any) error {
-	return runInstallArtifactsWithHostFactDetector(ctx, spec, detectHostFacts)
+func runInstallArtifact(ctx context.Context, spec map[string]any) error {
+	return runInstallArtifactWithHostFactDetector(ctx, spec, detectHostFacts)
 }
 
-func runInstallArtifactsWithHostFactDetector(ctx context.Context, spec map[string]any, hostFactDetector func() map[string]any) error {
+func runInstallArtifactWithHostFactDetector(ctx context.Context, spec map[string]any, hostFactDetector func() map[string]any) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
 
-	decoded, err := workflowexec.DecodeSpec[installArtifactsSpec](spec)
+	decoded, err := workflowexec.DecodeSpec[installArtifactSpec](spec)
 	if err != nil {
-		return fmt.Errorf("decode InstallArtifacts spec: %w", err)
+		return fmt.Errorf("decode InstallArtifact spec: %w", err)
 	}
-	if len(decoded.Artifacts) == 0 {
-		return fmt.Errorf("%s: InstallArtifacts requires at least one artifact", errCodeInstallArtifactsMissing)
+	if len(decoded.Artifact) == 0 {
+		return fmt.Errorf("%s: InstallArtifact requires at least one artifact", errCodeInstallArtifactMissing)
 	}
 
-	arch, err := installArtifactsHostArch(hostFactDetector)
+	arch, err := installArtifactHostArch(hostFactDetector)
 	if err != nil {
 		return err
 	}
 
 	fetchCfg := fetchSpecMap(decoded.Fetch)
-	for i, artifact := range decoded.Artifacts {
+	for i, artifact := range decoded.Artifact {
 		if shouldSkipInstallArtifact(artifact.SkipIfPresent) {
 			continue
 		}
@@ -150,7 +150,7 @@ func runInstallArtifactsWithHostFactDetector(ctx context.Context, spec map[strin
 	return nil
 }
 
-func installArtifactsHostArch(hostFactDetector func() map[string]any) (string, error) {
+func installArtifactHostArch(hostFactDetector func() map[string]any) (string, error) {
 	facts := hostFactDetector()
 	rawArch, _ := facts["arch"].(string)
 	arch := strings.ToLower(strings.TrimSpace(rawArch))
@@ -178,7 +178,7 @@ func sourceForArch(sources installArtifactSourcesSpec, arch string) (installArti
 	return source, nil
 }
 
-func fetchSpecMap(fetchSpec installArtifactsFetchSpec) map[string]any {
+func fetchSpecMap(fetchSpec installArtifactFetchSpec) map[string]any {
 	sources := make([]any, 0, len(fetchSpec.Sources))
 	for _, src := range fetchSpec.Sources {
 		sources = append(sources, map[string]any{
