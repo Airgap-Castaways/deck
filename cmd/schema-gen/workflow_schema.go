@@ -494,29 +494,8 @@ func stringArraySchema(minItems int, minLen bool) map[string]any {
 }
 
 func schemaFileName(kind string) string {
-	for _, pair := range []struct{ kind, file string }{
-		{"Checks", "checks.schema.json"},
-		{"Artifacts", "artifacts.schema.json"},
-		{"Packages", "packages.schema.json"},
-		{"Directory", "directory.schema.json"},
-		{"Symlink", "symlink.schema.json"},
-		{"SystemdUnit", "systemd-unit.schema.json"},
-		{"Containerd", "containerd.schema.json"},
-		{"Repository", "repository.schema.json"},
-		{"PackageCache", "package-cache.schema.json"},
-		{"Swap", "swap.schema.json"},
-		{"KernelModule", "kernel-module.schema.json"},
-		{"Service", "service.schema.json"},
-		{"Sysctl", "sysctl.schema.json"},
-		{"File", "file.schema.json"},
-		{"Image", "image.schema.json"},
-		{"Wait", "wait.schema.json"},
-		{"Kubeadm", "kubeadm.schema.json"},
-		{"Command", "command.schema.json"},
-	} {
-		if pair.kind == kind {
-			return pair.file
-		}
+	if def, ok := workflowexec.StepDefinitionForKind(kind); ok {
+		return def.SchemaFile
 	}
 	return strings.ToLower(kind) + ".schema.json"
 }

@@ -19,6 +19,7 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 	tests := []struct {
 		name   string
 		kind   string
+		action string
 		spec   map[string]any
 		runner CommandRunner
 		opts   RunOptions
@@ -27,6 +28,7 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 		{
 			name:   "file download",
 			kind:   "File",
+			action: "download",
 			spec:   map[string]any{"action": "download", "source": map[string]any{"path": localFile}},
 			runner: &noArtifactsRunner{},
 			expect: []string{"path", "artifacts"},
@@ -34,6 +36,7 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 		{
 			name:   "packages download",
 			kind:   "Packages",
+			action: "download",
 			spec:   map[string]any{"action": "download", "packages": []any{"containerd"}},
 			runner: &noArtifactsRunner{},
 			expect: []string{"artifacts"},
@@ -41,6 +44,7 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 		{
 			name:   "image download",
 			kind:   "Image",
+			action: "download",
 			spec:   map[string]any{"action": "download", "images": []any{"registry.k8s.io/pause:3.9"}},
 			runner: &noArtifactsRunner{},
 			opts:   RunOptions{imageDownloadOps: stubImageDownloadOps()},
@@ -68,6 +72,7 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 			expect: []string{"passed", "failedChecks"},
 		},
 	}
+	covered := map[string]bool{}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -76,6 +81,7 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 				t.Fatalf("runPrepareStep failed: %v", err)
 			}
 			for _, key := range tc.expect {
+				covered[coverageKey(tc.kind, tc.action, key)] = true
 				if _, ok := outputs[key]; !ok {
 					t.Fatalf("expected runtime output %q for %s", key, tc.kind)
 				}
@@ -85,4 +91,41 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 			}
 		})
 	}
+
+	for _, def := range workflowexec.StepDefinitions() {
+		if len(def.Actions) == 0 {
+			if !contains(def.Roles, "prepare") {
+				continue
+			}
+			for _, key := range def.Outputs {
+				if !covered[coverageKey(def.Kind, "", key)] {
+					t.Fatalf("missing prepare output coverage for %s output %s", def.Kind, key)
+				}
+			}
+			continue
+		}
+		for _, action := range def.Actions {
+			if !contains(action.Roles, "prepare") {
+				continue
+			}
+			for _, key := range action.Outputs {
+				if !covered[coverageKey(def.Kind, action.Name, key)] {
+					t.Fatalf("missing prepare output coverage for %s.%s output %s", def.Kind, action.Name, key)
+				}
+			}
+		}
+	}
+}
+
+func coverageKey(kind, action, output string) string {
+	return kind + ":" + action + ":" + output
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

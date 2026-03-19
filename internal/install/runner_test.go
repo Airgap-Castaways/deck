@@ -1066,8 +1066,8 @@ func TestRun_KubeadmRealMode(t *testing.T) {
 		Phases: []config.Phase{{
 			Name: "install",
 			Steps: []config.Step{
-				{ID: "kubeadm-init", Kind: "Kubeadm", Spec: map[string]any{"action": "init", "mode": "real", "outputJoinFile": joinPath}},
-				{ID: "kubeadm-join", Kind: "Kubeadm", Spec: map[string]any{"action": "join", "mode": "real", "joinFile": joinPath}},
+				{ID: "kubeadm-init", Kind: "Kubeadm", Spec: map[string]any{"action": "init", "outputJoinFile": joinPath}},
+				{ID: "kubeadm-join", Kind: "Kubeadm", Spec: map[string]any{"action": "join", "joinFile": joinPath}},
 			},
 		}},
 	}
@@ -1115,7 +1115,7 @@ func TestRun_KubeadmRealModeRejectsInvalidCommand(t *testing.T) {
 			Steps: []config.Step{{
 				ID:   "kubeadm-join",
 				Kind: "Kubeadm",
-				Spec: map[string]any{"action": "join", "mode": "real", "joinFile": joinPath},
+				Spec: map[string]any{"action": "join", "joinFile": joinPath},
 			}},
 		}},
 	}
@@ -1728,7 +1728,7 @@ func TestRun_KubeadmInitSkipDoesNotRegisterMissingJoinFile(t *testing.T) {
 			Steps: []config.Step{{
 				ID:       "init",
 				Kind:     "Kubeadm",
-				Spec:     map[string]any{"action": "init", "mode": "real", "outputJoinFile": joinPath},
+				Spec:     map[string]any{"action": "init", "outputJoinFile": joinPath},
 				Register: map[string]string{"workerJoinFile": "joinFile"},
 			}},
 		}},
