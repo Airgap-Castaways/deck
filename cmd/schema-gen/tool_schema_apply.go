@@ -70,10 +70,7 @@ func generateDirectoryToolSchema() map[string]any {
 func generateImageToolSchema() map[string]any {
 	root := stepEnvelopeSchema("Image", "ImageStep", "Checks image-related state through action-specific modes.", "public")
 	props := propertyMap(root)
-	imageAllowedByAction := map[string][]string{
-		"download": {"action", "images", "auth", "backend", "output"},
-		"verify":   {"action", "images", "command"},
-	}
+	imageAllowedByAction := registryActionFields("Image")
 	imageFields := []string{"action", "images", "auth", "backend", "output", "command"}
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
@@ -215,9 +212,10 @@ func generateKernelModuleToolSchema() map[string]any {
 func generateKubeadmToolSchema() map[string]any {
 	root := stepEnvelopeSchema("Kubeadm", "KubeadmStep", "Runs kubeadm operations through action-specific subcommands.", "public")
 	props := propertyMap(root)
-	initAllowed := []string{"action", "configFile", "configTemplate", "pullImages", "outputJoinFile", "kubernetesVersion", "advertiseAddress", "podNetworkCIDR", "criSocket", "ignorePreflightErrors", "extraArgs", "skipIfAdminConfExists"}
-	joinAllowed := []string{"action", "configFile", "joinFile", "asControlPlane", "extraArgs"}
-	resetAllowed := []string{"action", "force", "ignoreErrors", "stopKubelet", "criSocket", "extraArgs", "removePaths", "removeFiles", "cleanupContainers", "restartRuntimeService"}
+	actionFields := registryActionFields("Kubeadm")
+	initAllowed := actionFields["init"]
+	joinAllowed := actionFields["join"]
+	resetAllowed := actionFields["reset"]
 	specProps := map[string]any{
 		"action":                enumStringSchema("init", "join", "reset"),
 		"configFile":            map[string]any{"type": "string"},

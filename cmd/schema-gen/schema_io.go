@@ -74,17 +74,26 @@ func loadToolPageInputs(dir string) ([]schemadoc.PageInput, error) {
 		if kind != def.Kind {
 			return nil, fmt.Errorf("tool schema %s kind mismatch: expected %s, got %s", def.SchemaFile, def.Kind, kind)
 		}
+		if visibility := firstNonEmpty(doc.Visibility, "public"); visibility != def.Visibility {
+			return nil, fmt.Errorf("tool schema %s visibility mismatch: expected %s, got %s", def.SchemaFile, def.Visibility, visibility)
+		}
 		spec, _ := doc.Properties["spec"].(map[string]any)
+		meta := schemadoc.ToolMeta(kind)
+		meta.Category = def.Category
+		actions := make([]string, 0, len(def.Actions))
+		for _, action := range def.Actions {
+			actions = append(actions, action.Name)
+		}
 		page := schemadoc.PageInput{
 			Kind:        kind,
 			PageSlug:    strings.TrimSuffix(def.SchemaFile, ".schema.json"),
 			Title:       doc.Title,
 			Description: doc.Description,
-			Visibility:  firstNonEmpty(doc.Visibility, "public"),
+			Visibility:  def.Visibility,
 			SchemaPath:  filepath.ToSlash(filepath.Join("schemas", "tools", def.SchemaFile)),
 			Schema:      raw,
-			Meta:        schemadoc.ToolMeta(kind),
-			Actions:     nestedEnum(doc.Properties, "spec", "action"),
+			Meta:        meta,
+			Actions:     actions,
 			Required:    nestedRequired(doc.Properties, "spec"),
 			Spec:        spec,
 		}
@@ -116,14 +125,21 @@ func loadToolSchemas(dir string) ([]toolSchemaDoc, error) {
 		if kind != def.Kind {
 			return nil, fmt.Errorf("tool schema %s kind mismatch: expected %s, got %s", def.SchemaFile, def.Kind, kind)
 		}
+		if visibility := firstNonEmpty(doc.Visibility, "public"); visibility != def.Visibility {
+			return nil, fmt.Errorf("tool schema %s visibility mismatch: expected %s, got %s", def.SchemaFile, def.Visibility, visibility)
+		}
 		specProps := nestedProperties(doc.Properties, "spec")
+		actions := make([]string, 0, len(def.Actions))
+		for _, action := range def.Actions {
+			actions = append(actions, action.Name)
+		}
 		tool := toolSchemaDoc{
 			File:        def.SchemaFile,
 			Kind:        kind,
 			Title:       doc.Title,
 			Description: doc.Description,
-			Visibility:  firstNonEmpty(doc.Visibility, "public"),
-			Actions:     nestedEnum(doc.Properties, "spec", "action"),
+			Visibility:  def.Visibility,
+			Actions:     actions,
 			SpecFields:  sortedKeys(specProps),
 			Required:    nestedRequired(doc.Properties, "spec"),
 		}

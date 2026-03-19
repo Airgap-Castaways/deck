@@ -114,7 +114,7 @@ func buildStepKinds() []StepKindContext {
 		contract, _ := workflowexec.StepContractForKind(def.Kind)
 		ctx := StepKindContext{
 			Kind:         def.Kind,
-			Category:     meta.Category,
+			Category:     def.Category,
 			Summary:      meta.Summary,
 			WhenToUse:    meta.WhenToUse,
 			SchemaFile:   def.SchemaFile,

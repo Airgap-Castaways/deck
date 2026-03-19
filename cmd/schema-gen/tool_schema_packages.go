@@ -24,10 +24,7 @@ func generatePackageCacheToolSchema() map[string]any {
 func generatePackagesToolSchema() map[string]any {
 	root := stepEnvelopeSchema("Packages", "PackagesStep", "Installs packages on the local node.", "public")
 	props := propertyMap(root)
-	packagesAllowedByAction := map[string][]string{
-		"download": {"action", "packages", "distro", "repo", "backend", "output"},
-		"install":  {"action", "packages", "source", "restrictToRepos", "excludeRepos"},
-	}
+	packagesAllowedByAction := registryActionFields("Packages")
 	packageFields := []string{"action", "packages", "source", "restrictToRepos", "excludeRepos", "distro", "repo", "backend", "output"}
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
@@ -110,7 +107,15 @@ func generateRepositoryToolSchema() map[string]any {
 			"disableExisting": map[string]any{"type": "boolean"},
 			"backupPaths":     stringArraySchema(0, false),
 			"cleanupPaths":    stringArraySchema(0, false),
-			"refreshCache":    map[string]any{"type": "object", "additionalProperties": true},
+			"refreshCache": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"enabled": map[string]any{"type": "boolean"},
+					"clean":   map[string]any{"type": "boolean"},
+					"update":  map[string]any{"type": "boolean"},
+				},
+			},
 			"repositories": map[string]any{
 				"type":     "array",
 				"minItems": 1,

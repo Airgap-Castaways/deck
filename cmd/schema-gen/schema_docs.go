@@ -56,20 +56,6 @@ func nestedRequired(root map[string]any, key string) []string {
 	return toStringSlice(node["required"])
 }
 
-func nestedEnum(root map[string]any, parent, child string) []string {
-	props := nestedProperties(root, parent)
-	if props == nil {
-		return nil
-	}
-	field, ok := props[child].(map[string]any)
-	if !ok {
-		return nil
-	}
-	values := toStringSlice(field["enum"])
-	sort.Strings(values)
-	return values
-}
-
 func schemaConst(root map[string]any, key string) string {
 	field, ok := root[key].(map[string]any)
 	if !ok {

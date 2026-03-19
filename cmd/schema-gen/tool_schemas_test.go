@@ -34,3 +34,16 @@ func TestToolSchemaDefinitionsUseRegistrySchemaFiles(t *testing.T) {
 		t.Fatalf("expected %d generated tool schemas, got %d", len(workflowexec.StepDefinitions()), len(defs))
 	}
 }
+
+func TestActionScopedDefinitionsDeclareFieldOwnership(t *testing.T) {
+	for _, def := range workflowexec.StepDefinitions() {
+		if len(def.Actions) == 0 {
+			continue
+		}
+		for _, action := range def.Actions {
+			if len(action.Fields) == 0 {
+				t.Fatalf("missing field ownership for %s.%s", def.Kind, action.Name)
+			}
+		}
+	}
+}

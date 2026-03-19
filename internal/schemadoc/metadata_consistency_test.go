@@ -1,16 +1,25 @@
 package schemadoc
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/taedi90/deck/internal/workflowexec"
+	"github.com/taedi90/deck/schemas"
 )
 
 func TestToolMetadataCoversStepKinds(t *testing.T) {
+	known := map[string]bool{}
 	for _, kind := range workflowexec.StepKinds() {
+		known[kind] = true
 		if _, ok := toolMetadata[kind]; !ok {
 			t.Fatalf("missing tool metadata for kind %s", kind)
+		}
+	}
+	for kind := range toolMetadata {
+		if !known[kind] {
+			t.Fatalf("unexpected tool metadata for unknown kind %s", kind)
 		}
 	}
 }
@@ -53,12 +62,62 @@ func TestActionMetadataCoversActionContracts(t *testing.T) {
 			continue
 		}
 		meta := toolMetadata[kind]
+		knownActions := map[string]bool{}
 		for action := range contract.Actions {
+			knownActions[action] = true
 			if _, ok := meta.ActionNotes[action]; !ok {
 				t.Fatalf("missing action note for %s.%s", kind, action)
 			}
 			if _, ok := meta.ActionExamples[action]; !ok {
 				t.Fatalf("missing action example for %s.%s", kind, action)
+			}
+		}
+		for action := range meta.ActionNotes {
+			if !knownActions[action] {
+				t.Fatalf("unexpected action note for %s.%s", kind, action)
+			}
+		}
+		for action := range meta.ActionExamples {
+			if !knownActions[action] {
+				t.Fatalf("unexpected action example for %s.%s", kind, action)
+			}
+		}
+	}
+}
+
+func TestToolMetadataCategoryMatchesRegistry(t *testing.T) {
+	for _, def := range workflowexec.StepDefinitions() {
+		meta, ok := toolMetadata[def.Kind]
+		if !ok {
+			t.Fatalf("missing tool metadata for kind %s", def.Kind)
+		}
+		if meta.Category != def.Category {
+			t.Fatalf("category mismatch for %s: metadata=%q registry=%q", def.Kind, meta.Category, def.Category)
+		}
+	}
+}
+
+func TestToolMetadataFieldDocsExistInSchemas(t *testing.T) {
+	for _, def := range workflowexec.StepDefinitions() {
+		meta, ok := toolMetadata[def.Kind]
+		if !ok {
+			t.Fatalf("missing tool metadata for kind %s", def.Kind)
+		}
+		raw, err := schemas.ToolSchema(def.SchemaFile)
+		if err != nil {
+			t.Fatalf("ToolSchema(%q): %v", def.SchemaFile, err)
+		}
+		var schema map[string]any
+		if err := json.Unmarshal(raw, &schema); err != nil {
+			t.Fatalf("unmarshal schema %q: %v", def.SchemaFile, err)
+		}
+		fieldSet := map[string]bool{}
+		for _, field := range CollectFields(schema) {
+			fieldSet[field.Path] = true
+		}
+		for path := range meta.FieldDocs {
+			if !fieldSet[path] {
+				t.Fatalf("field doc %s missing from schema for %s", path, def.Kind)
 			}
 		}
 	}

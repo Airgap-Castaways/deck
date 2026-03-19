@@ -4,6 +4,7 @@ import (
 	jsonschema "github.com/invopop/jsonschema"
 
 	"github.com/taedi90/deck/internal/schemamodel"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 func generateFileToolSchema() (map[string]any, error) {
@@ -88,12 +89,7 @@ func patchFileSpec(node any) {
 	patchFileEditRules(props["edits"])
 	patchFileSource(props["source"])
 	patchFileOutput(props["output"])
-	allowedByAction := map[string][]string{
-		"download": {"action", "source", "fetch", "output"},
-		"write":    {"action", "path", "content", "contentFromTemplate", "mode"},
-		"copy":     {"action", "src", "dest", "mode"},
-		"edit":     {"action", "path", "backup", "edits", "mode"},
-	}
+	allowedByAction := registryActionFields("File")
 	allFields := []string{"action", "path", "content", "contentFromTemplate", "mode", "src", "dest", "backup", "edits", "source", "fetch", "output"}
 	spec["allOf"] = []any{
 		restrictActionFields(allowedByAction, allFields),
@@ -133,14 +129,7 @@ func patchWaitSpec(node any) {
 	mergeMap(props, "pollInterval", map[string]any{"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"})
 	setMap(props, "type", map[string]any{"type": "string", "enum": []any{"any", "file", "dir"}})
 	setMap(props, "command", map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string"}})
-	allowedByAction := map[string][]string{
-		"serviceActive":  {"action", "interval", "initialDelay", "name", "timeout", "pollInterval"},
-		"commandSuccess": {"action", "interval", "initialDelay", "command", "timeout", "pollInterval"},
-		"fileExists":     {"action", "interval", "initialDelay", "path", "type", "nonEmpty", "timeout", "pollInterval"},
-		"fileAbsent":     {"action", "interval", "initialDelay", "path", "type", "timeout", "pollInterval"},
-		"tcpPortClosed":  {"action", "interval", "initialDelay", "address", "port", "timeout", "pollInterval"},
-		"tcpPortOpen":    {"action", "interval", "initialDelay", "address", "port", "timeout", "pollInterval"},
-	}
+	allowedByAction := registryActionFields("Wait")
 	allFields := []string{"action", "interval", "initialDelay", "name", "command", "path", "type", "nonEmpty", "address", "port", "timeout", "pollInterval"}
 	spec["allOf"] = []any{
 		restrictActionFields(allowedByAction, allFields),
@@ -149,6 +138,18 @@ func patchWaitSpec(node any) {
 		conditionalEnumRequired([]string{"fileExists", "fileAbsent"}, []string{"path"}),
 		conditionalEnumRequired([]string{"tcpPortClosed", "tcpPortOpen"}, []string{"port"}),
 	}
+}
+
+func registryActionFields(kind string) map[string][]string {
+	def, ok := workflowexec.StepDefinitionForKind(kind)
+	if !ok {
+		return nil
+	}
+	fields := make(map[string][]string, len(def.Actions))
+	for _, action := range def.Actions {
+		fields[action.Name] = append([]string(nil), action.Fields...)
+	}
+	return fields
 }
 
 func patchFileEditRules(node any) {

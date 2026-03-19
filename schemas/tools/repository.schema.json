@@ -86,7 +86,18 @@
           "type": "string"
         },
         "refreshCache": {
-          "additionalProperties": true,
+          "additionalProperties": false,
+          "properties": {
+            "clean": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "update": {
+              "type": "boolean"
+            }
+          },
           "type": "object"
         },
         "replaceExisting": {

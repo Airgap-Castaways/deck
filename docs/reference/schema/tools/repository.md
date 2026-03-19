@@ -75,6 +75,17 @@ spec:
 | `spec.replaceExisting` | `boolean` | no | `` | `` | Replace an existing repository file at the target path before writing the new definition. | `true` |
 | `spec.repositories` | `array<object>` | no | `` | `` | Repository entries to write. Each entry maps to one repository block in the generated file. | `[{id:offline,baseurl:http://repo.local/debian}]` |
 
+## Nested Objects
+
+### `spec.refreshCache`
+
+| Key | Type | Required | Default | Enum | Description | Example |
+|---|---|---:|---|---|---|---|
+| `spec.refreshCache.clean` | `boolean` | no | `` | `` | Run the package-manager cache clean command before refreshing metadata. | `true` |
+| `spec.refreshCache.enabled` | `boolean` | no | `` | `` | Whether the refresh block should run. Defaults to `true` when `refreshCache` is present. | `true` |
+| `spec.refreshCache.update` | `boolean` | no | `` | `` | Run the package-manager metadata update command after writing repo files. Defaults to `true` when omitted. | `true` |
+
+
 ## Validation Rules
 
 - When `spec.action=configure`, `spec.repositories` are required.
