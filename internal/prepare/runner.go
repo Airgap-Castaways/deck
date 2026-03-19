@@ -61,7 +61,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 		return fmt.Errorf("workflow is nil")
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return fmt.Errorf("context is nil")
 	}
 
 	bundleRoot := strings.TrimSpace(opts.BundleRoot)

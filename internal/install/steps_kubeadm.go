@@ -44,6 +44,12 @@ type kubeadmInitSpec struct {
 
 var kubeadmAdminConfPath = "/etc/kubernetes/admin.conf"
 
+var (
+	kubeadmInitExecutor  = runKubeadmInitReal
+	kubeadmJoinExecutor  = runKubeadmJoinReal
+	kubeadmResetExecutor = runKubeadmResetReal
+)
+
 type kubeadmJoinSpec struct {
 	JoinFile       string   `json:"joinFile"`
 	ConfigFile     string   `json:"configFile"`
@@ -57,14 +63,10 @@ func runKubeadmInit(ctx context.Context, spec map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("decode KubeadmInit spec: %w", err)
 	}
-	mode := kubeadmMode(ctx)
-	if mode == "stub" {
-		return runKubeadmInitStub(decoded)
+	if ctx == nil {
+		return fmt.Errorf("context is nil")
 	}
-	if mode != "real" {
-		return fmt.Errorf("%s: unsupported mode %q", errCodeInstallInitModeInvalid, mode)
-	}
-	return runKubeadmInitReal(ctx, decoded)
+	return kubeadmInitExecutor(ctx, decoded)
 }
 
 func runKubeadmInitStub(spec kubeadmInitSpec) error {
@@ -84,14 +86,10 @@ func runKubeadmJoin(ctx context.Context, spec map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("decode KubeadmJoin spec: %w", err)
 	}
-	mode := kubeadmMode(ctx)
-	if mode == "stub" {
-		return runKubeadmJoinStub(decoded)
+	if ctx == nil {
+		return fmt.Errorf("context is nil")
 	}
-	if mode != "real" {
-		return fmt.Errorf("%s: unsupported mode %q", errCodeInstallJoinModeInvalid, mode)
-	}
-	return runKubeadmJoinReal(ctx, decoded)
+	return kubeadmJoinExecutor(ctx, decoded)
 }
 
 func runKubeadmJoinStub(spec kubeadmJoinSpec) error {
@@ -366,21 +364,17 @@ func runKubeadmJoinReal(ctx context.Context, spec kubeadmJoinSpec) error {
 
 func runKubeadmReset(ctx context.Context, spec map[string]any) error {
 	if ctx == nil {
-		ctx = context.Background()
+		return fmt.Errorf("context is nil")
 	}
 
 	decoded, err := workflowexec.DecodeSpec[kubeadmResetSpec](spec)
 	if err != nil {
 		return fmt.Errorf("decode KubeadmReset spec: %w", err)
 	}
-	mode := kubeadmMode(ctx)
-	if mode == "stub" {
-		return runKubeadmResetStub(decoded)
-	}
-	if mode != "real" {
-		return fmt.Errorf("%s: unsupported mode %q", errCodeInstallResetFailed, mode)
-	}
+	return kubeadmResetExecutor(ctx, decoded)
+}
 
+func runKubeadmResetReal(ctx context.Context, decoded kubeadmResetSpec) error {
 	stopKubelet := true
 	if decoded.StopKubelet != nil {
 		stopKubelet = *decoded.StopKubelet
@@ -443,15 +437,6 @@ func runKubeadmResetStub(spec kubeadmResetSpec) error {
 	_ = strings.TrimSpace(spec.CriSocket)
 	_ = strings.TrimSpace(spec.RestartRuntimeService)
 	return nil
-}
-
-func kubeadmMode(ctx context.Context) string {
-	if ctx != nil {
-		if mode, ok := ctx.Value(kubeadmModeContextKey{}).(string); ok && strings.TrimSpace(mode) != "" {
-			return strings.TrimSpace(mode)
-		}
-	}
-	return "real"
 }
 
 func removeResetPaths(paths []string) error {
