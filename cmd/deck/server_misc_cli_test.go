@@ -598,7 +598,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 			t.Fatalf("write prepare: %v", err)
 		}
 		componentPath := filepath.Join(root, "workflows", "components", "shared", "checks.yaml")
-		if err := os.WriteFile(componentPath, []byte("steps:\n  - id: imported-file\n    kind: File\n    spec:\n      source:\n        path: files/source.bin\n      output:\n        path: imported.bin\n"), 0o644); err != nil {
+		if err := os.WriteFile(componentPath, []byte("steps:\n  - id: imported-file\n    kind: File\n    spec:\n      action: download\n      source:\n        path: files/source.bin\n      output:\n        path: imported.bin\n"), 0o644); err != nil {
 			t.Fatalf("write component: %v", err)
 		}
 

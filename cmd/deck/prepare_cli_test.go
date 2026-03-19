@@ -33,6 +33,7 @@ phases:
       - id: p1
         kind: File
         spec:
+          action: download
           source:
             path: files/source.bin
           fetch:
@@ -238,6 +239,7 @@ phases:
       - id: p1
         kind: File
         spec:
+          action: download
           source:
             path: files/source.bin
           fetch:
