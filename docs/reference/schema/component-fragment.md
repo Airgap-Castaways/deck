@@ -5,17 +5,7 @@ Reference for reusable workflow component fragments located under `workflows/com
 
 - schema: `../../../schemas/deck-component-fragment.schema.json`
 
-## Minimal Example
-
-```yaml
-steps:
-  - id: example-step
-    kind: Command
-    spec:
-      command: [echo, hello]
-```
-
-## Realistic Example
+## Example
 
 ```yaml
 steps:

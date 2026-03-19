@@ -6,94 +6,16 @@ Configure apt or yum repository definitions.
 ## Summary
 
 - kind: `Repository`
-- visibility: `public`
 - schema: `../../../schemas/tools/repository.schema.json`
-- category: `packages`
 - actions: `configure`
 
 ## When To Use
 
 Use this before refreshing caches or installing packages from a local mirror.
 
-## Minimal Example
+## Shared Step Fields
 
-```yaml
-apiVersion: deck/v1alpha1
-id: example-repository
-kind: Repository
-spec:
-  action: configure
-  format: apt
-  repositories:
-    - id: offline
-      baseurl: http://repo.local/debian
-```
-
-## Realistic Example
-
-```yaml
-kind: Repository
-spec:
-  action: configure
-  format: apt
-  replaceExisting: true
-  refreshCache:
-    clean: true
-    update: true
-  repositories:
-    - id: offline
-      baseurl: http://repo.local/debian
-      trusted: true
-```
-
-## Fields
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `apiVersion` | `string` | yes | `` | `` | Must be `deck/v1alpha1`. | `deck/v1alpha1` |
-| `id` | `string` | yes | `` | `` | Unique identifier for the step within the workflow. Used in logs and plan output. | `configure-containerd` |
-| `kind` | `string` | yes | `` | `` | Typed step kind. Determines which schema is applied to `spec`. | `File` |
-| `metadata` | `object` | no | `` | `` | Optional free-form annotation map attached to the step for tooling or audit purposes. | `{owner: platform-team}` |
-| `register` | `object` | no | `` | `` | Map of runtime variable names to step output keys. Exported values are available to later steps via `runtime.` in `when` expressions and `.runtime` in templates. | `{outputPath:path}` |
-| `retry` | `integer` | no | `` | `` | Number of times to retry the step after a failure before marking it as failed. | `3` |
-| `spec` | `object` | yes | `` | `` | Step-specific configuration payload. Shape depends on the chosen `kind`. | `{...}` |
-| `timeout` | `string` | no | `` | `` | Maximum duration allowed for the step before it is cancelled. Accepts Go duration strings. | `5m` |
-| `when` | `string` | no | `` | `` | CEL expression evaluated at runtime. The step is skipped when it evaluates to false. Use `vars.` for input variables and `runtime.` for registered outputs and host facts. | `vars.skipKubeadm != "true"` |
-
-## Spec Fields
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `spec.action` | `string` | yes | `` | `configure` | Operation to perform. Currently only `configure` is supported. | `configure` |
-| `spec.backupPaths` | `array<string>` | no | `` | `` | Paths to back up before modifying. Backed-up files are saved with a `.bak` suffix. | `[/etc/apt/sources.list]` |
-| `spec.cleanupPaths` | `array<string>` | no | `` | `` | Paths to remove before writing the new repository definition. | `[/etc/apt/sources.list.d/ubuntu.list]` |
-| `spec.disableExisting` | `boolean` | no | `` | `` | Disable all existing repository definitions before writing the new one. Prevents conflicts from online repos during offline installs. | `true` |
-| `spec.format` | `string` | no | `` | `auto, apt, yum` | Repository file format to write. `auto` detects from the host family, `apt` produces a sources.list entry, and `yum` produces a `.repo` file. | `apt` |
-| `spec.mode` | `string` | no | `` | `` | File permissions applied to the generated repository file in octal notation. | `0644` |
-| `spec.path` | `string` | no | `` | `` | Explicit output path for the generated repository file. Defaults to `/etc/apt/sources.list.d/deck-offline.list` for apt or `/etc/yum.repos.d/deck-offline.repo` for yum when omitted. | `/etc/apt/sources.list.d/offline.list` |
-| `spec.refreshCache` | `object` | no | `` | `` | Optional package metadata refresh that runs after repository files are written. The block is enabled by default when present, and behaves like a follow-up `PackageCache` step. | `{clean:true,update:true}` |
-| `spec.replaceExisting` | `boolean` | no | `` | `` | Replace an existing repository file at the target path before writing the new definition. | `true` |
-| `spec.repositories` | `array<object>` | no | `` | `` | Repository entries to write. Each entry maps to one repository block in the generated file. | `[{id:offline,baseurl:http://repo.local/debian}]` |
-
-## Nested Objects
-
-### `spec.refreshCache`
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `spec.refreshCache.clean` | `boolean` | no | `` | `` | Run the package-manager cache clean command before refreshing metadata. | `true` |
-| `spec.refreshCache.enabled` | `boolean` | no | `` | `` | Whether the refresh block should run. Defaults to `true` when `refreshCache` is present. | `true` |
-| `spec.refreshCache.update` | `boolean` | no | `` | `` | Run the package-manager metadata update command after writing repo files. Defaults to `true` when omitted. | `true` |
-
-
-## Validation Rules
-
-- When `spec.action=configure`, `spec.repositories` are required.
-
-## Notes
-
-- `Repository` only writes repository definition files. Combine it with `PackageCache` when the package manager needs an explicit metadata refresh.
-- Keep repository definitions mirror-specific rather than mutating the host's default online sources.
+Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema](../workflow.md).
 
 ## Actions
 
@@ -108,7 +30,19 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.action` | `string` | yes | `` | `configure` | Operation to perform. Currently only `configure` is supported. | `configure` |
+| `spec.backupPaths` | `array<string>` | no | `` | `` | Paths to back up before modifying. Backed-up files are saved with a `.bak` suffix. | `[/etc/apt/sources.list]` |
+| `spec.cleanupPaths` | `array<string>` | no | `` | `` | Paths to remove before writing the new repository definition. | `[/etc/apt/sources.list.d/ubuntu.list]` |
+| `spec.disableExisting` | `boolean` | no | `` | `` | Disable all existing repository definitions before writing the new one. Prevents conflicts from online repos during offline installs. | `true` |
+| `spec.format` | `string` | no | `` | `auto, apt, yum` | Repository file format to write. `auto` detects from the host family, `apt` produces a sources.list entry, and `yum` produces a `.repo` file. | `apt` |
+| `spec.mode` | `string` | no | `` | `` | File permissions applied to the generated repository file in octal notation. | `0644` |
+| `spec.path` | `string` | no | `` | `` | Explicit output path for the generated repository file. Defaults to `/etc/apt/sources.list.d/deck-offline.list` for apt or `/etc/yum.repos.d/deck-offline.repo` for yum when omitted. | `/etc/apt/sources.list.d/offline.list` |
+| `spec.refreshCache` | `object` | no | `` | `` | Optional package metadata refresh that runs after repository files are written. The block is enabled by default when present, and behaves like a follow-up `PackageCache` step. | `{clean:true,update:true}` |
+| `spec.refreshCache.clean` | `boolean` | no | `` | `` | Run the package-manager cache clean command before refreshing metadata. | `true` |
+| `spec.refreshCache.enabled` | `boolean` | no | `` | `` | Whether the refresh block should run. Defaults to `true` when `refreshCache` is present. | `true` |
+| `spec.refreshCache.update` | `boolean` | no | `` | `` | Run the package-manager metadata update command after writing repo files. Defaults to `true` when omitted. | `true` |
+| `spec.replaceExisting` | `boolean` | no | `` | `` | Replace an existing repository file at the target path before writing the new definition. | `true` |
 | `spec.repositories` | `array<object>` | no | `` | `` | Repository entries to write. Each entry maps to one repository block in the generated file. | `[{id:offline,baseurl:http://repo.local/debian}]` |
+| `timeout` | `string` | no | `` | `` | Maximum duration allowed for the step before it is cancelled. Accepts Go duration strings. | `5m` |
 
 #### Rules
 
@@ -127,6 +61,11 @@ spec:
       baseurl: http://repo.local/debian
       trusted: true
 ```
+
+## Notes
+
+- `Repository` only writes repository definition files. Combine it with `PackageCache` when the package manager needs an explicit metadata refresh.
+- Keep repository definitions mirror-specific rather than mutating the host's default online sources.
 
 ## Related
 

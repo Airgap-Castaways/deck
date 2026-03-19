@@ -5,91 +5,69 @@ Reference documentation for each typed workflow step supported by deck.
 
 ## [Artifacts](artifacts.md)
 
-- **Category**: `apply`
 - **Summary**: Install or extract pre-collected artifacts on the node.
 
 ## [Checks](checks.md)
 
-- **Category**: `prepare`
 - **Summary**: Run host checks before prepare execution.
-
-## [Command](command.md)
-
-- **Category**: `advanced`
-- **Summary**: Run an explicit command as an escape hatch.
 
 ## [Containerd](containerd.md)
 
-- **Category**: `runtime`
 - **Summary**: Write containerd config and registry host settings.
 
 ## [Directory](directory.md)
 
-- **Category**: `filesystem`
 - **Summary**: Ensure a directory exists with an optional mode.
 
 ## [File](file.md)
 
-- **Category**: `filesystem`
 - **Summary**: Manage files through write, copy, edit, or download actions.
 
 ## [Image](image.md)
 
-- **Category**: `containers`
 - **Summary**: Download or verify container images.
 
 ## [KernelModule](kernel-module.md)
 
-- **Category**: `system`
 - **Summary**: Load and persist kernel modules.
 
 ## [Kubeadm](kubeadm.md)
 
-- **Category**: `kubernetes`
 - **Summary**: Run kubeadm init, join, or reset actions.
 
 ## [PackageCache](package-cache.md)
 
-- **Category**: `packages`
 - **Summary**: Refresh package metadata with repo filtering.
 
 ## [Packages](packages.md)
 
-- **Category**: `packages`
 - **Summary**: Download or install package sets.
 
 ## [Repository](repository.md)
 
-- **Category**: `packages`
 - **Summary**: Configure apt or yum repository definitions.
 
 ## [Service](service.md)
 
-- **Category**: `system`
 - **Summary**: Start, stop, enable, or reload local services.
 
 ## [Swap](swap.md)
 
-- **Category**: `system`
 - **Summary**: Enable or disable swap and its persistence.
 
 ## [Symlink](symlink.md)
 
-- **Category**: `filesystem`
 - **Summary**: Create or replace a symbolic link.
 
 ## [Sysctl](sysctl.md)
 
-- **Category**: `system`
 - **Summary**: Write and optionally apply sysctl values.
 
 ## [SystemdUnit](systemd-unit.md)
 
-- **Category**: `system`
 - **Summary**: Write a systemd unit file and optionally manage the service.
 
 ## [Wait](wait.md)
 
-- **Category**: `control-flow`
 - **Summary**: Wait for command, service, file, or port conditions.
 

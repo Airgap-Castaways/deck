@@ -5,7 +5,7 @@ Top-level workflow authoring reference for deck workflows.
 
 - schema: `../../../schemas/deck-workflow.schema.json`
 
-## Minimal Example
+## Example
 
 ```yaml
 role: apply
@@ -18,22 +18,6 @@ steps:
       action: write
       path: /etc/example.conf
       content: hello
-```
-
-## Realistic Example
-
-```yaml
-role: prepare
-version: v1alpha1
-artifacts:
-  files:
-    - group: runtime-binaries
-      items:
-        - id: runc
-          source:
-            url: https://mirror.example.invalid/runc
-          output:
-            path: bin/runc
 ```
 
 ## Fields

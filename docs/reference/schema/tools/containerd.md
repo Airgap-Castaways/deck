@@ -6,24 +6,13 @@ Write containerd config and registry host settings.
 ## Summary
 
 - kind: `Containerd`
-- visibility: `public`
 - schema: `../../../schemas/tools/containerd.schema.json`
-- category: `runtime`
 
 ## When To Use
 
 Use this when the node runtime needs a default config or registry mirror layout.
 
-## Minimal Example
-
-```yaml
-apiVersion: deck/v1alpha1
-id: example-containerd
-kind: Containerd
-spec: {}
-```
-
-## Realistic Example
+## Example
 
 ```yaml
 kind: Containerd
@@ -42,7 +31,7 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `apiVersion` | `string` | yes | `` | `` | Must be `deck/v1alpha1`. | `deck/v1alpha1` |
+| `apiVersion` | `string` | no | `` | `` | Optional step API version. When omitted, deck uses the current default. When set, it must be a supported deck step API version. | `deck/v1alpha1` |
 | `id` | `string` | yes | `` | `` | Unique identifier for the step within the workflow. Used in logs and plan output. | `configure-containerd` |
 | `kind` | `string` | yes | `` | `` | Typed step kind. Determines which schema is applied to `spec`. | `File` |
 | `metadata` | `object` | no | `` | `` | Optional free-form annotation map attached to the step for tooling or audit purposes. | `{owner: platform-team}` |

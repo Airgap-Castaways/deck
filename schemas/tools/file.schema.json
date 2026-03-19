@@ -500,7 +500,6 @@
   },
   "required": [
     "id",
-    "apiVersion",
     "kind",
     "spec"
   ],

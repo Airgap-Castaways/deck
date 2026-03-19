@@ -6,36 +6,13 @@ Install or extract pre-collected artifacts on the node.
 ## Summary
 
 - kind: `Artifacts`
-- visibility: `public`
 - schema: `../../../schemas/tools/artifacts.schema.json`
-- category: `apply`
 
 ## When To Use
 
 Use this when your apply workflow needs binaries or archives that were prepared into the bundle.
 
-## Minimal Example
-
-```yaml
-apiVersion: deck/v1alpha1
-id: example-artifacts
-kind: Artifacts
-spec:
-  artifacts:
-    - source:
-        amd64:
-          bundle:
-            root: files
-            path: bin/linux/amd64/example
-        arm64:
-          bundle:
-            root: files
-            path: bin/linux/arm64/example
-      install:
-        path: /usr/local/bin/example
-```
-
-## Realistic Example
+## Example
 
 ```yaml
 kind: Artifacts
@@ -59,7 +36,7 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `apiVersion` | `string` | yes | `` | `` | Must be `deck/v1alpha1`. | `deck/v1alpha1` |
+| `apiVersion` | `string` | no | `` | `` | Optional step API version. When omitted, deck uses the current default. When set, it must be a supported deck step API version. | `deck/v1alpha1` |
 | `id` | `string` | yes | `` | `` | Unique identifier for the step within the workflow. Used in logs and plan output. | `configure-containerd` |
 | `kind` | `string` | yes | `` | `` | Typed step kind. Determines which schema is applied to `spec`. | `File` |
 | `metadata` | `object` | no | `` | `` | Optional free-form annotation map attached to the step for tooling or audit purposes. | `{owner: platform-team}` |

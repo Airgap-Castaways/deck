@@ -6,26 +6,13 @@ Create or replace a symbolic link.
 ## Summary
 
 - kind: `Symlink`
-- visibility: `public`
 - schema: `../../../schemas/tools/symlink.schema.json`
-- category: `filesystem`
 
 ## When To Use
 
 Use this when tools or runtimes expect a stable path alias.
 
-## Minimal Example
-
-```yaml
-apiVersion: deck/v1alpha1
-id: example-symlink
-kind: Symlink
-spec:
-    path: example
-    target: example
-```
-
-## Realistic Example
+## Example
 
 ```yaml
 kind: Symlink
@@ -39,7 +26,7 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `apiVersion` | `string` | yes | `` | `` | Must be `deck/v1alpha1`. | `deck/v1alpha1` |
+| `apiVersion` | `string` | no | `` | `` | Optional step API version. When omitted, deck uses the current default. When set, it must be a supported deck step API version. | `deck/v1alpha1` |
 | `id` | `string` | yes | `` | `` | Unique identifier for the step within the workflow. Used in logs and plan output. | `configure-containerd` |
 | `kind` | `string` | yes | `` | `` | Typed step kind. Determines which schema is applied to `spec`. | `File` |
 | `metadata` | `object` | no | `` | `` | Optional free-form annotation map attached to the step for tooling or audit purposes. | `{owner: platform-team}` |

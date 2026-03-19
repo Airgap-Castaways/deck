@@ -6,95 +6,16 @@ Download or verify container images.
 ## Summary
 
 - kind: `Image`
-- visibility: `public`
 - schema: `../../../schemas/tools/image.schema.json`
-- category: `containers`
 - actions: `download`, `verify`
 
 ## When To Use
 
 Use this when workflows need image presence checks or bundle-time image collection.
 
-## Minimal Example
+## Shared Step Fields
 
-```yaml
-apiVersion: deck/v1alpha1
-id: example-image
-kind: Image
-spec:
-  action: verify
-  images:
-    - registry.k8s.io/pause:3.9
-```
-
-## Realistic Example
-
-```yaml
-kind: Image
-spec:
-  action: verify
-  images:
-    - registry.k8s.io/kube-apiserver:v1.30.1
-    - registry.k8s.io/kube-controller-manager:v1.30.1
-```
-
-## Fields
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `apiVersion` | `string` | yes | `` | `` | Must be `deck/v1alpha1`. | `deck/v1alpha1` |
-| `id` | `string` | yes | `` | `` | Unique identifier for the step within the workflow. Used in logs and plan output. | `configure-containerd` |
-| `kind` | `string` | yes | `` | `` | Typed step kind. Determines which schema is applied to `spec`. | `File` |
-| `metadata` | `object` | no | `` | `` | Optional free-form annotation map attached to the step for tooling or audit purposes. | `{owner: platform-team}` |
-| `register` | `object` | no | `` | `` | Map of runtime variable names to step output keys. Exported values are available to later steps via `runtime.` in `when` expressions and `.runtime` in templates. | `{outputPath:path}` |
-| `retry` | `integer` | no | `` | `` | Number of times to retry the step after a failure before marking it as failed. | `3` |
-| `spec` | `object` | yes | `` | `` | Step-specific configuration payload. Shape depends on the chosen `kind`. | `{...}` |
-| `timeout` | `string` | no | `` | `` | Maximum duration allowed for the step before it is cancelled. Accepts Go duration strings. | `5m` |
-| `when` | `string` | no | `` | `` | CEL expression evaluated at runtime. The step is skipped when it evaluates to false. Use `vars.` for input variables and `runtime.` for registered outputs and host facts. | `vars.skipKubeadm != "true"` |
-
-## Spec Fields
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `spec.action` | `string` | yes | `` | `download, verify` | Chooses whether the step downloads images into the bundle or verifies their presence on the node. | `verify` |
-| `spec.auth` | `array<object>` | no | `` | `` | Optional registry authentication entries for `download`. Match each private registry with credentials while leaving public registries to the default keychain. | `[{registry:registry.example.com,basic:{username:robot,password:${REGISTRY_PASSWORD}}}]` |
-| `spec.backend` | `object` | no | `` | `` | Backend-specific download settings such as image transfer engine configuration. Applies to `download` only. | `{engine:go-containerregistry}` |
-| `spec.command` | `array<string>` | no | `` | `` | Optional image-listing command used by `verify` when the default runtime command is not appropriate. | `[ctr,-n,k8s.io,images,list,-q]` |
-| `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download or verify. | `[registry.k8s.io/pause:3.9]` |
-| `spec.output` | `object` | no | `` | `` | Bundle output settings for `download`. Deck writes one tar archive per image under `output.dir`. | `{dir:images/control-plane}` |
-
-## Nested Objects
-
-### `spec.auth[].basic`
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `spec.auth[].basic.password` | `string` | yes | `` | `` | Registry password or access token paired with `basic.username`. | `${REGISTRY_PASSWORD}` |
-| `spec.auth[].basic.username` | `string` | yes | `` | `` | Registry username used for basic authentication. | `robot` |
-
-### `spec.backend`
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `spec.backend.engine` | `string` | no | `` | `go-containerregistry` | Image download engine. Currently only `go-containerregistry` is supported. | `go-containerregistry` |
-
-### `spec.output`
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `spec.output.dir` | `string` | no | `` | `` | Bundle-relative directory where per-image tar archives are written. Defaults to `images` when omitted. | `images/control-plane` |
-
-
-## Validation Rules
-
-- When `spec.action=download`, `spec.images` are required.
-- When `spec.action=verify`, `spec.images` are required.
-
-## Notes
-
-- Prefer `Image` over ad-hoc shell commands so workflows keep an explicit list of required images.
-- Use explicit image tags or digests to keep prepared bundles reproducible.
-- `spec.auth` is optional and only applies to `download`; when omitted, deck falls back to the environment's default registry keychain.
+Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema](../workflow.md).
 
 ## Actions
 
@@ -109,7 +30,16 @@ Use `download` during prepare to collect images into bundle outputs.
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.action` | `string` | yes | `` | `download, verify` | Chooses whether the step downloads images into the bundle or verifies their presence on the node. | `verify` |
+| `spec.auth` | `array<object>` | no | `` | `` | Optional registry authentication entries for `download`. Match each private registry with credentials while leaving public registries to the default keychain. | `[{registry:registry.example.com,basic:{username:robot,password:${REGISTRY_PASSWORD}}}]` |
+| `spec.auth[].basic` | `object` | yes | `` | `` | Explicit basic-auth credentials used when downloading from the matched registry. | `{username:robot,password:${REGISTRY_PASSWORD}}` |
+| `spec.auth[].basic.password` | `string` | yes | `` | `` | Registry password or access token paired with `basic.username`. | `${REGISTRY_PASSWORD}` |
+| `spec.auth[].basic.username` | `string` | yes | `` | `` | Registry username used for basic authentication. | `robot` |
+| `spec.auth[].registry` | `string` | yes | `` | `` | Registry host matched against each image reference, for example `registry.example.com` or `ghcr.io`. | `registry.example.com` |
+| `spec.backend` | `object` | no | `` | `` | Backend-specific download settings such as image transfer engine configuration. Applies to `download` only. | `{engine:go-containerregistry}` |
+| `spec.backend.engine` | `string` | no | `` | `go-containerregistry` | Image download engine. Currently only `go-containerregistry` is supported. | `go-containerregistry` |
 | `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download or verify. | `[registry.k8s.io/pause:3.9]` |
+| `spec.output` | `object` | no | `` | `` | Bundle output settings for `download`. Deck writes one tar archive per image under `output.dir`. | `{dir:images/control-plane}` |
+| `spec.output.dir` | `string` | no | `` | `` | Bundle-relative directory where per-image tar archives are written. Defaults to `images` when omitted. | `images/control-plane` |
 
 #### Rules
 
@@ -143,6 +73,7 @@ Use `verify` to assert that required images already exist locally on the node.
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.action` | `string` | yes | `` | `download, verify` | Chooses whether the step downloads images into the bundle or verifies their presence on the node. | `verify` |
+| `spec.command` | `array<string>` | no | `` | `` | Optional image-listing command used by `verify` when the default runtime command is not appropriate. | `[ctr,-n,k8s.io,images,list,-q]` |
 | `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download or verify. | `[registry.k8s.io/pause:3.9]` |
 
 #### Rules
@@ -159,6 +90,12 @@ spec:
   images:
     - registry.k8s.io/kube-apiserver:v1.30.1
 ```
+
+## Notes
+
+- Prefer `Image` over ad-hoc shell commands so workflows keep an explicit list of required images.
+- Use explicit image tags or digests to keep prepared bundles reproducible.
+- `spec.auth` is optional and only applies to `download`; when omitted, deck falls back to the environment's default registry keychain.
 
 ## Related
 

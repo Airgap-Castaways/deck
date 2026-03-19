@@ -17,8 +17,7 @@ type ToolMetadata struct {
 	Category       string
 	Summary        string
 	WhenToUse      string
-	MinimalExample string
-	CuratedExample string
+	Example        string
 	ActionNotes    map[string]string
 	ActionExamples map[string]string
 	FieldDocs      map[string]FieldDoc
@@ -26,18 +25,18 @@ type ToolMetadata struct {
 }
 
 type PageMetadata struct {
-	Title            string
-	Summary          string
-	MinimalExample   string
-	RealisticExample string
-	FieldDocs        map[string]FieldDoc
-	Notes            []string
+	Title     string
+	Summary   string
+	Example   string
+	FieldDocs map[string]FieldDoc
+	Notes     []string
 }
 
 // commonFieldDocs describes the structural and execution-control fields shared by every step document.
-// These are merged into every tool's FieldDocs so they appear consistently on all pages.
+// These are merged into every tool's FieldDocs so non-action pages and any action-specific references
+// to shared fields use the same wording.
 var commonFieldDocs = map[string]FieldDoc{
-	"apiVersion": {Description: "Must be `deck/v1alpha1`.", Example: "deck/v1alpha1"},
+	"apiVersion": {Description: "Optional step API version. When omitted, deck uses the current default. When set, it must be a supported deck step API version.", Example: "deck/v1alpha1"},
 	"id":         {Description: "Unique identifier for the step within the workflow. Used in logs and plan output.", Example: "configure-containerd"},
 	"kind":       {Description: "Typed step kind. Determines which schema is applied to `spec`.", Example: "File"},
 	"spec":       {Description: "Step-specific configuration payload. Shape depends on the chosen `kind`.", Example: "{...}"},
@@ -50,10 +49,7 @@ var commonFieldDocs = map[string]FieldDoc{
 
 var toolMetadata = map[string]ToolMetadata{
 	"Artifacts": {
-		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-artifacts\nkind: Artifacts\nspec:\n" +
-			"  artifacts:\n    - source:\n        amd64:\n          bundle:\n            root: files\n            path: bin/linux/amd64/example\n" +
-			"        arm64:\n          bundle:\n            root: files\n            path: bin/linux/arm64/example\n      install:\n        path: /usr/local/bin/example\n",
-		CuratedExample: "kind: Artifacts\nspec:\n  artifacts:\n    - source:\n        amd64:\n          bundle:\n            root: files\n" +
+		Example: "kind: Artifacts\nspec:\n  artifacts:\n    - source:\n        amd64:\n          bundle:\n            root: files\n" +
 			"            path: bin/linux/amd64/runc\n        arm64:\n          bundle:\n            root: files\n            path: bin/linux/arm64/runc\n" +
 			"      install:\n        path: /usr/local/sbin/runc\n        mode: \"0755\"\n",
 		FieldDocs: map[string]FieldDoc{
@@ -96,7 +92,7 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Command": {
-		CuratedExample: "kind: Command\nspec:\n  command: [\"systemctl\", \"status\", \"containerd\"]\n  timeout: 30s\n",
+		Example: "kind: Command\nspec:\n  command: [\"systemctl\", \"status\", \"containerd\"]\n  timeout: 30s\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.command": {Description: "Command vector to execute. The first element is the binary; remaining elements are arguments.", Example: "[systemctl,restart,containerd]"},
 			"spec.env":     {Description: "Additional environment variables passed to the command process as key-value pairs.", Example: "{KUBECONFIG:/etc/kubernetes/admin.conf}"},
@@ -110,7 +106,7 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Containerd": {
-		CuratedExample: "kind: Containerd\nspec:\n  path: /etc/containerd/config.toml\n  systemdCgroup: true\n  registryHosts:\n    - registry: registry.k8s.io\n      server: https://registry.k8s.io\n      host: http://registry.local:5000\n      capabilities: [pull, resolve]\n      skipVerify: true\n",
+		Example: "kind: Containerd\nspec:\n  path: /etc/containerd/config.toml\n  systemdCgroup: true\n  registryHosts:\n    - registry: registry.k8s.io\n      server: https://registry.k8s.io\n      host: http://registry.local:5000\n      capabilities: [pull, resolve]\n      skipVerify: true\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.path":                         {Description: "Destination path for the generated `config.toml`. Defaults to `/etc/containerd/config.toml`.", Example: "/etc/containerd/config.toml"},
 			"spec.configPath":                   {Description: "Directory for per-registry `hosts.toml` files, used by containerd's registry host configuration model.", Example: "/etc/containerd/certs.d"},
@@ -130,7 +126,7 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Directory": {
-		CuratedExample: "kind: Directory\nspec:\n  path: /home/vagrant/.kube\n  mode: \"0755\"\n",
+		Example: "kind: Directory\nspec:\n  path: /home/vagrant/.kube\n  mode: \"0755\"\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.path": {Description: "Directory path to create if it does not already exist. Parent directories are created as needed.", Example: "/var/lib/deck"},
 			"spec.mode": {Description: "Directory permissions in octal notation. Applied after ensuring the directory exists, including on existing directories.", Example: "0755"},
@@ -138,8 +134,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"File": {
-		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-file\nkind: File\nspec:\n  action: download\n  source:\n    url: https://example.invalid/file.tar.gz\n  output:\n    path: files/example.tar.gz\n",
-		CuratedExample: "kind: File\nspec:\n  action: copy\n  src: /etc/kubernetes/admin.conf\n  dest: /home/vagrant/.kube/config\n  mode: \"0644\"\n",
 		ActionNotes: map[string]string{
 			"download": "Use `download` to pull or bundle a source into a staged output target. This is most common in prepare, but apply can also stage bundle outputs for later steps.",
 			"write":    "Use `write` to write inline content or a rendered template to a destination path on the node.",
@@ -185,8 +179,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Image": {
-		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-image\nkind: Image\nspec:\n  action: verify\n  images:\n    - registry.k8s.io/pause:3.9\n",
-		CuratedExample: "kind: Image\nspec:\n  action: verify\n  images:\n    - registry.k8s.io/kube-apiserver:v1.30.1\n    - registry.k8s.io/kube-controller-manager:v1.30.1\n",
 		ActionNotes: map[string]string{
 			"download": "Use `download` during prepare to collect images into bundle outputs.",
 			"verify":   "Use `verify` to assert that required images already exist locally on the node.",
@@ -217,8 +209,7 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Checks": {
-		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-checks\nkind: Checks\nspec:\n  checks: [os]\n",
-		CuratedExample: "kind: Checks\nspec:\n  checks: [os, arch, swap]\n  failFast: true\n",
+		Example: "kind: Checks\nspec:\n  checks: [os, arch, swap]\n  failFast: true\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.checks":   {Description: "Named checks to run. Supported values include `os`, `arch`, `swap`, `kernelModules`, and `binaries`.", Example: "[os,arch,swap]"},
 			"spec.binaries": {Description: "Binary names to verify are present in `PATH`. Used when `checks` includes `binaries`.", Example: "[kubeadm,kubelet,kubectl]"},
@@ -227,7 +218,7 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"KernelModule": {
-		CuratedExample: "kind: KernelModule\nspec:\n  name: br_netfilter\n  load: true\n  persist: true\n  persistFile: /etc/modules-load.d/k8s.conf\n",
+		Example: "kind: KernelModule\nspec:\n  name: br_netfilter\n  load: true\n  persist: true\n  persistFile: /etc/modules-load.d/k8s.conf\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.name":        {Description: "Single module name to load. Use `name` or `names`, not both.", Example: "br_netfilter"},
 			"spec.names":       {Description: "Multiple module names to load in a single step. Use `name` or `names`, not both.", Example: "[overlay,br_netfilter]"},
@@ -238,8 +229,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Kubeadm": {
-		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-kubeadm\nkind: Kubeadm\nspec:\n  action: init\n  outputJoinFile: /tmp/deck/join.txt\n",
-		CuratedExample: "kind: Kubeadm\nspec:\n  action: init\n  outputJoinFile: /tmp/deck/join.txt\n  podNetworkCIDR: 10.244.0.0/16\n  criSocket: unix:///run/containerd/containerd.sock\n  ignorePreflightErrors: [Swap]\n",
 		ActionNotes: map[string]string{
 			"init":  "`init` bootstraps a new control plane and writes a join artifact for worker nodes.",
 			"join":  "`join` consumes either a prepared join command file or a kubeadm JoinConfiguration file and adds the node to an existing cluster.",
@@ -282,7 +271,7 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"PackageCache": {
-		CuratedExample: "kind: PackageCache\nspec:\n  manager: apt\n  clean: true\n  update: true\n  restrictToRepos:\n    - /etc/apt/sources.list.d/offline.list\n",
+		Example: "kind: PackageCache\nspec:\n  manager: apt\n  clean: true\n  update: true\n  restrictToRepos:\n    - /etc/apt/sources.list.d/offline.list\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.manager":         {Description: "Package manager to use. `auto` detects from the host OS. Supports `apt` and `dnf`.", Example: "apt"},
 			"spec.clean":           {Description: "Run a cache clean before updating metadata (`apt clean` / `dnf clean all`).", Example: "true"},
@@ -293,8 +282,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Packages": {
-		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-packages\nkind: Packages\nspec:\n  action: install\n  packages: [kubelet]\n",
-		CuratedExample: "kind: Packages\nspec:\n  action: install\n  packages: [kubelet, kubeadm, kubectl]\n",
 		ActionNotes: map[string]string{
 			"download": "`download` resolves and gathers packages into a prepare artifact set without installing them.",
 			"install":  "`install` applies packages on the node using the available package manager.",
@@ -336,8 +323,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Repository": {
-		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-repository\nkind: Repository\nspec:\n  action: configure\n  format: apt\n  repositories:\n    - id: offline\n      baseurl: http://repo.local/debian\n",
-		CuratedExample: "kind: Repository\nspec:\n  action: configure\n  format: apt\n  replaceExisting: true\n  refreshCache:\n    clean: true\n    update: true\n  repositories:\n    - id: offline\n      baseurl: http://repo.local/debian\n      trusted: true\n",
 		ActionNotes: map[string]string{
 			"configure": "`configure` writes or rewrites repository definition files and optionally triggers a cache refresh.",
 		},
@@ -366,7 +351,7 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Service": {
-		CuratedExample: "kind: Service\nspec:\n  name: containerd\n  enabled: true\n  state: started\n",
+		Example: "kind: Service\nspec:\n  name: containerd\n  enabled: true\n  state: started\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.name":          {Description: "Single service name to manage. Use `name` or `names`, not both.", Example: "containerd"},
 			"spec.names":         {Description: "Multiple service names to manage in one step. Use `name` or `names`, not both.", Example: "[firewalld,ufw]"},
@@ -379,7 +364,7 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Swap": {
-		CuratedExample: "kind: Swap\nspec:\n  disable: true\n  persist: true\n",
+		Example: "kind: Swap\nspec:\n  disable: true\n  persist: true\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.disable":   {Description: "Disable all active swap devices with `swapoff -a`. Defaults to `true`.", Example: "true"},
 			"spec.persist":   {Description: "Comment out swap entries in `/etc/fstab` so swap stays off after reboot. Defaults to `true`.", Example: "true"},
@@ -388,7 +373,7 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Symlink": {
-		CuratedExample: "kind: Symlink\nspec:\n  path: /usr/bin/runc\n  target: /usr/local/sbin/runc\n  force: true\n",
+		Example: "kind: Symlink\nspec:\n  path: /usr/bin/runc\n  target: /usr/local/sbin/runc\n  force: true\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.path":          {Description: "Path where the symbolic link will be created.", Example: "/usr/bin/runc"},
 			"spec.target":        {Description: "Path that the symbolic link points to.", Example: "/usr/local/sbin/runc"},
@@ -399,7 +384,7 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Sysctl": {
-		CuratedExample: "kind: Sysctl\nspec:\n  writeFile: /etc/sysctl.d/99-kubernetes-cri.conf\n  apply: true\n  values:\n    net.ipv4.ip_forward: 1\n",
+		Example: "kind: Sysctl\nspec:\n  writeFile: /etc/sysctl.d/99-kubernetes-cri.conf\n  apply: true\n  values:\n    net.ipv4.ip_forward: 1\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.writeFile": {Description: "Path to the sysctl file written with the given values. A drop-in under `/etc/sysctl.d/` is the common choice.", Example: "/etc/sysctl.d/99-k8s.conf"},
 			"spec.values":    {Description: "Map of sysctl key-value pairs to write and optionally apply.", Example: "{net.ipv4.ip_forward:1,net.bridge.bridge-nf-call-iptables:1}"},
@@ -408,7 +393,7 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"SystemdUnit": {
-		CuratedExample: "kind: SystemdUnit\nspec:\n  path: /etc/systemd/system/kubelet.service\n  contentFromTemplate: |\n    [Unit]\n    Description=Kubelet\n\n    [Service]\n    Environment=NODE_IP={{ .vars.nodeIP }}\n  daemonReload: true\n  service:\n    enabled: true\n    state: started\n",
+		Example: "kind: SystemdUnit\nspec:\n  path: /etc/systemd/system/kubelet.service\n  contentFromTemplate: |\n    [Unit]\n    Description=Kubelet\n\n    [Service]\n    Environment=NODE_IP={{ .vars.nodeIP }}\n  daemonReload: true\n  service:\n    enabled: true\n    state: started\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.path":                {Description: "Destination path for the unit file on the node.", Example: "/etc/systemd/system/kubelet.service"},
 			"spec.content":             {Description: "Inline unit file content written verbatim to `path`.", Example: "[Unit]\\nDescription=kubelet"},
@@ -423,8 +408,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Wait": {
-		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-wait\nkind: Wait\nspec:\n  action: serviceActive\n  name: containerd\n",
-		CuratedExample: "kind: Wait\nspec:\n  action: fileExists\n  path: /etc/kubernetes/admin.conf\n  type: file\n  nonEmpty: true\n  interval: 2s\n  timeout: 5m\n",
 		ActionNotes: map[string]string{
 			"serviceActive":  "Wait until a systemd service reports an active state.",
 			"commandSuccess": "Poll a command until it exits with code 0.",
@@ -495,10 +478,9 @@ func ToolKinds() []string {
 
 func WorkflowMeta() PageMetadata {
 	return PageMetadata{
-		Title:            "Workflow Schema",
-		Summary:          "Top-level workflow authoring reference for deck workflows.",
-		MinimalExample:   "role: apply\nversion: v1alpha1\nsteps:\n  - id: write-config\n    apiVersion: deck/v1alpha1\n    kind: File\n    spec:\n      action: write\n      path: /etc/example.conf\n      content: hello\n",
-		RealisticExample: "role: prepare\nversion: v1alpha1\nartifacts:\n  files:\n    - group: runtime-binaries\n      items:\n        - id: runc\n          source:\n            url: https://mirror.example.invalid/runc\n          output:\n            path: bin/runc\n",
+		Title:   "Workflow Schema",
+		Summary: "Top-level workflow authoring reference for deck workflows.",
+		Example: "role: apply\nversion: v1alpha1\nsteps:\n  - id: write-config\n    apiVersion: deck/v1alpha1\n    kind: File\n    spec:\n      action: write\n      path: /etc/example.conf\n      content: hello\n",
 		FieldDocs: map[string]FieldDoc{
 			"role":                           {Description: "Workflow role. `prepare` builds offline artifacts; `apply` changes the local node.", Example: "apply"},
 			"artifacts":                      {Description: "Declarative prepare inventory that replaces legacy prepare download steps.", Example: "{files:[...],images:[...],packages:[...]}"},
@@ -528,10 +510,9 @@ func WorkflowMeta() PageMetadata {
 
 func ToolDefinitionMeta() PageMetadata {
 	return PageMetadata{
-		Title:            "Tool Definition Schema",
-		Summary:          "Reference for tool definition manifests used to describe typed workflow tools.",
-		MinimalExample:   "apiVersion: deck/v1\nkind: ToolDefinition\nmetadata:\n  name: File\nspec:\n  version: v1\n  summary: Manage files\n  category: shared\n  inputSchema: {}\n",
-		RealisticExample: "apiVersion: deck/v1\nkind: ToolDefinition\nmetadata:\n  name: File\n  description: Manage files on the local node\nspec:\n  version: v1\n  summary: Manage files on the local node\n  category: shared\n  offlineAllowed: true\n  requires:\n    root: true\n  inputSchema: {}\n  idempotency:\n    mode: by-output\n    keys: [path]\n",
+		Title:   "Tool Definition Schema",
+		Summary: "Reference for tool definition manifests used to describe typed workflow tools.",
+		Example: "apiVersion: deck/v1\nkind: ToolDefinition\nmetadata:\n  name: File\n  description: Manage files on the local node\nspec:\n  version: v1\n  summary: Manage files on the local node\n  category: shared\n  offlineAllowed: true\n  requires:\n    root: true\n  inputSchema: {}\n  idempotency:\n    mode: by-output\n    keys: [path]\n",
 		FieldDocs: map[string]FieldDoc{
 			"metadata.name":                  {Description: "Public tool kind name described by this manifest.", Example: "File"},
 			"spec.version":                   {Description: "Manifest version for the tool definition contract.", Example: "v1"},
@@ -551,10 +532,9 @@ func ToolDefinitionMeta() PageMetadata {
 
 func ComponentFragmentMeta() PageMetadata {
 	return PageMetadata{
-		Title:            "Component Fragment Schema",
-		Summary:          "Reference for reusable workflow component fragments located under `workflows/components/`.",
-		MinimalExample:   "steps:\n  - id: example-step\n    kind: Command\n    spec:\n      command: [echo, hello]\n",
-		RealisticExample: "steps:\n  - id: write-config\n    kind: File\n    spec:\n      action: write\n      path: /etc/example.conf\n      content: hello\n  - id: restart-service\n    kind: Service\n    spec:\n      name: example\n      state: restarted\n",
+		Title:   "Component Fragment Schema",
+		Summary: "Reference for reusable workflow component fragments located under `workflows/components/`.",
+		Example: "steps:\n  - id: write-config\n    kind: File\n    spec:\n      action: write\n      path: /etc/example.conf\n      content: hello\n  - id: restart-service\n    kind: Service\n    spec:\n      name: example\n      state: restarted\n",
 		FieldDocs: map[string]FieldDoc{
 			"steps": {Description: "Ordered list of workflow steps contained in this fragment.", Example: "[{id:example,kind:Command,spec:{...}}]"},
 		},

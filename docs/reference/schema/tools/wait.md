@@ -6,82 +6,16 @@ Wait for command, service, file, or port conditions.
 ## Summary
 
 - kind: `Wait`
-- visibility: `public`
 - schema: `../../../schemas/tools/wait.schema.json`
-- category: `control-flow`
 - actions: `commandSuccess`, `fileAbsent`, `fileExists`, `serviceActive`, `tcpPortClosed`, `tcpPortOpen`
 
 ## When To Use
 
 Use this between dependent steps when the host needs time to converge after a change.
 
-## Minimal Example
+## Shared Step Fields
 
-```yaml
-apiVersion: deck/v1alpha1
-id: example-wait
-kind: Wait
-spec:
-  action: serviceActive
-  name: containerd
-```
-
-## Realistic Example
-
-```yaml
-kind: Wait
-spec:
-  action: fileExists
-  path: /etc/kubernetes/admin.conf
-  type: file
-  nonEmpty: true
-  interval: 2s
-  timeout: 5m
-```
-
-## Fields
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `apiVersion` | `string` | yes | `` | `` | Must be `deck/v1alpha1`. | `deck/v1alpha1` |
-| `id` | `string` | yes | `` | `` | Unique identifier for the step within the workflow. Used in logs and plan output. | `configure-containerd` |
-| `kind` | `string` | yes | `` | `` | Typed step kind. Determines which schema is applied to `spec`. | `File` |
-| `metadata` | `object` | no | `` | `` | Optional free-form annotation map attached to the step for tooling or audit purposes. | `{owner: platform-team}` |
-| `register` | `object` | no | `` | `` | Map of runtime variable names to step output keys. Exported values are available to later steps via `runtime.` in `when` expressions and `.runtime` in templates. | `{outputPath:path}` |
-| `retry` | `integer` | no | `` | `` | Number of times to retry the step after a failure before marking it as failed. | `3` |
-| `spec` | `object` | yes | `` | `` | Step-specific configuration payload. Shape depends on the chosen `kind`. | `{...}` |
-| `timeout` | `string` | no | `` | `` | Maximum duration allowed for the step before it is cancelled. Accepts Go duration strings. | `5m` |
-| `when` | `string` | no | `` | `` | CEL expression evaluated at runtime. The step is skipped when it evaluates to false. Use `vars.` for input variables and `runtime.` for registered outputs and host facts. | `vars.skipKubeadm != "true"` |
-
-## Spec Fields
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `spec.action` | `string` | yes | `` | `serviceActive, commandSuccess, fileExists, fileAbsent, tcpPortClosed, tcpPortOpen` | Selects the condition to poll: `serviceActive`, `commandSuccess`, `fileExists`, `fileAbsent`, `tcpPortOpen`, or `tcpPortClosed`. | `fileExists` |
-| `spec.address` | `string` | no | `` | `` | Host or IP address for TCP port checks. Defaults to `127.0.0.1` when omitted. | `127.0.0.1` |
-| `spec.command` | `array<string>` | no | `` | `` | Command vector to run on each poll attempt. Required for `commandSuccess`. The step succeeds when the command exits 0. | `[test,-f,/etc/kubernetes/admin.conf]` |
-| `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
-| `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
-| `spec.name` | `string` | no | `` | `` | Service name to check. Required for `serviceActive`. | `containerd` |
-| `spec.nonEmpty` | `boolean` | no | `` | `` | For `fileExists`, also assert that the file has non-zero size. Useful when waiting for a file that is written progressively. | `true` |
-| `spec.path` | `string` | no | `` | `` | Filesystem path to check. Required for `fileExists` and `fileAbsent`. | `/etc/kubernetes/admin.conf` |
-| `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
-| `spec.port` | `string` | no | `` | `` | TCP port number to check. Required for `tcpPortOpen` and `tcpPortClosed`. | `6443` |
-| `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
-| `spec.type` | `string` | no | `` | `any, file, dir` | Restricts the path check to a specific filesystem entry type. `file` matches regular files only, `dir` matches directories, `any` matches either. Defaults to `any`. | `file` |
-
-## Validation Rules
-
-- When `spec.action` is one of `serviceActive`, `spec.name` are required.
-- When `spec.action` is one of `commandSuccess`, `spec.command` are required.
-- When `spec.action` is one of `fileExists`, `fileAbsent`, `spec.path` are required.
-- When `spec.action` is one of `tcpPortClosed`, `tcpPortOpen`, `spec.port` are required.
-
-## Notes
-
-- `Wait` bridges convergence gaps between steps. It should not replace the configuration action itself.
-- Keep waits specific so failures identify exactly which dependency did not become ready within the timeout.
-- Use `initialDelay` when a service emits a transient non-active state immediately after being started.
+Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema](../workflow.md).
 
 ## Actions
 
@@ -97,6 +31,10 @@ Poll a command until it exits with code 0.
 |---|---|---:|---|---|---|---|
 | `spec.action` | `string` | yes | `` | `serviceActive, commandSuccess, fileExists, fileAbsent, tcpPortClosed, tcpPortOpen` | Selects the condition to poll: `serviceActive`, `commandSuccess`, `fileExists`, `fileAbsent`, `tcpPortOpen`, or `tcpPortClosed`. | `fileExists` |
 | `spec.command` | `array<string>` | no | `` | `` | Command vector to run on each poll attempt. Required for `commandSuccess`. The step succeeds when the command exits 0. | `[test,-f,/etc/kubernetes/admin.conf]` |
+| `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
+| `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
+| `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
+| `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
 
 #### Rules
 
@@ -123,7 +61,12 @@ Wait for a file or directory path to disappear.
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.action` | `string` | yes | `` | `serviceActive, commandSuccess, fileExists, fileAbsent, tcpPortClosed, tcpPortOpen` | Selects the condition to poll: `serviceActive`, `commandSuccess`, `fileExists`, `fileAbsent`, `tcpPortOpen`, or `tcpPortClosed`. | `fileExists` |
+| `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
+| `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
 | `spec.path` | `string` | no | `` | `` | Filesystem path to check. Required for `fileExists` and `fileAbsent`. | `/etc/kubernetes/admin.conf` |
+| `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
+| `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
+| `spec.type` | `string` | no | `` | `any, file, dir` | Restricts the path check to a specific filesystem entry type. `file` matches regular files only, `dir` matches directories, `any` matches either. Defaults to `any`. | `file` |
 
 #### Example
 
@@ -146,7 +89,13 @@ Wait for a file or directory path to appear.
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.action` | `string` | yes | `` | `serviceActive, commandSuccess, fileExists, fileAbsent, tcpPortClosed, tcpPortOpen` | Selects the condition to poll: `serviceActive`, `commandSuccess`, `fileExists`, `fileAbsent`, `tcpPortOpen`, or `tcpPortClosed`. | `fileExists` |
+| `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
+| `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
+| `spec.nonEmpty` | `boolean` | no | `` | `` | For `fileExists`, also assert that the file has non-zero size. Useful when waiting for a file that is written progressively. | `true` |
 | `spec.path` | `string` | no | `` | `` | Filesystem path to check. Required for `fileExists` and `fileAbsent`. | `/etc/kubernetes/admin.conf` |
+| `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
+| `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
+| `spec.type` | `string` | no | `` | `any, file, dir` | Restricts the path check to a specific filesystem entry type. `file` matches regular files only, `dir` matches directories, `any` matches either. Defaults to `any`. | `file` |
 
 #### Rules
 
@@ -175,7 +124,11 @@ Wait until a systemd service reports an active state.
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.action` | `string` | yes | `` | `serviceActive, commandSuccess, fileExists, fileAbsent, tcpPortClosed, tcpPortOpen` | Selects the condition to poll: `serviceActive`, `commandSuccess`, `fileExists`, `fileAbsent`, `tcpPortOpen`, or `tcpPortClosed`. | `fileExists` |
+| `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
+| `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
 | `spec.name` | `string` | no | `` | `` | Service name to check. Required for `serviceActive`. | `containerd` |
+| `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
+| `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
 
 #### Rules
 
@@ -202,7 +155,12 @@ Wait for a TCP port to stop accepting connections.
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.action` | `string` | yes | `` | `serviceActive, commandSuccess, fileExists, fileAbsent, tcpPortClosed, tcpPortOpen` | Selects the condition to poll: `serviceActive`, `commandSuccess`, `fileExists`, `fileAbsent`, `tcpPortOpen`, or `tcpPortClosed`. | `fileExists` |
+| `spec.address` | `string` | no | `` | `` | Host or IP address for TCP port checks. Defaults to `127.0.0.1` when omitted. | `127.0.0.1` |
+| `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
+| `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
+| `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
 | `spec.port` | `string` | no | `` | `` | TCP port number to check. Required for `tcpPortOpen` and `tcpPortClosed`. | `6443` |
+| `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
 
 #### Rules
 
@@ -229,7 +187,12 @@ Wait for a TCP listener to accept connections on the given port.
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.action` | `string` | yes | `` | `serviceActive, commandSuccess, fileExists, fileAbsent, tcpPortClosed, tcpPortOpen` | Selects the condition to poll: `serviceActive`, `commandSuccess`, `fileExists`, `fileAbsent`, `tcpPortOpen`, or `tcpPortClosed`. | `fileExists` |
+| `spec.address` | `string` | no | `` | `` | Host or IP address for TCP port checks. Defaults to `127.0.0.1` when omitted. | `127.0.0.1` |
+| `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
+| `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
+| `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
 | `spec.port` | `string` | no | `` | `` | TCP port number to check. Required for `tcpPortOpen` and `tcpPortClosed`. | `6443` |
+| `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
 
 #### Example
 
@@ -241,6 +204,12 @@ spec:
   interval: 2s
   timeout: 5m
 ```
+
+## Notes
+
+- `Wait` bridges convergence gaps between steps. It should not replace the configuration action itself.
+- Keep waits specific so failures identify exactly which dependency did not become ready within the timeout.
+- Use `initialDelay` when a service emits a transient non-active state immediately after being started.
 
 ## Related
 

@@ -338,7 +338,7 @@ func stepEnvelopeSchema(kind, title, description, visibility string) map[string]
 		"x-deck-visibility":    visibility,
 		"type":                 "object",
 		"additionalProperties": false,
-		"required":             []any{"id", "apiVersion", "kind", "spec"},
+		"required":             []any{"id", "kind", "spec"},
 		"properties": map[string]any{
 			"id":         map[string]any{"type": "string"},
 			"apiVersion": map[string]any{"const": "deck/v1alpha1"},

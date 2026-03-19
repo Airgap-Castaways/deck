@@ -6,25 +6,13 @@ Ensure a directory exists with an optional mode.
 ## Summary
 
 - kind: `Directory`
-- visibility: `public`
 - schema: `../../../schemas/tools/directory.schema.json`
-- category: `filesystem`
 
 ## When To Use
 
 Use this before writing files or placing extracted content.
 
-## Minimal Example
-
-```yaml
-apiVersion: deck/v1alpha1
-id: example-directory
-kind: Directory
-spec:
-    path: example
-```
-
-## Realistic Example
+## Example
 
 ```yaml
 kind: Directory
@@ -37,7 +25,7 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `apiVersion` | `string` | yes | `` | `` | Must be `deck/v1alpha1`. | `deck/v1alpha1` |
+| `apiVersion` | `string` | no | `` | `` | Optional step API version. When omitted, deck uses the current default. When set, it must be a supported deck step API version. | `deck/v1alpha1` |
 | `id` | `string` | yes | `` | `` | Unique identifier for the step within the workflow. Used in logs and plan output. | `configure-containerd` |
 | `kind` | `string` | yes | `` | `` | Typed step kind. Determines which schema is applied to `spec`. | `File` |
 | `metadata` | `object` | no | `` | `` | Optional free-form annotation map attached to the step for tooling or audit purposes. | `{owner: platform-team}` |

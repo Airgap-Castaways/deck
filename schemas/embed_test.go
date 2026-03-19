@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/taedi90/deck/internal/workflowcontract"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -20,14 +21,13 @@ func TestWorkflowSchemaAvailable(t *testing.T) {
 }
 
 func TestGeneratedToolPagesExist(t *testing.T) {
-	for _, kind := range workflowexec.StepKinds() {
-		file, ok := workflowexec.StepSchemaFile(kind)
-		if !ok {
-			t.Fatalf("missing schema file for kind %s", kind)
+	for _, def := range workflowcontract.StepDefinitions() {
+		if def.Visibility != "public" {
+			continue
 		}
-		page := filepath.Join("..", "docs", "reference", "schema", "tools", trimSchemaSuffix(file)+".md")
+		page := filepath.Join("..", "docs", "reference", "schema", "tools", trimSchemaSuffix(def.SchemaFile)+".md")
 		if _, err := os.Stat(page); err != nil {
-			t.Fatalf("tool page missing for %s: %v", kind, err)
+			t.Fatalf("tool page missing for %s: %v", def.Kind, err)
 		}
 	}
 }

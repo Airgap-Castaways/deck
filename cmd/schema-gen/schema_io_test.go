@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/taedi90/deck/internal/workflowcontract"
 )
 
 func TestEnsureRegistrySchemaFilesRejectsUnknownSchema(t *testing.T) {
@@ -23,5 +25,32 @@ func TestEnsureRegistrySchemaFilesRejectsUnknownSchema(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unknown tool schema file") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadToolPageInputsIncludesOnlyPublicSteps(t *testing.T) {
+	root := filepath.Clean(filepath.Join("..", ".."))
+	pages, err := loadToolPageInputs(filepath.Join(root, "schemas", "tools"))
+	if err != nil {
+		t.Fatalf("loadToolPageInputs: %v", err)
+	}
+	if len(pages) == 0 {
+		t.Fatalf("expected public tool pages")
+	}
+	for _, page := range pages {
+		def, ok := workflowcontract.StepDefinitionForKind(page.Kind)
+		if !ok {
+			t.Fatalf("missing step definition for %s", page.Kind)
+		}
+		if def.Visibility != "public" {
+			t.Fatalf("non-public step %s should not be rendered", page.Kind)
+		}
+	}
+	for _, hidden := range []string{"Command"} {
+		for _, page := range pages {
+			if page.Kind == hidden {
+				t.Fatalf("did not expect %s in public schema docs", hidden)
+			}
+		}
 	}
 }

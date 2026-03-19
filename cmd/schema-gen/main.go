@@ -99,6 +99,9 @@ func run() error {
 }
 
 func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSchema, toolDefinitionSchema map[string]any, toolPages []schemadoc.PageInput) error {
+	if err := removeGeneratedToolDocs(filepath.Join(root, "docs", "reference", "schema", "tools"), toolPages); err != nil {
+		return err
+	}
 	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "README.md"), schemadoc.RenderSchemaIndex("schemas/deck-workflow.schema.json", "schemas/deck-tooldefinition.schema.json", toolPages)); err != nil {
 		return err
 	}
@@ -117,6 +120,27 @@ func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSche
 	for _, page := range toolPages {
 		name := strings.TrimSuffix(filepath.Base(page.SchemaPath), ".schema.json") + ".md"
 		if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "tools", name), schemadoc.RenderToolPage(page)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func removeGeneratedToolDocs(dir string, toolPages []schemadoc.PageInput) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	keep := map[string]bool{"README.md": true}
+	for _, page := range toolPages {
+		name := strings.TrimSuffix(filepath.Base(page.SchemaPath), ".schema.json") + ".md"
+		keep[name] = true
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" || keep[entry.Name()] {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
 			return err
 		}
 	}

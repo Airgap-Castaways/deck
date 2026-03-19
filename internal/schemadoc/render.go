@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/taedi90/deck/internal/workflowcontract"
 )
 
 type PageInput struct {
@@ -42,9 +44,9 @@ type ActionDetail struct {
 }
 
 type PageOverrides struct {
-	FieldDocs      map[string]FieldDoc
-	MinimalExample string
-	Notes          []string
+	FieldDocs map[string]FieldDoc
+	Example   string
+	Notes     []string
 }
 
 func RenderToolPage(in PageInput) []byte {
@@ -54,53 +56,19 @@ func RenderToolPage(in PageInput) []byte {
 	buf.WriteString(in.firstNonEmpty(in.Meta.Summary, in.Description) + "\n\n")
 	buf.WriteString("## Summary\n\n")
 	buf.WriteString("- kind: `" + in.Kind + "`\n")
-	buf.WriteString("- visibility: `" + in.Visibility + "`\n")
 	buf.WriteString("- schema: `../../../" + in.SchemaPath + "`\n")
-	buf.WriteString("- category: `" + in.firstNonEmpty(in.Meta.Category, "other") + "`\n")
 	if len(in.Actions) > 0 {
 		buf.WriteString("- actions: `" + strings.Join(in.Actions, "`, `") + "`\n")
 	}
 	if strings.TrimSpace(in.Meta.WhenToUse) != "" {
 		buf.WriteString("\n## When To Use\n\n" + in.Meta.WhenToUse + "\n")
 	}
-	buf.WriteString("\n## Minimal Example\n\n```yaml\n")
-	example, err := minimalToolExample(in)
-	if err != nil {
-		buf.WriteString("# error: unable to render example\n")
-		buf.WriteString("```\n")
-		return buf.Bytes()
-	}
-	buf.WriteString(example)
-	buf.WriteString("```\n")
-	if strings.TrimSpace(in.Meta.CuratedExample) != "" {
-		buf.WriteString("\n## Realistic Example\n\n```yaml\n")
-		buf.WriteString(in.Meta.CuratedExample)
-		buf.WriteString("```\n")
-	}
 	fields := CollectFields(in.Schema)
 	applyFieldDocs(fields, in.Meta.FieldDocs)
-	buf.WriteString("\n## Fields\n\n")
-	buf.WriteString(renderFieldTable(directChildFields(fields, "")))
-	buf.WriteString("\n## Spec Fields\n\n")
-	buf.WriteString(renderFieldTable(directChildFields(fields, "spec")))
-	if nested := renderNestedSections(fields, "spec"); nested != "" {
-		buf.WriteString("\n## Nested Objects\n\n")
-		buf.WriteString(nested)
-	}
 	rules := ExtractRules(in.Spec, "spec")
-	if len(rules) > 0 {
-		buf.WriteString("\n## Validation Rules\n\n")
-		for _, rule := range rules {
-			buf.WriteString("- " + rule + "\n")
-		}
-	}
-	if len(in.Meta.Notes) > 0 {
-		buf.WriteString("\n## Notes\n\n")
-		for _, note := range in.Meta.Notes {
-			buf.WriteString("- " + note + "\n")
-		}
-	}
 	if len(in.Actions) > 0 {
+		buf.WriteString("\n## Shared Step Fields\n\n")
+		buf.WriteString("Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema](../workflow.md).\n")
 		buf.WriteString("\n## Actions\n\n")
 		for _, action := range in.Actions {
 			detail := buildActionDetail(in, fields, rules, action)
@@ -129,6 +97,36 @@ func RenderToolPage(in PageInput) []byte {
 				buf.WriteString("```\n")
 			}
 		}
+	} else {
+		buf.WriteString("\n## Example\n\n```yaml\n")
+		example, err := toolExample(in)
+		if err != nil {
+			buf.WriteString("# error: unable to render example\n")
+			buf.WriteString("```\n")
+			return buf.Bytes()
+		}
+		buf.WriteString(example)
+		buf.WriteString("```\n")
+		buf.WriteString("\n## Fields\n\n")
+		buf.WriteString(renderFieldTable(directChildFields(fields, "")))
+		buf.WriteString("\n## Spec Fields\n\n")
+		buf.WriteString(renderFieldTable(directChildFields(fields, "spec")))
+		if nested := renderNestedSections(fields, "spec"); nested != "" {
+			buf.WriteString("\n## Nested Objects\n\n")
+			buf.WriteString(nested)
+		}
+		if len(rules) > 0 {
+			buf.WriteString("\n## Validation Rules\n\n")
+			for _, rule := range rules {
+				buf.WriteString("- " + rule + "\n")
+			}
+		}
+	}
+	if len(in.Meta.Notes) > 0 {
+		buf.WriteString("\n## Notes\n\n")
+		for _, note := range in.Meta.Notes {
+			buf.WriteString("- " + note + "\n")
+		}
 	}
 	buf.WriteString("\n## Related\n\n")
 	buf.WriteString("- [Schema Reference](../README.md)\n")
@@ -142,7 +140,6 @@ func RenderToolsIndex(inputs []PageInput) []byte {
 	buf.WriteString("Reference documentation for each typed workflow step supported by deck.\n\n")
 	for _, in := range inputs {
 		buf.WriteString("## [" + in.Kind + "](" + in.PageSlug + ".md)\n\n")
-		buf.WriteString("- **Category**: `" + in.firstNonEmpty(in.Meta.Category, "other") + "`\n")
 		buf.WriteString("- **Summary**: " + in.firstNonEmpty(in.Meta.Summary, in.Description) + "\n")
 		buf.WriteString("\n")
 	}
@@ -176,8 +173,7 @@ func RenderWorkflowPage(schemaPath string, schema map[string]any, meta PageMetad
 	buf.WriteString("# " + firstNonEmpty(meta.Title, "Workflow Schema") + "\n\n")
 	buf.WriteString(firstNonEmpty(meta.Summary, "Top-level workflow authoring reference for deck workflows.") + "\n\n")
 	buf.WriteString("- schema: `../../../" + schemaPath + "`\n\n")
-	buf.WriteString("## Minimal Example\n\n```yaml\n" + firstNonEmpty(meta.MinimalExample, "role: apply\nversion: v1alpha1\nsteps:\n  - id: example-step\n    kind: File\n    spec:\n      action: write\n      path: /tmp/example\n      content: hello\n") + "```\n")
-	buf.WriteString("\n## Realistic Example\n\n```yaml\n" + firstNonEmpty(meta.RealisticExample, "role: prepare\nversion: v1alpha1\nartifacts:\n  files:\n    - group: runtime-binaries\n      items:\n        - id: runc\n          source:\n            url: https://mirror.example.invalid/runc\n          output:\n            path: bin/runc\n") + "```\n")
+	buf.WriteString("## Example\n\n```yaml\n" + firstNonEmpty(meta.Example, "role: apply\nversion: v1alpha1\nsteps:\n  - id: example-step\n    kind: File\n    spec:\n      action: write\n      path: /tmp/example\n      content: hello\n") + "```\n")
 	fields := CollectFields(schema)
 	applyFieldDocs(fields, meta.FieldDocs)
 	buf.WriteString("\n## Fields\n\n")
@@ -205,8 +201,7 @@ func RenderToolDefinitionPage(schemaPath string, schema map[string]any, meta Pag
 	buf.WriteString("# " + firstNonEmpty(meta.Title, "Tool Definition Schema") + "\n\n")
 	buf.WriteString(firstNonEmpty(meta.Summary, "Reference for tool definition manifests.") + "\n\n")
 	buf.WriteString("- schema: `../../../" + schemaPath + "`\n\n")
-	buf.WriteString("## Minimal Example\n\n```yaml\n" + firstNonEmpty(meta.MinimalExample, "apiVersion: deck/v1\nkind: ToolDefinition\nmetadata:\n  name: Example\nspec:\n  version: v1\n  summary: Example tool\n  category: shared\n  inputSchema: {}\n") + "```\n")
-	buf.WriteString("\n## Realistic Example\n\n```yaml\n" + firstNonEmpty(meta.RealisticExample, "apiVersion: deck/v1\nkind: ToolDefinition\nmetadata:\n  name: Example\nspec:\n  version: v1\n  summary: Example tool\n  category: shared\n  inputSchema: {}\n") + "```\n")
+	buf.WriteString("## Example\n\n```yaml\n" + firstNonEmpty(meta.Example, "apiVersion: deck/v1\nkind: ToolDefinition\nmetadata:\n  name: Example\nspec:\n  version: v1\n  summary: Example tool\n  category: shared\n  inputSchema: {}\n") + "```\n")
 	fields := CollectFields(schema)
 	applyFieldDocs(fields, meta.FieldDocs)
 	buf.WriteString("## Fields\n\n")
@@ -234,8 +229,7 @@ func RenderComponentFragmentPage(schemaPath string, schema map[string]any, meta 
 	buf.WriteString("# " + firstNonEmpty(meta.Title, "Component Fragment Schema") + "\n\n")
 	buf.WriteString(firstNonEmpty(meta.Summary, "Reference for reusable workflow component fragments.") + "\n\n")
 	buf.WriteString("- schema: `../../../" + schemaPath + "`\n\n")
-	buf.WriteString("## Minimal Example\n\n```yaml\n" + firstNonEmpty(meta.MinimalExample, "steps:\n  - id: example-step\n    kind: Command\n    spec:\n      command: [echo, hello]\n") + "```\n")
-	buf.WriteString("\n## Realistic Example\n\n```yaml\n" + firstNonEmpty(meta.RealisticExample, "steps:\n  - id: write-config\n    kind: File\n    spec:\n      action: write\n      path: /etc/example.conf\n      content: hello\n") + "```\n")
+	buf.WriteString("## Example\n\n```yaml\n" + firstNonEmpty(meta.Example, "steps:\n  - id: example-step\n    kind: Command\n    spec:\n      command: [echo, hello]\n") + "```\n")
 	fields := CollectFields(schema)
 	applyFieldDocs(fields, meta.FieldDocs)
 	buf.WriteString("\n## Fields\n\n")
@@ -392,9 +386,9 @@ func joinWithFinalConjunction(values []string, conjunction string) string {
 	return strings.Join(values[:len(values)-1], ", ") + ", " + conjunction + " " + values[len(values)-1]
 }
 
-func minimalToolExample(in PageInput) (string, error) {
-	if strings.TrimSpace(in.Meta.MinimalExample) != "" {
-		return in.Meta.MinimalExample, nil
+func toolExample(in PageInput) (string, error) {
+	if strings.TrimSpace(in.Meta.Example) != "" {
+		return in.Meta.Example, nil
 	}
 	obj := map[string]any{
 		"id":         "example-" + strings.ToLower(in.Kind),
@@ -426,6 +420,69 @@ func applyFieldDocs(fields []Field, overrides map[string]FieldDoc) {
 
 func buildActionDetail(in PageInput, fields []Field, rules []string, action string) ActionDetail {
 	required := actionRequiredFields(in.Spec, action)
+	actionFields := actionFieldsForKind(in.Kind, fields, action)
+	if len(actionFields) == 0 {
+		actionFields = actionFieldsFromRequired(fields, required)
+	}
+	var actionRules []string
+	needle := "`spec.action=" + action + "`"
+	needleMulti := "`spec.action` is one of `" + action + "`"
+	for _, rule := range rules {
+		if strings.Contains(rule, needle) || strings.Contains(rule, needleMulti) || strings.Contains(rule, "`spec.action` is one of `"+action+"`") {
+			actionRules = append(actionRules, rule)
+		}
+	}
+	return ActionDetail{
+		Action:   action,
+		Fields:   dedupeFields(actionFields),
+		Rules:    dedupeStrings(actionRules),
+		Example:  in.Meta.ActionExamples[action],
+		Required: required,
+	}
+}
+
+func actionFieldsForKind(kind string, fields []Field, action string) []Field {
+	def, ok := workflowcontract.StepDefinitionForKind(kind)
+	if !ok {
+		return nil
+	}
+	fieldSet := map[string]bool{}
+	for _, item := range fields {
+		fieldSet[item.Path] = true
+	}
+	var roots []string
+	for _, actionDef := range def.Actions {
+		if actionDef.Name != action {
+			continue
+		}
+		for _, field := range actionDef.Fields {
+			prefixed := prefixSpec(field)
+			if fieldSet[prefixed] {
+				roots = append(roots, prefixed)
+				continue
+			}
+			if fieldSet[field] {
+				roots = append(roots, field)
+			}
+		}
+		break
+	}
+	if len(roots) == 0 {
+		return nil
+	}
+	var actionFields []Field
+	for _, field := range fields {
+		for _, root := range roots {
+			if field.Path == root || strings.HasPrefix(field.Path, root+".") || strings.HasPrefix(field.Path, root+"[]") {
+				actionFields = append(actionFields, field)
+				break
+			}
+		}
+	}
+	return dedupeFields(actionFields)
+}
+
+func actionFieldsFromRequired(fields []Field, required []string) []Field {
 	var actionFields []Field
 	requiredSet := map[string]bool{}
 	for _, item := range required {
@@ -443,21 +500,7 @@ func buildActionDetail(in PageInput, fields []Field, rules []string, action stri
 			}
 		}
 	}
-	var actionRules []string
-	needle := "`spec.action=" + action + "`"
-	needleMulti := "`spec.action` is one of `" + action + "`"
-	for _, rule := range rules {
-		if strings.Contains(rule, needle) || strings.Contains(rule, needleMulti) || strings.Contains(rule, "`spec.action` is one of `"+action+"`") {
-			actionRules = append(actionRules, rule)
-		}
-	}
-	return ActionDetail{
-		Action:   action,
-		Fields:   dedupeFields(actionFields),
-		Rules:    dedupeStrings(actionRules),
-		Example:  in.Meta.ActionExamples[action],
-		Required: required,
-	}
+	return dedupeFields(actionFields)
 }
 
 func actionRequiredFields(spec map[string]any, action string) []string {

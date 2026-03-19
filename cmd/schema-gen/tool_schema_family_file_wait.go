@@ -20,7 +20,7 @@ func generateFileToolSchema() (map[string]any, error) {
 	root["x-deck-visibility"] = "public"
 	root["type"] = "object"
 	root["additionalProperties"] = false
-	root["required"] = []any{"id", "apiVersion", "kind", "spec"}
+	root["required"] = []any{"id", "kind", "spec"}
 
 	props := propertyMap(root)
 	setMap(props, "id", map[string]any{"type": "string"})
@@ -53,7 +53,7 @@ func generateWaitToolSchema() (map[string]any, error) {
 	root["x-deck-visibility"] = "public"
 	root["type"] = "object"
 	root["additionalProperties"] = false
-	root["required"] = []any{"id", "apiVersion", "kind", "spec"}
+	root["required"] = []any{"id", "kind", "spec"}
 
 	props := propertyMap(root)
 	setMap(props, "id", map[string]any{"type": "string"})

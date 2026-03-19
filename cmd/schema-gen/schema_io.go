@@ -61,6 +61,9 @@ func loadToolPageInputs(dir string) ([]schemadoc.PageInput, error) {
 	defs := workflowexec.StepDefinitions()
 	pages := make([]schemadoc.PageInput, 0, len(defs))
 	for _, def := range defs {
+		if def.Visibility != "public" {
+			continue
+		}
 		path := filepath.Join(dir, def.SchemaFile)
 		doc, err := readSchema(path)
 		if err != nil {
