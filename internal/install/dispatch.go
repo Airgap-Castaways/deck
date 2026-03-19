@@ -18,11 +18,15 @@ func executeStep(ctx context.Context, kind string, spec map[string]any, execCtx 
 	case "Packages":
 		return runPackages(ctx, spec)
 	case "File":
-		if stringValue(spec, "action") == "download" {
+		action, err := decodeStepAction(spec)
+		if err != nil {
+			return fmt.Errorf("decode File action: %w", err)
+		}
+		if action == "download" {
 			_, err := runFileDownload(ctx, execCtx.BundleRoot, spec)
 			return err
 		}
-		return runFile(spec)
+		return runFileAction(action, spec)
 	case "Sysctl":
 		return runSysctl(ctx, spec)
 	case "Service":

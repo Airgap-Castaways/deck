@@ -57,6 +57,8 @@ func FileWithContext(ctx context.Context, path string) error {
 	return withWorkflowName(path, Bytes(path, content))
 }
 
+// Workspace validates every scenario entrypoint under a workflow root.
+// It is a convenience wrapper for callers that do not own a request context.
 func Workspace(root string) ([]string, error) {
 	return WorkspaceWithContext(context.Background(), root)
 }
@@ -128,6 +130,8 @@ func WorkspaceWithContext(ctx context.Context, root string) ([]string, error) {
 	return dedupeAndSort(validated), nil
 }
 
+// Entrypoint validates a scenario entrypoint and its imported components.
+// It is a convenience wrapper for callers that do not own a request context.
 func Entrypoint(path string) ([]string, error) {
 	return EntrypointWithContext(context.Background(), path)
 }

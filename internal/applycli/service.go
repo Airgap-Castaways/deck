@@ -116,12 +116,6 @@ func writeApplyDryRun(stdoutPrintf func(format string, args ...any) error, wf *c
 		completed[stepID] = true
 	}
 
-	statePath, err := ResolveInstallStatePath(wf)
-	if err != nil {
-		return err
-	}
-	ctxData := map[string]any{"bundleRoot": bundleRoot, "stateFile": statePath}
-
 	for _, phase := range wf.Phases {
 		if err := stdoutPrintf("PHASE=%s\n", phase.Name); err != nil {
 			return err
@@ -134,7 +128,7 @@ func writeApplyDryRun(stdoutPrintf func(format string, args ...any) error, wf *c
 				continue
 			}
 
-			ok, evalErr := install.EvaluateWhen(step.When, wf.Vars, runtimeVars, ctxData)
+			ok, evalErr := install.EvaluateWhen(step.When, wf.Vars, runtimeVars)
 			if evalErr != nil {
 				return fmt.Errorf("WHEN_EVAL_ERROR: step %s (%s): %w", step.ID, step.Kind, evalErr)
 			}

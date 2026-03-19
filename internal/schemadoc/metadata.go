@@ -50,10 +50,6 @@ var commonFieldDocs = map[string]FieldDoc{
 
 var toolMetadata = map[string]ToolMetadata{
 	"Artifacts": {
-		Kind:      "Artifacts",
-		Category:  "apply",
-		Summary:   "Install or extract pre-collected artifacts on the node.",
-		WhenToUse: "Use this when your apply workflow needs binaries or archives that were prepared into the bundle.",
 		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-artifacts\nkind: Artifacts\nspec:\n" +
 			"  artifacts:\n    - source:\n        amd64:\n          bundle:\n            root: files\n            path: bin/linux/amd64/example\n" +
 			"        arm64:\n          bundle:\n            root: files\n            path: bin/linux/arm64/example\n      install:\n        path: /usr/local/bin/example\n",
@@ -100,10 +96,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Command": {
-		Kind:           "Command",
-		Category:       "advanced",
-		Summary:        "Run an explicit command as an escape hatch.",
-		WhenToUse:      "Use this only when no typed step expresses the change clearly enough.",
 		CuratedExample: "kind: Command\nspec:\n  command: [\"systemctl\", \"status\", \"containerd\"]\n  timeout: 30s\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.command": {Description: "Command vector to execute. The first element is the binary; remaining elements are arguments.", Example: "[systemctl,restart,containerd]"},
@@ -118,10 +110,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Containerd": {
-		Kind:           "Containerd",
-		Category:       "runtime",
-		Summary:        "Write containerd config and registry host settings.",
-		WhenToUse:      "Use this when the node runtime needs a default config or registry mirror layout.",
 		CuratedExample: "kind: Containerd\nspec:\n  path: /etc/containerd/config.toml\n  systemdCgroup: true\n  registryHosts:\n    - registry: registry.k8s.io\n      server: https://registry.k8s.io\n      host: http://registry.local:5000\n      capabilities: [pull, resolve]\n      skipVerify: true\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.path":                         {Description: "Destination path for the generated `config.toml`. Defaults to `/etc/containerd/config.toml`.", Example: "/etc/containerd/config.toml"},
@@ -142,10 +130,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Directory": {
-		Kind:           "Directory",
-		Category:       "filesystem",
-		Summary:        "Ensure a directory exists with an optional mode.",
-		WhenToUse:      "Use this before writing files or placing extracted content.",
 		CuratedExample: "kind: Directory\nspec:\n  path: /home/vagrant/.kube\n  mode: \"0755\"\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.path": {Description: "Directory path to create if it does not already exist. Parent directories are created as needed.", Example: "/var/lib/deck"},
@@ -154,10 +138,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"File": {
-		Kind:           "File",
-		Category:       "filesystem",
-		Summary:        "Manage files through write, copy, edit, or download actions.",
-		WhenToUse:      "Use this for most file-oriented host changes instead of generic commands.",
 		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-file\nkind: File\nspec:\n  action: download\n  source:\n    url: https://example.invalid/file.tar.gz\n  output:\n    path: files/example.tar.gz\n",
 		CuratedExample: "kind: File\nspec:\n  action: copy\n  src: /etc/kubernetes/admin.conf\n  dest: /home/vagrant/.kube/config\n  mode: \"0644\"\n",
 		ActionNotes: map[string]string{
@@ -205,10 +185,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Image": {
-		Kind:           "Image",
-		Category:       "containers",
-		Summary:        "Download or verify container images.",
-		WhenToUse:      "Use this when workflows need image presence checks or bundle-time image collection.",
 		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-image\nkind: Image\nspec:\n  action: verify\n  images:\n    - registry.k8s.io/pause:3.9\n",
 		CuratedExample: "kind: Image\nspec:\n  action: verify\n  images:\n    - registry.k8s.io/kube-apiserver:v1.30.1\n    - registry.k8s.io/kube-controller-manager:v1.30.1\n",
 		ActionNotes: map[string]string{
@@ -241,10 +217,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Checks": {
-		Kind:           "Checks",
-		Category:       "prepare",
-		Summary:        "Run host checks before prepare execution.",
-		WhenToUse:      "Use this at the start of prepare workflows to fail early on unsupported hosts.",
 		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-checks\nkind: Checks\nspec:\n  checks: [os]\n",
 		CuratedExample: "kind: Checks\nspec:\n  checks: [os, arch, swap]\n  failFast: true\n",
 		FieldDocs: map[string]FieldDoc{
@@ -255,10 +227,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"KernelModule": {
-		Kind:           "KernelModule",
-		Category:       "system",
-		Summary:        "Load and persist kernel modules.",
-		WhenToUse:      "Use this for modules that must be present before networking or container runtime setup.",
 		CuratedExample: "kind: KernelModule\nspec:\n  name: br_netfilter\n  load: true\n  persist: true\n  persistFile: /etc/modules-load.d/k8s.conf\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.name":        {Description: "Single module name to load. Use `name` or `names`, not both.", Example: "br_netfilter"},
@@ -270,10 +238,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Kubeadm": {
-		Kind:           "Kubeadm",
-		Category:       "kubernetes",
-		Summary:        "Run kubeadm init, join, or reset actions.",
-		WhenToUse:      "Use this for bootstrap lifecycle steps after host prerequisites are ready.",
 		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-kubeadm\nkind: Kubeadm\nspec:\n  action: init\n  outputJoinFile: /tmp/deck/join.txt\n",
 		CuratedExample: "kind: Kubeadm\nspec:\n  action: init\n  outputJoinFile: /tmp/deck/join.txt\n  podNetworkCIDR: 10.244.0.0/16\n  criSocket: unix:///run/containerd/containerd.sock\n  ignorePreflightErrors: [Swap]\n",
 		ActionNotes: map[string]string{
@@ -318,10 +282,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"PackageCache": {
-		Kind:           "PackageCache",
-		Category:       "packages",
-		Summary:        "Refresh package metadata with repo filtering.",
-		WhenToUse:      "Use this after writing repo definitions and before package install steps that depend on fresh metadata.",
 		CuratedExample: "kind: PackageCache\nspec:\n  manager: apt\n  clean: true\n  update: true\n  restrictToRepos:\n    - /etc/apt/sources.list.d/offline.list\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.manager":         {Description: "Package manager to use. `auto` detects from the host OS. Supports `apt` and `dnf`.", Example: "apt"},
@@ -333,10 +293,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Packages": {
-		Kind:           "Packages",
-		Category:       "packages",
-		Summary:        "Download or install package sets.",
-		WhenToUse:      "Use this for package-manager driven dependencies instead of shelling out directly.",
 		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-packages\nkind: Packages\nspec:\n  action: install\n  packages: [kubelet]\n",
 		CuratedExample: "kind: Packages\nspec:\n  action: install\n  packages: [kubelet, kubeadm, kubectl]\n",
 		ActionNotes: map[string]string{
@@ -380,10 +336,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Repository": {
-		Kind:           "Repository",
-		Category:       "packages",
-		Summary:        "Configure apt or yum repository definitions.",
-		WhenToUse:      "Use this before refreshing caches or installing packages from a local mirror.",
 		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-repository\nkind: Repository\nspec:\n  action: configure\n  format: apt\n  repositories:\n    - id: offline\n      baseurl: http://repo.local/debian\n",
 		CuratedExample: "kind: Repository\nspec:\n  action: configure\n  format: apt\n  replaceExisting: true\n  refreshCache:\n    clean: true\n    update: true\n  repositories:\n    - id: offline\n      baseurl: http://repo.local/debian\n      trusted: true\n",
 		ActionNotes: map[string]string{
@@ -414,10 +366,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Service": {
-		Kind:           "Service",
-		Category:       "system",
-		Summary:        "Start, stop, enable, or reload local services.",
-		WhenToUse:      "Use this after config changes that need a service lifecycle action.",
 		CuratedExample: "kind: Service\nspec:\n  name: containerd\n  enabled: true\n  state: started\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.name":          {Description: "Single service name to manage. Use `name` or `names`, not both.", Example: "containerd"},
@@ -431,10 +379,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Swap": {
-		Kind:           "Swap",
-		Category:       "system",
-		Summary:        "Enable or disable swap and its persistence.",
-		WhenToUse:      "Use this for Kubernetes-oriented host prep where swap policy matters.",
 		CuratedExample: "kind: Swap\nspec:\n  disable: true\n  persist: true\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.disable":   {Description: "Disable all active swap devices with `swapoff -a`. Defaults to `true`.", Example: "true"},
@@ -444,10 +388,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Symlink": {
-		Kind:           "Symlink",
-		Category:       "filesystem",
-		Summary:        "Create or replace a symbolic link.",
-		WhenToUse:      "Use this when tools or runtimes expect a stable path alias.",
 		CuratedExample: "kind: Symlink\nspec:\n  path: /usr/bin/runc\n  target: /usr/local/sbin/runc\n  force: true\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.path":          {Description: "Path where the symbolic link will be created.", Example: "/usr/bin/runc"},
@@ -459,10 +399,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Sysctl": {
-		Kind:           "Sysctl",
-		Category:       "system",
-		Summary:        "Write and optionally apply sysctl values.",
-		WhenToUse:      "Use this for kernel tunables that must survive reboot and may need immediate application.",
 		CuratedExample: "kind: Sysctl\nspec:\n  writeFile: /etc/sysctl.d/99-kubernetes-cri.conf\n  apply: true\n  values:\n    net.ipv4.ip_forward: 1\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.writeFile": {Description: "Path to the sysctl file written with the given values. A drop-in under `/etc/sysctl.d/` is the common choice.", Example: "/etc/sysctl.d/99-k8s.conf"},
@@ -472,10 +408,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"SystemdUnit": {
-		Kind:           "SystemdUnit",
-		Category:       "system",
-		Summary:        "Write a systemd unit file and optionally manage the service.",
-		WhenToUse:      "Use this when workflows need to install or override a custom unit definition.",
 		CuratedExample: "kind: SystemdUnit\nspec:\n  path: /etc/systemd/system/kubelet.service\n  contentFromTemplate: |\n    [Unit]\n    Description=Kubelet\n\n    [Service]\n    Environment=NODE_IP={{ .vars.nodeIP }}\n  daemonReload: true\n  service:\n    enabled: true\n    state: started\n",
 		FieldDocs: map[string]FieldDoc{
 			"spec.path":                {Description: "Destination path for the unit file on the node.", Example: "/etc/systemd/system/kubelet.service"},
@@ -491,10 +423,6 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 
 	"Wait": {
-		Kind:           "Wait",
-		Category:       "control-flow",
-		Summary:        "Wait for command, service, file, or port conditions.",
-		WhenToUse:      "Use this between dependent steps when the host needs time to converge after a change.",
 		MinimalExample: "apiVersion: deck/v1alpha1\nid: example-wait\nkind: Wait\nspec:\n  action: serviceActive\n  name: containerd\n",
 		CuratedExample: "kind: Wait\nspec:\n  action: fileExists\n  path: /etc/kubernetes/admin.conf\n  type: file\n  nonEmpty: true\n  interval: 2s\n  timeout: 5m\n",
 		ActionNotes: map[string]string{
@@ -556,9 +484,10 @@ func ToolMeta(kind string) ToolMetadata {
 }
 
 func ToolKinds() []string {
-	kinds := make([]string, 0, len(toolMetadata))
-	for kind := range toolMetadata {
-		kinds = append(kinds, kind)
+	defs := workflowcontract.StepDefinitions()
+	kinds := make([]string, 0, len(defs))
+	for _, def := range defs {
+		kinds = append(kinds, def.Kind)
 	}
 	sort.Strings(kinds)
 	return kinds

@@ -139,7 +139,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 				continue
 			}
 
-			ok, err := evaluateWhen(step.When, wf.Vars, runtimeVars, ctxData)
+			ok, err := evaluateWhen(step.When, wf.Vars, runtimeVars)
 			if err != nil {
 				st.FailedStep = step.ID
 				st.Error = err.Error()

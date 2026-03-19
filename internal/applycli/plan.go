@@ -103,7 +103,6 @@ func BuildPlanReport(request ExecutionRequest) (PlanReport, error) {
 	for key, value := range state.RuntimeVars {
 		runtimeVars[key] = value
 	}
-	ctxData := map[string]any{"bundleRoot": "", "stateFile": request.StatePath}
 	steps := make([]PlanStep, 0)
 	summary := PlanSummary{PhaseCount: len(request.ExecutionWorkflow.Phases), CompletedSteps: len(state.CompletedSteps), RuntimeVarCount: len(runtimeVars)}
 	for _, phase := range request.ExecutionWorkflow.Phases {
@@ -124,7 +123,7 @@ func BuildPlanReport(request ExecutionRequest) (PlanReport, error) {
 				steps = append(steps, entry)
 				continue
 			}
-			ok, evalErr := install.EvaluateWhen(step.When, request.ExecutionWorkflow.Vars, runtimeVars, ctxData)
+			ok, evalErr := install.EvaluateWhen(step.When, request.ExecutionWorkflow.Vars, runtimeVars)
 			if evalErr != nil {
 				return PlanReport{}, fmt.Errorf("WHEN_EVAL_ERROR: step %s (%s): %w", step.ID, step.Kind, evalErr)
 			}

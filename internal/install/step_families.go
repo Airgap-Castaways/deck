@@ -11,11 +11,7 @@ type actionSelectorSpec struct {
 	Action string `json:"action"`
 }
 
-func runFile(spec map[string]any) error {
-	action, err := decodeStepAction(spec)
-	if err != nil {
-		return fmt.Errorf("decode File action: %w", err)
-	}
+func runFileAction(action string, spec map[string]any) error {
 	switch action {
 	case "download":
 		return fmt.Errorf("file action download is not supported in apply dispatch without context")

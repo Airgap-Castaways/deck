@@ -50,6 +50,8 @@ func useStubKubeadmReset(t *testing.T) {
 	}
 }
 
+func nilContextForInstallTest() context.Context { return nil }
+
 func TestRun_InstallTools(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state", "state.json")
@@ -2087,6 +2089,26 @@ func TestCommandOutputWithContext_TimeoutReturnsSentinel(t *testing.T) {
 	}
 }
 
+func TestCommandOutputWithContext_RejectsNilContext(t *testing.T) {
+	_, err := runCommandOutputWithContext(nilContextForInstallTest(), []string{"true"}, time.Second)
+	if err == nil {
+		t.Fatalf("expected nil context error")
+	}
+	if !strings.Contains(err.Error(), "context is nil") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestExecuteStep_FileActionDecodeError(t *testing.T) {
+	err := executeStep(context.Background(), "File", map[string]any{"action": 42}, ExecutionContext{})
+	if err == nil {
+		t.Fatalf("expected decode error")
+	}
+	if !strings.Contains(err.Error(), "decode File action") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRun_ContainerdDefaultGenerationRespectsParentContext(t *testing.T) {
 	dir := t.TempDir()
 	bundle := filepath.Join(dir, "bundle")
@@ -2227,9 +2249,7 @@ func TestRun_WhenInvalidExpression(t *testing.T) {
 func TestWhen_NamespaceEnforced(t *testing.T) {
 	vars := map[string]any{"nodeRole": "worker"}
 	runtimeVars := map[string]any{"hostPassed": true}
-	ctx := map[string]any{"nodeRole": "worker"}
-
-	ok, err := EvaluateWhen("vars.nodeRole == \"worker\"", vars, runtimeVars, ctx)
+	ok, err := EvaluateWhen("vars.nodeRole == \"worker\"", vars, runtimeVars)
 	if err != nil {
 		t.Fatalf("expected vars namespace expression to pass, got %v", err)
 	}
@@ -2237,7 +2257,7 @@ func TestWhen_NamespaceEnforced(t *testing.T) {
 		t.Fatalf("expected vars namespace expression to be true")
 	}
 
-	_, err = EvaluateWhen("nodeRole == \"worker\"", vars, runtimeVars, ctx)
+	_, err = EvaluateWhen("nodeRole == \"worker\"", vars, runtimeVars)
 	if err == nil {
 		t.Fatalf("expected bare identifier to fail")
 	}
@@ -2245,7 +2265,7 @@ func TestWhen_NamespaceEnforced(t *testing.T) {
 		t.Fatalf("expected bare identifier guidance, got %v", err)
 	}
 
-	_, err = EvaluateWhen("context.nodeRole == \"worker\"", vars, runtimeVars, ctx)
+	_, err = EvaluateWhen("context.nodeRole == \"worker\"", vars, runtimeVars)
 	if err == nil {
 		t.Fatalf("expected context namespace to fail")
 	}
@@ -2253,7 +2273,7 @@ func TestWhen_NamespaceEnforced(t *testing.T) {
 		t.Fatalf("expected namespace restriction message, got %v", err)
 	}
 
-	_, err = EvaluateWhen("other.nodeRole == \"worker\"", vars, runtimeVars, ctx)
+	_, err = EvaluateWhen("other.nodeRole == \"worker\"", vars, runtimeVars)
 	if err == nil {
 		t.Fatalf("expected unknown dotted namespace to fail")
 	}

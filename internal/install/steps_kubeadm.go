@@ -69,18 +69,6 @@ func runKubeadmInit(ctx context.Context, spec map[string]any) error {
 	return kubeadmInitExecutor(ctx, decoded)
 }
 
-func runKubeadmInitStub(spec kubeadmInitSpec) error {
-	joinFile := strings.TrimSpace(spec.OutputJoinFile)
-	if joinFile == "" {
-		return fmt.Errorf("%s: KubeadmInit requires outputJoinFile", errCodeInstallInitJoinMissing)
-	}
-	if shouldSkipKubeadmInit(spec) {
-		return nil
-	}
-	content := "kubeadm join 10.0.0.10:6443 --token dummy.token --discovery-token-ca-cert-hash sha256:dummy\n"
-	return filemode.WritePrivateFile(joinFile, []byte(content))
-}
-
 func runKubeadmJoin(ctx context.Context, spec map[string]any) error {
 	decoded, err := workflowexec.DecodeSpec[kubeadmJoinSpec](spec)
 	if err != nil {
@@ -90,27 +78,6 @@ func runKubeadmJoin(ctx context.Context, spec map[string]any) error {
 		return fmt.Errorf("context is nil")
 	}
 	return kubeadmJoinExecutor(ctx, decoded)
-}
-
-func runKubeadmJoinStub(spec kubeadmJoinSpec) error {
-	joinFile := strings.TrimSpace(spec.JoinFile)
-	configFile := strings.TrimSpace(spec.ConfigFile)
-	if joinFile != "" && configFile != "" {
-		return fmt.Errorf("%s: KubeadmJoin accepts joinFile or configFile, not both", errCodeInstallJoinInputConflict)
-	}
-	if joinFile == "" && configFile == "" {
-		return fmt.Errorf("%s: KubeadmJoin requires joinFile or configFile", errCodeInstallJoinPathMissing)
-	}
-	path := joinFile
-	label := "join file"
-	if configFile != "" {
-		path = configFile
-		label = "config file"
-	}
-	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("%s: %s not found: %w", errCodeInstallJoinFileMissing, label, err)
-	}
-	return nil
 }
 
 func runKubeadmInitReal(parent context.Context, spec kubeadmInitSpec) error {
@@ -426,16 +393,6 @@ func runKubeadmResetReal(ctx context.Context, decoded kubeadmResetSpec) error {
 		}
 	}
 
-	return nil
-}
-
-func runKubeadmResetStub(spec kubeadmResetSpec) error {
-	_ = trimmedStringSlice(spec.RemovePaths)
-	_ = trimmedStringSlice(spec.RemoveFiles)
-	_ = trimmedStringSlice(spec.CleanupContainers)
-	_ = trimmedStringSlice(spec.ExtraArgs)
-	_ = strings.TrimSpace(spec.CriSocket)
-	_ = strings.TrimSpace(spec.RestartRuntimeService)
 	return nil
 }
 

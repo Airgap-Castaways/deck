@@ -124,6 +124,23 @@ func TestToolMetadataCategoryMatchesRegistry(t *testing.T) {
 	}
 }
 
+func TestToolMetadataDoesNotDuplicateStructuredIdentityFacts(t *testing.T) {
+	for kind, meta := range toolMetadata {
+		if meta.Kind != "" {
+			t.Fatalf("tool metadata should not set Kind for %s", kind)
+		}
+		if meta.Category != "" {
+			t.Fatalf("tool metadata should not set Category for %s", kind)
+		}
+		if meta.Summary != "" {
+			t.Fatalf("tool metadata should not set Summary for %s", kind)
+		}
+		if meta.WhenToUse != "" {
+			t.Fatalf("tool metadata should not set WhenToUse for %s", kind)
+		}
+	}
+}
+
 func TestToolMetadataFieldDocsExistInSchemas(t *testing.T) {
 	for _, def := range workflowexec.StepDefinitions() {
 		meta, ok := toolMetadata[def.Kind]
