@@ -92,7 +92,7 @@ func executeServe(ctx context.Context, root string, addr string, auditMaxSizeMB 
 	}
 	select {
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("server shutdown: %w", err)
