@@ -4,6 +4,7 @@ import (
 	jsonschema "github.com/invopop/jsonschema"
 
 	"github.com/taedi90/deck/internal/schemamodel"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 func generateFileToolSchema() (map[string]any, error) {
@@ -79,21 +80,33 @@ func patchFileSpec(node any) {
 	}
 	spec["type"] = "object"
 	spec["additionalProperties"] = false
-	spec["required"] = []any{}
+	spec["required"] = []any{"action"}
 	props := propertyMap(spec)
 	setMap(props, "action", map[string]any{"type": "string", "enum": []any{"download", "write", "copy", "edit"}})
 	mergeMap(props, "mode", map[string]any{"type": "string", "pattern": "^[0-7]{4}$"})
-	mergeMap(props, "owner", map[string]any{"type": "string", "minLength": 1})
-	mergeMap(props, "group", map[string]any{"type": "string", "minLength": 1})
+	delete(props, "owner")
+	delete(props, "group")
 	patchFileEditRules(props["edits"])
 	patchFileSource(props["source"])
 	patchFileOutput(props["output"])
+	allowedByAction := registryActionFields("File")
+	allFields := []string{"action", "path", "content", "contentFromTemplate", "mode", "src", "dest", "backup", "edits", "source", "fetch", "output"}
 	spec["allOf"] = []any{
-		conditionalRequired("download", []string{"source", "output"}, nil),
-		conditionalRequired("write", []string{"path"}, []any{
-			map[string]any{"required": []any{"content"}},
-			map[string]any{"required": []any{"contentFromTemplate"}},
-		}),
+		restrictActionFields(allowedByAction, allFields),
+		conditionalRequired("download", []string{"source"}, nil),
+		map[string]any{
+			"if": map[string]any{
+				"properties": map[string]any{"action": map[string]any{"const": "write"}},
+				"required":   []any{"action"},
+			},
+			"then": map[string]any{
+				"required": []any{"path"},
+				"oneOf": []any{
+					map[string]any{"required": []any{"content"}, "not": map[string]any{"required": []any{"contentFromTemplate"}}},
+					map[string]any{"required": []any{"contentFromTemplate"}, "not": map[string]any{"required": []any{"content"}}},
+				},
+			},
+		},
 		conditionalRequired("copy", []string{"src", "dest"}, nil),
 		conditionalRequired("edit", []string{"path", "edits"}, nil),
 	}
@@ -109,18 +122,34 @@ func patchWaitSpec(node any) {
 	spec["required"] = []any{"action"}
 	props := propertyMap(spec)
 	setMap(props, "action", map[string]any{"type": "string", "enum": []any{"serviceActive", "commandSuccess", "fileExists", "fileAbsent", "tcpPortClosed", "tcpPortOpen"}})
+	delete(props, "state")
 	mergeMap(props, "interval", map[string]any{"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"})
 	mergeMap(props, "initialDelay", map[string]any{"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"})
 	mergeMap(props, "timeout", map[string]any{"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"})
 	mergeMap(props, "pollInterval", map[string]any{"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"})
 	setMap(props, "type", map[string]any{"type": "string", "enum": []any{"any", "file", "dir"}})
 	setMap(props, "command", map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string"}})
+	allowedByAction := registryActionFields("Wait")
+	allFields := []string{"action", "interval", "initialDelay", "name", "command", "path", "type", "nonEmpty", "address", "port", "timeout", "pollInterval"}
 	spec["allOf"] = []any{
+		restrictActionFields(allowedByAction, allFields),
 		conditionalEnumRequired([]string{"serviceActive"}, []string{"name"}),
 		conditionalEnumRequired([]string{"commandSuccess"}, []string{"command"}),
 		conditionalEnumRequired([]string{"fileExists", "fileAbsent"}, []string{"path"}),
 		conditionalEnumRequired([]string{"tcpPortClosed", "tcpPortOpen"}, []string{"port"}),
 	}
+}
+
+func registryActionFields(kind string) map[string][]string {
+	def, ok := workflowexec.StepDefinitionForKind(kind)
+	if !ok {
+		return nil
+	}
+	fields := make(map[string][]string, len(def.Actions))
+	for _, action := range def.Actions {
+		fields[action.Name] = append([]string(nil), action.Fields...)
+	}
+	return fields
 }
 
 func patchFileEditRules(node any) {
@@ -137,7 +166,7 @@ func patchFileEditRules(node any) {
 		"properties": map[string]any{
 			"match": map[string]any{"type": "string"},
 			"with":  map[string]any{"type": "string"},
-			"op":    map[string]any{"type": "string"},
+			"op":    enumStringSchema("replace", "append"),
 		},
 	}
 }
@@ -177,7 +206,7 @@ func patchFileOutput(node any) {
 	}
 	output["type"] = "object"
 	output["additionalProperties"] = false
-	output["required"] = []any{"path"}
+	delete(output, "required")
 	output["properties"] = map[string]any{
 		"path":  map[string]any{"type": "string", "minLength": 1},
 		"chmod": map[string]any{"type": "string", "pattern": "^[0-7]{4}$"},

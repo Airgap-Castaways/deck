@@ -62,7 +62,6 @@ phases:
         kind: Kubeadm
         spec:
           action: init
-          mode: real
           outputJoinFile: /tmp/deck/join-real.txt
           podNetworkCIDR: 10.244.0.0/16
           criSocket: unix:///run/containerd/containerd.sock
@@ -80,6 +79,4 @@ phases:
           action: copy
           src: /etc/kubernetes/admin.conf
           dest: /home/vagrant/.kube/config
-          owner: vagrant
-          group: vagrant
           mode: "0644"

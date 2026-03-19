@@ -24,10 +24,12 @@ func generatePackageCacheToolSchema() map[string]any {
 func generatePackagesToolSchema() map[string]any {
 	root := stepEnvelopeSchema("Packages", "PackagesStep", "Installs packages on the local node.", "public")
 	props := propertyMap(root)
+	packagesAllowedByAction := registryActionFields("Packages")
+	packageFields := []string{"action", "packages", "source", "restrictToRepos", "excludeRepos", "distro", "repo", "backend", "output"}
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
-		"required":             []any{"packages"},
+		"required":             []any{"action", "packages"},
 		"properties": map[string]any{
 			"source": map[string]any{
 				"type":                 "object",
@@ -42,8 +44,12 @@ func generatePackagesToolSchema() map[string]any {
 			"distro":          map[string]any{"type": "object", "additionalProperties": true},
 			"repo": map[string]any{
 				"type":                 "object",
-				"additionalProperties": true,
+				"additionalProperties": false,
+				"required":             []any{"type"},
 				"properties": map[string]any{
+					"type":     enumStringSchema("apt-flat", "yum"),
+					"generate": map[string]any{"type": "boolean"},
+					"pkgsDir":  minLenStringSchema(),
 					"modules": map[string]any{
 						"type": "array",
 						"items": map[string]any{
@@ -58,11 +64,28 @@ func generatePackagesToolSchema() map[string]any {
 					},
 				},
 			},
-			"backend": map[string]any{"type": "object", "additionalProperties": true},
+			"backend": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"required":             []any{"mode", "image"},
+				"properties": map[string]any{
+					"mode":    enumStringSchema("container"),
+					"runtime": enumStringSchema("auto", "docker", "podman"),
+					"image":   minLenStringSchema(),
+				},
+			},
+			"output": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"dir": minLenStringSchema(),
+				},
+			},
 		},
 		"allOf": []any{
 			conditionalRequired("download", []string{"packages"}, nil),
 			conditionalRequired("install", []string{"packages"}, nil),
+			restrictActionFields(packagesAllowedByAction, packageFields),
 		},
 	})
 	return root
@@ -77,14 +100,22 @@ func generateRepositoryToolSchema() map[string]any {
 		"required":             []any{"action"},
 		"properties": map[string]any{
 			"action":          enumStringSchema("configure"),
-			"format":          enumStringSchema("apt", "yum"),
+			"format":          enumStringSchema("auto", "apt", "yum"),
 			"path":            map[string]any{"type": "string"},
 			"mode":            modeSchema(),
 			"replaceExisting": map[string]any{"type": "boolean"},
 			"disableExisting": map[string]any{"type": "boolean"},
 			"backupPaths":     stringArraySchema(0, false),
 			"cleanupPaths":    stringArraySchema(0, false),
-			"refreshCache":    map[string]any{"type": "object", "additionalProperties": true},
+			"refreshCache": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"enabled": map[string]any{"type": "boolean"},
+					"clean":   map[string]any{"type": "boolean"},
+					"update":  map[string]any{"type": "boolean"},
+				},
+			},
 			"repositories": map[string]any{
 				"type":     "array",
 				"minItems": 1,

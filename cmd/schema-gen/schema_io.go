@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/schemadoc"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 func repoRoot() (string, error) {
@@ -55,12 +55,13 @@ func loadToolPageInputs(dir string) ([]schemadoc.PageInput, error) {
 	if err != nil {
 		return nil, err
 	}
-	pages := make([]schemadoc.PageInput, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".schema.json") {
-			continue
-		}
-		path := filepath.Join(dir, entry.Name())
+	if err := ensureRegistrySchemaFiles(dir, entries); err != nil {
+		return nil, err
+	}
+	defs := workflowexec.StepDefinitions()
+	pages := make([]schemadoc.PageInput, 0, len(defs))
+	for _, def := range defs {
+		path := filepath.Join(dir, def.SchemaFile)
 		doc, err := readSchema(path)
 		if err != nil {
 			return nil, err
@@ -69,24 +70,28 @@ func loadToolPageInputs(dir string) ([]schemadoc.PageInput, error) {
 		if err != nil {
 			return nil, err
 		}
-		kind := schemaConst(doc.Properties, "kind")
+		kind, actions, err := validateToolSchemaDoc(def, doc)
+		if err != nil {
+			return nil, err
+		}
 		spec, _ := doc.Properties["spec"].(map[string]any)
+		meta := schemadoc.ToolMeta(kind)
+		meta.Category = def.Category
 		page := schemadoc.PageInput{
 			Kind:        kind,
-			PageSlug:    strings.TrimSuffix(entry.Name(), ".schema.json"),
+			PageSlug:    strings.TrimSuffix(def.SchemaFile, ".schema.json"),
 			Title:       doc.Title,
 			Description: doc.Description,
-			Visibility:  firstNonEmpty(doc.Visibility, "public"),
-			SchemaPath:  filepath.ToSlash(filepath.Join("schemas", "tools", entry.Name())),
+			Visibility:  def.Visibility,
+			SchemaPath:  filepath.ToSlash(filepath.Join("schemas", "tools", def.SchemaFile)),
 			Schema:      raw,
-			Meta:        schemadoc.ToolMeta(kind),
-			Actions:     nestedEnum(doc.Properties, "spec", "action"),
+			Meta:        meta,
+			Actions:     actions,
 			Required:    nestedRequired(doc.Properties, "spec"),
 			Spec:        spec,
 		}
 		pages = append(pages, page)
 	}
-	sort.Slice(pages, func(i, j int) bool { return pages[i].Kind < pages[j].Kind })
 	return pages, nil
 }
 
@@ -95,33 +100,67 @@ func loadToolSchemas(dir string) ([]toolSchemaDoc, error) {
 	if err != nil {
 		return nil, err
 	}
-	tools := make([]toolSchemaDoc, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".schema.json") {
-			continue
-		}
-		raw, err := fsutil.ReadFile(filepath.Join(dir, entry.Name()))
+	if err := ensureRegistrySchemaFiles(dir, entries); err != nil {
+		return nil, err
+	}
+	defs := workflowexec.StepDefinitions()
+	tools := make([]toolSchemaDoc, 0, len(defs))
+	for _, def := range defs {
+		raw, err := fsutil.ReadFile(filepath.Join(dir, def.SchemaFile))
 		if err != nil {
 			return nil, err
 		}
 		var doc schemaDoc
 		if err := json.Unmarshal(raw, &doc); err != nil {
-			return nil, fmt.Errorf("parse tool schema %s: %w", entry.Name(), err)
+			return nil, fmt.Errorf("parse tool schema %s: %w", def.SchemaFile, err)
 		}
-		kind := schemaConst(doc.Properties, "kind")
+		kind, actions, err := validateToolSchemaDoc(def, doc)
+		if err != nil {
+			return nil, err
+		}
 		specProps := nestedProperties(doc.Properties, "spec")
 		tool := toolSchemaDoc{
-			File:        entry.Name(),
+			File:        def.SchemaFile,
 			Kind:        kind,
 			Title:       doc.Title,
 			Description: doc.Description,
-			Visibility:  firstNonEmpty(doc.Visibility, "public"),
-			Actions:     nestedEnum(doc.Properties, "spec", "action"),
+			Visibility:  def.Visibility,
+			Actions:     actions,
 			SpecFields:  sortedKeys(specProps),
 			Required:    nestedRequired(doc.Properties, "spec"),
 		}
 		tools = append(tools, tool)
 	}
-	sort.Slice(tools, func(i, j int) bool { return tools[i].Kind < tools[j].Kind })
 	return tools, nil
+}
+
+func ensureRegistrySchemaFiles(dir string, entries []os.DirEntry) error {
+	known := map[string]bool{}
+	for _, def := range workflowexec.StepDefinitions() {
+		known[def.SchemaFile] = true
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".schema.json") {
+			continue
+		}
+		if !known[entry.Name()] {
+			return fmt.Errorf("unknown tool schema file %s in %s", entry.Name(), dir)
+		}
+	}
+	return nil
+}
+
+func validateToolSchemaDoc(def workflowexec.StepDefinition, doc schemaDoc) (string, []string, error) {
+	kind := schemaConst(doc.Properties, "kind")
+	if kind != def.Kind {
+		return "", nil, fmt.Errorf("tool schema %s kind mismatch: expected %s, got %s", def.SchemaFile, def.Kind, kind)
+	}
+	if visibility := firstNonEmpty(doc.Visibility, "public"); visibility != def.Visibility {
+		return "", nil, fmt.Errorf("tool schema %s visibility mismatch: expected %s, got %s", def.SchemaFile, def.Visibility, visibility)
+	}
+	actions := make([]string, 0, len(def.Actions))
+	for _, action := range def.Actions {
+		actions = append(actions, action.Name)
+	}
+	return kind, actions, nil
 }

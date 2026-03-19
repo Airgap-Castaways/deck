@@ -44,7 +44,7 @@ spec:
 | `id` | `string` | yes | `` | `` | Unique identifier for the step within the workflow. Used in logs and plan output. | `configure-containerd` |
 | `kind` | `string` | yes | `` | `` | Typed step kind. Determines which schema is applied to `spec`. | `File` |
 | `metadata` | `object` | no | `` | `` | Optional free-form annotation map attached to the step for tooling or audit purposes. | `{owner: platform-team}` |
-| `register` | `object` | no | `` | `` | Map of variable names to step output keys. Exported values are available to later steps as runtime vars. | `{joinCmd: joinCommand}` |
+| `register` | `object` | no | `` | `` | Map of variable names to step output keys. Exported values are available to later steps as runtime vars. | `{outputPath:path}` |
 | `retry` | `integer` | no | `` | `` | Number of times to retry the step after a failure before marking it as failed. | `3` |
 | `spec` | `object` | yes | `` | `` | Step-specific configuration payload. Shape depends on the chosen `kind`. | `{...}` |
 | `timeout` | `string` | no | `` | `` | Maximum duration allowed for the step before it is cancelled. Accepts Go duration strings. | `5m` |
@@ -55,9 +55,9 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.clean` | `boolean` | no | `` | `` | Run a cache clean before updating metadata (`apt clean` / `dnf clean all`). | `true` |
-| `spec.excludeRepos` | `array<string>` | no | `` | `` | Repository identifiers to skip during the metadata update. | `[updates]` |
+| `spec.excludeRepos` | `array<string>` | no | `` | `` | Repository selectors to skip during metadata update. For apt, selectors match repo file paths; for dnf, they match repo IDs. | `[updates]` |
 | `spec.manager` | `string` | no | `` | `auto, apt, dnf` | Package manager to use. `auto` detects from the host OS. Supports `apt` and `dnf`. | `apt` |
-| `spec.restrictToRepos` | `array<string>` | no | `` | `` | Limit the metadata update to these repository file paths or identifiers. Prevents fetching from online repos during an offline install. | `[/etc/apt/sources.list.d/offline.list]` |
+| `spec.restrictToRepos` | `array<string>` | no | `` | `` | Limit the metadata update to these repository selectors. For apt, use repo file paths or globs; for dnf, use repo IDs. Prevents fetching from online repos during an offline install. | `[/etc/apt/sources.list.d/offline.list]` |
 | `spec.update` | `boolean` | no | `` | `` | Fetch fresh package metadata from the configured repositories (`apt update` / `dnf makecache`). | `true` |
 
 ## Validation Rules

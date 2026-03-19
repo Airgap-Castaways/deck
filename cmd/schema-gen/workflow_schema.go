@@ -121,7 +121,7 @@ func workflowImportSchema() map[string]any {
 }
 
 func stepBaseSchema() map[string]any {
-	return map[string]any{
+	root := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
 		"required":             []any{"id", "kind", "spec"},
@@ -141,6 +141,59 @@ func stepBaseSchema() map[string]any {
 			"spec":    map[string]any{"type": "object"},
 		},
 	}
+	root["allOf"] = registerContractClauses()
+	return root
+}
+
+func registerContractClauses() []any {
+	defs := workflowexec.StepDefinitions()
+	clauses := make([]any, 0, len(defs))
+	for _, def := range defs {
+		if len(def.Actions) == 0 {
+			clauses = append(clauses, map[string]any{
+				"if": map[string]any{
+					"properties": map[string]any{"kind": map[string]any{"const": def.Kind}},
+					"required":   []any{"kind"},
+				},
+				"then": map[string]any{
+					"properties": map[string]any{"register": registerValueSchema(def.Outputs)},
+				},
+			})
+			continue
+		}
+		for _, action := range def.Actions {
+			clauses = append(clauses, map[string]any{
+				"if": map[string]any{
+					"properties": map[string]any{
+						"kind": map[string]any{"const": def.Kind},
+						"spec": map[string]any{
+							"properties": map[string]any{"action": map[string]any{"const": action.Name}},
+							"required":   []any{"action"},
+						},
+					},
+					"required": []any{"kind", "spec"},
+				},
+				"then": map[string]any{
+					"properties": map[string]any{"register": registerValueSchema(action.Outputs)},
+				},
+			})
+		}
+	}
+	return clauses
+}
+
+func registerValueSchema(outputs []string) map[string]any {
+	root := map[string]any{
+		"type":          "object",
+		"propertyNames": map[string]any{"pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+	}
+	if len(outputs) == 0 {
+		root["maxProperties"] = 0
+		root["additionalProperties"] = false
+		return root
+	}
+	root["additionalProperties"] = map[string]any{"enum": toAnySlice(outputs)}
+	return root
 }
 
 func patchArtifactsSchema(node any) {
@@ -441,29 +494,8 @@ func stringArraySchema(minItems int, minLen bool) map[string]any {
 }
 
 func schemaFileName(kind string) string {
-	for _, pair := range []struct{ kind, file string }{
-		{"Checks", "checks.schema.json"},
-		{"Artifacts", "artifacts.schema.json"},
-		{"Packages", "packages.schema.json"},
-		{"Directory", "directory.schema.json"},
-		{"Symlink", "symlink.schema.json"},
-		{"SystemdUnit", "systemd-unit.schema.json"},
-		{"Containerd", "containerd.schema.json"},
-		{"Repository", "repository.schema.json"},
-		{"PackageCache", "package-cache.schema.json"},
-		{"Swap", "swap.schema.json"},
-		{"KernelModule", "kernel-module.schema.json"},
-		{"Service", "service.schema.json"},
-		{"Sysctl", "sysctl.schema.json"},
-		{"File", "file.schema.json"},
-		{"Image", "image.schema.json"},
-		{"Wait", "wait.schema.json"},
-		{"Kubeadm", "kubeadm.schema.json"},
-		{"Command", "command.schema.json"},
-	} {
-		if pair.kind == kind {
-			return pair.file
-		}
+	if def, ok := workflowexec.StepDefinitionForKind(kind); ok {
+		return def.SchemaFile
 	}
 	return strings.ToLower(kind) + ".schema.json"
 }

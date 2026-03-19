@@ -46,6 +46,7 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 						ID:   "download-file",
 						Kind: "File",
 						Spec: map[string]any{
+							"action": "download",
 							"source": map[string]any{"url": server.URL + "/artifact"},
 							"output": map[string]any{"path": "files/artifact.bin"},
 						},
@@ -54,6 +55,7 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 						ID:   "download-os-packages",
 						Kind: "Packages",
 						Spec: map[string]any{
+							"action":   "download",
 							"packages": []any{"containerd", "iptables"},
 						},
 					},
@@ -61,6 +63,7 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 						ID:   "download-k8s-packages",
 						Kind: "Packages",
 						Spec: map[string]any{
+							"action":   "download",
 							"packages": []any{"kubelet"},
 						},
 					},
@@ -68,6 +71,7 @@ func TestRun_PrepareArtifactsAndManifest(t *testing.T) {
 						ID:   "download-images",
 						Kind: "Image",
 						Spec: map[string]any{
+							"action": "download",
 							"images": []any{"registry.k8s.io/kube-apiserver:{{ .vars.kubernetesVersion }}"},
 						},
 					},
@@ -203,6 +207,7 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 					ID:   "pkg",
 					Kind: "Packages",
 					Spec: map[string]any{
+						"action":   "download",
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
 							"mode":    "container",
@@ -215,6 +220,7 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 					ID:   "img",
 					Kind: "Image",
 					Spec: map[string]any{
+						"action": "download",
 						"images": []any{"registry.k8s.io/kube-apiserver:v1.30.1"},
 						"backend": map[string]any{
 							"engine": "go-containerregistry",
@@ -234,6 +240,33 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(bundle, "images", "registry.k8s.io_kube-apiserver_v1.30.1.tar")); err != nil {
 		t.Fatalf("expected mock image artifact: %v", err)
+	}
+}
+
+func TestRun_ImageDownloadUsesOutputDir(t *testing.T) {
+	bundle := t.TempDir()
+	imageOps := stubImageDownloadOps()
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{{
+				ID:   "img",
+				Kind: "Image",
+				Spec: map[string]any{
+					"action": "download",
+					"images": []any{"registry.k8s.io/kube-apiserver:v1.30.1"},
+					"output": map[string]any{"dir": "images/control-plane"},
+				},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, imageDownloadOps: imageOps}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(bundle, "images", "control-plane", "registry.k8s.io_kube-apiserver_v1.30.1.tar")); err != nil {
+		t.Fatalf("expected image artifact in custom dir: %v", err)
 	}
 }
 
@@ -264,6 +297,7 @@ func TestRun_PackagesContainerBackend(t *testing.T) {
 					ID:   "k8s-pkgs",
 					Kind: "Packages",
 					Spec: map[string]any{
+						"action":   "download",
 						"packages": []any{"kubelet", "kubeadm"},
 						"backend": map[string]any{
 							"mode":    "container",
@@ -297,6 +331,7 @@ func TestRun_PackagesContainerRuntimeMissing(t *testing.T) {
 					ID:   "pkg",
 					Kind: "Packages",
 					Spec: map[string]any{
+						"action":   "download",
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
 							"mode":    "container",
@@ -330,6 +365,7 @@ func TestRun_PackagesContainerNoArtifacts(t *testing.T) {
 					ID:   "pkg",
 					Kind: "Packages",
 					Spec: map[string]any{
+						"action":   "download",
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
 							"mode":    "container",
@@ -348,6 +384,32 @@ func TestRun_PackagesContainerNoArtifacts(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "E_PREPARE_NO_ARTIFACTS") {
 		t.Fatalf("expected no-artifacts error code, got: %v", err)
+	}
+}
+
+func TestRun_PackagesDownloadUsesOutputDir(t *testing.T) {
+	bundle := t.TempDir()
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{{
+				ID:   "pkg",
+				Kind: "Packages",
+				Spec: map[string]any{
+					"action":   "download",
+					"packages": []any{"containerd"},
+					"output":   map[string]any{"dir": "packages/custom"},
+				},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "custom", "containerd.txt")); err != nil {
+		t.Fatalf("expected package artifact in custom dir: %v", err)
 	}
 }
 
@@ -374,6 +436,7 @@ func TestRun_FileFallbackLocalThenBundle(t *testing.T) {
 				ID:   "download-file",
 				Kind: "File",
 				Spec: map[string]any{
+					"action": "download",
 					"source": map[string]any{
 						"path":   relSource,
 						"sha256": hex.EncodeToString(sum[:]),
@@ -415,6 +478,7 @@ func TestRun_FileFallbackSourceMissing(t *testing.T) {
 				ID:   "download-file",
 				Kind: "File",
 				Spec: map[string]any{
+					"action": "download",
 					"source": map[string]any{
 						"path": "files/missing.bin",
 					},
@@ -488,6 +552,7 @@ func TestRun_FileFallbackRepoThenOnline(t *testing.T) {
 				ID:   "download-file",
 				Kind: "File",
 				Spec: map[string]any{
+					"action": "download",
 					"source": map[string]any{
 						"path": "files/remote.bin",
 					},
@@ -533,6 +598,7 @@ func TestRun_FileOfflinePolicyBlocksOnlineFallback(t *testing.T) {
 				ID:   "download-file",
 				Kind: "File",
 				Spec: map[string]any{
+					"action": "download",
 					"source": map[string]any{
 						"path": "files/not-found.bin",
 						"url":  server.URL + "/files/not-found.bin",
@@ -573,6 +639,7 @@ func TestRun_FileOfflinePolicyBlocksDirectURL(t *testing.T) {
 				ID:   "download-file",
 				Kind: "File",
 				Spec: map[string]any{
+					"action": "download",
 					"source": map[string]any{"url": server.URL + "/files/a.bin"},
 					"fetch":  map[string]any{"offlineOnly": true},
 					"output": map[string]any{"path": "files/out.bin"},
@@ -613,6 +680,7 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 					ID:   "download-a",
 					Kind: "File",
 					Spec: map[string]any{
+						"action": "download",
 						"source": map[string]any{"path": sourceRel},
 						"fetch":  map[string]any{"sources": []any{map[string]any{"type": "local", "path": localCache}}},
 						"output": map[string]any{"path": "files/a-out.bin"},
@@ -624,6 +692,7 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 					Kind: "File",
 					When: "vars.role == \"control-plane\"",
 					Spec: map[string]any{
+						"action": "download",
 						"source": map[string]any{"path": "{{ .runtime.downloaded }}"},
 						"fetch":  map[string]any{"sources": []any{map[string]any{"type": "bundle", "path": bundle}}},
 						"output": map[string]any{"path": "files/b-out.bin"},
@@ -634,6 +703,7 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 					Kind: "File",
 					When: "vars.role == \"worker\"",
 					Spec: map[string]any{
+						"action": "download",
 						"source": map[string]any{"path": sourceRel},
 						"fetch":  map[string]any{"sources": []any{map[string]any{"type": "local", "path": localCache}}},
 						"output": map[string]any{"path": "files/skip.bin"},
@@ -671,6 +741,7 @@ func TestRun_RetrySemantics(t *testing.T) {
 					Kind:  "Packages",
 					Retry: 1,
 					Spec: map[string]any{
+						"action":   "download",
 						"packages": []any{"containerd"},
 						"backend": map[string]any{
 							"mode":    "container",
@@ -702,6 +773,7 @@ func TestRun_RetrySemantics(t *testing.T) {
 					Kind:  "File",
 					Retry: 1,
 					Spec: map[string]any{
+						"action": "download",
 						"source": map[string]any{"path": "files/missing.bin"},
 						"fetch":  map[string]any{"sources": []any{map[string]any{"type": "local", "path": t.TempDir()}}},
 						"output": map[string]any{"path": "files/retry-fail.bin"},
@@ -731,7 +803,7 @@ func TestRun_WhenInvalidExpression(t *testing.T) {
 				ID:   "bad-when",
 				Kind: "Packages",
 				When: "vars.role = \"worker\"",
-				Spec: map[string]any{"packages": []any{"containerd"}},
+				Spec: map[string]any{"action": "download", "packages": []any{"containerd"}},
 			}},
 		}},
 	}
@@ -806,6 +878,7 @@ func TestRun_ChecksStep(t *testing.T) {
 						Kind: "Packages",
 						When: "runtime.hostPassed == true and vars.want == \"ok\" and runtime.host.os.family == \"debian\" and runtime.host.arch == \"arm64\"",
 						Spec: map[string]any{
+							"action":   "download",
 							"packages": []any{"containerd"},
 							"backend": map[string]any{
 								"mode":    "container",
@@ -896,6 +969,7 @@ func TestRun_PackagesKubernetesSetRepoModeAptFlatGeneratesMetadata(t *testing.T)
 				ID:   "pkgs",
 				Kind: "Packages",
 				Spec: map[string]any{
+					"action":   "download",
 					"packages": []any{"containerd"},
 					"distro": map[string]any{
 						"family":  "debian",
@@ -941,6 +1015,7 @@ func TestRun_PackagesKubernetesSetRepoModeYumGeneratesRepodata(t *testing.T) {
 				ID:   "pkgs",
 				Kind: "Packages",
 				Spec: map[string]any{
+					"action":   "download",
 					"packages": []any{"containerd"},
 					"distro": map[string]any{
 						"family":  "rhel",

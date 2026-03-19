@@ -4,7 +4,6 @@ steps:
     when: vars.allowDestructive == "true"
     spec:
       action: reset
-      mode: real
       force: true
       criSocket: unix:///run/containerd/containerd.sock
       removePaths:

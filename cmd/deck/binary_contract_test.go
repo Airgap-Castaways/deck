@@ -295,6 +295,7 @@ phases:
       - id: seed-file
         kind: File
         spec:
+          action: download
           source:
             path: files/source.bin
           fetch:

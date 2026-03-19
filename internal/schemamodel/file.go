@@ -22,8 +22,6 @@ type FileStepSpec struct {
 	Dest                string            `json:"dest,omitempty"`
 	Backup              bool              `json:"backup,omitempty"`
 	Edits               []FileEditRule    `json:"edits,omitempty"`
-	Owner               string            `json:"owner,omitempty"`
-	Group               string            `json:"group,omitempty"`
 	Source              *FileSource       `json:"source,omitempty"`
 	Fetch               map[string]any    `json:"fetch,omitempty"`
 	Output              *FileOutputTarget `json:"output,omitempty"`

@@ -12,10 +12,13 @@ import (
 )
 
 type RunOptions struct {
-	BundleRoot string
-	StatePath  string
-	EventSink  StepEventSink
+	BundleRoot  string
+	StatePath   string
+	EventSink   StepEventSink
+	kubeadmMode string
 }
+
+type kubeadmModeContextKey struct{}
 
 const (
 	errCodeInstallKindUnsupported   = "E_INSTALL_KIND_UNSUPPORTED"
@@ -85,6 +88,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	ctx = context.WithValue(ctx, kubeadmModeContextKey{}, strings.TrimSpace(opts.kubeadmMode))
 
 	if len(wf.Phases) == 0 {
 		return fmt.Errorf("no phases found")

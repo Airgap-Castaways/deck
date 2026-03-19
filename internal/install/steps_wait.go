@@ -13,7 +13,6 @@ import (
 
 type waitSpec struct {
 	Action       string   `json:"action"`
-	State        string   `json:"state"`
 	Interval     string   `json:"interval"`
 	PollInterval string   `json:"pollInterval"`
 	InitialDelay string   `json:"initialDelay"`
@@ -33,13 +32,6 @@ func runWait(parent context.Context, spec map[string]any) error {
 		return fmt.Errorf("decode Wait spec: %w", err)
 	}
 	action := decoded.Action
-	if action == "" {
-		if decoded.State == "absent" {
-			action = "fileAbsent"
-		} else {
-			action = "fileExists"
-		}
-	}
 	if action == "" {
 		return fmt.Errorf("wait requires action")
 	}

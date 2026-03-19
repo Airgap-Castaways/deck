@@ -26,17 +26,20 @@ var yumEnabledTruePattern = regexp.MustCompile(`(?i)^\s*enabled\s*=\s*(1|yes|tru
 type editFileEditSpec struct {
 	Match string `json:"match"`
 	With  string `json:"with"`
+	Op    string `json:"op"`
 }
 
 type editFileSpec struct {
 	Path   string             `json:"path"`
 	Backup *bool              `json:"backup"`
 	Edits  []editFileEditSpec `json:"edits"`
+	Mode   string             `json:"mode"`
 }
 
 type copyFileSpec struct {
 	Src  string `json:"src"`
 	Dest string `json:"dest"`
+	Mode string `json:"mode"`
 }
 
 type writeFileSpec struct {
@@ -91,10 +94,20 @@ func runEditFile(spec map[string]any) error {
 		if match == "" {
 			continue
 		}
-		updated = strings.Replace(updated, match, with, 1)
+		switch strings.TrimSpace(edit.Op) {
+		case "", "replace":
+			updated = strings.ReplaceAll(updated, match, with)
+		case "append":
+			updated = strings.ReplaceAll(updated, match, match+with)
+		default:
+			return fmt.Errorf("%s: unsupported edit op %q", errCodeInstallEditsMissing, edit.Op)
+		}
 	}
 
-	return hostPath.WriteFile([]byte(updated), filemode.PublishedArtifact)
+	if err := hostPath.WriteFile([]byte(updated), filemode.PublishedArtifact); err != nil {
+		return err
+	}
+	return applyOptionalFileMode(hostPath, strings.TrimSpace(decoded.Mode))
 }
 
 func runCopyFile(spec map[string]any) error {
@@ -120,7 +133,10 @@ func runCopyFile(spec map[string]any) error {
 	if err != nil {
 		return err
 	}
-	return destPath.WriteFile(content, filemode.PublishedArtifact)
+	if err := destPath.WriteFile(content, filemode.PublishedArtifact); err != nil {
+		return err
+	}
+	return applyOptionalFileMode(destPath, strings.TrimSpace(decoded.Mode))
 }
 
 func runEnsureDir(spec map[string]any) error {
@@ -233,16 +249,18 @@ func runWriteFile(spec map[string]any) error {
 	if err := hostfs.WriteFileIfChanged(hostPath, []byte(content), 0o644); err != nil {
 		return err
 	}
-	if modeRaw := strings.TrimSpace(decoded.Mode); modeRaw != "" {
-		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
-		if err != nil {
-			return fmt.Errorf("invalid mode: %w", err)
-		}
-		if err := hostPath.Chmod(os.FileMode(modeVal)); err != nil {
-			return err
-		}
+	return applyOptionalFileMode(hostPath, strings.TrimSpace(decoded.Mode))
+}
+
+func applyOptionalFileMode(path hostfs.HostPath, modeRaw string) error {
+	if strings.TrimSpace(modeRaw) == "" {
+		return nil
 	}
-	return nil
+	modeVal, err := strconv.ParseUint(strings.TrimSpace(modeRaw), 8, 32)
+	if err != nil {
+		return fmt.Errorf("invalid mode: %w", err)
+	}
+	return path.Chmod(os.FileMode(modeVal))
 }
 
 func runTemplateFile(spec map[string]any) error {
@@ -640,14 +658,25 @@ func refreshRepoMetadata(spec map[string]any, format string) error {
 	if !ok {
 		return nil
 	}
-	if enabled, exists := refresh["enabled"].(bool); !exists || !enabled {
+	enabled := true
+	if value, exists := refresh["enabled"].(bool); exists {
+		enabled = value
+	}
+	if !enabled {
 		return nil
 	}
 	clean, _ := refresh["clean"].(bool)
+	update := true
+	if value, exists := refresh["update"].(bool); exists {
+		update = value
+	}
+	if !clean && !update {
+		return nil
+	}
 	return runPackageCacheCommands(
 		repoConfigFormatToPackageManager(format),
 		clean,
-		true,
+		update,
 		packageRepoPolicy{},
 		commandTimeoutWithDefault(spec, defaultPackageCacheTimeout),
 		repoConfigRunTimedCommand,

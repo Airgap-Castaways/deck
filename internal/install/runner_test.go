@@ -62,10 +62,10 @@ func TestRun_InstallTools(t *testing.T) {
 		Phases: []config.Phase{{
 			Name: "install",
 			Steps: []config.Step{
-				{ID: "install-packages", Kind: "Packages", Spec: map[string]any{"packages": []any{"containerd"}}},
-				{ID: "write-file", Kind: "File", Spec: map[string]any{"path": fileA, "content": "hello world"}},
-				{ID: "edit-file", Kind: "File", Spec: map[string]any{"path": fileA, "edits": []any{map[string]any{"op": "replace", "match": "world", "with": "deck"}}}},
-				{ID: "copy-file", Kind: "File", Spec: map[string]any{"src": fileA, "dest": fileB}},
+				{ID: "install-packages", Kind: "Packages", Spec: map[string]any{"action": "install", "packages": []any{"containerd"}}},
+				{ID: "write-file", Kind: "File", Spec: map[string]any{"action": "write", "path": fileA, "content": "hello world"}},
+				{ID: "edit-file", Kind: "File", Spec: map[string]any{"action": "edit", "path": fileA, "edits": []any{map[string]any{"op": "replace", "match": "world", "with": "deck"}}}},
+				{ID: "copy-file", Kind: "File", Spec: map[string]any{"action": "copy", "src": fileA, "dest": fileB}},
 				{ID: "sysctl", Kind: "Sysctl", Spec: map[string]any{"writeFile": sysctlPath, "values": map[string]any{"net.ipv4.ip_forward": "1"}}},
 				{ID: "modprobe", Kind: "KernelModule", Spec: map[string]any{"name": "overlay", "persistFile": modprobePath}},
 				{ID: "run-cmd", Kind: "Command", Spec: map[string]any{"command": []any{"true"}}},
@@ -75,7 +75,7 @@ func TestRun_InstallTools(t *testing.T) {
 		}},
 	}
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath, kubeadmMode: "stub"}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -291,9 +291,9 @@ func TestRun_ResumeFromFailedStep(t *testing.T) {
 		Phases: []config.Phase{{
 			Name: "install",
 			Steps: []config.Step{
-				{ID: "s1", Kind: "File", Spec: map[string]any{"path": first, "content": "ok"}},
+				{ID: "s1", Kind: "File", Spec: map[string]any{"action": "write", "path": first, "content": "ok"}},
 				{ID: "s2", Kind: "Command", Spec: map[string]any{"command": []any{"false"}}},
-				{ID: "s3", Kind: "File", Spec: map[string]any{"path": second, "content": "done"}},
+				{ID: "s3", Kind: "File", Spec: map[string]any{"action": "write", "path": second, "content": "done"}},
 			},
 		}},
 	}
@@ -484,6 +484,7 @@ func TestRun_CommandErrorCodes(t *testing.T) {
 					ID:   "verify-images",
 					Kind: "Image",
 					Spec: map[string]any{
+						"action":  "verify",
 						"images":  []any{"registry.k8s.io/pause:3.10.1"},
 						"command": []any{fakeList},
 						"timeout": "20ms",
@@ -518,7 +519,7 @@ func TestRun_Wait(t *testing.T) {
 				Steps: []config.Step{{
 					ID:   "wait-file",
 					Kind: "Wait",
-					Spec: map[string]any{"path": target, "state": "exists", "type": "file", "pollInterval": "10ms", "timeout": "1s"},
+					Spec: map[string]any{"action": "fileExists", "path": target, "type": "file", "pollInterval": "10ms", "timeout": "1s"},
 				}},
 			}},
 		}
@@ -548,7 +549,7 @@ func TestRun_Wait(t *testing.T) {
 				Steps: []config.Step{{
 					ID:   "wait-absent",
 					Kind: "Wait",
-					Spec: map[string]any{"path": target, "state": "absent", "pollInterval": "10ms", "timeout": "1s"},
+					Spec: map[string]any{"action": "fileAbsent", "path": target, "pollInterval": "10ms", "timeout": "1s"},
 				}},
 			}},
 		}
@@ -578,7 +579,7 @@ func TestRun_Wait(t *testing.T) {
 				Steps: []config.Step{{
 					ID:   "wait-non-empty",
 					Kind: "Wait",
-					Spec: map[string]any{"path": target, "state": "exists", "type": "file", "nonEmpty": true, "pollInterval": "10ms", "timeout": "1s"},
+					Spec: map[string]any{"action": "fileExists", "path": target, "type": "file", "nonEmpty": true, "pollInterval": "10ms", "timeout": "1s"},
 				}},
 			}},
 		}
@@ -609,7 +610,7 @@ func TestRun_Wait(t *testing.T) {
 					ID:      "wait-type",
 					Kind:    "Wait",
 					Timeout: "80ms",
-					Spec:    map[string]any{"path": target, "state": "exists", "type": "file", "pollInterval": "10ms"},
+					Spec:    map[string]any{"action": "fileExists", "path": target, "type": "file", "pollInterval": "10ms"},
 				}},
 			}},
 		}
@@ -965,6 +966,7 @@ func TestRun_Image(t *testing.T) {
 					ID:   "verify-images",
 					Kind: "Image",
 					Spec: map[string]any{
+						"action":  "verify",
 						"images":  []any{"registry.k8s.io/pause:3.10.1"},
 						"command": []any{fakeList},
 					},
@@ -1009,6 +1011,7 @@ func TestRun_Image(t *testing.T) {
 					ID:   "verify-images",
 					Kind: "Image",
 					Spec: map[string]any{
+						"action":  "verify",
 						"images":  []any{"registry.k8s.io/pause:3.10.1"},
 						"command": []any{fakeList},
 					},
@@ -1063,8 +1066,8 @@ func TestRun_KubeadmRealMode(t *testing.T) {
 		Phases: []config.Phase{{
 			Name: "install",
 			Steps: []config.Step{
-				{ID: "kubeadm-init", Kind: "Kubeadm", Spec: map[string]any{"action": "init", "mode": "real", "outputJoinFile": joinPath}},
-				{ID: "kubeadm-join", Kind: "Kubeadm", Spec: map[string]any{"action": "join", "mode": "real", "joinFile": joinPath}},
+				{ID: "kubeadm-init", Kind: "Kubeadm", Spec: map[string]any{"action": "init", "outputJoinFile": joinPath}},
+				{ID: "kubeadm-join", Kind: "Kubeadm", Spec: map[string]any{"action": "join", "joinFile": joinPath}},
 			},
 		}},
 	}
@@ -1112,7 +1115,7 @@ func TestRun_KubeadmRealModeRejectsInvalidCommand(t *testing.T) {
 			Steps: []config.Step{{
 				ID:   "kubeadm-join",
 				Kind: "Kubeadm",
-				Spec: map[string]any{"action": "join", "mode": "real", "joinFile": joinPath},
+				Spec: map[string]any{"action": "join", "joinFile": joinPath},
 			}},
 		}},
 	}
@@ -1649,13 +1652,13 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 			Name: "install",
 			Steps: []config.Step{
 				{ID: "init", Kind: "Kubeadm", Spec: map[string]any{"action": "init", "outputJoinFile": joinPath}, Register: map[string]string{"workerJoinFile": "joinFile"}},
-				{ID: "use-register", Kind: "File", When: "vars.role == \"control-plane\"", Spec: map[string]any{"path": registeredOutputPath, "content": "{{ .runtime.workerJoinFile }}"}},
-				{ID: "skip-worker", Kind: "File", When: "vars.role == \"worker\"", Spec: map[string]any{"path": skippedOutputPath, "content": "worker"}},
+				{ID: "use-register", Kind: "File", When: "vars.role == \"control-plane\"", Spec: map[string]any{"action": "write", "path": registeredOutputPath, "content": "{{ .runtime.workerJoinFile }}"}},
+				{ID: "skip-worker", Kind: "File", When: "vars.role == \"worker\"", Spec: map[string]any{"action": "write", "path": skippedOutputPath, "content": "worker"}},
 			},
 		}},
 	}
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath, kubeadmMode: "stub"}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -1947,7 +1950,7 @@ func TestRun_FileRespectsParentContext(t *testing.T) {
 			Steps: []config.Step{{
 				ID:   "download",
 				Kind: "File",
-				Spec: map[string]any{"source": map[string]any{"url": srv.URL + "/files/payload.txt"}, "output": map[string]any{"path": "files/payload.txt"}},
+				Spec: map[string]any{"action": "download", "source": map[string]any{"url": srv.URL + "/files/payload.txt"}, "output": map[string]any{"path": "files/payload.txt"}},
 			}},
 		}},
 	}
@@ -1960,6 +1963,62 @@ func TestRun_FileRespectsParentContext(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
 		t.Fatalf("expected deadline exceeded in error, got %v", err)
+	}
+}
+
+func TestRun_FileDownloadRegistersOutputs(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("payload"))
+	}))
+	defer srv.Close()
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:       "download",
+				Kind:     "File",
+				Spec:     map[string]any{"action": "download", "source": map[string]any{"url": srv.URL + "/files/payload.txt"}},
+				Register: map[string]string{"downloadPath": "path", "downloadArtifacts": "artifacts"},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	stateRaw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	var st State
+	if err := json.Unmarshal(stateRaw, &st); err != nil {
+		t.Fatalf("parse state: %v", err)
+	}
+	if st.RuntimeVars["downloadPath"] != "files/payload.txt" {
+		t.Fatalf("expected registered path, got %#v", st.RuntimeVars["downloadPath"])
+	}
+	artifacts, ok := st.RuntimeVars["downloadArtifacts"].([]any)
+	if !ok || len(artifacts) != 1 || artifacts[0] != "files/payload.txt" {
+		t.Fatalf("expected registered artifacts, got %#v", st.RuntimeVars["downloadArtifacts"])
 	}
 }
 
@@ -2213,7 +2272,7 @@ func TestRun_PackagesExecutesPackageManager(t *testing.T) {
 			Steps: []config.Step{{
 				ID:   "install-pkgs",
 				Kind: "Packages",
-				Spec: map[string]any{"packages": []any{"containerd", "kubelet"}},
+				Spec: map[string]any{"action": "install", "packages": []any{"containerd", "kubelet"}},
 			}},
 		}},
 	}
@@ -2258,6 +2317,7 @@ func TestRun_PackagesSourcePathValidation(t *testing.T) {
 				ID:   "install-pkgs",
 				Kind: "Packages",
 				Spec: map[string]any{
+					"action":   "install",
 					"packages": []any{"containerd"},
 					"source":   map[string]any{"type": "local-repo", "path": filepath.Join(dir, "missing")},
 				},
@@ -2327,6 +2387,7 @@ func TestRun_PackagesInstallsFromLocalRepo(t *testing.T) {
 				ID:   "install-pkgs",
 				Kind: "Packages",
 				Spec: map[string]any{
+					"action":   "install",
 					"packages": []any{"containerd", "kubelet"},
 					"source":   map[string]any{"type": "local-repo", "path": repoDir},
 				},
@@ -2389,7 +2450,7 @@ func TestRun_PackagesTimeoutUsesTimeoutClassification(t *testing.T) {
 				ID:      "install-pkgs",
 				Kind:    "Packages",
 				Timeout: "20ms",
-				Spec:    map[string]any{"packages": []any{"containerd"}},
+				Spec:    map[string]any{"action": "install", "packages": []any{"containerd"}},
 			}},
 		}},
 	}
@@ -2642,6 +2703,61 @@ func TestEditFileBackup_CreateFailureIncludesBackupPath(t *testing.T) {
 	}
 }
 
+func TestEditFileSupportsAppendOperation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "target.conf")
+	if err := os.WriteFile(path, []byte("alpha\nalpha\n"), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+
+	err := runEditFile(map[string]any{
+		"path": path,
+		"edits": []any{
+			map[string]any{"match": "alpha", "with": "-beta", "op": "append"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("runEditFile failed: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read target: %v", err)
+	}
+	if string(raw) != "alpha-beta\nalpha-beta\n" {
+		t.Fatalf("unexpected edited content: %q", string(raw))
+	}
+}
+
+func TestFileModeAppliesToCopyAndEdit(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.txt")
+	dest := filepath.Join(dir, "dest.txt")
+	if err := os.WriteFile(src, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write src: %v", err)
+	}
+	if err := runCopyFile(map[string]any{"src": src, "dest": dest, "mode": "0600"}); err != nil {
+		t.Fatalf("runCopyFile failed: %v", err)
+	}
+	if info, err := os.Stat(dest); err != nil {
+		t.Fatalf("stat dest: %v", err)
+	} else if info.Mode().Perm() != 0o600 {
+		t.Fatalf("expected dest mode 0600, got %o", info.Mode().Perm())
+	}
+
+	if err := runEditFile(map[string]any{
+		"path":  dest,
+		"mode":  "0640",
+		"edits": []any{map[string]any{"match": "hello", "with": "deck", "op": "replace"}},
+	}); err != nil {
+		t.Fatalf("runEditFile failed: %v", err)
+	}
+	if info, err := os.Stat(dest); err != nil {
+		t.Fatalf("stat edited dest: %v", err)
+	} else if info.Mode().Perm() != 0o640 {
+		t.Fatalf("expected edited dest mode 0640, got %o", info.Mode().Perm())
+	}
+}
+
 func TestServiceStep(t *testing.T) {
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
@@ -2770,6 +2886,65 @@ func TestServiceStep(t *testing.T) {
 	})
 }
 
+func TestRun_ServiceRegistersNamesOutput(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	logPath := filepath.Join(dir, "systemctl.log")
+	script := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + logPath + "\"\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write systemctl script: %v", err)
+	}
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:       "service",
+				Kind:     "Service",
+				Spec:     map[string]any{"names": []any{"firewalld", "ufw"}, "state": "restarted", "ignoreMissing": true},
+				Register: map[string]string{"managedServices": "names"},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	stateRaw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	var st State
+	if err := json.Unmarshal(stateRaw, &st); err != nil {
+		t.Fatalf("parse state: %v", err)
+	}
+	services, ok := st.RuntimeVars["managedServices"].([]any)
+	if !ok || len(services) != 2 || services[0] != "firewalld" || services[1] != "ufw" {
+		t.Fatalf("expected registered service names, got %#v", st.RuntimeVars["managedServices"])
+	}
+}
+
 func TestEnsureDirStep(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "a", "b")
@@ -2812,6 +2987,45 @@ func TestInstallFileStep(t *testing.T) {
 	}
 }
 
+func TestRunCommandSupportsEnvAndSudo(t *testing.T) {
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	logPath := filepath.Join(dir, "command.log")
+	sudoScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf 'sudo:%s\\n' \"$*\" >> \"" + logPath + "\"\nexec \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(binDir, "sudo"), []byte(sudoScript), 0o755); err != nil {
+		t.Fatalf("write sudo script: %v", err)
+	}
+	commandPath := filepath.Join(binDir, "print-env")
+	commandScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf 'env:%s\\n' \"${DECK_TEST_ENV:-missing}\" >> \"" + logPath + "\"\n"
+	if err := os.WriteFile(commandPath, []byte(commandScript), 0o755); err != nil {
+		t.Fatalf("write command script: %v", err)
+	}
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
+
+	if err := runCommand(context.Background(), map[string]any{
+		"command": []any{"print-env"},
+		"env":     map[string]any{"DECK_TEST_ENV": "present"},
+		"sudo":    true,
+	}); err != nil {
+		t.Fatalf("runCommand failed: %v", err)
+	}
+
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	logText := string(raw)
+	if !strings.Contains(logText, "sudo:print-env") {
+		t.Fatalf("expected sudo invocation, got %q", logText)
+	}
+	if !strings.Contains(logText, "env:present") {
+		t.Fatalf("expected env to be passed, got %q", logText)
+	}
+}
+
 func TestInstallArtifactsStep_InstallsSingleFileWithMode(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "kubelet")
@@ -2851,6 +3065,44 @@ func TestInstallArtifactsStep_InstallsSingleFileWithMode(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o755 {
 		t.Fatalf("expected mode 0755, got %o", info.Mode().Perm())
+	}
+}
+
+func TestInstallArtifactsStep_InstallsBundleSource(t *testing.T) {
+	dir := t.TempDir()
+	bundleRoot := filepath.Join(dir, "bundle")
+	sourcePath := filepath.Join(bundleRoot, "files", "bin", "tool")
+	if err := os.MkdirAll(filepath.Dir(sourcePath), 0o755); err != nil {
+		t.Fatalf("mkdir bundle source dir: %v", err)
+	}
+	if err := os.WriteFile(sourcePath, []byte("bundle-binary"), 0o644); err != nil {
+		t.Fatalf("write bundle source: %v", err)
+	}
+	target := filepath.Join(dir, "usr", "local", "bin", "tool")
+	hostFactDetector := func() map[string]any {
+		return map[string]any{"arch": "amd64"}
+	}
+
+	spec := map[string]any{
+		"artifacts": []any{map[string]any{
+			"source": map[string]any{
+				"amd64": map[string]any{"bundle": map[string]any{"root": "files", "path": "bin/tool"}},
+				"arm64": map[string]any{"bundle": map[string]any{"root": "files", "path": "bin/tool"}},
+			},
+			"install": map[string]any{"path": target, "mode": "0755"},
+		}},
+		"fetch": map[string]any{"sources": []any{map[string]any{"type": "bundle", "path": bundleRoot}}},
+	}
+
+	if err := runInstallArtifactsWithHostFactDetector(context.Background(), spec, hostFactDetector); err != nil {
+		t.Fatalf("runInstallArtifacts failed: %v", err)
+	}
+	raw, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read installed artifact: %v", err)
+	}
+	if string(raw) != "bundle-binary" {
+		t.Fatalf("unexpected installed artifact content: %q", string(raw))
 	}
 }
 
@@ -3127,6 +3379,40 @@ func TestSystemdUnitStep(t *testing.T) {
 			t.Fatalf("expected restart call, got %q", logText)
 		}
 	})
+
+	t.Run("derives service name from unit path when omitted", func(t *testing.T) {
+		dir := t.TempDir()
+		binDir := filepath.Join(dir, "bin")
+		if err := os.MkdirAll(binDir, 0o755); err != nil {
+			t.Fatalf("mkdir bin: %v", err)
+		}
+		logPath := filepath.Join(dir, "systemctl.log")
+		script := "#!/usr/bin/env bash\nset -euo pipefail\ncmd=\"${1:-}\"\nif [[ \"${cmd}\" == \"is-enabled\" ]]; then\n  exit 1\nfi\nprintf '%s\\n' \"$*\" >> \"" + logPath + "\"\nexit 0\n"
+		if err := os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(script), 0o755); err != nil {
+			t.Fatalf("write systemctl script: %v", err)
+		}
+		t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
+
+		target := filepath.Join(dir, "kubelet.service")
+		spec := map[string]any{
+			"path":    target,
+			"content": "[Unit]",
+			"service": map[string]any{
+				"state": "restarted",
+			},
+		}
+		if err := runSystemdUnit(spec); err != nil {
+			t.Fatalf("runSystemdUnit failed: %v", err)
+		}
+
+		raw, err := os.ReadFile(logPath)
+		if err != nil {
+			t.Fatalf("read systemctl log: %v", err)
+		}
+		if !strings.Contains(string(raw), "restart kubelet.service") {
+			t.Fatalf("expected derived service name, got %q", string(raw))
+		}
+	})
 }
 
 func TestRepoConfigStep(t *testing.T) {
@@ -3355,6 +3641,36 @@ func TestRepoConfigStep(t *testing.T) {
 			t.Fatalf("runRepoConfig failed: %v", err)
 		}
 		if len(calls) != 2 || calls[0] != "apt-get clean" || calls[1] != "apt-get update" {
+			t.Fatalf("unexpected refresh command sequence: %#v", calls)
+		}
+	})
+
+	t.Run("refresh cache honors update false and implicit enabled", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "repo", "offline.list")
+		origRun := repoConfigRunTimedCommand
+		t.Cleanup(func() { repoConfigRunTimedCommand = origRun })
+		calls := make([]string, 0)
+		repoConfigRunTimedCommand = func(name string, args []string, timeout time.Duration) error {
+			calls = append(calls, name+" "+strings.Join(args, " "))
+			return nil
+		}
+
+		spec := map[string]any{
+			"format": "apt",
+			"path":   target,
+			"refreshCache": map[string]any{
+				"clean":  true,
+				"update": false,
+			},
+			"repositories": []any{map[string]any{
+				"baseurl": "http://repo.local/apt/bookworm",
+			}},
+		}
+		if err := runRepoConfig(spec); err != nil {
+			t.Fatalf("runRepoConfig failed: %v", err)
+		}
+		if len(calls) != 1 || calls[0] != "apt-get clean" {
 			t.Fatalf("unexpected refresh command sequence: %#v", calls)
 		}
 	})
@@ -3629,6 +3945,71 @@ func TestKernelModuleStep(t *testing.T) {
 	}
 	if strings.Count(string(raw), "overlay") != 1 {
 		t.Fatalf("expected single module line, got %q", string(raw))
+	}
+
+	multiPersistPath := filepath.Join(dir, "modules-load.d", "multi.conf")
+	multiSpec := map[string]any{"names": []any{"overlay", "br_netfilter", "overlay"}, "load": false, "persist": true, "persistFile": multiPersistPath}
+	if err := runKernelModule(multiSpec); err != nil {
+		t.Fatalf("runKernelModule multi failed: %v", err)
+	}
+	multiRaw, err := os.ReadFile(multiPersistPath)
+	if err != nil {
+		t.Fatalf("read multi persist file: %v", err)
+	}
+	if strings.Count(string(multiRaw), "overlay") != 1 || strings.Count(string(multiRaw), "br_netfilter") != 1 {
+		t.Fatalf("expected deduplicated module lines, got %q", string(multiRaw))
+	}
+}
+
+func TestRun_WaitRequiresExplicitAction(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state", "state.json")
+	target := filepath.Join(dir, "appears.txt")
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "wait-file",
+				Kind: "Wait",
+				Spec: map[string]any{"path": target, "timeout": "10ms"},
+			}},
+		}},
+	}
+	err := Run(context.Background(), wf, RunOptions{StatePath: statePath})
+	if err == nil {
+		t.Fatalf("expected explicit action error")
+	}
+	if !strings.Contains(err.Error(), "wait requires action") {
+		t.Fatalf("expected wait requires action error, got %v", err)
+	}
+}
+
+func TestRun_RepositoryRequiresExplicitAction(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state", "state.json")
+	target := filepath.Join(dir, "offline.list")
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "repo-config",
+				Kind: "Repository",
+				Spec: map[string]any{
+					"format":       "apt",
+					"path":         target,
+					"repositories": []any{map[string]any{"id": "offline", "baseurl": "http://repo.local/debian"}},
+				},
+			}},
+		}},
+	}
+	err := Run(context.Background(), wf, RunOptions{StatePath: statePath})
+	if err == nil {
+		t.Fatalf("expected explicit action error")
+	}
+	if !strings.Contains(err.Error(), "unsupported Repository action") {
+		t.Fatalf("expected unsupported Repository action error, got %v", err)
 	}
 }
 
@@ -3928,7 +4309,6 @@ func TestRun_Kubeadm(t *testing.T) {
 					Kind: "Kubeadm",
 					Spec: map[string]any{
 						"action":                "reset",
-						"mode":                  "stub",
 						"force":                 true,
 						"criSocket":             "unix:///run/containerd/containerd.sock",
 						"extraArgs":             []any{"--cleanup-tmp-dir"},
@@ -3941,7 +4321,7 @@ func TestRun_Kubeadm(t *testing.T) {
 			}},
 		}
 
-		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath, kubeadmMode: "stub"}); err != nil {
 			t.Fatalf("expected stub reset success, got %v", err)
 		}
 

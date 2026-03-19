@@ -27,8 +27,6 @@ phases:
             engine: go-containerregistry
           output:
             dir: images
-            format: docker-archive
-            manifest: images/manifest.json
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			t.Fatalf("write file: %v", err)
@@ -69,6 +67,34 @@ phases:
 		}
 	})
 
+	t.Run("tool schema rejects Image without explicit action", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: prepare
+version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: pull-images
+        apiVersion: deck/v1alpha1
+        kind: Image
+        spec:
+          images:
+            - registry.k8s.io/pause:3.9
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
 	t.Run("tool schema rejects Image verify with auth", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
@@ -89,6 +115,37 @@ phases:
               basic:
                 username: robot
                 password: secret
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects Image verify with backend", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: apply
+    steps:
+      - id: verify-images
+        apiVersion: deck/v1alpha1
+        kind: Image
+        spec:
+          action: verify
+          images:
+            - registry.k8s.io/pause:3.9
+          backend:
+            engine: go-containerregistry
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			t.Fatalf("write file: %v", err)
@@ -124,6 +181,96 @@ phases:
 
 		if err := File(path); err != nil {
 			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects Packages without explicit action", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: install-packages
+        apiVersion: deck/v1alpha1
+        kind: Packages
+        spec:
+          packages: [containerd]
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects Packages download with install-only source", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: prepare
+version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: download-packages
+        apiVersion: deck/v1alpha1
+        kind: Packages
+        spec:
+          action: download
+          packages: [containerd]
+          source:
+            type: local-repo
+            path: /opt/deck/repos/custom
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects Packages install with download-only backend", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: install-packages
+        apiVersion: deck/v1alpha1
+        kind: Packages
+        spec:
+          action: install
+          packages: [containerd]
+          backend:
+            mode: container
+            runtime: docker
+            image: ubuntu:22.04
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
 
@@ -526,6 +673,37 @@ phases:
 		}
 	})
 
+	t.Run("tool schema rejects invalid register output key for action", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: copy-file
+        apiVersion: deck/v1alpha1
+        kind: File
+        register:
+          copiedPath: path
+        spec:
+          action: copy
+          src: /tmp/source.txt
+          dest: /tmp/dest.txt
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected schema/register validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
 	t.Run("tool schema invalid step spec", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
@@ -608,6 +786,33 @@ phases:
 		}
 	})
 
+	t.Run("tool schema rejects Wait without explicit action", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: wait-admin-conf
+        apiVersion: deck/v1alpha1
+        kind: Wait
+        spec:
+          path: /etc/kubernetes/admin.conf
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
 	t.Run("tool schema rejects WaitPath nonEmpty with absent state", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
@@ -666,6 +871,35 @@ phases:
 		}
 	})
 
+	t.Run("tool schema rejects Wait fileExists with tcp fields", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: bad-wait-mix
+        apiVersion: deck/v1alpha1
+        kind: Wait
+        spec:
+          action: fileExists
+          path: /tmp/target
+          port: "6443"
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
 	t.Run("tool schema valid Symlink", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
@@ -683,6 +917,61 @@ phases:
           force: true
           createParent: true
           requireTarget: true
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects Repository without explicit action", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: repo-config
+        apiVersion: deck/v1alpha1
+        kind: Repository
+        spec:
+          format: apt
+          repositories:
+            - id: offline
+              baseurl: http://repo.local/debian
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("tool schema valid KernelModule names", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: load-modules
+        apiVersion: deck/v1alpha1
+        kind: KernelModule
+        spec:
+          names: [overlay, br_netfilter]
+          load: true
+          persist: true
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			t.Fatalf("write file: %v", err)
@@ -742,6 +1031,201 @@ phases:
             name: kubelet
             enabled: true
             state: started
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema valid SystemdUnit without explicit service name", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: install-kubelet-unit
+        apiVersion: deck/v1alpha1
+        kind: SystemdUnit
+        spec:
+          path: /etc/systemd/system/kubelet.service
+          content: |
+            [Unit]
+            Description=kubelet
+          service:
+            enabled: true
+            state: started
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema valid File download without output path", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: prepare
+version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: download-runc
+        apiVersion: deck/v1alpha1
+        kind: File
+        spec:
+          action: download
+          source:
+            url: https://example.invalid/runc
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects File without explicit action", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: prepare
+version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: download-runc
+        apiVersion: deck/v1alpha1
+        kind: File
+        spec:
+          source:
+            url: https://example.invalid/runc
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects File write with both content fields", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: write-file
+        apiVersion: deck/v1alpha1
+        kind: File
+        spec:
+          action: write
+          path: /etc/example.conf
+          content: plain text
+          contentFromTemplate: |
+            templated {{ .vars.role }}
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects File write with copy-only fields", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: write-file
+        apiVersion: deck/v1alpha1
+        kind: File
+        spec:
+          action: write
+          path: /etc/example.conf
+          content: plain text
+          src: /tmp/source.txt
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("tool schema valid Image download output dir", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: prepare
+version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: download-images
+        apiVersion: deck/v1alpha1
+        kind: Image
+        spec:
+          action: download
+          images: [registry.k8s.io/pause:3.9]
+          output:
+            dir: images/core
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema valid Packages download output dir", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: prepare
+version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: download-packages
+        apiVersion: deck/v1alpha1
+        kind: Packages
+        spec:
+          action: download
+          packages: [containerd]
+          output:
+            dir: packages/custom
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			t.Fatalf("write file: %v", err)
@@ -831,7 +1315,6 @@ phases:
         kind: Kubeadm
         spec:
           action: init
-          mode: real
           outputJoinFile: /tmp/deck/join.txt
           configFile: /tmp/deck/kubeadm-init.yaml
           configTemplate: default
@@ -864,9 +1347,37 @@ phases:
         kind: Kubeadm
         spec:
           action: init
-          mode: real
           outputJoinFile: /tmp/deck/join.txt
           pullImages: "yes"
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects Kubeadm stub mode", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`role: apply
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: kubeadm-init
+        apiVersion: deck/v1alpha1
+        kind: Kubeadm
+        spec:
+          action: init
+          mode: stub
+          outputJoinFile: /tmp/deck/join.txt
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			t.Fatalf("write file: %v", err)
@@ -894,7 +1405,6 @@ phases:
         kind: Kubeadm
         spec:
           action: join
-          mode: real
           configFile: /tmp/deck/kubeadm-join.yaml
           asControlPlane: true
           extraArgs: [--skip-phases=preflight]
@@ -921,7 +1431,6 @@ phases:
         kind: Kubeadm
         spec:
           action: join
-          mode: real
           joinFile: /tmp/deck/join.txt
           configFile: /tmp/deck/kubeadm-join.yaml
 `)
@@ -978,7 +1487,6 @@ phases:
         kind: Kubeadm
         spec:
           action: join
-          mode: real
           joinFile: /tmp/deck/join.txt
           force: true
 `)
@@ -1106,8 +1614,8 @@ phases:
 		if err == nil {
 			t.Fatalf("expected register output error")
 		}
-		if got := err.Error(); !strings.Contains(got, "E_REGISTER_OUTPUT_NOT_FOUND") {
-			t.Fatalf("expected E_REGISTER_OUTPUT_NOT_FOUND, got %v", err)
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
 

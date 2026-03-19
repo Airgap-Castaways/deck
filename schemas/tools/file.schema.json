@@ -34,6 +34,232 @@
       "additionalProperties": false,
       "allOf": [
         {
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "copy"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "path"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "content"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "contentFromTemplate"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "backup"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "edits"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "source"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "fetch"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "output"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "download"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "path"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "content"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "contentFromTemplate"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "mode"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "src"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "dest"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "backup"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "edits"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "edit"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "content"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "contentFromTemplate"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "src"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "dest"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "source"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "fetch"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "output"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "write"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "src"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "dest"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "backup"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "edits"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "source"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "fetch"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "output"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
           "if": {
             "properties": {
               "action": {
@@ -46,8 +272,7 @@
           },
           "then": {
             "required": [
-              "source",
-              "output"
+              "source"
             ]
           }
         },
@@ -63,13 +288,23 @@
             ]
           },
           "then": {
-            "anyOf": [
+            "oneOf": [
               {
+                "not": {
+                  "required": [
+                    "contentFromTemplate"
+                  ]
+                },
                 "required": [
                   "content"
                 ]
               },
               {
+                "not": {
+                  "required": [
+                    "content"
+                  ]
+                },
                 "required": [
                   "contentFromTemplate"
                 ]
@@ -147,6 +382,10 @@
                 "type": "string"
               },
               "op": {
+                "enum": [
+                  "replace",
+                  "append"
+                ],
                 "type": "string"
               },
               "with": {
@@ -164,10 +403,6 @@
         "fetch": {
           "type": "object"
         },
-        "group": {
-          "minLength": 1,
-          "type": "string"
-        },
         "mode": {
           "pattern": "^[0-7]{4}$",
           "type": "string"
@@ -184,14 +419,7 @@
               "type": "string"
             }
           },
-          "required": [
-            "path"
-          ],
           "type": "object"
-        },
-        "owner": {
-          "minLength": 1,
-          "type": "string"
         },
         "path": {
           "type": "string"
@@ -257,7 +485,9 @@
           "type": "string"
         }
       },
-      "required": [],
+      "required": [
+        "action"
+      ],
       "type": "object"
     },
     "timeout": {

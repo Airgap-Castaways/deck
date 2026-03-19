@@ -66,6 +66,81 @@
               "packages"
             ]
           }
+        },
+        {
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "download"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "source"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "restrictToRepos"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "excludeRepos"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "action": {
+                    "const": "install"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "distro"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "repo"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "backend"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "output"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
         }
       ],
       "properties": {
@@ -77,7 +152,31 @@
           "type": "string"
         },
         "backend": {
-          "additionalProperties": true,
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "mode": {
+              "enum": [
+                "container"
+              ],
+              "type": "string"
+            },
+            "runtime": {
+              "enum": [
+                "auto",
+                "docker",
+                "podman"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode",
+            "image"
+          ],
           "type": "object"
         },
         "distro": {
@@ -91,6 +190,16 @@
           },
           "type": "array"
         },
+        "output": {
+          "additionalProperties": false,
+          "properties": {
+            "dir": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
         "packages": {
           "items": {
             "type": "string"
@@ -99,8 +208,11 @@
           "type": "array"
         },
         "repo": {
-          "additionalProperties": true,
+          "additionalProperties": false,
           "properties": {
+            "generate": {
+              "type": "boolean"
+            },
             "modules": {
               "items": {
                 "additionalProperties": false,
@@ -121,8 +233,22 @@
                 "type": "object"
               },
               "type": "array"
+            },
+            "pkgsDir": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "apt-flat",
+                "yum"
+              ],
+              "type": "string"
             }
           },
+          "required": [
+            "type"
+          ],
           "type": "object"
         },
         "restrictToRepos": {
@@ -150,6 +276,7 @@
         }
       },
       "required": [
+        "action",
         "packages"
       ],
       "type": "object"

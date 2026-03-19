@@ -70,13 +70,14 @@ func generateDirectoryToolSchema() map[string]any {
 func generateImageToolSchema() map[string]any {
 	root := stepEnvelopeSchema("Image", "ImageStep", "Checks image-related state through action-specific modes.", "public")
 	props := propertyMap(root)
+	imageAllowedByAction := registryActionFields("Image")
+	imageFields := []string{"action", "images", "auth", "backend", "output", "command"}
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
-		"required":             []any{"images"},
+		"required":             []any{"action", "images"},
 		"properties": map[string]any{
 			"action":  enumStringSchema("download", "verify"),
-			"runtime": map[string]any{"type": "object", "additionalProperties": true},
 			"command": stringArraySchema(1, false),
 			"images":  stringArraySchema(1, false),
 			"auth": map[string]any{
@@ -100,12 +101,25 @@ func generateImageToolSchema() map[string]any {
 					},
 				},
 			},
-			"backend": map[string]any{"type": "object", "additionalProperties": true},
-			"output":  map[string]any{"type": "object", "additionalProperties": true},
+			"backend": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"engine": enumStringSchema("go-containerregistry"),
+				},
+			},
+			"output": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"dir": minLenStringSchema(),
+				},
+			},
 		},
 		"allOf": []any{
 			conditionalRequired("download", []string{"images"}, nil),
 			conditionalRequired("verify", []string{"images"}, nil),
+			restrictActionFields(imageAllowedByAction, imageFields),
 			map[string]any{
 				"if": map[string]any{
 					"properties": map[string]any{
@@ -122,6 +136,40 @@ func generateImageToolSchema() map[string]any {
 		},
 	})
 	return root
+}
+
+func restrictActionFields(allowedByAction map[string][]string, allFields []string) map[string]any {
+	actions := make([]string, 0, len(allowedByAction))
+	for action := range allowedByAction {
+		actions = append(actions, action)
+	}
+	sort.Strings(actions)
+	clauses := make([]any, 0, len(allowedByAction))
+	for _, action := range actions {
+		allowed := allowedByAction[action]
+		allowedSet := map[string]bool{}
+		for _, field := range allowed {
+			allowedSet[field] = true
+		}
+		forbidden := make([]any, 0)
+		for _, field := range allFields {
+			if !allowedSet[field] {
+				forbidden = append(forbidden, map[string]any{"required": []any{field}})
+			}
+		}
+		clauses = append(clauses, map[string]any{
+			"if": map[string]any{
+				"properties": map[string]any{"action": map[string]any{"const": action}},
+				"required":   []any{"action"},
+			},
+			"then": map[string]any{
+				"not": map[string]any{
+					"anyOf": forbidden,
+				},
+			},
+		})
+	}
+	return map[string]any{"allOf": clauses}
 }
 
 func generateChecksToolSchema() map[string]any {
@@ -162,14 +210,14 @@ func generateKernelModuleToolSchema() map[string]any {
 }
 
 func generateKubeadmToolSchema() map[string]any {
-	root := stepEnvelopeSchema("Kubeadm", "KubeadmStep", "Runs kubeadm operations through action-specific modes.", "public")
+	root := stepEnvelopeSchema("Kubeadm", "KubeadmStep", "Runs kubeadm operations through action-specific subcommands.", "public")
 	props := propertyMap(root)
-	initAllowed := []string{"action", "mode", "configFile", "configTemplate", "pullImages", "outputJoinFile", "kubernetesVersion", "advertiseAddress", "podNetworkCIDR", "criSocket", "ignorePreflightErrors", "extraArgs", "skipIfAdminConfExists"}
-	joinAllowed := []string{"action", "mode", "configFile", "joinFile", "asControlPlane", "extraArgs"}
-	resetAllowed := []string{"action", "mode", "force", "ignoreErrors", "stopKubelet", "criSocket", "extraArgs", "removePaths", "removeFiles", "cleanupContainers", "restartRuntimeService"}
+	actionFields := registryActionFields("Kubeadm")
+	initAllowed := actionFields["init"]
+	joinAllowed := actionFields["join"]
+	resetAllowed := actionFields["reset"]
 	specProps := map[string]any{
 		"action":                enumStringSchema("init", "join", "reset"),
-		"mode":                  enumStringSchema("stub", "real"),
 		"configFile":            map[string]any{"type": "string"},
 		"configTemplate":        map[string]any{"type": "string"},
 		"pullImages":            map[string]any{"type": "boolean"},

@@ -15,7 +15,6 @@ import (
 )
 
 type kubeadmResetSpec struct {
-	Mode                  string   `json:"mode"`
 	Force                 bool     `json:"force"`
 	IgnoreErrors          bool     `json:"ignoreErrors"`
 	StopKubelet           *bool    `json:"stopKubelet"`
@@ -29,7 +28,6 @@ type kubeadmResetSpec struct {
 }
 
 type kubeadmInitSpec struct {
-	Mode                  string   `json:"mode"`
 	OutputJoinFile        string   `json:"outputJoinFile"`
 	SkipIfAdminConfExists *bool    `json:"skipIfAdminConfExists"`
 	CriSocket             string   `json:"criSocket"`
@@ -47,7 +45,6 @@ type kubeadmInitSpec struct {
 var kubeadmAdminConfPath = "/etc/kubernetes/admin.conf"
 
 type kubeadmJoinSpec struct {
-	Mode           string   `json:"mode"`
 	JoinFile       string   `json:"joinFile"`
 	ConfigFile     string   `json:"configFile"`
 	AsControlPlane bool     `json:"asControlPlane"`
@@ -60,10 +57,7 @@ func runKubeadmInit(ctx context.Context, spec map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("decode KubeadmInit spec: %w", err)
 	}
-	mode := strings.TrimSpace(decoded.Mode)
-	if mode == "" {
-		mode = "stub"
-	}
+	mode := kubeadmMode(ctx)
 	if mode == "stub" {
 		return runKubeadmInitStub(decoded)
 	}
@@ -90,10 +84,7 @@ func runKubeadmJoin(ctx context.Context, spec map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("decode KubeadmJoin spec: %w", err)
 	}
-	mode := strings.TrimSpace(decoded.Mode)
-	if mode == "" {
-		mode = "stub"
-	}
+	mode := kubeadmMode(ctx)
 	if mode == "stub" {
 		return runKubeadmJoinStub(decoded)
 	}
@@ -382,10 +373,7 @@ func runKubeadmReset(ctx context.Context, spec map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("decode KubeadmReset spec: %w", err)
 	}
-	mode := strings.TrimSpace(decoded.Mode)
-	if mode == "" {
-		mode = "stub"
-	}
+	mode := kubeadmMode(ctx)
 	if mode == "stub" {
 		return runKubeadmResetStub(decoded)
 	}
@@ -455,6 +443,15 @@ func runKubeadmResetStub(spec kubeadmResetSpec) error {
 	_ = strings.TrimSpace(spec.CriSocket)
 	_ = strings.TrimSpace(spec.RestartRuntimeService)
 	return nil
+}
+
+func kubeadmMode(ctx context.Context) string {
+	if ctx != nil {
+		if mode, ok := ctx.Value(kubeadmModeContextKey{}).(string); ok && strings.TrimSpace(mode) != "" {
+			return strings.TrimSpace(mode)
+		}
+	}
+	return "real"
 }
 
 func removeResetPaths(paths []string) error {

@@ -32,7 +32,6 @@ spec:
 kind: Kubeadm
 spec:
   action: init
-  mode: real
   outputJoinFile: /tmp/deck/join.txt
   podNetworkCIDR: 10.244.0.0/16
   criSocket: unix:///run/containerd/containerd.sock
@@ -47,7 +46,7 @@ spec:
 | `id` | `string` | yes | `` | `` | Unique identifier for the step within the workflow. Used in logs and plan output. | `configure-containerd` |
 | `kind` | `string` | yes | `` | `` | Typed step kind. Determines which schema is applied to `spec`. | `File` |
 | `metadata` | `object` | no | `` | `` | Optional free-form annotation map attached to the step for tooling or audit purposes. | `{owner: platform-team}` |
-| `register` | `object` | no | `` | `` | Map of variable names to step output keys. Exported values are available to later steps as runtime vars. | `{joinCmd: joinCommand}` |
+| `register` | `object` | no | `` | `` | Map of variable names to step output keys. Exported values are available to later steps as runtime vars. | `{outputPath:path}` |
 | `retry` | `integer` | no | `` | `` | Number of times to retry the step after a failure before marking it as failed. | `3` |
 | `spec` | `object` | yes | `` | `` | Step-specific configuration payload. Shape depends on the chosen `kind`. | `{...}` |
 | `timeout` | `string` | no | `` | `` | Maximum duration allowed for the step before it is cancelled. Accepts Go duration strings. | `5m` |
@@ -70,7 +69,6 @@ spec:
 | `spec.ignorePreflightErrors` | `array<string>` | no | `` | `` | Kubeadm preflight check names to suppress. Use sparingly and only for known-safe deviations. | `[Swap]` |
 | `spec.joinFile` | `string` | no | `` | `` | Path to the join command file produced by a prior `init` run. For `join`, provide this or `configFile`. | `/tmp/deck/join.txt` |
 | `spec.kubernetesVersion` | `string` | no | `` | `` | Kubernetes version string passed to kubeadm. Accepts the `{{ .vars.* }}` template syntax. | `v1.30.1` |
-| `spec.mode` | `string` | no | `` | `stub, real` | `real` runs kubeadm normally. `stub` performs a dry-run contract check without executing kubeadm. Defaults to `stub`. | `real` |
 | `spec.outputJoinFile` | `string` | no | `` | `` | Path where the generated join command is written after `init`. Worker nodes read this file to join the cluster. | `/tmp/deck/join.txt` |
 | `spec.podNetworkCIDR` | `string` | no | `` | `` | CIDR range for the pod network passed to `init`. Must not overlap with node or service CIDRs. | `10.244.0.0/16` |
 | `spec.pullImages` | `boolean` | no | `` | `` | Pull required control-plane images before running `kubeadm init`. Requires network or a pre-configured mirror. | `true` |
@@ -90,7 +88,6 @@ spec:
 - Kubeadm fields are action-scoped: validation rejects `join`-only fields on `init`, `init`-only fields on `reset`, and other cross-action mixes.
 - When `skipIfAdminConfExists` skips `init`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
 - Place host preparation steps (`Containerd`, `Swap`, `KernelModule`, `Sysctl`) before `Kubeadm` so bootstrap failures point to the correct step.
-- Use `mode: stub` in CI or dry-run contexts where a real cluster is not available.
 
 ## Actions
 
@@ -117,7 +114,6 @@ spec:
 kind: Kubeadm
 spec:
   action: init
-  mode: real
   outputJoinFile: /tmp/deck/join.txt
   podNetworkCIDR: 10.244.0.0/16
 ```
@@ -156,7 +152,6 @@ spec:
 kind: Kubeadm
 spec:
   action: reset
-  mode: real
   force: true
   removePaths: [/etc/cni/net.d, /var/lib/etcd]
 ```

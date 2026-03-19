@@ -8,7 +8,7 @@ Download or verify container images.
 - kind: `Image`
 - visibility: `public`
 - schema: `../../../schemas/tools/image.schema.json`
-- category: `prepare`
+- category: `containers`
 - actions: `download`, `verify`
 
 ## When To Use
@@ -46,7 +46,7 @@ spec:
 | `id` | `string` | yes | `` | `` | Unique identifier for the step within the workflow. Used in logs and plan output. | `configure-containerd` |
 | `kind` | `string` | yes | `` | `` | Typed step kind. Determines which schema is applied to `spec`. | `File` |
 | `metadata` | `object` | no | `` | `` | Optional free-form annotation map attached to the step for tooling or audit purposes. | `{owner: platform-team}` |
-| `register` | `object` | no | `` | `` | Map of variable names to step output keys. Exported values are available to later steps as runtime vars. | `{joinCmd: joinCommand}` |
+| `register` | `object` | no | `` | `` | Map of variable names to step output keys. Exported values are available to later steps as runtime vars. | `{outputPath:path}` |
 | `retry` | `integer` | no | `` | `` | Number of times to retry the step after a failure before marking it as failed. | `3` |
 | `spec` | `object` | yes | `` | `` | Step-specific configuration payload. Shape depends on the chosen `kind`. | `{...}` |
 | `timeout` | `string` | no | `` | `` | Maximum duration allowed for the step before it is cancelled. Accepts Go duration strings. | `5m` |
@@ -56,13 +56,12 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.action` | `string` | no | `` | `download, verify` | Chooses whether the step downloads images into the bundle or verifies their presence on the node. | `verify` |
+| `spec.action` | `string` | yes | `` | `download, verify` | Chooses whether the step downloads images into the bundle or verifies their presence on the node. | `verify` |
 | `spec.auth` | `array<object>` | no | `` | `` | Optional registry authentication entries for `download`. Match each private registry with credentials while leaving public registries to the default keychain. | `[{registry:registry.example.com,basic:{username:robot,password:${REGISTRY_PASSWORD}}}]` |
-| `spec.backend` | `object` | no | `` | `` | Backend-specific settings such as runtime or transport configuration. | `{runtime:containerd}` |
+| `spec.backend` | `object` | no | `` | `` | Backend-specific download settings such as image transfer engine configuration. Applies to `download` only. | `{engine:go-containerregistry}` |
 | `spec.command` | `array<string>` | no | `` | `` | Optional image-listing command used by `verify` when the default runtime command is not appropriate. | `[ctr,-n,k8s.io,images,list,-q]` |
 | `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download or verify. | `[registry.k8s.io/pause:3.9]` |
-| `spec.output` | `object` | no | `` | `` | Bundle output settings used when downloaded image archives are written during prepare. | `{layout:oci-archive,path:images/control-plane.tar}` |
-| `spec.runtime` | `object` | no | `` | `` | Container runtime configuration used when pulling or verifying images. | `{socket:unix:///run/containerd/containerd.sock}` |
+| `spec.output` | `object` | no | `` | `` | Bundle output settings for `download`. Deck writes one tar archive per image under `output.dir`. | `{dir:images/control-plane}` |
 
 ## Nested Objects
 
@@ -72,6 +71,18 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.auth[].basic.password` | `string` | yes | `` | `` | Registry password or access token paired with `basic.username`. | `${REGISTRY_PASSWORD}` |
 | `spec.auth[].basic.username` | `string` | yes | `` | `` | Registry username used for basic authentication. | `robot` |
+
+### `spec.backend`
+
+| Key | Type | Required | Default | Enum | Description | Example |
+|---|---|---:|---|---|---|---|
+| `spec.backend.engine` | `string` | no | `` | `go-containerregistry` | Image download engine. Currently only `go-containerregistry` is supported. | `go-containerregistry` |
+
+### `spec.output`
+
+| Key | Type | Required | Default | Enum | Description | Example |
+|---|---|---:|---|---|---|---|
+| `spec.output.dir` | `string` | no | `` | `` | Bundle-relative directory where per-image tar archives are written. Defaults to `images` when omitted. | `images/control-plane` |
 
 
 ## Validation Rules
@@ -97,7 +108,7 @@ Use `download` during prepare to collect images into bundle outputs.
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.action` | `string` | no | `` | `download, verify` | Chooses whether the step downloads images into the bundle or verifies their presence on the node. | `verify` |
+| `spec.action` | `string` | yes | `` | `download, verify` | Chooses whether the step downloads images into the bundle or verifies their presence on the node. | `verify` |
 | `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download or verify. | `[registry.k8s.io/pause:3.9]` |
 
 #### Rules
@@ -119,7 +130,7 @@ spec:
         username: "{{ .vars.registryUser }}"
         password: "{{ .vars.registryPassword }}"
   output:
-    path: images/control-plane.tar
+    dir: images/control-plane
 ```
 ### `verify`
 
@@ -131,7 +142,7 @@ Use `verify` to assert that required images already exist locally on the node.
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.action` | `string` | no | `` | `download, verify` | Chooses whether the step downloads images into the bundle or verifies their presence on the node. | `verify` |
+| `spec.action` | `string` | yes | `` | `download, verify` | Chooses whether the step downloads images into the bundle or verifies their presence on the node. | `verify` |
 | `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download or verify. | `[registry.k8s.io/pause:3.9]` |
 
 #### Rules

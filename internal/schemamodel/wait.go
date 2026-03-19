@@ -25,5 +25,4 @@ type WaitStepSpec struct {
 	Port         string   `json:"port,omitempty"`
 	Timeout      string   `json:"timeout,omitempty"`
 	PollInterval string   `json:"pollInterval,omitempty"`
-	State        string   `json:"state,omitempty"`
 }

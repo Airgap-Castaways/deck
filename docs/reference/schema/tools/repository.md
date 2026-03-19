@@ -54,7 +54,7 @@ spec:
 | `id` | `string` | yes | `` | `` | Unique identifier for the step within the workflow. Used in logs and plan output. | `configure-containerd` |
 | `kind` | `string` | yes | `` | `` | Typed step kind. Determines which schema is applied to `spec`. | `File` |
 | `metadata` | `object` | no | `` | `` | Optional free-form annotation map attached to the step for tooling or audit purposes. | `{owner: platform-team}` |
-| `register` | `object` | no | `` | `` | Map of variable names to step output keys. Exported values are available to later steps as runtime vars. | `{joinCmd: joinCommand}` |
+| `register` | `object` | no | `` | `` | Map of variable names to step output keys. Exported values are available to later steps as runtime vars. | `{outputPath:path}` |
 | `retry` | `integer` | no | `` | `` | Number of times to retry the step after a failure before marking it as failed. | `3` |
 | `spec` | `object` | yes | `` | `` | Step-specific configuration payload. Shape depends on the chosen `kind`. | `{...}` |
 | `timeout` | `string` | no | `` | `` | Maximum duration allowed for the step before it is cancelled. Accepts Go duration strings. | `5m` |
@@ -68,12 +68,23 @@ spec:
 | `spec.backupPaths` | `array<string>` | no | `` | `` | Paths to back up before modifying. Backed-up files are saved with a `.bak` suffix. | `[/etc/apt/sources.list]` |
 | `spec.cleanupPaths` | `array<string>` | no | `` | `` | Paths to remove before writing the new repository definition. | `[/etc/apt/sources.list.d/ubuntu.list]` |
 | `spec.disableExisting` | `boolean` | no | `` | `` | Disable all existing repository definitions before writing the new one. Prevents conflicts from online repos during offline installs. | `true` |
-| `spec.format` | `string` | no | `` | `apt, yum` | Repository file format to write. `apt` produces a sources.list entry; `yum` produces a `.repo` file. | `apt` |
+| `spec.format` | `string` | no | `` | `auto, apt, yum` | Repository file format to write. `auto` detects from the host family, `apt` produces a sources.list entry, and `yum` produces a `.repo` file. | `apt` |
 | `spec.mode` | `string` | no | `` | `` | File permissions applied to the generated repository file in octal notation. | `0644` |
-| `spec.path` | `string` | no | `` | `` | Explicit output path for the generated repository file. Defaults to a path derived from the first repository id when omitted. | `/etc/apt/sources.list.d/offline.list` |
-| `spec.refreshCache` | `object` | no | `` | `` | Optional package metadata refresh that runs after repository files are written. Equivalent to a follow-up `PackageCache` step. | `{clean:true,update:true}` |
+| `spec.path` | `string` | no | `` | `` | Explicit output path for the generated repository file. Defaults to `/etc/apt/sources.list.d/deck-offline.list` for apt or `/etc/yum.repos.d/deck-offline.repo` for yum when omitted. | `/etc/apt/sources.list.d/offline.list` |
+| `spec.refreshCache` | `object` | no | `` | `` | Optional package metadata refresh that runs after repository files are written. The block is enabled by default when present, and behaves like a follow-up `PackageCache` step. | `{clean:true,update:true}` |
 | `spec.replaceExisting` | `boolean` | no | `` | `` | Replace an existing repository file at the target path before writing the new definition. | `true` |
 | `spec.repositories` | `array<object>` | no | `` | `` | Repository entries to write. Each entry maps to one repository block in the generated file. | `[{id:offline,baseurl:http://repo.local/debian}]` |
+
+## Nested Objects
+
+### `spec.refreshCache`
+
+| Key | Type | Required | Default | Enum | Description | Example |
+|---|---|---:|---|---|---|---|
+| `spec.refreshCache.clean` | `boolean` | no | `` | `` | Run the package-manager cache clean command before refreshing metadata. | `true` |
+| `spec.refreshCache.enabled` | `boolean` | no | `` | `` | Whether the refresh block should run. Defaults to `true` when `refreshCache` is present. | `true` |
+| `spec.refreshCache.update` | `boolean` | no | `` | `` | Run the package-manager metadata update command after writing repo files. Defaults to `true` when omitted. | `true` |
+
 
 ## Validation Rules
 

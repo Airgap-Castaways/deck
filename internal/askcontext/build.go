@@ -107,23 +107,23 @@ func AllowedGeneratedPath(path string) bool {
 }
 
 func buildStepKinds() []StepKindContext {
-	kinds := workflowexec.StepKinds()
-	out := make([]StepKindContext, 0, len(kinds))
-	for _, kind := range kinds {
-		meta := schemadoc.ToolMeta(kind)
-		contract, _ := workflowexec.StepContractForKind(kind)
+	defs := workflowexec.StepDefinitions()
+	out := make([]StepKindContext, 0, len(defs))
+	for _, def := range defs {
+		meta := schemadoc.ToolMeta(def.Kind)
+		contract, _ := workflowexec.StepContractForKind(def.Kind)
 		ctx := StepKindContext{
-			Kind:         kind,
-			Category:     meta.Category,
+			Kind:         def.Kind,
+			Category:     def.Category,
 			Summary:      meta.Summary,
 			WhenToUse:    meta.WhenToUse,
-			SchemaFile:   contract.SchemaFile,
+			SchemaFile:   def.SchemaFile,
 			AllowedRoles: sortedKeys(contract.Roles),
 			Actions:      sortedActionKeys(contract.Actions),
 			Outputs:      sortedKeys(contract.Outputs),
 			MinimalShape: strings.TrimSpace(meta.MinimalExample),
 			CuratedShape: strings.TrimSpace(meta.CuratedExample),
-			KeyFields:    buildStepKeyFields(kind, meta),
+			KeyFields:    buildStepKeyFields(def.Kind, meta),
 			ActionGuides: buildStepActionGuides(meta),
 			Notes:        append([]string(nil), meta.Notes...),
 		}

@@ -145,7 +145,6 @@ steps:
     kind: Kubeadm
     spec:
       action: init
-      mode: real
       outputJoinFile: "{{ .vars.joinFile }}"
     register:
       joinFile: joinFile
@@ -154,7 +153,6 @@ steps:
     kind: Kubeadm
     spec:
       action: join
-      mode: real
       joinFile: "{{ .vars.joinFile }}"
       extraArgs: ["--cri-socket", "unix:///run/containerd/containerd.sock", "--ignore-preflight-errors=Swap,FileExisting-crictl,FileExisting-conntrack,FileExisting-socat"]
 ```
