@@ -208,7 +208,7 @@ func TestAskReviewMode(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte("version: v1alpha1\nsteps:\n  - id: run\n    kind: RunCommand\n    spec:\n      command: [\"true\"]\n"), 0o644); err != nil {
 		t.Fatalf("write apply: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "prepare.yaml"), []byte("version: v1alpha1\nartifacts: {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "prepare.yaml"), []byte("version: v1alpha1\nphases:\n  - name: collect\n    steps: []\n"), 0o644); err != nil {
 		t.Fatalf("write prepare: %v", err)
 	}
 	oldWD, err := os.Getwd()
@@ -366,7 +366,7 @@ func TestAskOneShotFallsBackToPlanOnlyWhenPlannerBlocks(t *testing.T) {
 }
 
 func validAskJSON() string {
-	return `{"summary":"generated starter workflows","review":["Prefer typed steps where possible."],"files":[{"path":"workflows/vars.yaml","content":"{}\n"},{"path":"workflows/scenarios/prepare.yaml","content":"version: v1alpha1\nartifacts: {}\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: install\n    imports:\n      - path: example-apply.yaml\n"},{"path":"workflows/components/example-apply.yaml","content":"steps:\n  - id: wait-runtime\n    kind: WaitForFile\n    spec:\n      path: /etc/containerd/config.toml\n      interval: 1s\n      timeout: 5s\n"}]}`
+	return `{"summary":"generated starter workflows","review":["Prefer typed steps where possible."],"files":[{"path":"workflows/vars.yaml","content":"{}\n"},{"path":"prepare.yaml","content":"version: v1alpha1\nphases:\n  - name: collect\n    steps: []\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: install\n    imports:\n      - path: example-apply.yaml\n"},{"path":"workflows/components/example-apply.yaml","content":"steps:\n  - id: wait-runtime\n    kind: WaitForFile\n    spec:\n      path: /etc/containerd/config.toml\n      interval: 1s\n      timeout: 5s\n"}]}`
 }
 
 func validClassificationDraft() string {

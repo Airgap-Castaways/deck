@@ -4,16 +4,13 @@
 
 ## Top-level fields
 
-- `role`: required, either `prepare` or `apply`
 - `version`: currently `v1alpha1`
 - `vars`: optional variable map
-- `artifact`: declarative prepare artifact inventory for `role: prepare`
 - `steps`: top-level step list
 - `phases`: named phase list for more structured execution
 
 The schema allows one execution mode at a time:
 
-- `artifact` for declarative prepare workflows
 - top-level `steps`
 - named `phases`
 
@@ -83,14 +80,14 @@ steps:
 
 ```yaml
 version: v1alpha1
-artifacts:
-  files:
-    - group: binaries
-      items:
-        - id: kubeadm
-          source:
-            url: https://example.local/kubeadm
-          outputPath: bin/kubeadm
+steps:
+  - id: fetch-kubeadm
+    kind: DownloadFile
+    spec:
+      source:
+        url: https://example.local/kubeadm
+      outputPath: files/bin/kubeadm
+      mode: "0755"
 ```
 
 ## Step shape
@@ -178,21 +175,18 @@ phases:
 
 Import paths are relative to `workflows/components/`. Write `k8s/prereq.yaml`, not `../components/k8s/prereq.yaml`.
 
-`artifact` is the preferred authoring mode for `role: prepare`. Use `steps` or `phases` for `role: apply`.
-
 ## Step kinds
 
 Typed steps make the workflow easier to scan, validate, and evolve. Use `RunCommand` only when no supported kind fits.
 
 Supported kinds:
 
-- `Artifact`
 - `CheckHost`
 - `RunCommand`
-- `WriteContainerdConfig`
+- `WriteContainerdConfig`, `WriteContainerdRegistryHosts`
 - `EnsureDirectory`
-- `DownloadFile`, `WriteFile`, `CopyFile`, `EditFile`
-- `DownloadImage`, `VerifyImage`
+- `DownloadFile`, `WriteFile`, `CopyFile`, `EditFile`, `ExtractArchive`
+- `DownloadImage`, `LoadImage`, `VerifyImage`
 - `ConfigureKernelModule`
 - `InitKubeadm`, `JoinKubeadm`, `ResetKubeadm`
 - `DownloadPackage`, `InstallPackage`
@@ -206,12 +200,12 @@ Supported kinds:
 
 ## Prepare semantics
 
-`role: prepare` can use top-level `artifact` to declare artifact inventory instead of writing repeated download steps.
+`prepare` uses the same step grammar as `apply`, but command context determines which kinds are valid.
 
-- `artifacts.files[*].items[*].output.path` is relative to the `files/` bundle root, so use `bin/kubeadm`, not `files/bin/kubeadm`
-- `artifacts.images` declares image groups and lets the engine choose bundle tar layout
-- `artifacts.packages` declares package groups per target OS family, release, and arch
-- internally, `deck` still plans typed actions, but the authoring model stays inventory-driven
+- `DownloadFile` writes bundle-relative outputs through `outputPath`
+- `DownloadImage` writes prepared image archives under `outputDir` or the default `images/` root
+- `DownloadPackage` writes prepared package content under `outputDir` or the default `packages/` root
+- `prepare.yaml` is the fixed root entrypoint for prepare workflows
 
 ## When to use RunCommand
 

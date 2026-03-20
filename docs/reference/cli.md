@@ -115,7 +115,7 @@ deck list --source local
 deck completion bash > ./deck.bash
 deck lint --file ./demo/workflows/scenarios/apply.yaml
 deck lint --file ./demo/workflows/scenarios/apply.yaml -o json
-deck lint --file ./demo/workflows/scenarios/prepare.yaml
+deck lint --file ./demo/prepare.yaml
 
 cd ./demo
 deck prepare

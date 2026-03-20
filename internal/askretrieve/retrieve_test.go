@@ -60,7 +60,7 @@ func TestRetrieveHasBudgetAndDropTracking(t *testing.T) {
 		Root: filepath.ToSlash(t.TempDir()),
 		Files: []WorkspaceFile{
 			{Path: "workflows/scenarios/apply.yaml", Content: longText(7000)},
-			{Path: "workflows/scenarios/prepare.yaml", Content: longText(7000)},
+			{Path: "prepare.yaml", Content: longText(7000)},
 		},
 	}
 	result := Retrieve(askintent.RouteQuestion, "what is this workspace", askintent.Target{}, workspace, askstate.Context{}, nil)

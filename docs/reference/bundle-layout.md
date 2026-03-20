@@ -25,7 +25,7 @@ A typical Kubernetes control-plane bundle might contain:
 deck
 .deck/manifest.json
 workflows/scenarios/apply.yaml
-workflows/scenarios/prepare.yaml
+prepare.yaml
 workflows/vars.yaml
 outputs/packages/kubernetes-1.29.tar.gz
 outputs/images/pause-3.9.tar

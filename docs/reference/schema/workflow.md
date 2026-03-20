@@ -34,8 +34,8 @@ steps:
 
 ## Notes
 
-- A workflow must define at least one of `artifact`, `phases`, or `steps`.
+- A workflow must define at least one of `phases` or `steps`.
 - A workflow cannot define both top-level `phases` and top-level `steps` at the same time.
 - Imports are only supported under `phases[].imports` and resolve from `workflows/components/`.
-- Artifact execution controls are opt-in and only affect `role: prepare` artifact jobs; they do not introduce general step-level parallelism.
+- Workflow mode is determined by command context or file location, not by an in-file `role` field.
 - Each step still validates against its own kind-specific schema after the top-level workflow schema passes.
