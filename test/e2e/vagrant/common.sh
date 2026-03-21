@@ -73,6 +73,8 @@ STEP_TO_INDEX=0
 SCENARIO_METADATA_LOADED=0
 SCENARIO_METADATA_NODES=""
 SCENARIO_METADATA_USES_WORKERS=""
+SCENARIO_METADATA_KUBERNETES_VERSION=""
+SCENARIO_METADATA_UPGRADE_KUBERNETES_VERSION=""
 
 scenario_basename() {
   local scenario_id="${1:-}"
@@ -92,6 +94,8 @@ load_scenario_metadata() {
   SCENARIO_METADATA_LOADED=0
   SCENARIO_METADATA_NODES=""
   SCENARIO_METADATA_USES_WORKERS=""
+  SCENARIO_METADATA_KUBERNETES_VERSION=""
+  SCENARIO_METADATA_UPGRADE_KUBERNETES_VERSION=""
   if [[ -f "${metadata_path}" ]]; then
     source "${metadata_path}"
   elif [[ "${normalized_metadata_path}" != "${metadata_path}" && -f "${normalized_metadata_path}" ]]; then
@@ -100,6 +104,8 @@ load_scenario_metadata() {
   if [[ -n "${NODES:-}" || -n "${USES_WORKERS:-}" ]]; then
     SCENARIO_METADATA_NODES="${NODES:-}"
     SCENARIO_METADATA_USES_WORKERS="${USES_WORKERS:-}"
+    SCENARIO_METADATA_KUBERNETES_VERSION="${KUBERNETES_VERSION:-v1.30.1}"
+    SCENARIO_METADATA_UPGRADE_KUBERNETES_VERSION="${UPGRADE_KUBERNETES_VERSION:-}"
     if [[ -n "${SCENARIO_METADATA_NODES}" && -n "${SCENARIO_METADATA_USES_WORKERS}" ]]; then
       SCENARIO_METADATA_LOADED=1
       return 0
@@ -130,6 +136,20 @@ scenario_requires_workers() {
     return 1
   fi
   [[ "${SCENARIO_METADATA_USES_WORKERS}" == "1" ]]
+}
+
+scenario_kubernetes_version() {
+  if ! ensure_scenario_metadata_loaded; then
+    return 1
+  fi
+  printf '%s\n' "${SCENARIO_METADATA_KUBERNETES_VERSION:-v1.30.1}"
+}
+
+scenario_upgrade_kubernetes_version() {
+  if ! ensure_scenario_metadata_loaded; then
+    return 1
+  fi
+  printf '%s\n' "${SCENARIO_METADATA_UPGRADE_KUBERNETES_VERSION:-}"
 }
 
 active_nodes() {
@@ -380,7 +400,11 @@ compute_prepared_bundle_cache_key() {
   local include_legacy_workflows="$6"
   local vm_scenario_script="${7:-}"
   local vm_dispatcher_script="${8:-}"
-  python3 - <<'PY' "${ROOT_DIR}" "${host_bin}" "${workflow_root}" "${helper_root}" "${backend_runtime}" "${arch}" "${include_legacy_workflows}" "${vm_scenario_script}" "${vm_dispatcher_script}"
+  local kubernetes_version
+  local upgrade_kubernetes_version
+  kubernetes_version="$(scenario_kubernetes_version || printf '%s' 'v1.30.1')"
+  upgrade_kubernetes_version="$(scenario_upgrade_kubernetes_version || true)"
+  python3 - <<'PY' "${ROOT_DIR}" "${host_bin}" "${workflow_root}" "${helper_root}" "${backend_runtime}" "${arch}" "${include_legacy_workflows}" "${vm_scenario_script}" "${vm_dispatcher_script}" "${kubernetes_version}" "${upgrade_kubernetes_version}"
 import hashlib
 from pathlib import Path
 import sys
@@ -394,6 +418,8 @@ arch = sys.argv[6]
 include_legacy_workflows = sys.argv[7] == "1"
 vm_scenario_script = Path(sys.argv[8]) if sys.argv[8] else None
 vm_dispatcher_script = Path(sys.argv[9]) if sys.argv[9] else None
+kubernetes_version = sys.argv[10]
+upgrade_kubernetes_version = sys.argv[11]
 
 paths = [host_bin]
 paths.extend(sorted(p for p in workflow_root.rglob('*') if p.is_file()))
@@ -420,7 +446,8 @@ for candidate in (
 digest = hashlib.sha256()
 digest.update(f'backendRuntime={backend_runtime}\n'.encode())
 digest.update(f'arch={arch}\n'.encode())
-digest.update(b'kubernetesVersion=v1.30.1\n')
+digest.update(f'kubernetesVersion={kubernetes_version}\n'.encode())
+digest.update(f'upgradeKubernetesVersion={upgrade_kubernetes_version}\n'.encode())
 seen = set()
 for path in paths:
     if path in seen:
@@ -441,6 +468,12 @@ prepare_shared_bundle_cache() {
   local workflow_root_abs="${ROOT_DIR}/${DECK_VAGRANT_WORKFLOW_ROOT_REL}"
   local helper_root_abs="${ROOT_DIR}/${DECK_VAGRANT_HELPER_ROOT_REL}"
   local cache_key=""
+  local kubernetes_version=""
+  local upgrade_kubernetes_version=""
+  local -a prepare_args=()
+
+  kubernetes_version="$(scenario_kubernetes_version || printf '%s' 'v1.30.1')"
+  upgrade_kubernetes_version="$(scenario_upgrade_kubernetes_version || true)"
 
   cache_key="$(compute_prepared_bundle_cache_key "${host_bin}" "${workflow_root_abs}" "${helper_root_abs}" "${backend_runtime}" "${arch}" "0" "${DECK_VAGRANT_VM_SCENARIO_SCRIPT:-}" "${DECK_VAGRANT_VM_DISPATCHER_SCRIPT:-}")"
   CACHE_KEY="${cache_key}"
@@ -455,10 +488,14 @@ prepare_shared_bundle_cache() {
   rm -rf "${PREPARED_BUNDLE_WORK_ABS}" "${PREPARED_BUNDLE_STAGE_ABS}"
   mkdir -p "${PREPARED_BUNDLE_WORKFLOW_DIR}" "${PREPARED_BUNDLE_FRAGMENT_DIR}"
   deck_vagrant_prepare_workflow_bundle
-  (cd "${PREPARED_BUNDLE_PACK_ROOT}" && "${host_bin}" prepare --root outputs \
-    --var "kubernetesVersion=v1.30.1" \
-    --var "arch=${arch}" \
+  prepare_args=(prepare --root outputs
+    --var "kubernetesVersion=${kubernetes_version}"
+    --var "arch=${arch}"
     --var "backendRuntime=${backend_runtime}")
+  if [[ -n "${upgrade_kubernetes_version}" ]]; then
+    prepare_args+=(--var "upgradeKubernetesVersion=${upgrade_kubernetes_version}")
+  fi
+  (cd "${PREPARED_BUNDLE_PACK_ROOT}" && "${host_bin}" "${prepare_args[@]}")
   (cd "${PREPARED_BUNDLE_PACK_ROOT}" && "${host_bin}" bundle build --root . --out "${PREPARED_BUNDLE_TAR}")
 
   mkdir -p "${PREPARED_BUNDLE_STAGE_ABS}"

@@ -1,0 +1,117 @@
+version: v1alpha1
+vars:
+  clusterName: upgrade
+  enableBootstrap: "true"
+phases:
+  - name: host-prereqs
+    imports:
+      - path: k8s/prereq.yaml
+      - path: repo/offline-repo-debian.yaml
+      - path: k8s/runtime-deps-debian.yaml
+  - name: runtime
+    imports:
+      - path: k8s/k8s-binaries.yaml
+      - path: k8s/containerd-kubelet.yaml
+  - name: bootstrap
+    imports:
+      - path: bootstrap.yaml
+      - path: k8s/cni.yaml
+  - name: upgrade-runtime
+    steps:
+      - id: install-upgrade-binaries
+        kind: Command
+        spec:
+          timeout: 10m
+          command:
+            - bash
+            - -lc
+            - |
+              set -euo pipefail
+              base_url="http://{{ .vars.serverURL }}/files/bin/linux/{{ .runtime.host.arch }}/upgrade/{{ .vars.upgradeKubernetesVersion }}"
+              work_dir="/tmp/deck/upgrade-bin"
+              mkdir -p "${work_dir}"
+              curl -fsSL "${base_url}/kubelet" -o "${work_dir}/kubelet"
+              curl -fsSL "${base_url}/kubeadm" -o "${work_dir}/kubeadm"
+              curl -fsSL "${base_url}/kubectl" -o "${work_dir}/kubectl"
+              install -m 0755 "${work_dir}/kubelet" /usr/bin/kubelet
+              install -m 0755 "${work_dir}/kubeadm" /usr/bin/kubeadm
+              install -m 0755 "${work_dir}/kubectl" /usr/bin/kubectl
+      - id: update-upgrade-pause-image
+        kind: EditFile
+        spec:
+          path: /etc/containerd/config.toml
+          backup: false
+          edits:
+            - op: replace
+              match: registry.k8s.io/pause:3.9
+              replaceWith: "{{ .vars.upgradePauseImage }}"
+      - id: restart-containerd-for-upgrade
+        kind: ManageService
+        spec:
+          name: containerd
+          enabled: true
+          state: restarted
+  - name: upgrade
+    steps:
+      - id: upgrade-control-plane
+        kind: Command
+        spec:
+          timeout: 20m
+          command:
+            - bash
+            - -lc
+            - |
+              set -euo pipefail
+              target="{{ .vars.upgradeKubernetesVersion }}"
+              kubeadm upgrade apply -y "${target}" \
+                --ignore-preflight-errors=Swap,FileExisting-crictl,FileExisting-conntrack,FileExisting-socat
+              systemctl restart kubelet
+      - id: upgrade-report
+        kind: Command
+        spec:
+          timeout: 20m
+          command:
+            - bash
+            - -lc
+            - |
+              set -euo pipefail
+              target="{{ .vars.upgradeKubernetesVersion }}"
+              reports_dir=/tmp/deck/reports
+              pods_json="${reports_dir}/kube-system-pods.json"
+              nodes_txt="${reports_dir}/upgrade-nodes.txt"
+              cluster_nodes_txt="${reports_dir}/cluster-nodes.txt"
+              pods_txt="${reports_dir}/kube-system-pods.txt"
+              version_txt="${reports_dir}/upgrade-version.txt"
+              mkdir -p "${reports_dir}"
+              for i in $(seq 1 120); do
+                if sudo -n env KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes > "${nodes_txt}" 2>/dev/null; then
+                  cp "${nodes_txt}" "${cluster_nodes_txt}"
+                  sudo -n env KUBECONFIG=/etc/kubernetes/admin.conf kubectl get pods -n kube-system > "${pods_txt}" 2>/dev/null || true
+                  sudo -n env KUBECONFIG=/etc/kubernetes/admin.conf kubectl get pods -n kube-system -o json > "${pods_json}" 2>/dev/null || true
+                  server_version="$(sudo -n env KUBECONFIG=/etc/kubernetes/admin.conf kubectl version -o json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("serverVersion", {}).get("gitVersion", ""))' || true)"
+                  kubelet_version="$(sudo -n env KUBECONFIG=/etc/kubernetes/admin.conf kubectl get node control-plane -o jsonpath='{.status.nodeInfo.kubeletVersion}' 2>/dev/null || true)"
+                  kubeadm_version="$(kubeadm version -o short 2>/dev/null || true)"
+                  printf 'targetVersion=%s\nserverVersion=%s\nkubeletVersion=%s\nkubeadmVersion=%s\n' \
+                    "${target}" "${server_version}" "${kubelet_version}" "${kubeadm_version}" > "${version_txt}"
+                  total="$(awk 'NR>1 && NF>0 {c++} END {print c+0}' "${nodes_txt}")"
+                  ready="$(awk 'NR>1 && $2=="Ready" {c++} END {print c+0}' "${nodes_txt}")"
+                  control_plane_ready="$(awk 'NR>1 && $2=="Ready" && $3 ~ /control-plane/ {c++} END {print c+0}' "${nodes_txt}")"
+                  pause_ok=0
+                  if grep -F '{{ .vars.upgradePauseImage }}' /etc/containerd/config.toml >/dev/null 2>&1; then
+                    pause_ok=1
+                  fi
+                  pods_ok=0
+                  if python3 -c 'import json,sys; items=json.load(open(sys.argv[1], encoding="utf-8")).get("items", []); names={item.get("metadata", {}).get("name", ""): item for item in items}; ready=lambda pod: (not pod.get("metadata", {}).get("deletionTimestamp") and pod.get("status", {}).get("phase") == "Running" and bool(pod.get("status", {}).get("containerStatuses") or []) and all(status.get("ready") for status in (pod.get("status", {}).get("containerStatuses") or []))); required=["etcd-control-plane","kube-apiserver-control-plane","kube-controller-manager-control-plane","kube-scheduler-control-plane"]; assert all(name in names and ready(names[name]) for name in required); coredns=[pod for name,pod in names.items() if name.startswith("coredns-")]; assert len(coredns) >= 2 and all(ready(pod) for pod in coredns); kube_proxy=[pod for name,pod in names.items() if name.startswith("kube-proxy-")]; assert len(kube_proxy) >= 1 and all(ready(pod) for pod in kube_proxy)' "${pods_json}" >/dev/null 2>&1; then
+                    pods_ok=1
+                  fi
+                  if [[ "${total}" == "1" && "${ready}" == "1" && "${control_plane_ready}" == "1" && "${server_version}" == "${target}" && "${kubelet_version}" == "${target}" && "${pause_ok}" == "1" && "${pods_ok}" == "1" ]]; then
+                    exit 0
+                  fi
+                fi
+                sleep 5
+              done
+              echo "expected upgraded single-node control-plane cluster with healthy kube-system pods" >&2
+              cat "${nodes_txt}" >&2 || true
+              cat "${pods_txt}" >&2 || true
+              cat "${version_txt}" >&2 || true
+              exit 1
