@@ -45,13 +45,13 @@ const (
 	errCodePrepareRuntimeMissing     = "E_PREPARE_RUNTIME_NOT_FOUND"
 	errCodePrepareRuntimeUnsupported = "E_PREPARE_RUNTIME_UNSUPPORTED"
 	errCodePrepareEngineUnsupported  = "E_PREPARE_ENGINE_UNSUPPORTED"
-	errCodePrepareArtifactsEmpty     = "E_PREPARE_NO_ARTIFACTS"
+	errCodePrepareArtifactEmpty      = "E_PREPARE_NO_ARTIFACTS"
 	errCodeArtifactSourceNotFound    = "E_PREPARE_SOURCE_NOT_FOUND"
 	errCodePrepareChecksumMismatch   = "E_PREPARE_CHECKSUM_MISMATCH"
 	errCodePrepareOfflinePolicyBlock = "E_PREPARE_OFFLINE_POLICY_BLOCK"
 	errCodePrepareConditionEval      = "E_CONDITION_EVAL"
 	errCodePrepareRegisterMissing    = "E_REGISTER_OUTPUT_NOT_FOUND"
-	errCodePrepareChecksFailed       = "E_PREPARE_CHECKHOST_FAILED"
+	errCodePrepareCheckHostFailed    = "E_PREPARE_CHECKHOST_FAILED"
 	errCodePrepareKindUnsupported    = "E_PREPARE_KIND_UNSUPPORTED"
 	packageCacheMetaFile             = ".deck-cache-packages.json"
 )
@@ -84,7 +84,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	if err != nil {
 		return err
 	}
-	packCacheEnabled := strings.TrimSpace(wf.Role) == "prepare"
+	packCacheEnabled := true
 	packCacheStatePath := ""
 	packCachePlan := PackCachePlan{}
 	if packCacheEnabled {
@@ -113,35 +113,6 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 		packCachePlan.WorkflowSHA256 = workflowSHA
 	}
 	ctxData := map[string]any{"bundleRoot": bundleRoot, "stateFile": ""}
-
-	if hasPrepareArtifacts(wf) {
-		plannedGroups, err := planArtifactJobGroups(wf, bundleRoot, opts)
-		if err != nil {
-			return err
-		}
-		artifactFiles, err := runArtifactJobGroups(ctx, plannedGroups)
-		if err != nil {
-			return err
-		}
-		for _, f := range artifactFiles {
-			entry, err := fileManifestEntry(bundleRoot, f)
-			if err != nil {
-				return err
-			}
-			entries = append(entries, entry)
-		}
-		sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
-		manifestPath := filepath.Join(bundleRoot, ".deck", "manifest.json")
-		if err := writeManifest(manifestPath, dedupeEntries(filterManifestEntries(entries))); err != nil {
-			return err
-		}
-		if packCacheEnabled {
-			if err := savePackCacheState(packCacheStatePath, packCacheStateFromPlan(packCachePlan)); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
 
 	for _, step := range prepareSteps {
 		ok, err := evaluateWhen(step.When, wf.Vars, runtimeVars)
@@ -210,14 +181,20 @@ func prepareExecutionSteps(wf *config.Workflow) ([]config.Step, error) {
 	if wf == nil {
 		return nil, fmt.Errorf("workflow is nil")
 	}
-	if wf.Artifacts != nil && (len(wf.Artifacts.Files) > 0 || len(wf.Artifacts.Images) > 0 || len(wf.Artifacts.Packages) > 0) {
-		return declaredPrepareSteps(wf)
+	if len(wf.Phases) > 0 {
+		steps := make([]config.Step, 0)
+		for _, phase := range wf.Phases {
+			steps = append(steps, phase.Steps...)
+		}
+		if len(steps) == 0 {
+			return nil, fmt.Errorf("prepare workflow has no steps")
+		}
+		return steps, nil
 	}
-	preparePhase, found := findPhase(wf, "prepare")
-	if !found {
-		return nil, fmt.Errorf("prepare phase not found")
+	if len(wf.Steps) == 0 {
+		return nil, fmt.Errorf("prepare workflow has no steps")
 	}
-	return preparePhase.Steps, nil
+	return wf.Steps, nil
 }
 
 func applyRegister(step config.Step, outputs map[string]any, runtimeVars map[string]any) error {
@@ -230,10 +207,6 @@ func evaluateWhen(expr string, vars map[string]any, runtime map[string]any) (boo
 
 func EvaluateWhen(expr string, vars map[string]any, runtime map[string]any) (bool, error) {
 	return evaluateWhen(expr, vars, runtime)
-}
-
-func findPhase(wf *config.Workflow, name string) (config.Phase, bool) {
-	return workflowexec.FindPhase(wf, name)
 }
 
 func mapValue(v map[string]any, key string) map[string]any {

@@ -5,11 +5,6 @@
   "anyOf": [
     {
       "required": [
-        "artifacts"
-      ]
-    },
-    {
-      "required": [
         "phases"
       ]
     },
@@ -35,311 +30,6 @@
     ]
   },
   "properties": {
-    "artifacts": {
-      "additionalProperties": false,
-      "description": "Declarative prepare artifact inventory. Prefer this over legacy prepare download steps in new role: prepare workflows.",
-      "properties": {
-        "files": {
-          "items": {
-            "additionalProperties": false,
-            "properties": {
-              "execution": {
-                "additionalProperties": false,
-                "properties": {
-                  "parallelism": {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  "retry": {
-                    "minimum": 0,
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              },
-              "group": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "items": {
-                "items": {
-                  "additionalProperties": false,
-                  "description": "One file artifact to place under the bundle files/ root.",
-                  "properties": {
-                    "checksum": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "id": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "mode": {
-                      "pattern": "^[0-7]{4}$",
-                      "type": "string"
-                    },
-                    "output": {
-                      "additionalProperties": false,
-                      "description": "Bundle file output. path is relative to the files/ root and must not start with files/.",
-                      "properties": {
-                        "mode": {
-                          "pattern": "^[0-7]{4}$",
-                          "type": "string"
-                        },
-                        "path": {
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "path"
-                      ],
-                      "type": "object"
-                    },
-                    "source": {
-                      "additionalProperties": false,
-                      "oneOf": [
-                        {
-                          "required": [
-                            "url"
-                          ]
-                        },
-                        {
-                          "required": [
-                            "path"
-                          ]
-                        }
-                      ],
-                      "properties": {
-                        "path": {
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        "sha256": {
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        "url": {
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "source",
-                    "output"
-                  ],
-                  "type": "object"
-                },
-                "minItems": 1,
-                "type": "array"
-              },
-              "targets": {
-                "items": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "arch": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "os": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "osFamily": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "release": {
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              }
-            },
-            "required": [
-              "group",
-              "items"
-            ],
-            "type": "object"
-          },
-          "type": "array"
-        },
-        "images": {
-          "items": {
-            "additionalProperties": false,
-            "description": "A grouped set of images to collect during prepare.",
-            "properties": {
-              "backend": {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              "execution": {
-                "additionalProperties": false,
-                "properties": {
-                  "parallelism": {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  "retry": {
-                    "minimum": 0,
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              },
-              "group": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "items": {
-                "items": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "image": {
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "image"
-                  ],
-                  "type": "object"
-                },
-                "minItems": 1,
-                "type": "array"
-              },
-              "output": {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              "targets": {
-                "items": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "arch": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "os": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "osFamily": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "release": {
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              }
-            },
-            "required": [
-              "group",
-              "items"
-            ],
-            "type": "object"
-          },
-          "type": "array"
-        },
-        "packages": {
-          "items": {
-            "additionalProperties": false,
-            "description": "A grouped set of packages for one or more OS targets to collect during prepare.",
-            "properties": {
-              "backend": {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              "execution": {
-                "additionalProperties": false,
-                "properties": {
-                  "parallelism": {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  "retry": {
-                    "minimum": 0,
-                    "type": "integer"
-                  }
-                },
-                "type": "object"
-              },
-              "group": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "items": {
-                "items": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "name": {
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "name"
-                  ],
-                  "type": "object"
-                },
-                "minItems": 1,
-                "type": "array"
-              },
-              "repo": {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              "targets": {
-                "items": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "arch": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "os": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "osFamily": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "release": {
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "minItems": 1,
-                "type": "array"
-              }
-            },
-            "required": [
-              "group",
-              "targets",
-              "items"
-            ],
-            "type": "object"
-          },
-          "type": "array"
-        }
-      },
-      "type": "object"
-    },
     "phases": {
       "items": {
         "$id": "https://github.com/taedi90/deck/internal/schemamodel/workflow-phase",
@@ -391,31 +81,7 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "Artifacts"
-                      }
-                    },
-                    "required": [
-                      "kind"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": false,
-                        "maxProperties": 0,
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Checks"
+                        "const": "CheckHost"
                       }
                     },
                     "required": [
@@ -467,7 +133,7 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "Containerd"
+                        "const": "ConfigureRepository"
                       }
                     },
                     "required": [
@@ -494,7 +160,7 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "Directory"
+                        "const": "CopyFile"
                       }
                     },
                     "required": [
@@ -521,22 +187,11 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "File"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "copy"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
+                        "const": "CreateSymlink"
                       }
                     },
                     "required": [
-                      "kind",
-                      "spec"
+                      "kind"
                     ]
                   },
                   "then": {
@@ -544,7 +199,7 @@
                       "register": {
                         "additionalProperties": {
                           "enum": [
-                            "dest"
+                            "path"
                           ]
                         },
                         "propertyNames": {
@@ -559,22 +214,11 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "File"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "download"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
+                        "const": "DownloadFile"
                       }
                     },
                     "required": [
-                      "kind",
-                      "spec"
+                      "kind"
                     ]
                   },
                   "then": {
@@ -583,7 +227,7 @@
                         "additionalProperties": {
                           "enum": [
                             "artifacts",
-                            "path"
+                            "outputPath"
                           ]
                         },
                         "propertyNames": {
@@ -598,98 +242,11 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "File"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "edit"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
+                        "const": "DownloadImage"
                       }
                     },
                     "required": [
-                      "kind",
-                      "spec"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": {
-                          "enum": [
-                            "path"
-                          ]
-                        },
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "File"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "write"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "spec"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": {
-                          "enum": [
-                            "path"
-                          ]
-                        },
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Image"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "download"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "spec"
+                      "kind"
                     ]
                   },
                   "then": {
@@ -712,22 +269,170 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "Image"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "verify"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
+                        "const": "DownloadPackage"
                       }
                     },
                     "required": [
-                      "kind",
-                      "spec"
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": {
+                          "enum": [
+                            "artifacts"
+                          ]
+                        },
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "EditFile"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": {
+                          "enum": [
+                            "path"
+                          ]
+                        },
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "EnsureDirectory"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": {
+                          "enum": [
+                            "path"
+                          ]
+                        },
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "ExtractArchive"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": {
+                          "enum": [
+                            "path"
+                          ]
+                        },
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "InitKubeadm"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": {
+                          "enum": [
+                            "joinFile"
+                          ]
+                        },
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "InstallPackage"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "JoinKubeadm"
+                      }
+                    },
+                    "required": [
+                      "kind"
                     ]
                   },
                   "then": {
@@ -775,115 +480,7 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "Kubeadm"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "init"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "spec"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": {
-                          "enum": [
-                            "joinFile"
-                          ]
-                        },
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Kubeadm"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "join"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "spec"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": false,
-                        "maxProperties": 0,
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Kubeadm"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "reset"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "spec"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": false,
-                        "maxProperties": 0,
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "PackageCache"
+                        "const": "LoadImage"
                       }
                     },
                     "required": [
@@ -907,118 +504,7 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "Packages"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "download"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "spec"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": {
-                          "enum": [
-                            "artifacts"
-                          ]
-                        },
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Packages"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "install"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "spec"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": false,
-                        "maxProperties": 0,
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Repository"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "configure"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "spec"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": {
-                          "enum": [
-                            "path"
-                          ]
-                        },
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Service"
+                        "const": "ManageService"
                       }
                     },
                     "required": [
@@ -1034,6 +520,54 @@
                             "names"
                           ]
                         },
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "RefreshRepository"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "ResetKubeadm"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
                         "propertyNames": {
                           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                         },
@@ -1070,33 +604,6 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "Symlink"
-                      }
-                    },
-                    "required": [
-                      "kind"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": {
-                          "enum": [
-                            "path"
-                          ]
-                        },
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
                         "const": "Sysctl"
                       }
                     },
@@ -1121,7 +628,175 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "SystemdUnit"
+                        "const": "VerifyImage"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "WaitForCommand"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "WaitForFile"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "WaitForMissingFile"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "WaitForMissingTCPPort"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "WaitForService"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "WaitForTCPPort"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "WriteContainerdConfig"
                       }
                     },
                     "required": [
@@ -1148,29 +823,21 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "Wait"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "commandSuccess"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
+                        "const": "WriteContainerdRegistryHosts"
                       }
                     },
                     "required": [
-                      "kind",
-                      "spec"
+                      "kind"
                     ]
                   },
                   "then": {
                     "properties": {
                       "register": {
-                        "additionalProperties": false,
-                        "maxProperties": 0,
+                        "additionalProperties": {
+                          "enum": [
+                            "path"
+                          ]
+                        },
                         "propertyNames": {
                           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                         },
@@ -1183,29 +850,21 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "Wait"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "fileAbsent"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
+                        "const": "WriteFile"
                       }
                     },
                     "required": [
-                      "kind",
-                      "spec"
+                      "kind"
                     ]
                   },
                   "then": {
                     "properties": {
                       "register": {
-                        "additionalProperties": false,
-                        "maxProperties": 0,
+                        "additionalProperties": {
+                          "enum": [
+                            "path"
+                          ]
+                        },
                         "propertyNames": {
                           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                         },
@@ -1218,134 +877,21 @@
                   "if": {
                     "properties": {
                       "kind": {
-                        "const": "Wait"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "fileExists"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
+                        "const": "WriteSystemdUnit"
                       }
                     },
                     "required": [
-                      "kind",
-                      "spec"
+                      "kind"
                     ]
                   },
                   "then": {
                     "properties": {
                       "register": {
-                        "additionalProperties": false,
-                        "maxProperties": 0,
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        "additionalProperties": {
+                          "enum": [
+                            "path"
+                          ]
                         },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Wait"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "serviceActive"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "spec"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": false,
-                        "maxProperties": 0,
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Wait"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "tcpPortClosed"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "spec"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": false,
-                        "maxProperties": 0,
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Wait"
-                      },
-                      "spec": {
-                        "properties": {
-                          "action": {
-                            "const": "tcpPortOpen"
-                          }
-                        },
-                        "required": [
-                          "action"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "spec"
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": false,
-                        "maxProperties": 0,
                         "propertyNames": {
                           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                         },
@@ -1366,24 +912,38 @@
                 },
                 "kind": {
                   "enum": [
-                    "Artifacts",
-                    "Checks",
+                    "CheckHost",
                     "Command",
-                    "Containerd",
-                    "Directory",
-                    "File",
-                    "Image",
+                    "ConfigureRepository",
+                    "CopyFile",
+                    "CreateSymlink",
+                    "DownloadFile",
+                    "DownloadImage",
+                    "DownloadPackage",
+                    "EditFile",
+                    "EnsureDirectory",
+                    "ExtractArchive",
+                    "InitKubeadm",
+                    "InstallPackage",
+                    "JoinKubeadm",
                     "KernelModule",
-                    "Kubeadm",
-                    "PackageCache",
-                    "Packages",
-                    "Repository",
-                    "Service",
+                    "LoadImage",
+                    "ManageService",
+                    "RefreshRepository",
+                    "ResetKubeadm",
                     "Swap",
-                    "Symlink",
                     "Sysctl",
-                    "SystemdUnit",
-                    "Wait"
+                    "VerifyImage",
+                    "WaitForCommand",
+                    "WaitForFile",
+                    "WaitForMissingFile",
+                    "WaitForMissingTCPPort",
+                    "WaitForService",
+                    "WaitForTCPPort",
+                    "WriteContainerdConfig",
+                    "WriteContainerdRegistryHosts",
+                    "WriteFile",
+                    "WriteSystemdUnit"
                   ],
                   "type": "string"
                 },
@@ -1434,13 +994,6 @@
       "minItems": 1,
       "type": "array"
     },
-    "role": {
-      "enum": [
-        "prepare",
-        "apply"
-      ],
-      "type": "string"
-    },
     "steps": {
       "items": {
         "additionalProperties": false,
@@ -1449,31 +1002,7 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "Artifacts"
-                }
-              },
-              "required": [
-                "kind"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": false,
-                  "maxProperties": 0,
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "Checks"
+                  "const": "CheckHost"
                 }
               },
               "required": [
@@ -1525,7 +1054,7 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "Containerd"
+                  "const": "ConfigureRepository"
                 }
               },
               "required": [
@@ -1552,7 +1081,7 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "Directory"
+                  "const": "CopyFile"
                 }
               },
               "required": [
@@ -1579,22 +1108,11 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "File"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "copy"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
+                  "const": "CreateSymlink"
                 }
               },
               "required": [
-                "kind",
-                "spec"
+                "kind"
               ]
             },
             "then": {
@@ -1602,7 +1120,7 @@
                 "register": {
                   "additionalProperties": {
                     "enum": [
-                      "dest"
+                      "path"
                     ]
                   },
                   "propertyNames": {
@@ -1617,22 +1135,11 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "File"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "download"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
+                  "const": "DownloadFile"
                 }
               },
               "required": [
-                "kind",
-                "spec"
+                "kind"
               ]
             },
             "then": {
@@ -1641,7 +1148,7 @@
                   "additionalProperties": {
                     "enum": [
                       "artifacts",
-                      "path"
+                      "outputPath"
                     ]
                   },
                   "propertyNames": {
@@ -1656,98 +1163,11 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "File"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "edit"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
+                  "const": "DownloadImage"
                 }
               },
               "required": [
-                "kind",
-                "spec"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": {
-                    "enum": [
-                      "path"
-                    ]
-                  },
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "File"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "write"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "spec"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": {
-                    "enum": [
-                      "path"
-                    ]
-                  },
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "Image"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "download"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "spec"
+                "kind"
               ]
             },
             "then": {
@@ -1770,22 +1190,170 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "Image"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "verify"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
+                  "const": "DownloadPackage"
                 }
               },
               "required": [
-                "kind",
-                "spec"
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": {
+                    "enum": [
+                      "artifacts"
+                    ]
+                  },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "EditFile"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": {
+                    "enum": [
+                      "path"
+                    ]
+                  },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "EnsureDirectory"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": {
+                    "enum": [
+                      "path"
+                    ]
+                  },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "ExtractArchive"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": {
+                    "enum": [
+                      "path"
+                    ]
+                  },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "InitKubeadm"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": {
+                    "enum": [
+                      "joinFile"
+                    ]
+                  },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "InstallPackage"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "JoinKubeadm"
+                }
+              },
+              "required": [
+                "kind"
               ]
             },
             "then": {
@@ -1833,115 +1401,7 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "Kubeadm"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "init"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "spec"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": {
-                    "enum": [
-                      "joinFile"
-                    ]
-                  },
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "Kubeadm"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "join"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "spec"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": false,
-                  "maxProperties": 0,
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "Kubeadm"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "reset"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "spec"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": false,
-                  "maxProperties": 0,
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "PackageCache"
+                  "const": "LoadImage"
                 }
               },
               "required": [
@@ -1965,118 +1425,7 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "Packages"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "download"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "spec"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": {
-                    "enum": [
-                      "artifacts"
-                    ]
-                  },
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "Packages"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "install"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "spec"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": false,
-                  "maxProperties": 0,
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "Repository"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "configure"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "spec"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": {
-                    "enum": [
-                      "path"
-                    ]
-                  },
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "Service"
+                  "const": "ManageService"
                 }
               },
               "required": [
@@ -2092,6 +1441,54 @@
                       "names"
                     ]
                   },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "RefreshRepository"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "ResetKubeadm"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
                   "propertyNames": {
                     "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                   },
@@ -2128,33 +1525,6 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "Symlink"
-                }
-              },
-              "required": [
-                "kind"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": {
-                    "enum": [
-                      "path"
-                    ]
-                  },
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
                   "const": "Sysctl"
                 }
               },
@@ -2179,7 +1549,175 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "SystemdUnit"
+                  "const": "VerifyImage"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "WaitForCommand"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "WaitForFile"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "WaitForMissingFile"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "WaitForMissingTCPPort"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "WaitForService"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "WaitForTCPPort"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "WriteContainerdConfig"
                 }
               },
               "required": [
@@ -2206,29 +1744,21 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "Wait"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "commandSuccess"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
+                  "const": "WriteContainerdRegistryHosts"
                 }
               },
               "required": [
-                "kind",
-                "spec"
+                "kind"
               ]
             },
             "then": {
               "properties": {
                 "register": {
-                  "additionalProperties": false,
-                  "maxProperties": 0,
+                  "additionalProperties": {
+                    "enum": [
+                      "path"
+                    ]
+                  },
                   "propertyNames": {
                     "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                   },
@@ -2241,29 +1771,21 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "Wait"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "fileAbsent"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
+                  "const": "WriteFile"
                 }
               },
               "required": [
-                "kind",
-                "spec"
+                "kind"
               ]
             },
             "then": {
               "properties": {
                 "register": {
-                  "additionalProperties": false,
-                  "maxProperties": 0,
+                  "additionalProperties": {
+                    "enum": [
+                      "path"
+                    ]
+                  },
                   "propertyNames": {
                     "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                   },
@@ -2276,134 +1798,21 @@
             "if": {
               "properties": {
                 "kind": {
-                  "const": "Wait"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "fileExists"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
+                  "const": "WriteSystemdUnit"
                 }
               },
               "required": [
-                "kind",
-                "spec"
+                "kind"
               ]
             },
             "then": {
               "properties": {
                 "register": {
-                  "additionalProperties": false,
-                  "maxProperties": 0,
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  "additionalProperties": {
+                    "enum": [
+                      "path"
+                    ]
                   },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "Wait"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "serviceActive"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "spec"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": false,
-                  "maxProperties": 0,
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "Wait"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "tcpPortClosed"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "spec"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": false,
-                  "maxProperties": 0,
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "kind": {
-                  "const": "Wait"
-                },
-                "spec": {
-                  "properties": {
-                    "action": {
-                      "const": "tcpPortOpen"
-                    }
-                  },
-                  "required": [
-                    "action"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "spec"
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": false,
-                  "maxProperties": 0,
                   "propertyNames": {
                     "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                   },
@@ -2424,24 +1833,38 @@
           },
           "kind": {
             "enum": [
-              "Artifacts",
-              "Checks",
+              "CheckHost",
               "Command",
-              "Containerd",
-              "Directory",
-              "File",
-              "Image",
+              "ConfigureRepository",
+              "CopyFile",
+              "CreateSymlink",
+              "DownloadFile",
+              "DownloadImage",
+              "DownloadPackage",
+              "EditFile",
+              "EnsureDirectory",
+              "ExtractArchive",
+              "InitKubeadm",
+              "InstallPackage",
+              "JoinKubeadm",
               "KernelModule",
-              "Kubeadm",
-              "PackageCache",
-              "Packages",
-              "Repository",
-              "Service",
+              "LoadImage",
+              "ManageService",
+              "RefreshRepository",
+              "ResetKubeadm",
               "Swap",
-              "Symlink",
               "Sysctl",
-              "SystemdUnit",
-              "Wait"
+              "VerifyImage",
+              "WaitForCommand",
+              "WaitForFile",
+              "WaitForMissingFile",
+              "WaitForMissingTCPPort",
+              "WaitForService",
+              "WaitForTCPPort",
+              "WriteContainerdConfig",
+              "WriteContainerdRegistryHosts",
+              "WriteFile",
+              "WriteSystemdUnit"
             ],
             "type": "string"
           },
@@ -2495,7 +1918,6 @@
     }
   },
   "required": [
-    "role",
     "version"
   ],
   "title": "DeckWorkflow",

@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
@@ -25,30 +24,31 @@ var (
 
 var yumEnabledTruePattern = regexp.MustCompile(`(?i)^\s*enabled\s*=\s*(1|yes|true)\s*$`)
 
-type editFileEditSpec struct {
-	Match string `json:"match"`
-	With  string `json:"with"`
-	Op    string `json:"op"`
+type editEditFileSpec struct {
+	Match       string `json:"match"`
+	ReplaceWith string `json:"replaceWith"`
+	Op          string `json:"op"`
 }
 
 type editFileSpec struct {
 	Path   string             `json:"path"`
 	Backup *bool              `json:"backup"`
-	Edits  []editFileEditSpec `json:"edits"`
+	Edits  []editEditFileSpec `json:"edits"`
 	Mode   string             `json:"mode"`
 }
 
 type copyFileSpec struct {
-	Src  string `json:"src"`
-	Dest string `json:"dest"`
-	Mode string `json:"mode"`
+	Source fileDownloadSourceSpec `json:"source"`
+	Fetch  fileDownloadFetchSpec  `json:"fetch"`
+	Path   string                 `json:"path"`
+	Mode   string                 `json:"mode"`
 }
 
 type writeFileSpec struct {
-	Path                string `json:"path"`
-	Content             string `json:"content"`
-	ContentFromTemplate string `json:"contentFromTemplate"`
-	Mode                string `json:"mode"`
+	Path     string `json:"path"`
+	Content  string `json:"content"`
+	Template string `json:"template"`
+	Mode     string `json:"mode"`
 }
 
 type templateFileSpec struct {
@@ -92,7 +92,7 @@ func runEditFile(spec map[string]any) error {
 
 	for _, edit := range decoded.Edits {
 		match := strings.TrimSpace(edit.Match)
-		with := edit.With
+		with := edit.ReplaceWith
 		if match == "" {
 			continue
 		}
@@ -112,26 +112,59 @@ func runEditFile(spec map[string]any) error {
 	return applyOptionalFileMode(hostPath, strings.TrimSpace(decoded.Mode))
 }
 
-func runCopyFile(spec map[string]any) error {
+func runCopyFile(ctx context.Context, bundleRoot string, spec map[string]any) error {
 	decoded, err := workflowexec.DecodeSpec[copyFileSpec](spec)
 	if err != nil {
 		return fmt.Errorf("decode CopyFile spec: %w", err)
 	}
-	src := strings.TrimSpace(decoded.Src)
-	dest := strings.TrimSpace(decoded.Dest)
-	if src == "" || dest == "" {
-		return fmt.Errorf("%s: CopyFile requires src and dest", errCodeInstallCopyPathMissing)
+	if ctx == nil {
+		return fmt.Errorf("context is nil")
 	}
-
-	srcPath, err := hostfs.NewHostPath(src)
-	if err != nil {
-		return err
+	dest := strings.TrimSpace(decoded.Path)
+	if dest == "" {
+		return fmt.Errorf("%s: CopyFile requires path", errCodeInstallCopyPathMissing)
+	}
+	if strings.TrimSpace(decoded.Source.Path) == "" && strings.TrimSpace(decoded.Source.URL) == "" && decoded.Source.Bundle == nil {
+		return fmt.Errorf("%s: CopyFile requires source", errCodeInstallCopyPathMissing)
 	}
 	destPath, err := hostfs.NewHostPath(dest)
 	if err != nil {
 		return err
 	}
-	content, err := srcPath.ReadFile()
+	tmpDir, err := os.MkdirTemp("", "deck-copy-file-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	downloadSpec := map[string]any{
+		"source": map[string]any{
+			"url":    decoded.Source.URL,
+			"path":   decoded.Source.Path,
+			"sha256": decoded.Source.SHA256,
+		},
+		"fetch": map[string]any{
+			"offlineOnly": decoded.Fetch.OfflineOnly,
+			"sources":     fetchSourcesAny(decoded.Fetch.Sources),
+		},
+		"outputPath": "copy.bin",
+	}
+	if decoded.Source.Bundle != nil {
+		downloadSpec["source"].(map[string]any)["bundle"] = map[string]any{"root": decoded.Source.Bundle.Root, "path": decoded.Source.Bundle.Path}
+	}
+	downloadRoot := tmpDir
+	if decoded.Source.Bundle != nil {
+		downloadRoot = bundleRoot
+	}
+	relPath, err := runDownloadFile(ctx, downloadRoot, downloadSpec)
+	if err != nil {
+		return err
+	}
+	contentPath := filepath.Join(tmpDir, "copy.bin")
+	if decoded.Source.Bundle != nil {
+		contentPath = filepath.Join(bundleRoot, relPath)
+	}
+	content, err := fsutil.ReadFile(contentPath)
 	if err != nil {
 		return err
 	}
@@ -165,14 +198,14 @@ func runEnsureDir(spec map[string]any) error {
 	return nil
 }
 
-func runSymlink(spec map[string]any) error {
+func runCreateSymlink(spec map[string]any) error {
 	path := stringValue(spec, "path")
 	if path == "" {
-		return fmt.Errorf("%s: Symlink requires path", errCodeInstallSymlinkPathMiss)
+		return fmt.Errorf("%s: CreateSymlink requires path", errCodeInstallCreateSymlinkPathMiss)
 	}
 	target := stringValue(spec, "target")
 	if target == "" {
-		return fmt.Errorf("%s: Symlink requires target", errCodeInstallSymlinkTargetMis)
+		return fmt.Errorf("%s: CreateSymlink requires target", errCodeInstallCreateSymlinkTargetMis)
 	}
 
 	pathRef, err := hostfs.NewHostPath(path)
@@ -219,7 +252,7 @@ func runSymlink(spec map[string]any) error {
 		return err
 	}
 
-	return pathRef.Symlink(target)
+	return pathRef.CreateSymlink(target)
 }
 
 func runWriteFile(spec map[string]any) error {
@@ -237,7 +270,7 @@ func runWriteFile(spec map[string]any) error {
 	}
 	content := decoded.Content
 	if content == "" {
-		if from := decoded.ContentFromTemplate; from != "" {
+		if from := decoded.Template; from != "" {
 			content = from
 		}
 	}
@@ -252,6 +285,14 @@ func runWriteFile(spec map[string]any) error {
 		return err
 	}
 	return applyOptionalFileMode(hostPath, strings.TrimSpace(decoded.Mode))
+}
+
+func fetchSourcesAny(items []fileDownloadFetchSourceSpec) []any {
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		out = append(out, map[string]any{"type": item.Type, "path": item.Path, "url": item.URL})
+	}
+	return out
 }
 
 func applyOptionalFileMode(path hostfs.HostPath, modeRaw string) error {
@@ -361,9 +402,6 @@ func runRepoConfig(ctx context.Context, spec map[string]any) error {
 		if err := os.Chmod(path, os.FileMode(modeVal)); err != nil {
 			return err
 		}
-	}
-	if err := refreshRepoMetadata(ctx, spec, format); err != nil {
-		return err
 	}
 
 	return nil
@@ -656,37 +694,4 @@ func disableYumRepoPaths(patterns []string, keepPath string) error {
 		}
 	}
 	return nil
-}
-
-func refreshRepoMetadata(ctx context.Context, spec map[string]any, format string) error {
-	refresh, ok := spec["refreshCache"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	enabled := true
-	if value, exists := refresh["enabled"].(bool); exists {
-		enabled = value
-	}
-	if !enabled {
-		return nil
-	}
-	clean, _ := refresh["clean"].(bool)
-	update := true
-	if value, exists := refresh["update"].(bool); exists {
-		update = value
-	}
-	if !clean && !update {
-		return nil
-	}
-	return runPackageCacheCommands(
-		repoConfigFormatToPackageManager(format),
-		clean,
-		update,
-		packageRepoPolicy{},
-		commandTimeoutWithDefault(spec, defaultPackageCacheTimeout),
-		func(name string, args []string, timeout time.Duration) error {
-			return repoConfigRunTimedCommand(ctx, name, args, timeout)
-		},
-		"repo metadata refresh",
-	)
 }

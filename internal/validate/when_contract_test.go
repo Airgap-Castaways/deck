@@ -8,12 +8,11 @@ import (
 )
 
 func TestWorkflowRejectsLegacyWhenOperators(t *testing.T) {
-	wf := []byte(`role: apply
-version: v1alpha1
+	wf := []byte(`version: v1alpha1
 steps:
   - id: bad-when
     apiVersion: deck/v1alpha1
-    kind: Directory
+    kind: EnsureDirectory
     when: vars.enabled and runtime.ready
     spec:
       path: /var/lib/deck
@@ -53,6 +52,9 @@ func TestScenarioWorkspaceValidates(t *testing.T) {
 	_, err := Workspace(filepath.Join("..", "..", "test"))
 	if err != nil {
 		t.Fatalf("validate scenario workspace: %v", err)
+	}
+	if err := File(filepath.Join("..", "..", "test", "workflows", "prepare.yaml")); err != nil {
+		t.Fatalf("validate canonical test prepare workflow: %v", err)
 	}
 }
 

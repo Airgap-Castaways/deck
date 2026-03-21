@@ -32,7 +32,7 @@ type Summary struct {
 
 type Contracts struct {
 	SupportedVersion string   `json:"supportedVersion"`
-	SupportedRoles   []string `json:"supportedRoles"`
+	SupportedModes   []string `json:"supportedModes"`
 	TopLevelModes    []string `json:"topLevelModes"`
 	ImportRule       string   `json:"importRule"`
 	InvariantNotes   []string `json:"invariantNotes"`
@@ -162,7 +162,7 @@ func finalizeReport(report Report) (Report, error) {
 	for _, finding := range findings {
 		report.Findings = append(report.Findings, Finding{Severity: finding.Severity, Code: finding.Code, Message: finding.Message, Hint: finding.Hint, Path: finding.Path, Phase: finding.Phase, StepID: finding.StepID, Kind: finding.Kind})
 	}
-	report.Contracts = Contracts{SupportedVersion: validate.SupportedWorkflowVersion(), SupportedRoles: validate.SupportedWorkflowRoles(), TopLevelModes: validate.WorkflowTopLevelModes(), ImportRule: validate.WorkflowImportRule(), InvariantNotes: validate.WorkflowInvariantNotes()}
+	report.Contracts = Contracts{SupportedVersion: validate.SupportedWorkflowVersion(), SupportedModes: validate.SupportedWorkflowRoles(), TopLevelModes: validate.WorkflowTopLevelModes(), ImportRule: validate.WorkflowImportRule(), InvariantNotes: validate.WorkflowInvariantNotes()}
 	report.Summary.WorkflowCount = max(report.Summary.WorkflowCount, len(report.Workflows))
 	for _, finding := range report.Findings {
 		if strings.EqualFold(strings.TrimSpace(finding.Severity), "error") {
@@ -185,7 +185,7 @@ func writeTextReport(stdoutPrintf func(format string, args ...any) error, report
 			return err
 		}
 	}
-	return stdoutPrintf("SUMMARY mode=%s workflows=%d warnings=%d errors=%d supportedVersion=%s roles=%s topLevelModes=%s\n", report.Mode, report.Summary.WorkflowCount, report.Summary.WarningCount, report.Summary.ErrorCount, report.Contracts.SupportedVersion, strings.Join(report.Contracts.SupportedRoles, ","), strings.Join(report.Contracts.TopLevelModes, ","))
+	return stdoutPrintf("SUMMARY mode=%s workflows=%d warnings=%d errors=%d supportedVersion=%s modes=%s topLevelModes=%s\n", report.Mode, report.Summary.WorkflowCount, report.Summary.WarningCount, report.Summary.ErrorCount, report.Contracts.SupportedVersion, strings.Join(report.Contracts.SupportedModes, ","), strings.Join(report.Contracts.TopLevelModes, ","))
 }
 
 func logReport(verbose func(level int, format string, args ...any) error, report Report) error {

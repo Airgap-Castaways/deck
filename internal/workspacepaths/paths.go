@@ -10,7 +10,7 @@ const (
 	WorkflowRootDir             = "workflows"
 	WorkflowScenariosDir        = "scenarios"
 	WorkflowComponentsDir       = "components"
-	CanonicalPrepareWorkflowRel = "scenarios/prepare.yaml"
+	CanonicalPrepareWorkflowRel = "prepare.yaml"
 	CanonicalApplyWorkflowRel   = "scenarios/apply.yaml"
 	WorkflowVarsRel             = "vars.yaml"
 	PreparedDirRel              = "outputs"

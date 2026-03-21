@@ -46,32 +46,32 @@ func buildManifest() Manifest {
 			ComponentDir:      pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowComponentsDir),
 			VarsPath:          pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowVarsRel),
 			AllowedPaths:      AllowedGeneratedPathPatterns(),
-			CanonicalPrepare:  pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.CanonicalPrepareWorkflowRel),
+			CanonicalPrepare:  workspacepaths.CanonicalPrepareWorkflowRel,
 			CanonicalApply:    pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.CanonicalApplyWorkflowRel),
-			GeneratedPathNote: "New ask-generated files must stay under workflows/scenarios/, workflows/components/, or workflows/vars.yaml.",
+			GeneratedPathNote: "New ask-generated files must stay under workflows/prepare.yaml, workflows/scenarios/, workflows/components/, or workflows/vars.yaml.",
 		},
 		Workflow: WorkflowRules{
 			Summary:          workflow.Summary,
 			TopLevelModes:    validate.WorkflowTopLevelModes(),
-			SupportedRoles:   validate.SupportedWorkflowRoles(),
+			SupportedModes:   validate.SupportedWorkflowRoles(),
 			SupportedVersion: validate.SupportedWorkflowVersion(),
 			ImportRule:       validate.WorkflowImportRule(),
 			Notes:            append([]string(nil), validate.WorkflowInvariantNotes()...),
 		},
-		Roles: []RoleGuidance{
+		Modes: []ModeGuidance{
 			{
-				Role:        "prepare",
+				Mode:        "prepare",
 				Summary:     "Prepare collects online inputs and produces offline-ready artifacts.",
 				WhenToUse:   "Use prepare when the request needs downloads, mirrored images, package caches, or bundle content created before apply.",
-				Prefer:      []string{"artifacts for bundle inventory", "download-oriented File or Image steps", "variables shared by later apply steps"},
+				Prefer:      []string{"download-oriented File, Image, and Package steps", "variables shared by later apply steps", "named phases when collection has multiple stages"},
 				Avoid:       []string{"live node reconfiguration that belongs in apply", "service management on the target node"},
-				OutputFiles: []string{pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.CanonicalPrepareWorkflowRel), pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowVarsRel)},
+				OutputFiles: []string{workspacepaths.CanonicalPrepareWorkflowRel, pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowVarsRel)},
 			},
 			{
-				Role:        "apply",
+				Mode:        "apply",
 				Summary:     "Apply changes the local node using prepared inputs and typed host actions.",
 				WhenToUse:   "Use apply for package installation, file writes, service changes, runtime config, and host convergence steps.",
-				Prefer:      []string{"typed steps such as File, Repository, Service, Containerd, Packages", "named phases for multi-step installs", "components for reusable imported logic"},
+				Prefer:      []string{"typed steps such as File, ConfigureRepository, RefreshRepository, ManageService, WriteContainerdConfig, and Package", "named phases for multi-step installs", "components for reusable imported logic"},
 				Avoid:       []string{"online collection logic that should happen during prepare", "large repeated literals that belong in vars.yaml"},
 				OutputFiles: []string{pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.CanonicalApplyWorkflowRel), pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowVarsRel)},
 			},
@@ -95,7 +95,7 @@ func buildManifest() Manifest {
 }
 
 func AllowedGeneratedPathPatterns() []string {
-	return []string{"workflows/scenarios/*.yaml", "workflows/components/*.yaml", "workflows/vars.yaml"}
+	return []string{"workflows/prepare.yaml", "workflows/scenarios/*.yaml", "workflows/components/*.yaml", "workflows/vars.yaml"}
 }
 
 func AllowedGeneratedPath(path string) bool {
@@ -103,7 +103,7 @@ func AllowedGeneratedPath(path string) bool {
 	if clean == "" || strings.Contains(clean, "..") {
 		return false
 	}
-	return strings.HasPrefix(clean, "workflows/scenarios/") || strings.HasPrefix(clean, "workflows/components/") || clean == "workflows/vars.yaml"
+	return clean == "workflows/prepare.yaml" || strings.HasPrefix(clean, "workflows/scenarios/") || strings.HasPrefix(clean, "workflows/components/") || clean == "workflows/vars.yaml"
 }
 
 func buildStepKinds() []StepKindContext {
@@ -119,16 +119,11 @@ func buildStepKinds() []StepKindContext {
 			WhenToUse:    meta.WhenToUse,
 			SchemaFile:   def.SchemaFile,
 			AllowedRoles: sortedKeys(contract.Roles),
-			Actions:      sortedActionKeys(contract.Actions),
 			Outputs:      sortedKeys(contract.Outputs),
-			MinimalShape: strings.TrimSpace(meta.MinimalExample),
-			CuratedShape: strings.TrimSpace(meta.CuratedExample),
+			MinimalShape: strings.TrimSpace(meta.Example),
+			CuratedShape: strings.TrimSpace(meta.Example),
 			KeyFields:    buildStepKeyFields(def.Kind, meta),
-			ActionGuides: buildStepActionGuides(meta),
 			Notes:        append([]string(nil), meta.Notes...),
-		}
-		for _, action := range ctx.Actions {
-			ctx.Outputs = append(ctx.Outputs, sortedKeys(contract.Actions[action].Outputs)...)
 		}
 		ctx.Outputs = dedupe(ctx.Outputs)
 		out = append(out, ctx)
@@ -138,14 +133,19 @@ func buildStepKinds() []StepKindContext {
 
 func buildStepKeyFields(kind string, meta schemadoc.ToolMetadata) []StepFieldContext {
 	preferred := map[string][]string{
-		"Packages":   {"spec.action", "spec.packages", "spec.source", "spec.distro", "spec.repo", "spec.excludeRepos"},
-		"Repository": {"spec.action", "spec.format", "spec.path", "spec.repositories", "spec.refreshCache", "spec.replaceExisting"},
-		"Service":    {"spec.name", "spec.action", "spec.enabled"},
-		"File":       {"spec.action", "spec.path", "spec.content", "spec.source", "spec.output"},
+		"DownloadPackage":     {"spec.packages", "spec.distro", "spec.repo", "spec.backend", "spec.outputDir"},
+		"InstallPackage":      {"spec.packages", "spec.source", "spec.restrictToRepos", "spec.excludeRepos"},
+		"ConfigureRepository": {"spec.format", "spec.path", "spec.repositories", "spec.replaceExisting", "spec.cleanupPaths"},
+		"RefreshRepository":   {"spec.manager", "spec.clean", "spec.update", "spec.restrictToRepos", "spec.excludeRepos"},
+		"ManageService":       {"spec.name", "spec.names", "spec.state", "spec.enabled"},
+		"DownloadFile":        {"spec.source", "spec.fetch", "spec.outputPath", "spec.mode"},
+		"WriteFile":           {"spec.path", "spec.content", "spec.template", "spec.mode"},
+		"CopyFile":            {"spec.source", "spec.path", "spec.mode"},
+		"EditFile":            {"spec.path", "spec.edits", "spec.backup", "spec.mode"},
 	}
 	keys := preferred[kind]
 	if len(keys) == 0 {
-		keys = []string{"spec.action", "spec.path", "spec.source", "spec.content"}
+		keys = []string{"spec.path", "spec.source", "spec.content"}
 	}
 	out := make([]StepFieldContext, 0, len(keys))
 	for _, key := range keys {
@@ -158,38 +158,12 @@ func buildStepKeyFields(kind string, meta schemadoc.ToolMetadata) []StepFieldCon
 	return out
 }
 
-func buildStepActionGuides(meta schemadoc.ToolMetadata) []StepActionContext {
-	keys := make([]string, 0, len(meta.ActionExamples))
-	for action := range meta.ActionExamples {
-		keys = append(keys, action)
-	}
-	sort.Strings(keys)
-	out := make([]StepActionContext, 0, len(keys))
-	for _, action := range keys {
-		out = append(out, StepActionContext{
-			Action:  action,
-			Note:    strings.TrimSpace(meta.ActionNotes[action]),
-			Example: strings.TrimSpace(meta.ActionExamples[action]),
-		})
-	}
-	return out
-}
-
 func sortedKeys(values map[string]bool) []string {
 	out := make([]string, 0, len(values))
 	for value, ok := range values {
 		if ok {
 			out = append(out, value)
 		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-func sortedActionKeys(values map[string]workflowexec.ActionContract) []string {
-	out := make([]string, 0, len(values))
-	for value := range values {
-		out = append(out, value)
 	}
 	sort.Strings(out)
 	return out

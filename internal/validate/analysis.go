@@ -70,25 +70,6 @@ func analyzeWorkflow(path string, wf *config.Workflow) []Finding {
 	for _, phase := range wf.Phases {
 		findings = append(findings, analyzeSteps(path, phase.Name, phase.Steps)...)
 	}
-	if wf.Artifacts != nil {
-		for _, group := range wf.Artifacts.Files {
-			for _, item := range group.Items {
-				if strings.TrimSpace(item.Source.URL) == "" {
-					continue
-				}
-				if strings.TrimSpace(item.Source.SHA256) != "" || strings.TrimSpace(item.Checksum) != "" {
-					continue
-				}
-				findings = append(findings, Finding{
-					Severity: "warning",
-					Code:     "W_ARTIFACT_INTEGRITY_MISSING",
-					Message:  fmt.Sprintf("Remote artifact %q in group %q has no integrity check.", item.ID, group.Group),
-					Hint:     "Set source.sha256 or checksum for remote artifact inputs.",
-					Path:     path,
-				})
-			}
-		}
-	}
 	return findings
 }
 

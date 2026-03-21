@@ -8,41 +8,39 @@ import (
 )
 
 func executeStep(ctx context.Context, kind string, spec map[string]any, execCtx ExecutionContext) error {
-	if !workflowexec.StepAllowedForRole("apply", kind, spec) {
+	if !workflowexec.StepAllowedForRole("apply", kind) {
 		return fmt.Errorf("%s: unsupported step kind %s", errCodeInstallKindUnsupported, kind)
 	}
 
 	switch kind {
-	case "Artifacts":
-		return runInstallArtifacts(ctx, spec)
-	case "Packages":
-		return runPackages(ctx, spec)
-	case "File":
-		action, err := decodeStepAction(spec)
-		if err != nil {
-			return fmt.Errorf("decode File action: %w", err)
-		}
-		if action == "download" {
-			_, err := runFileDownload(ctx, execCtx.BundleRoot, spec)
-			return err
-		}
-		return runFileAction(action, spec)
+	case "InstallPackage":
+		return runInstallPackages(ctx, spec)
+	case "WriteFile":
+		return runWriteFile(spec)
+	case "CopyFile":
+		return runCopyFile(ctx, execCtx.BundleRoot, spec)
+	case "EditFile":
+		return runEditFile(spec)
+	case "ExtractArchive":
+		return runExtractArchive(ctx, execCtx.BundleRoot, spec)
 	case "Sysctl":
 		return runSysctl(ctx, spec)
-	case "Service":
-		return runService(ctx, spec)
-	case "Directory":
+	case "ManageService":
+		return runManageService(ctx, spec)
+	case "EnsureDirectory":
 		return runEnsureDir(spec)
-	case "Symlink":
-		return runSymlink(spec)
-	case "SystemdUnit":
-		return runSystemdUnit(ctx, spec)
-	case "Repository":
-		return runRepository(ctx, spec)
-	case "PackageCache":
-		return runPackageCache(ctx, spec)
-	case "Containerd":
-		return runContainerdConfig(ctx, spec)
+	case "CreateSymlink":
+		return runCreateSymlink(spec)
+	case "WriteSystemdUnit":
+		return runWriteSystemdUnit(ctx, spec)
+	case "ConfigureRepository":
+		return runRepoConfig(ctx, spec)
+	case "RefreshRepository":
+		return runRefreshRepository(ctx, spec)
+	case "WriteContainerdConfig":
+		return runWriteContainerdConfig(ctx, spec)
+	case "WriteContainerdRegistryHosts":
+		return runWriteContainerdRegistryHosts(spec)
 	case "Swap":
 		return runSwap(ctx, spec)
 	case "KernelModule":
@@ -50,20 +48,26 @@ func executeStep(ctx context.Context, kind string, spec map[string]any, execCtx 
 	case "Command":
 		decoded, err := workflowexec.DecodeSpec[runCommandSpec](spec)
 		if err != nil {
-			return fmt.Errorf("decode Command spec: %w", err)
+			return fmt.Errorf("decode command spec: %w", err)
 		}
 		return runCommandDecoded(ctx, decoded)
-	case "Image":
-		return runImage(ctx, spec)
-	case "Kubeadm":
-		return runKubeadm(ctx, spec)
-	case "Wait":
+	case "LoadImage":
+		return runLoadImage(ctx, execCtx.BundleRoot, spec)
+	case "VerifyImage":
+		return runVerifyImages(ctx, spec)
+	case "InitKubeadm":
+		return runInitKubeadm(ctx, spec)
+	case "JoinKubeadm":
+		return runJoinKubeadm(ctx, spec)
+	case "ResetKubeadm":
+		return runResetKubeadm(ctx, spec)
+	case "WaitForService", "WaitForCommand", "WaitForFile", "WaitForMissingFile", "WaitForTCPPort", "WaitForMissingTCPPort":
 		decoded, err := workflowexec.DecodeSpec[waitSpec](spec)
 		if err != nil {
-			return fmt.Errorf("decode Wait spec: %w", err)
+			return fmt.Errorf("decode wait spec: %w", err)
 		}
-		return runWaitDecoded(ctx, decoded, commandTimeout(spec))
-	case "Checks":
+		return runWaitDecoded(ctx, kind, decoded, commandTimeout(spec))
+	case "CheckHost", "DownloadPackage", "DownloadImage":
 		return fmt.Errorf("%s: unsupported step kind %s for apply", errCodeInstallKindUnsupported, kind)
 	default:
 		return fmt.Errorf("%s: unsupported step kind %s", errCodeInstallKindUnsupported, kind)

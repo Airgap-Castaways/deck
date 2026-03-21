@@ -18,17 +18,15 @@ This is the entrypoint for deck's generated schema documentation.
 
 ## Tool Step Quick Links
 
-- [Artifacts](tools/artifacts.md)
-- [Checks](tools/checks.md)
 - [Command](tools/command.md)
 - [Containerd](tools/containerd.md)
 - [Directory](tools/directory.md)
 - [File](tools/file.md)
+- [HostCheck](tools/host-check.md)
 - [Image](tools/image.md)
 - [KernelModule](tools/kernel-module.md)
 - [Kubeadm](tools/kubeadm.md)
-- [PackageCache](tools/package-cache.md)
-- [Packages](tools/packages.md)
+- [Package](tools/package.md)
 - [Repository](tools/repository.md)
 - [Service](tools/service.md)
 - [Swap](tools/swap.md)

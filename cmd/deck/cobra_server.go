@@ -344,7 +344,7 @@ func runServerDaemon(ctx context.Context, opts serverUpOptions) error {
 	}
 	args := []string{
 		"--unit", resolvedUnit,
-		"--property", "WorkingDirectory=" + cwd,
+		"--property", "WorkingEnsureDirectory=" + cwd,
 		"--service-type=simple",
 		execPath,
 		"server", "up",

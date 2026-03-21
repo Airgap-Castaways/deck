@@ -47,15 +47,33 @@ func TestToolSchemaDefinitionsUseRegistrySchemaFiles(t *testing.T) {
 	}
 }
 
-func TestActionScopedDefinitionsDeclareFieldOwnership(t *testing.T) {
+func TestGeneratedToolSchemasTreatAPIVersionAsOptional(t *testing.T) {
+	defs, err := toolSchemaDefinitions()
+	if err != nil {
+		t.Fatalf("toolSchemaDefinitions: %v", err)
+	}
 	for _, def := range workflowexec.StepDefinitions() {
-		if len(def.Actions) == 0 {
-			continue
+		schema, ok := defs[def.SchemaFile]
+		if !ok {
+			t.Fatalf("missing schema for %s", def.Kind)
 		}
-		for _, action := range def.Actions {
-			if len(action.Fields) == 0 {
-				t.Fatalf("missing field ownership for %s.%s", def.Kind, action.Name)
+		required := toStringSlice(schema["required"])
+		if contains(required, "apiVersion") {
+			t.Fatalf("tool schema %s should not require apiVersion: %v", def.SchemaFile, required)
+		}
+		for _, field := range []string{"id", "kind", "spec"} {
+			if !contains(required, field) {
+				t.Fatalf("tool schema %s missing required field %s: %v", def.SchemaFile, field, required)
 			}
 		}
 	}
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

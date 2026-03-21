@@ -1,82 +1,10 @@
 package schemamodel
 
 type WorkflowDocument struct {
-	Role      string            `json:"role"`
-	Version   string            `json:"version"`
-	Vars      map[string]any    `json:"vars,omitempty"`
-	Artifacts *ArtifactsSpec    `json:"artifacts,omitempty"`
-	Phases    []WorkflowPhase   `json:"phases,omitempty"`
-	Steps     []WorkflowStepRef `json:"steps,omitempty"`
-}
-
-type ArtifactsSpec struct {
-	Files    []ArtifactFileGroup    `json:"files,omitempty"`
-	Images   []ArtifactImageGroup   `json:"images,omitempty"`
-	Packages []ArtifactPackageGroup `json:"packages,omitempty"`
-}
-
-type ArtifactTarget struct {
-	OS       string `json:"os,omitempty"`
-	OSFamily string `json:"osFamily,omitempty"`
-	Release  string `json:"release,omitempty"`
-	Arch     string `json:"arch,omitempty"`
-}
-
-type ArtifactSource struct {
-	URL    string `json:"url,omitempty"`
-	Path   string `json:"path,omitempty"`
-	SHA256 string `json:"sha256,omitempty"`
-}
-
-type ArtifactFileOutput struct {
-	Path string `json:"path"`
-	Mode string `json:"mode,omitempty"`
-}
-
-type ArtifactFileItem struct {
-	ID       string             `json:"id"`
-	Source   ArtifactSource     `json:"source"`
-	Output   ArtifactFileOutput `json:"output"`
-	Checksum string             `json:"checksum,omitempty"`
-	Mode     string             `json:"mode,omitempty"`
-}
-
-type ArtifactFileGroup struct {
-	Group     string                 `json:"group"`
-	Targets   []ArtifactTarget       `json:"targets,omitempty"`
-	Items     []ArtifactFileItem     `json:"items"`
-	Execution *ArtifactExecutionSpec `json:"execution,omitempty"`
-}
-
-type ArtifactImageItem struct {
-	Image string `json:"image"`
-}
-
-type ArtifactImageGroup struct {
-	Group     string                 `json:"group"`
-	Targets   []ArtifactTarget       `json:"targets,omitempty"`
-	Items     []ArtifactImageItem    `json:"items"`
-	Backend   map[string]any         `json:"backend,omitempty"`
-	Output    map[string]any         `json:"output,omitempty"`
-	Execution *ArtifactExecutionSpec `json:"execution,omitempty"`
-}
-
-type ArtifactPackageItem struct {
-	Name string `json:"name"`
-}
-
-type ArtifactPackageGroup struct {
-	Group     string                 `json:"group"`
-	Targets   []ArtifactTarget       `json:"targets"`
-	Items     []ArtifactPackageItem  `json:"items"`
-	Repo      map[string]any         `json:"repo,omitempty"`
-	Backend   map[string]any         `json:"backend,omitempty"`
-	Execution *ArtifactExecutionSpec `json:"execution,omitempty"`
-}
-
-type ArtifactExecutionSpec struct {
-	Parallelism int `json:"parallelism,omitempty"`
-	Retry       int `json:"retry,omitempty"`
+	Version string            `json:"version"`
+	Vars    map[string]any    `json:"vars,omitempty"`
+	Phases  []WorkflowPhase   `json:"phases,omitempty"`
+	Steps   []WorkflowStepRef `json:"steps,omitempty"`
 }
 
 type WorkflowPhase struct {
@@ -134,7 +62,7 @@ type ToolDefinitionRequires struct {
 }
 
 type ToolDefinitionOutputContract struct {
-	Artifacts []string `json:"artifacts,omitempty"`
+	Artifact  []string `json:"artifacts,omitempty"`
 	StateKeys []string `json:"stateKeys,omitempty"`
 }
 

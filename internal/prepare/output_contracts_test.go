@@ -19,7 +19,6 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 	tests := []struct {
 		name   string
 		kind   string
-		action string
 		spec   map[string]any
 		runner CommandRunner
 		opts   RunOptions
@@ -27,34 +26,31 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 	}{
 		{
 			name:   "file download",
-			kind:   "File",
-			action: "download",
-			spec:   map[string]any{"action": "download", "source": map[string]any{"path": localFile}},
-			runner: &noArtifactsRunner{},
-			expect: []string{"path", "artifacts"},
+			kind:   "DownloadFile",
+			spec:   map[string]any{"source": map[string]any{"path": localFile}},
+			runner: &noArtifactRunner{},
+			expect: []string{"outputPath", "artifacts"},
 		},
 		{
 			name:   "packages download",
-			kind:   "Packages",
-			action: "download",
-			spec:   map[string]any{"action": "download", "packages": []any{"containerd"}},
-			runner: &noArtifactsRunner{},
+			kind:   "DownloadPackage",
+			spec:   map[string]any{"packages": []any{"containerd"}},
+			runner: &noArtifactRunner{},
 			expect: []string{"artifacts"},
 		},
 		{
 			name:   "image download",
-			kind:   "Image",
-			action: "download",
-			spec:   map[string]any{"action": "download", "images": []any{"registry.k8s.io/pause:3.9"}},
-			runner: &noArtifactsRunner{},
-			opts:   RunOptions{imageDownloadOps: stubImageDownloadOps()},
+			kind:   "DownloadImage",
+			spec:   map[string]any{"images": []any{"registry.k8s.io/pause:3.9"}},
+			runner: &noArtifactRunner{},
+			opts:   RunOptions{imageDownloadOps: stubDownloadImageOps()},
 			expect: []string{"artifacts"},
 		},
 		{
 			name:   "checks outputs",
-			kind:   "Checks",
+			kind:   "CheckHost",
 			spec:   map[string]any{"checks": []any{"os", "arch", "kernelModules"}},
-			runner: &noArtifactsRunner{},
+			runner: &noArtifactRunner{},
 			opts: RunOptions{checksRuntime: checksRuntime{
 				readHostFile: func(path string) ([]byte, error) {
 					switch path {
@@ -81,11 +77,11 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 				t.Fatalf("runPrepareStep failed: %v", err)
 			}
 			for _, key := range tc.expect {
-				covered[coverageKey(tc.kind, tc.action, key)] = true
+				covered[coverageKey(tc.kind, key)] = true
 				if _, ok := outputs[key]; !ok {
 					t.Fatalf("expected runtime output %q for %s", key, tc.kind)
 				}
-				if !workflowexec.StepHasOutput(tc.kind, tc.spec, key) {
+				if !workflowexec.StepHasOutput(tc.kind, key) {
 					t.Fatalf("contract missing output %q for %s", key, tc.kind)
 				}
 			}
@@ -93,32 +89,19 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 	}
 
 	for _, def := range workflowexec.StepDefinitions() {
-		if len(def.Actions) == 0 {
-			if !contains(def.Roles, "prepare") {
-				continue
-			}
-			for _, key := range def.Outputs {
-				if !covered[coverageKey(def.Kind, "", key)] {
-					t.Fatalf("missing prepare output coverage for %s output %s", def.Kind, key)
-				}
-			}
+		if !contains(def.Roles, "prepare") {
 			continue
 		}
-		for _, action := range def.Actions {
-			if !contains(action.Roles, "prepare") {
-				continue
-			}
-			for _, key := range action.Outputs {
-				if !covered[coverageKey(def.Kind, action.Name, key)] {
-					t.Fatalf("missing prepare output coverage for %s.%s output %s", def.Kind, action.Name, key)
-				}
+		for _, key := range def.Outputs {
+			if !covered[coverageKey(def.Kind, key)] {
+				t.Fatalf("missing prepare output coverage for %s output %s", def.Kind, key)
 			}
 		}
 	}
 }
 
-func coverageKey(kind, action, output string) string {
-	return kind + ":" + action + ":" + output
+func coverageKey(kind, output string) string {
+	return kind + ":" + output
 }
 
 func contains(values []string, want string) bool {

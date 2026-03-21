@@ -50,8 +50,8 @@ func TestManifestWorkflowRulesMatchValidatorAndSchema(t *testing.T) {
 	if got := manifest.Workflow.SupportedVersion; got != validate.SupportedWorkflowVersion() {
 		t.Fatalf("unexpected supported version: %s", got)
 	}
-	if strings.Join(manifest.Workflow.SupportedRoles, ",") != strings.Join(validate.SupportedWorkflowRoles(), ",") {
-		t.Fatalf("unexpected supported roles: %v", manifest.Workflow.SupportedRoles)
+	if strings.Join(manifest.Workflow.SupportedModes, ",") != strings.Join(validate.SupportedWorkflowRoles(), ",") {
+		t.Fatalf("unexpected supported modes: %v", manifest.Workflow.SupportedModes)
 	}
 	schemaRaw, err := deckschemas.WorkflowSchema()
 	if err != nil {
@@ -135,11 +135,11 @@ func TestRelevantStepKindsMatchesDockerRequest(t *testing.T) {
 	for _, step := range relevant {
 		joined = append(joined, step.Kind)
 	}
-	if !contains(joined, "Packages") {
-		t.Fatalf("expected Packages in relevant steps, got %v", joined)
+	if !contains(joined, "InstallPackage") {
+		t.Fatalf("expected packages.install in relevant steps, got %v", joined)
 	}
-	if !contains(joined, "Repository") {
-		t.Fatalf("expected Repository in relevant steps, got %v", joined)
+	if !contains(joined, "ConfigureRepository") {
+		t.Fatalf("expected ConfigureRepository in relevant steps, got %v", joined)
 	}
 }
 
@@ -150,10 +150,10 @@ func TestRelevantStepKindsBlockIncludesTypedShapeGuidance(t *testing.T) {
 		"real YAML array",
 		"{{ .vars.* }}",
 		"spec.repositories",
-		"action install",
-		"action configure",
-		"source:\n",
+		"spec.source",
 		"spec.format",
+		"InstallPackage",
+		"ConfigureRepository",
 	} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("expected %q in typed step guidance block, got %q", want, block)

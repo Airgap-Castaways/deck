@@ -1,0 +1,46 @@
+steps:
+  - id: download-ubuntu2204-runtime-deps
+    kind: DownloadPackage
+    spec:
+      packages: [containerd, containernetworking-plugins]
+      distro:
+        family: debian
+        release: ubuntu2204
+      repo:
+        type: apt-flat
+        generate: true
+      backend:
+        mode: container
+        runtime: auto
+        image: ubuntu:22.04
+      outputDir: packages/apt/ubuntu2204
+  - id: download-ubuntu2404-runtime-deps
+    kind: DownloadPackage
+    spec:
+      packages: [containerd, containernetworking-plugins]
+      distro:
+        family: debian
+        release: ubuntu2404
+      repo:
+        type: apt-flat
+        generate: true
+      backend:
+        mode: container
+        runtime: auto
+        image: ubuntu:24.04
+      outputDir: packages/apt/ubuntu2404
+  - id: download-rocky9-runtime-deps
+    kind: DownloadPackage
+    spec:
+      packages: [bash]
+      distro:
+        family: rhel
+        release: rocky9
+      repo:
+        type: yum
+        generate: true
+      backend:
+        mode: container
+        runtime: auto
+        image: rockylinux:9
+      outputDir: packages/yum/rocky9

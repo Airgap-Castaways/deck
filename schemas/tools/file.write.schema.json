@@ -1,8 +1,8 @@
 {
-  "$id": "https://deck.local/schemas/tools/package-cache.schema.json",
+  "$id": "https://deck.local/schemas/tools/file.write.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Refreshes package metadata and can restrict or exclude repos during refresh.",
+  "description": "Writes inline or templated content to a node path.",
   "properties": {
     "apiVersion": {
       "const": "deck/v1alpha1"
@@ -11,7 +11,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "PackageCache"
+      "const": "WriteFile"
     },
     "metadata": {
       "additionalProperties": true,
@@ -32,58 +32,47 @@
     },
     "spec": {
       "additionalProperties": false,
-      "anyOf": [
+      "oneOf": [
         {
-          "properties": {
-            "clean": {
-              "const": true
-            }
+          "not": {
+            "required": [
+              "template"
+            ]
           },
           "required": [
-            "clean"
+            "content"
           ]
         },
         {
-          "properties": {
-            "update": {
-              "const": true
-            }
+          "not": {
+            "required": [
+              "content"
+            ]
           },
           "required": [
-            "update"
+            "template"
           ]
         }
       ],
       "properties": {
-        "clean": {
-          "type": "boolean"
-        },
-        "excludeRepos": {
-          "items": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "manager": {
-          "enum": [
-            "auto",
-            "apt",
-            "dnf"
-          ],
+        "content": {
           "type": "string"
         },
-        "restrictToRepos": {
-          "items": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "type": "array"
+        "mode": {
+          "pattern": "^[0-7]{4}$",
+          "type": "string"
         },
-        "update": {
-          "type": "boolean"
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "template": {
+          "type": "string"
         }
       },
+      "required": [
+        "path"
+      ],
       "type": "object"
     },
     "timeout": {
@@ -96,11 +85,10 @@
   },
   "required": [
     "id",
-    "apiVersion",
     "kind",
     "spec"
   ],
-  "title": "PackageCacheStep",
+  "title": "WriteFileStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

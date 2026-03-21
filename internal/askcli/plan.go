@@ -111,7 +111,7 @@ type askconfigSettings struct {
 func localPlan(prompt string, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) askcontract.PlanResponse {
 	files := []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Kind: "scenario", Action: "create", Purpose: "Primary workflow entrypoint"}}
 	if strings.Contains(strings.ToLower(prompt), "prepare") {
-		files = append(files, askcontract.PlanFile{Path: "workflows/scenarios/prepare.yaml", Kind: "scenario", Action: "create", Purpose: "Prepare artifacts and dependencies"})
+		files = append(files, askcontract.PlanFile{Path: "workflows/prepare.yaml", Kind: "scenario", Action: "create", Purpose: "Prepare bundle inputs and dependencies"})
 	}
 	if strings.Contains(strings.ToLower(prompt), "vars") {
 		files = append(files, askcontract.PlanFile{Path: "workflows/vars.yaml", Kind: "vars", Action: "create", Purpose: "Workspace variables"})
@@ -248,7 +248,7 @@ func repoMapChunk(workspace askretrieve.WorkspaceSummary) askretrieve.Chunk {
 		path    string
 		imports []string
 		steps   []string
-		role    string
+		mode    string
 	}
 	lines := make([]repoLine, 0, len(workspace.Files))
 	for _, file := range workspace.Files {
@@ -256,15 +256,15 @@ func repoMapChunk(workspace askretrieve.WorkspaceSummary) askretrieve.Chunk {
 		if !strings.HasPrefix(clean, "workflows/") {
 			continue
 		}
-		lines = append(lines, repoLine{path: clean, imports: localImportPaths(file.Content), steps: localStepKinds(file.Content), role: localRole(file.Content)})
+		lines = append(lines, repoLine{path: clean, imports: localImportPaths(file.Content), steps: localStepKinds(file.Content), mode: localWorkflowMode(clean, file.Content)})
 	}
 	sort.Slice(lines, func(i, j int) bool { return lines[i].path < lines[j].path })
 	for _, line := range lines {
 		b.WriteString("- ")
 		b.WriteString(line.path)
-		if line.role != "" {
-			b.WriteString(" role=")
-			b.WriteString(line.role)
+		if line.mode != "" {
+			b.WriteString(" mode=")
+			b.WriteString(line.mode)
 		}
 		if len(line.steps) > 0 {
 			b.WriteString(" steps=")
@@ -392,12 +392,18 @@ func localStepKinds(content string) []string {
 	return dedupe(kinds)
 }
 
-func localRole(content string) string {
-	return strings.TrimSpace(parseWorkflowOutline(content).Role)
+func localWorkflowMode(path string, content string) string {
+	clean := filepath.ToSlash(strings.TrimSpace(path))
+	if filepath.Base(clean) == "prepare.yaml" {
+		return "prepare"
+	}
+	if strings.Contains(clean, "/workflows/scenarios/") || strings.HasPrefix(clean, "workflows/scenarios/") {
+		return "apply"
+	}
+	return ""
 }
 
 type workflowOutline struct {
-	Role   string         `yaml:"role"`
 	Steps  []outlineStep  `yaml:"steps"`
 	Phases []outlinePhase `yaml:"phases"`
 }

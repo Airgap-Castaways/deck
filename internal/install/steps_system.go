@@ -54,14 +54,14 @@ func runSysctl(ctx context.Context, spec map[string]any) error {
 	return nil
 }
 
-func runService(ctx context.Context, spec map[string]any) error {
+func runManageService(ctx context.Context, spec map[string]any) error {
 	name := stringValue(spec, "name")
 	names := stringSlice(spec["names"])
 	if name == "" && len(names) == 0 {
-		return fmt.Errorf("%s: Service requires name or names", errCodeInstallServiceNameMiss)
+		return fmt.Errorf("%s: ManageService requires name or names", errCodeInstallManageServiceNameMiss)
 	}
 	if name != "" && len(names) > 0 {
-		return fmt.Errorf("%s: Service accepts either name or names", errCodeInstallServiceNameMiss)
+		return fmt.Errorf("%s: ManageService accepts either name or names", errCodeInstallManageServiceNameMiss)
 	}
 	if name != "" {
 		names = []string{name}
@@ -88,7 +88,7 @@ func runService(ctx context.Context, spec map[string]any) error {
 		}
 
 		if enabled, ok := spec["enabled"].(bool); ok {
-			isEnabled, err := isServiceEnabled(ctx, serviceName, timeout)
+			isEnabled, err := isManageServiceEnabled(ctx, serviceName, timeout)
 			if err != nil {
 				return err
 			}
@@ -108,7 +108,7 @@ func runService(ctx context.Context, spec map[string]any) error {
 		case "", "unchanged":
 			continue
 		case "started":
-			active, err := isServiceActive(ctx, serviceName, timeout)
+			active, err := isManageServiceActive(ctx, serviceName, timeout)
 			if err != nil {
 				return err
 			}
@@ -119,7 +119,7 @@ func runService(ctx context.Context, spec map[string]any) error {
 				return err
 			}
 		case "stopped":
-			active, err := isServiceActive(ctx, serviceName, timeout)
+			active, err := isManageServiceActive(ctx, serviceName, timeout)
 			if err != nil {
 				return err
 			}

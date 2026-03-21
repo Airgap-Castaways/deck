@@ -5,28 +5,17 @@ Reference for reusable workflow component fragments located under `workflows/com
 
 - schema: `../../../schemas/deck-component-fragment.schema.json`
 
-## Minimal Example
-
-```yaml
-steps:
-  - id: example-step
-    kind: Command
-    spec:
-      command: [echo, hello]
-```
-
-## Realistic Example
+## Example
 
 ```yaml
 steps:
   - id: write-config
-    kind: File
+    kind: WriteFile
     spec:
-      action: write
       path: /etc/example.conf
       content: hello
   - id: restart-service
-    kind: Service
+    kind: ManageService
     spec:
       name: example
       state: restarted

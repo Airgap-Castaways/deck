@@ -26,8 +26,8 @@ func TestWorkspaceFileAllowed(t *testing.T) {
 func TestInspectWorkspaceWalksScenarioAndComponentTrees(t *testing.T) {
 	root := t.TempDir()
 	for path, content := range map[string]string{
-		"workflows/scenarios/apply.yaml":         "role: apply\nversion: v1alpha1\nsteps: []\n",
-		"workflows/scenarios/extra/install.yaml": "role: apply\nversion: v1alpha1\nsteps: []\n",
+		"workflows/scenarios/apply.yaml":         "version: v1alpha1\nsteps: []\n",
+		"workflows/scenarios/extra/install.yaml": "version: v1alpha1\nsteps: []\n",
 		"workflows/components/base/docker.yaml":  "steps: []\n",
 		"workflows/components/base/systemd.yaml": "steps: []\n",
 		"workflows/vars.yaml":                    "{}\n",
@@ -60,7 +60,7 @@ func TestRetrieveHasBudgetAndDropTracking(t *testing.T) {
 		Root: filepath.ToSlash(t.TempDir()),
 		Files: []WorkspaceFile{
 			{Path: "workflows/scenarios/apply.yaml", Content: longText(7000)},
-			{Path: "workflows/scenarios/prepare.yaml", Content: longText(7000)},
+			{Path: "workflows/prepare.yaml", Content: longText(7000)},
 		},
 	}
 	result := Retrieve(askintent.RouteQuestion, "what is this workspace", askintent.Target{}, workspace, askstate.Context{}, nil)
@@ -79,8 +79,8 @@ func TestRetrieveIncludesRelatedImportsForTargetScenario(t *testing.T) {
 	workspace := WorkspaceSummary{
 		Root: filepath.ToSlash(t.TempDir()),
 		Files: []WorkspaceFile{
-			{Path: "workflows/scenarios/apply.yaml", Content: "role: apply\nversion: v1alpha1\nphases:\n  - name: bootstrap\n    imports:\n      - path: bootstrap.yaml\n"},
-			{Path: "workflows/components/bootstrap.yaml", Content: "steps:\n  - id: init\n    kind: Kubeadm\n    spec:\n      action: init\n"},
+			{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: bootstrap\n    imports:\n      - path: bootstrap.yaml\n"},
+			{Path: "workflows/components/bootstrap.yaml", Content: "steps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n"},
 			{Path: "workflows/components/unrelated.yaml", Content: "steps:\n  - id: noop\n    kind: Command\n"},
 		},
 	}
@@ -95,7 +95,7 @@ func TestRetrieveIncludesExternalPlanAwareChunks(t *testing.T) {
 	workspace := WorkspaceSummary{
 		Root: filepath.ToSlash(t.TempDir()),
 		Files: []WorkspaceFile{
-			{Path: "workflows/scenarios/apply.yaml", Content: "role: apply\nversion: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [\"true\"]\n"},
+			{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [\"true\"]\n"},
 		},
 	}
 	external := []Chunk{{ID: "plan-artifact", Source: "plan", Label: "plan", Content: "Planned files:\n- workflows/scenarios/apply.yaml", Score: 90}}
@@ -116,8 +116,8 @@ func TestRetrieveIncludesAskContextChunks(t *testing.T) {
 		}
 	}
 	for _, chunk := range result.Chunks {
-		if chunk.ID == "typed-steps" && !containsString(chunk.Content, "Packages") {
-			t.Fatalf("expected Packages in typed-step chunk, got %q", chunk.Content)
+		if chunk.ID == "typed-steps" && !containsString(chunk.Content, "InstallPackage") {
+			t.Fatalf("expected packages.install in typed-step chunk, got %q", chunk.Content)
 		}
 	}
 }

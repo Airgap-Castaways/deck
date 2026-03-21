@@ -50,7 +50,7 @@ func runInstallPackages(ctx context.Context, spec map[string]any) error {
 
 	if sourcePath != "" {
 		if installer == "apt-get" {
-			artifacts, err := collectPackageArtifacts(sourcePath, ".deb")
+			artifacts, err := collectPackageArtifact(sourcePath, ".deb")
 			if err != nil {
 				return fmt.Errorf("%s: %w", errCodeInstallPkgSourceInvalid, err)
 			}
@@ -65,7 +65,7 @@ func runInstallPackages(ctx context.Context, spec map[string]any) error {
 			return nil
 		}
 
-		artifacts, err := collectPackageArtifacts(sourcePath, ".rpm")
+		artifacts, err := collectPackageArtifact(sourcePath, ".rpm")
 		if err != nil {
 			return fmt.Errorf("%s: %w", errCodeInstallPkgSourceInvalid, err)
 		}
@@ -106,7 +106,7 @@ func runInstallPackages(ctx context.Context, spec map[string]any) error {
 	return nil
 }
 
-func collectPackageArtifacts(root, ext string) ([]string, error) {
+func collectPackageArtifact(root, ext string) ([]string, error) {
 	artifacts := make([]string, 0)
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {

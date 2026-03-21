@@ -1,4 +1,3 @@
-role: apply
 version: v1alpha1
 vars:
   serverURL: 192.168.56.1:8080
@@ -10,21 +9,19 @@ phases:
       - id: write-apt-offline-config
         when: vars.osFamily == "debian"
         apiVersion: deck/v1alpha1
-        kind: File
+        kind: WriteFile
         spec:
-          action: write
           path: /etc/apt/apt.conf.d/99offline
           mode: "0644"
-          contentFromTemplate: |
+          template: |
             APT::Get::AllowUnauthenticated "true";
             Acquire::AllowInsecureRepositories "true";
             Acquire::AllowDowngradeToInsecureRepositories "true";
       - id: apply-offline-repo-config-apt
         when: vars.osFamily == "debian"
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: ConfigureRepository
         spec:
-          action: configure
           format: apt
           replaceExisting: true
           repositories:
@@ -34,7 +31,7 @@ phases:
       - id: refresh-offline-repo-cache-apt
         when: vars.osFamily == "debian"
         apiVersion: deck/v1alpha1
-        kind: PackageCache
+        kind: RefreshRepository
         spec:
           manager: apt
           clean: true
@@ -44,9 +41,8 @@ phases:
       - id: apply-offline-repo-config-yum
         when: vars.osFamily == "rhel"
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: ConfigureRepository
         spec:
-          action: configure
           format: yum
           replaceExisting: true
           repositories:
@@ -59,7 +55,7 @@ phases:
       - id: refresh-offline-repo-cache-yum
         when: vars.osFamily == "rhel"
         apiVersion: deck/v1alpha1
-        kind: PackageCache
+        kind: RefreshRepository
         spec:
           manager: dnf
           clean: true
@@ -67,7 +63,7 @@ phases:
           restrictToRepos: [offline-repo]
       - id: disable-firewalld-and-ufw
         apiVersion: deck/v1alpha1
-        kind: Service
+        kind: ManageService
         spec:
           names: [firewalld, ufw]
           enabled: false

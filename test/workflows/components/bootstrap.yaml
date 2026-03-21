@@ -1,8 +1,7 @@
 steps:
   - id: bootstrap-reset-preflight
-    kind: Kubeadm
+    kind: ResetKubeadm
     spec:
-      action: reset
       force: true
       ignoreErrors: true
       criSocket: unix:///run/containerd/containerd.sock
@@ -65,13 +64,11 @@ steps:
           systemctl enable --now kubelet
           systemctl is-active --quiet kubelet
   - id: bootstrap-init
-    kind: Kubeadm
+    kind: InitKubeadm
     timeout: 20m
     spec:
-      action: init
       configTemplate: default
       configFile: /tmp/deck/kubeadm-init.yaml
-      pullImages: true
       outputJoinFile: /tmp/deck/join.txt
       kubernetesVersion: "{{ .vars.kubernetesVersion }}"
       advertiseAddress: auto
@@ -79,19 +76,18 @@ steps:
       criSocket: unix:///run/containerd/containerd.sock
       ignorePreflightErrors: [Swap, FileExisting-crictl, FileExisting-conntrack, FileExisting-socat, Port-10250]
   - id: bootstrap-publish-join-dir
-    kind: Directory
+    kind: EnsureDirectory
     spec:
       path: /tmp/deck/server-root/files/cluster
   - id: bootstrap-publish-join
-    kind: File
+    kind: CopyFile
     spec:
-      action: copy
-      src: /tmp/deck/join.txt
-      dest: /tmp/deck/server-root/files/cluster/join.txt
+      source:
+        path: /tmp/deck/join.txt
+      path: /tmp/deck/server-root/files/cluster/join.txt
   - id: bootstrap-kubeconfig-ready
-    kind: Wait
+    kind: WaitForFile
     spec:
-      action: fileExists
       timeout: 5m
       path: /etc/kubernetes/admin.conf
       type: file

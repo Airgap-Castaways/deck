@@ -146,7 +146,7 @@ func describeVarsFile(file askretrieve.WorkspaceFile) (string, string) {
 }
 
 func describeScenarioFile(workspace askretrieve.WorkspaceSummary, file askretrieve.WorkspaceFile, doc map[string]any) (string, string) {
-	role, _ := doc["role"].(string)
+	role := localWorkflowMode(file.Path, file.Content)
 	version, _ := doc["version"].(string)
 	phaseNames := make([]string, 0)
 	imports := make([]string, 0)
@@ -167,9 +167,6 @@ func describeScenarioFile(workspace askretrieve.WorkspaceSummary, file askretrie
 	}
 	b := &strings.Builder{}
 	_, _ = fmt.Fprintf(b, "%s is a scenario workflow", file.Path)
-	if role != "" {
-		_, _ = fmt.Fprintf(b, " with role %q", role)
-	}
 	if version != "" {
 		_, _ = fmt.Fprintf(b, " and version %q", version)
 	}

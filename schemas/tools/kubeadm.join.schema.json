@@ -1,8 +1,8 @@
 {
-  "$id": "https://deck.local/schemas/tools/checks.schema.json",
+  "$id": "https://deck.local/schemas/tools/kubeadm.join.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Runs host checks before prepare execution.",
+  "description": "Runs kubeadm join.",
   "properties": {
     "apiVersion": {
       "const": "deck/v1alpha1"
@@ -11,7 +11,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "Checks"
+      "const": "JoinKubeadm"
     },
     "metadata": {
       "additionalProperties": true,
@@ -32,35 +32,36 @@
     },
     "spec": {
       "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "joinFile"
+          ]
+        },
+        {
+          "required": [
+            "configFile"
+          ]
+        }
+      ],
       "properties": {
-        "binaries": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "checks": {
-          "items": {
-            "enum": [
-              "os",
-              "arch",
-              "kernelModules",
-              "swap",
-              "binaries"
-            ],
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
-        },
-        "failFast": {
-          "default": true,
+        "asControlPlane": {
+          "default": false,
           "type": "boolean"
+        },
+        "configFile": {
+          "type": "string"
+        },
+        "extraArgs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "joinFile": {
+          "type": "string"
         }
       },
-      "required": [
-        "checks"
-      ],
       "type": "object"
     },
     "timeout": {
@@ -73,11 +74,10 @@
   },
   "required": [
     "id",
-    "apiVersion",
     "kind",
     "spec"
   ],
-  "title": "ChecksStep",
+  "title": "JoinKubeadmStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

@@ -23,7 +23,6 @@ type toolSchemaDoc struct {
 	Title       string
 	Description string
 	Visibility  string
-	Actions     []string
 	SpecFields  []string
 	Required    []string
 }
@@ -99,6 +98,9 @@ func run() error {
 }
 
 func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSchema, toolDefinitionSchema map[string]any, toolPages []schemadoc.PageInput) error {
+	if err := removeGeneratedToolDocs(filepath.Join(root, "docs", "reference", "schema", "tools"), toolPages); err != nil {
+		return err
+	}
 	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "README.md"), schemadoc.RenderSchemaIndex("schemas/deck-workflow.schema.json", "schemas/deck-tooldefinition.schema.json", toolPages)); err != nil {
 		return err
 	}
@@ -115,8 +117,27 @@ func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSche
 		return err
 	}
 	for _, page := range toolPages {
-		name := strings.TrimSuffix(filepath.Base(page.SchemaPath), ".schema.json") + ".md"
-		if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "tools", name), schemadoc.RenderToolPage(page)); err != nil {
+		if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "tools", page.PageSlug+".md"), schemadoc.RenderToolPage(page)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func removeGeneratedToolDocs(dir string, toolPages []schemadoc.PageInput) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	keep := map[string]bool{"README.md": true}
+	for _, page := range toolPages {
+		keep[page.PageSlug+".md"] = true
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" || keep[entry.Name()] {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
 			return err
 		}
 	}
@@ -128,8 +149,30 @@ func writeToolSchemas(root string) error {
 	if err != nil {
 		return err
 	}
+	if err := removeStaleGeneratedSchemas(filepath.Join(root, "schemas", "tools"), definitions); err != nil {
+		return err
+	}
 	for name, schema := range definitions {
 		if err := writeJSONFile(filepath.Join(root, "schemas", "tools", name), schema); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func removeStaleGeneratedSchemas(dir string, definitions map[string]map[string]any) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".schema.json") {
+			continue
+		}
+		if _, ok := definitions[entry.Name()]; ok {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
 			return err
 		}
 	}

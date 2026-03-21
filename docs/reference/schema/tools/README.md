@@ -3,93 +3,83 @@
 
 Reference documentation for each typed workflow step supported by deck.
 
-## [Artifacts](artifacts.md)
-
-- **Category**: `apply`
-- **Summary**: Install or extract pre-collected artifacts on the node.
-
-## [Checks](checks.md)
-
-- **Category**: `prepare`
-- **Summary**: Run host checks before prepare execution.
-
 ## [Command](command.md)
 
-- **Category**: `advanced`
-- **Summary**: Run an explicit command as an escape hatch.
+- **Summary**: Reference for the `Command` family of typed workflow steps.
+- **Kinds**: `Command`
 
 ## [Containerd](containerd.md)
 
-- **Category**: `runtime`
-- **Summary**: Write containerd config and registry host settings.
+- **Summary**: Reference for the `Containerd` family of typed workflow steps.
+- **Kinds**: `WriteContainerdConfig`, `WriteContainerdRegistryHosts`
 
 ## [Directory](directory.md)
 
-- **Category**: `filesystem`
-- **Summary**: Ensure a directory exists with an optional mode.
+- **Summary**: Reference for the `Directory` family of typed workflow steps.
+- **Kinds**: `EnsureDirectory`
 
 ## [File](file.md)
 
-- **Category**: `filesystem`
-- **Summary**: Manage files through write, copy, edit, or download actions.
+- **Summary**: Reference for the `File` family of typed workflow steps.
+- **Kinds**: `DownloadFile`, `WriteFile`, `CopyFile`, `EditFile`, `ExtractArchive`
+
+## [HostCheck](host-check.md)
+
+- **Summary**: Reference for the `HostCheck` family of typed workflow steps.
+- **Kinds**: `CheckHost`
 
 ## [Image](image.md)
 
-- **Category**: `containers`
-- **Summary**: Download or verify container images.
+- **Summary**: Reference for the `Image` family of typed workflow steps.
+- **Kinds**: `DownloadImage`, `LoadImage`, `VerifyImage`
 
 ## [KernelModule](kernel-module.md)
 
-- **Category**: `system`
-- **Summary**: Load and persist kernel modules.
+- **Summary**: Reference for the `KernelModule` family of typed workflow steps.
+- **Kinds**: `KernelModule`
 
 ## [Kubeadm](kubeadm.md)
 
-- **Category**: `kubernetes`
-- **Summary**: Run kubeadm init, join, or reset actions.
+- **Summary**: Reference for the `Kubeadm` family of typed workflow steps.
+- **Kinds**: `InitKubeadm`, `JoinKubeadm`, `ResetKubeadm`
 
-## [PackageCache](package-cache.md)
+## [Package](package.md)
 
-- **Category**: `packages`
-- **Summary**: Refresh package metadata with repo filtering.
-
-## [Packages](packages.md)
-
-- **Category**: `packages`
-- **Summary**: Download or install package sets.
+- **Summary**: Reference for the `Package` family of typed workflow steps.
+- **Kinds**: `DownloadPackage`, `InstallPackage`
 
 ## [Repository](repository.md)
 
-- **Category**: `packages`
-- **Summary**: Configure apt or yum repository definitions.
+- **Summary**: Reference for the `Repository` family of typed workflow steps.
+- **Kinds**: `ConfigureRepository`, `RefreshRepository`
 
 ## [Service](service.md)
 
-- **Category**: `system`
-- **Summary**: Start, stop, enable, or reload local services.
+- **Summary**: Reference for the `Service` family of typed workflow steps.
+- **Kinds**: `ManageService`
 
 ## [Swap](swap.md)
 
-- **Category**: `system`
-- **Summary**: Enable or disable swap and its persistence.
+- **Summary**: Reference for the `Swap` family of typed workflow steps.
+- **Kinds**: `Swap`
 
 ## [Symlink](symlink.md)
 
-- **Category**: `filesystem`
-- **Summary**: Create or replace a symbolic link.
+- **Summary**: Reference for the `Symlink` family of typed workflow steps.
+- **Kinds**: `CreateSymlink`
 
 ## [Sysctl](sysctl.md)
 
-- **Category**: `system`
-- **Summary**: Write and optionally apply sysctl values.
+- **Summary**: Reference for the `Sysctl` family of typed workflow steps.
+- **Kinds**: `Sysctl`
 
 ## [SystemdUnit](systemd-unit.md)
 
-- **Category**: `system`
-- **Summary**: Write a systemd unit file and optionally manage the service.
+- **Summary**: Reference for the `SystemdUnit` family of typed workflow steps.
+- **Kinds**: `WriteSystemdUnit`
 
 ## [Wait](wait.md)
 
-- **Category**: `control-flow`
-- **Summary**: Wait for command, service, file, or port conditions.
+- **Summary**: Reference for the `Wait` family of typed workflow steps.
+- **Kinds**: `WaitForService`, `WaitForCommand`, `WaitForFile`, `WaitForMissingFile`, `WaitForTCPPort`, `WaitForMissingTCPPort`
 

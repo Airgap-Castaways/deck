@@ -5,96 +5,37 @@ Top-level workflow authoring reference for deck workflows.
 
 - schema: `../../../schemas/deck-workflow.schema.json`
 
-## Minimal Example
+## Example
 
 ```yaml
-role: apply
 version: v1alpha1
 steps:
   - id: write-config
     apiVersion: deck/v1alpha1
-    kind: File
+    kind: WriteFile
     spec:
-      action: write
       path: /etc/example.conf
       content: hello
-```
-
-## Realistic Example
-
-```yaml
-role: prepare
-version: v1alpha1
-artifacts:
-  files:
-    - group: runtime-binaries
-      items:
-        - id: runc
-          source:
-            url: https://mirror.example.invalid/runc
-          output:
-            path: bin/runc
 ```
 
 ## Fields
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `artifacts` | `object` | no | `` | `` | Declarative prepare inventory that replaces legacy prepare download steps. | `{files:[...],images:[...],packages:[...]}` |
 | `phases` | `array<object>` | no | `` | `` | Ordered execution phases. Each phase can contain imports, steps, or both. | `[{name:install,steps:[...]}]` |
-| `role` | `string` | yes | `` | `prepare, apply` | Workflow role. `prepare` builds offline artifacts; `apply` changes the local node. | `apply` |
-| `steps` | `array<object>` | no | `` | `` | Flat step list for workflows that do not need named phases. | `[{id:configure-runtime,kind:Containerd,spec:{...}}]` |
+| `steps` | `array<object>` | no | `` | `` | Flat step list for workflows that do not need named phases. | `[{id:configure-runtime,kind:WriteContainerdConfig,spec:{...}}]` |
 | `vars` | `object` | no | `map[]` | `` |  | `map[]` |
 | `version` | `string` | yes | `` | `` |  | `v1alpha1` |
 
-## Nested Objects
-
-### `artifacts.files[].execution`
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `artifacts.files[].execution.parallelism` | `integer` | no | `` | `` |  | `1` |
-| `artifacts.files[].execution.retry` | `integer` | no | `` | `` |  | `1` |
-
-### `artifacts.files[].items[].output`
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `artifacts.files[].items[].output.mode` | `string` | no | `` | `` |  | `example` |
-| `artifacts.files[].items[].output.path` | `string` | yes | `` | `` |  | `example` |
-
-### `artifacts.files[].items[].source`
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `artifacts.files[].items[].source.path` | `string` | no | `` | `` |  | `example` |
-| `artifacts.files[].items[].source.sha256` | `string` | no | `` | `` |  | `example` |
-| `artifacts.files[].items[].source.url` | `string` | no | `` | `` |  | `example` |
-
-### `artifacts.images[].execution`
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `artifacts.images[].execution.parallelism` | `integer` | no | `` | `` |  | `1` |
-| `artifacts.images[].execution.retry` | `integer` | no | `` | `` |  | `1` |
-
-### `artifacts.packages[].execution`
-
-| Key | Type | Required | Default | Enum | Description | Example |
-|---|---|---:|---|---|---|---|
-| `artifacts.packages[].execution.parallelism` | `integer` | no | `` | `` |  | `1` |
-| `artifacts.packages[].execution.retry` | `integer` | no | `` | `` |  | `1` |
-
-
 ## Validation Rules
 
-- At least one of the top-level groups `artifacts`, `phases`, or `steps` must be present.
+- At least one of the top-level groups `phases` or `steps` must be present.
 - Top-level `phases` and top-level `steps` cannot both be set in the same workflow.
 
 ## Notes
 
-- A workflow must define at least one of `artifacts`, `phases`, or `steps`.
+- A workflow must define at least one of `phases` or `steps`.
 - A workflow cannot define both top-level `phases` and top-level `steps` at the same time.
 - Imports are only supported under `phases[].imports` and resolve from `workflows/components/`.
-- Artifact execution controls are opt-in and only affect `role: prepare` artifact jobs; they do not introduce general step-level parallelism.
+- Workflow mode is determined by command context or file location, not by an in-file `role` field.
 - Each step still validates against its own kind-specific schema after the top-level workflow schema passes.

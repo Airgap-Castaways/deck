@@ -147,7 +147,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		result.Plan = &plan
 		logger.logf("basic", "[ask][phase:plan:done] files=%d blockers=%d\n", len(plan.Files), len(plan.Blockers))
 		planMD := renderPlanMarkdown(plan, ".deck/plan/latest.md")
-		planMDPath, planJSONPath, saveErr := savePlanArtifacts(resolvedRoot, opts, plan, planMD)
+		planMDPath, planJSONPath, saveErr := savePlanArtifact(resolvedRoot, opts, plan, planMD)
 		if saveErr != nil {
 			return saveErr
 		}

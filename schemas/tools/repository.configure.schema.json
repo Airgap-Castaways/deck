@@ -1,5 +1,5 @@
 {
-  "$id": "https://deck.local/schemas/tools/repository.schema.json",
+  "$id": "https://deck.local/schemas/tools/repository.configure.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Configures repository definitions on the local node.",
@@ -11,7 +11,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "Repository"
+      "const": "ConfigureRepository"
     },
     "metadata": {
       "additionalProperties": true,
@@ -32,29 +32,7 @@
     },
     "spec": {
       "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "action": {
-                "const": "configure"
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "repositories"
-            ]
-          }
-        }
-      ],
       "properties": {
-        "action": {
-          "enum": [
-            "configure"
-          ],
-          "type": "string"
-        },
         "backupPaths": {
           "items": {
             "type": "string"
@@ -85,21 +63,6 @@
         "path": {
           "type": "string"
         },
-        "refreshCache": {
-          "additionalProperties": false,
-          "properties": {
-            "clean": {
-              "type": "boolean"
-            },
-            "enabled": {
-              "type": "boolean"
-            },
-            "update": {
-              "type": "boolean"
-            }
-          },
-          "type": "object"
-        },
         "replaceExisting": {
           "type": "boolean"
         },
@@ -113,7 +76,7 @@
         }
       },
       "required": [
-        "action"
+        "repositories"
       ],
       "type": "object"
     },
@@ -127,11 +90,10 @@
   },
   "required": [
     "id",
-    "apiVersion",
     "kind",
     "spec"
   ],
-  "title": "RepositoryStep",
+  "title": "ConfigureRepositoryStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

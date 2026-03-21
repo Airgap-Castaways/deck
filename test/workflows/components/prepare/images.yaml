@@ -1,0 +1,13 @@
+steps:
+  - id: download-control-plane-images
+    kind: DownloadImage
+    spec:
+      images:
+        - registry.k8s.io/kube-apiserver:{{ .vars.kubernetesVersion }}
+        - registry.k8s.io/kube-controller-manager:{{ .vars.kubernetesVersion }}
+        - registry.k8s.io/kube-scheduler:{{ .vars.kubernetesVersion }}
+        - registry.k8s.io/kube-proxy:{{ .vars.kubernetesVersion }}
+        - registry.k8s.io/pause:3.9
+        - registry.k8s.io/etcd:3.5.12-0
+        - registry.k8s.io/coredns/coredns:v1.11.1
+      outputDir: images/control-plane

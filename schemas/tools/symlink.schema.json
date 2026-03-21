@@ -11,7 +11,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "Symlink"
+      "const": "CreateSymlink"
     },
     "metadata": {
       "additionalProperties": true,
@@ -70,11 +70,10 @@
   },
   "required": [
     "id",
-    "apiVersion",
     "kind",
     "spec"
   ],
-  "title": "SymlinkStep",
+  "title": "CreateSymlinkStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

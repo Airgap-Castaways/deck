@@ -70,11 +70,10 @@
   },
   "required": [
     "id",
-    "apiVersion",
     "kind",
     "spec"
   ],
   "title": "CommandStep",
   "type": "object",
-  "x-deck-visibility": "advanced"
+  "x-deck-visibility": "public"
 }

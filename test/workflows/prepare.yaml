@@ -1,0 +1,11 @@
+version: v1alpha1
+phases:
+  - name: binaries
+    imports:
+      - path: prepare/binaries.yaml
+  - name: images
+    imports:
+      - path: prepare/images.yaml
+  - name: packages
+    imports:
+      - path: prepare/packages.yaml

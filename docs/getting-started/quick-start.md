@@ -14,12 +14,11 @@ This tutorial walks through the default `deck` path:
 deck init --out ./demo
 ```
 
-This creates a starter layout with two entry workflows and a set of empty artifact directories:
+This creates a starter layout with two entry workflows and a set of empty output source directories:
 
-- `./demo/workflows/scenarios/prepare.yaml`
+- `./demo/workflows/prepare.yaml`
 - `./demo/workflows/scenarios/apply.yaml`
 - `./demo/workflows/vars.yaml`
-- `./demo/workflows/components/example-prepare.yaml`
 - `./demo/workflows/components/example-apply.yaml`
 - `./demo/files/`
 - `./demo/packages/`
@@ -27,19 +26,17 @@ This creates a starter layout with two entry workflows and a set of empty artifa
 
 ## 2. Add or edit steps
 
-`deck init` creates fixed entry workflows under `workflows/scenarios/` and reusable fragments under `workflows/components/`. Preparation work goes in `prepare.yaml`; work that runs on the target machine goes in `apply.yaml`.
+`deck init` creates a fixed `workflows/prepare.yaml` entry workflow, an `apply.yaml` scenario under `workflows/scenarios/`, and reusable fragments under `workflows/components/`. Preparation work goes in `workflows/prepare.yaml`; work that runs on the target machine goes in `workflows/scenarios/apply.yaml`.
 
 Prefer typed steps. They make the procedure easier to read and lint as it grows.
 
 ```yaml
-role: apply
 version: v1alpha1
 steps:
   - id: write-motd
     apiVersion: deck/v1alpha1
-    kind: File
+    kind: WriteFile
     spec:
-      action: write
       path: /etc/motd
       content: |
         deck maintenance session in progress
@@ -58,7 +55,7 @@ deck lint --file ./demo/workflows/scenarios/apply.yaml
 
 ## 4. Build an offline bundle
 
-Run `prepare` from a directory that contains `workflows/scenarios/prepare.yaml`. `workflows/vars.yaml` and `workflows/scenarios/apply.yaml` are optional at this stage.
+Run `prepare` from a workspace directory that contains `workflows/prepare.yaml`. `workflows/vars.yaml` and `workflows/scenarios/apply.yaml` are optional at this stage.
 
 ```bash
 cd ./demo

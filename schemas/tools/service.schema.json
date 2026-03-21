@@ -11,7 +11,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "Service"
+      "const": "ManageService"
     },
     "metadata": {
       "additionalProperties": true,
@@ -102,11 +102,10 @@
   },
   "required": [
     "id",
-    "apiVersion",
     "kind",
     "spec"
   ],
-  "title": "ServiceStep",
+  "title": "ManageServiceStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

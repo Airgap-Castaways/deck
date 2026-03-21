@@ -1,17 +1,7 @@
 package main
 
-import "sort"
-
-func generateArtifactsToolSchema() map[string]any {
-	root := stepEnvelopeSchema("Artifacts", "ArtifactsStep", "Installs or extracts per-architecture artifacts during apply.", "public")
-	props := propertyMap(root)
-	setMap(props, "spec", artifactsToolSpecSchema())
-	root["$defs"] = map[string]any{"artifactSource": artifactSourceSchema()}
-	return root
-}
-
 func generateCommandToolSchema() map[string]any {
-	root := stepEnvelopeSchema("Command", "CommandStep", "Escape hatch for commands that are not yet covered by typed steps.", "advanced")
+	root := stepEnvelopeSchema("Command", "CommandStep", "Escape hatch for commands that are not yet covered by typed steps.", "public")
 	props := propertyMap(root)
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
@@ -27,8 +17,8 @@ func generateCommandToolSchema() map[string]any {
 	return root
 }
 
-func generateContainerdToolSchema() map[string]any {
-	root := stepEnvelopeSchema("Containerd", "ContainerdStep", "Configures containerd defaults and registry host settings during apply.", "public")
+func generateWriteContainerdConfigToolSchema() map[string]any {
+	root := stepEnvelopeSchema("WriteContainerdConfig", "WriteContainerdConfigStep", "Writes the containerd config.toml file on the node.", "public")
 	props := propertyMap(root)
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
@@ -38,7 +28,21 @@ func generateContainerdToolSchema() map[string]any {
 			"configPath":    minLenStringSchema(),
 			"systemdCgroup": map[string]any{"type": "boolean"},
 			"createDefault": map[string]any{"type": "boolean", "default": true},
-			"registryHosts": map[string]any{"type": "array", "items": map[string]any{
+		},
+	})
+	return root
+}
+
+func generateWriteContainerdRegistryHostsToolSchema() map[string]any {
+	root := stepEnvelopeSchema("WriteContainerdRegistryHosts", "WriteContainerdRegistryHostsStep", "Writes containerd registry host configuration for mirrors and trust policy.", "public")
+	props := propertyMap(root)
+	setMap(props, "spec", map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []any{"path", "registryHosts"},
+		"properties": map[string]any{
+			"path": minLenStringSchema(),
+			"registryHosts": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{
 				"type":                 "object",
 				"additionalProperties": false,
 				"required":             []any{"registry", "server", "host", "capabilities", "skipVerify"},
@@ -55,8 +59,8 @@ func generateContainerdToolSchema() map[string]any {
 	return root
 }
 
-func generateDirectoryToolSchema() map[string]any {
-	root := stepEnvelopeSchema("Directory", "DirectoryStep", "Ensures a directory exists on the local node.", "public")
+func generateEnsureDirectoryToolSchema() map[string]any {
+	root := stepEnvelopeSchema("EnsureDirectory", "EnsureDirectoryStep", "Ensures a directory exists on the local node.", "public")
 	props := propertyMap(root)
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
@@ -67,113 +71,91 @@ func generateDirectoryToolSchema() map[string]any {
 	return root
 }
 
-func generateImageToolSchema() map[string]any {
-	root := stepEnvelopeSchema("Image", "ImageStep", "Checks image-related state through action-specific modes.", "public")
+func generateDownloadImageToolSchema() map[string]any {
+	root := stepEnvelopeSchema("DownloadImage", "DownloadImageStep", "Downloads images into bundle output storage.", "public")
 	props := propertyMap(root)
-	imageAllowedByAction := registryActionFields("Image")
-	imageFields := []string{"action", "images", "auth", "backend", "output", "command"}
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
-		"required":             []any{"action", "images"},
+		"required":             []any{"images"},
 		"properties": map[string]any{
-			"action":  enumStringSchema("download", "verify"),
-			"command": stringArraySchema(1, false),
-			"images":  stringArraySchema(1, false),
-			"auth": map[string]any{
-				"type":     "array",
-				"minItems": 1,
-				"items": map[string]any{
-					"type":                 "object",
-					"additionalProperties": false,
-					"required":             []any{"registry", "basic"},
-					"properties": map[string]any{
-						"registry": minLenStringSchema(),
-						"basic": map[string]any{
-							"type":                 "object",
-							"additionalProperties": false,
-							"required":             []any{"username", "password"},
-							"properties": map[string]any{
-								"username": map[string]any{"type": "string"},
-								"password": map[string]any{"type": "string"},
-							},
-						},
-					},
-				},
-			},
-			"backend": map[string]any{
-				"type":                 "object",
-				"additionalProperties": false,
-				"properties": map[string]any{
-					"engine": enumStringSchema("go-containerregistry"),
-				},
-			},
-			"output": map[string]any{
-				"type":                 "object",
-				"additionalProperties": false,
-				"properties": map[string]any{
-					"dir": minLenStringSchema(),
-				},
-			},
-		},
-		"allOf": []any{
-			conditionalRequired("download", []string{"images"}, nil),
-			conditionalRequired("verify", []string{"images"}, nil),
-			restrictActionFields(imageAllowedByAction, imageFields),
-			map[string]any{
-				"if": map[string]any{
-					"properties": map[string]any{
-						"action": map[string]any{"const": "verify"},
-					},
-					"required": []any{"action"},
-				},
-				"then": map[string]any{
-					"not": map[string]any{
-						"required": []any{"auth"},
-					},
-				},
-			},
+			"images":    stringArraySchema(1, false),
+			"auth":      imageAuthSchema(),
+			"backend":   imageBackendSchema(),
+			"outputDir": minLenStringSchema(),
 		},
 	})
 	return root
 }
 
-func restrictActionFields(allowedByAction map[string][]string, allFields []string) map[string]any {
-	actions := make([]string, 0, len(allowedByAction))
-	for action := range allowedByAction {
-		actions = append(actions, action)
-	}
-	sort.Strings(actions)
-	clauses := make([]any, 0, len(allowedByAction))
-	for _, action := range actions {
-		allowed := allowedByAction[action]
-		allowedSet := map[string]bool{}
-		for _, field := range allowed {
-			allowedSet[field] = true
-		}
-		forbidden := make([]any, 0)
-		for _, field := range allFields {
-			if !allowedSet[field] {
-				forbidden = append(forbidden, map[string]any{"required": []any{field}})
-			}
-		}
-		clauses = append(clauses, map[string]any{
-			"if": map[string]any{
-				"properties": map[string]any{"action": map[string]any{"const": action}},
-				"required":   []any{"action"},
-			},
-			"then": map[string]any{
-				"not": map[string]any{
-					"anyOf": forbidden,
-				},
-			},
-		})
-	}
-	return map[string]any{"allOf": clauses}
+func generateImageLoadToolSchema() map[string]any {
+	root := stepEnvelopeSchema("LoadImage", "LoadImageStep", "Loads prepared image archives into the local container runtime.", "public")
+	props := propertyMap(root)
+	setMap(props, "spec", map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []any{"images"},
+		"properties": map[string]any{
+			"images":    stringArraySchema(1, false),
+			"sourceDir": minLenStringSchema(),
+			"runtime":   enumStringSchema("auto", "ctr", "docker", "podman"),
+			"command":   stringArraySchema(1, false),
+		},
+	})
+	return root
 }
 
-func generateChecksToolSchema() map[string]any {
-	root := stepEnvelopeSchema("Checks", "ChecksStep", "Runs host checks before prepare execution.", "public")
+func generateVerifyImageToolSchema() map[string]any {
+	root := stepEnvelopeSchema("VerifyImage", "VerifyImageStep", "Verifies that required images already exist on the node.", "public")
+	props := propertyMap(root)
+	setMap(props, "spec", map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []any{"images"},
+		"properties": map[string]any{
+			"images":  stringArraySchema(1, false),
+			"command": stringArraySchema(1, false),
+		},
+	})
+	return root
+}
+
+func imageAuthSchema() map[string]any {
+	return map[string]any{
+		"type":     "array",
+		"minItems": 1,
+		"items": map[string]any{
+			"type":                 "object",
+			"additionalProperties": false,
+			"required":             []any{"registry", "basic"},
+			"properties": map[string]any{
+				"registry": minLenStringSchema(),
+				"basic": map[string]any{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []any{"username", "password"},
+					"properties": map[string]any{
+						"username": map[string]any{"type": "string"},
+						"password": map[string]any{"type": "string"},
+					},
+				},
+			},
+		},
+	}
+}
+
+func imageBackendSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"engine": enumStringSchema("go-containerregistry"),
+		},
+	}
+}
+
+func generateCheckHostToolSchema() map[string]any {
+	root := stepEnvelopeSchema("CheckHost", "CheckHostStep", "Runs host checks before prepare execution.", "public")
 	props := propertyMap(root)
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
@@ -209,105 +191,66 @@ func generateKernelModuleToolSchema() map[string]any {
 	return root
 }
 
-func generateKubeadmToolSchema() map[string]any {
-	root := stepEnvelopeSchema("Kubeadm", "KubeadmStep", "Runs kubeadm operations through action-specific subcommands.", "public")
+func generateInitKubeadmToolSchema() map[string]any {
+	root := stepEnvelopeSchema("InitKubeadm", "InitKubeadmStep", "Runs kubeadm init and writes a join command file.", "public")
 	props := propertyMap(root)
-	actionFields := registryActionFields("Kubeadm")
-	initAllowed := actionFields["init"]
-	joinAllowed := actionFields["join"]
-	resetAllowed := actionFields["reset"]
-	specProps := map[string]any{
-		"action":                enumStringSchema("init", "join", "reset"),
-		"configFile":            map[string]any{"type": "string"},
-		"configTemplate":        map[string]any{"type": "string"},
-		"pullImages":            map[string]any{"type": "boolean"},
-		"outputJoinFile":        map[string]any{"type": "string"},
-		"kubernetesVersion":     map[string]any{"type": "string"},
-		"advertiseAddress":      map[string]any{"type": "string"},
-		"podNetworkCIDR":        map[string]any{"type": "string"},
-		"criSocket":             map[string]any{"type": "string"},
-		"ignorePreflightErrors": stringArraySchema(0, false),
-		"extraArgs":             stringArraySchema(0, false),
-		"skipIfAdminConfExists": map[string]any{"type": "boolean", "default": true},
-		"joinFile":              map[string]any{"type": "string"},
-		"asControlPlane":        map[string]any{"type": "boolean", "default": false},
-		"force":                 map[string]any{"type": "boolean", "default": false},
-		"ignoreErrors":          map[string]any{"type": "boolean", "default": false},
-		"stopKubelet":           map[string]any{"type": "boolean", "default": true},
-		"removePaths":           stringArraySchema(0, false),
-		"removeFiles":           stringArraySchema(0, false),
-		"cleanupContainers":     stringArraySchema(0, false),
-		"restartRuntimeService": map[string]any{"type": "string"},
-	}
-	allFields := schemaPropertyKeys(specProps)
 	setMap(props, "spec", map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
-		"required":             []any{"action"},
-		"properties":           specProps,
-		"allOf": []any{
-			conditionalRequired("init", []string{"outputJoinFile"}, nil),
-			forbidFieldsOutsideAction("init", initAllowed, allFields),
-			map[string]any{
-				"if": map[string]any{
-					"properties": map[string]any{"action": map[string]any{"const": "join"}},
-					"required":   []any{"action"},
-				},
-				"then": map[string]any{
-					"allOf": []any{
-						forbidFieldsOutsideActionThen(joinAllowed, allFields),
-						map[string]any{"oneOf": []any{
-							map[string]any{"required": []any{"joinFile"}},
-							map[string]any{"required": []any{"configFile"}},
-						}},
-					},
-				},
-			},
-			map[string]any{
-				"if": map[string]any{
-					"properties": map[string]any{"action": map[string]any{"const": "reset"}},
-					"required":   []any{"action"},
-				},
-				"then": forbidFieldsOutsideActionThen(resetAllowed, allFields),
-			},
+		"required":             []any{"outputJoinFile"},
+		"properties": map[string]any{
+			"configFile":            map[string]any{"type": "string"},
+			"configTemplate":        map[string]any{"type": "string"},
+			"outputJoinFile":        map[string]any{"type": "string"},
+			"kubernetesVersion":     map[string]any{"type": "string"},
+			"advertiseAddress":      map[string]any{"type": "string"},
+			"podNetworkCIDR":        map[string]any{"type": "string"},
+			"criSocket":             map[string]any{"type": "string"},
+			"ignorePreflightErrors": stringArraySchema(0, false),
+			"extraArgs":             stringArraySchema(0, false),
+			"skipIfAdminConfExists": map[string]any{"type": "boolean", "default": true},
 		},
 	})
 	return root
 }
 
-func forbidFieldsOutsideAction(action string, allowed, allFields []string) map[string]any {
-	return map[string]any{
-		"if": map[string]any{
-			"properties": map[string]any{"action": map[string]any{"const": action}},
-			"required":   []any{"action"},
+func generateJoinKubeadmToolSchema() map[string]any {
+	root := stepEnvelopeSchema("JoinKubeadm", "JoinKubeadmStep", "Runs kubeadm join.", "public")
+	props := propertyMap(root)
+	setMap(props, "spec", map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"oneOf": []any{
+			map[string]any{"required": []any{"joinFile"}},
+			map[string]any{"required": []any{"configFile"}},
 		},
-		"then": forbidFieldsOutsideActionThen(allowed, allFields),
-	}
+		"properties": map[string]any{
+			"configFile":     map[string]any{"type": "string"},
+			"joinFile":       map[string]any{"type": "string"},
+			"asControlPlane": map[string]any{"type": "boolean", "default": false},
+			"extraArgs":      stringArraySchema(0, false),
+		},
+	})
+	return root
 }
 
-func forbidFieldsOutsideActionThen(allowed, allFields []string) map[string]any {
-	allowedSet := map[string]bool{}
-	for _, field := range allowed {
-		allowedSet[field] = true
-	}
-	forbidden := make([]any, 0)
-	for _, field := range allFields {
-		if !allowedSet[field] {
-			forbidden = append(forbidden, map[string]any{"required": []any{field}})
-		}
-	}
-	return map[string]any{
-		"not": map[string]any{
-			"anyOf": forbidden,
+func generateResetKubeadmToolSchema() map[string]any {
+	root := stepEnvelopeSchema("ResetKubeadm", "ResetKubeadmStep", "Runs kubeadm reset and optional cleanup steps.", "public")
+	props := propertyMap(root)
+	setMap(props, "spec", map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"force":                 map[string]any{"type": "boolean", "default": false},
+			"ignoreErrors":          map[string]any{"type": "boolean", "default": false},
+			"stopKubelet":           map[string]any{"type": "boolean", "default": true},
+			"criSocket":             map[string]any{"type": "string"},
+			"extraArgs":             stringArraySchema(0, false),
+			"removePaths":           stringArraySchema(0, false),
+			"removeFiles":           stringArraySchema(0, false),
+			"cleanupContainers":     stringArraySchema(0, false),
+			"restartRuntimeService": map[string]any{"type": "string"},
 		},
-	}
-}
-
-func schemaPropertyKeys(properties map[string]any) []string {
-	keys := make([]string, 0, len(properties))
-	for key := range properties {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
+	})
+	return root
 }

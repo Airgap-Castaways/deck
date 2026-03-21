@@ -67,7 +67,7 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, retr
 	b.WriteString("- Do not use whole-value template expressions such as `{{ .vars.dockerPackages }}` for typed fields that expect arrays or objects; inline those YAML arrays or objects directly.\n")
 	b.WriteString("- Detailed topology, component/import guidance, vars guidance, and typed-step references are provided through retrieved context.\n")
 	b.WriteString("- Example valid minimal scenario YAML:\n")
-	b.WriteString("  role: apply\n")
+	b.WriteString("  ")
 	b.WriteString("  version: v1alpha1\n")
 	b.WriteString("  steps:\n")
 	b.WriteString("    - id: print-hello\n")

@@ -5,21 +5,7 @@ Reference for tool definition manifests used to describe typed workflow tools.
 
 - schema: `../../../schemas/deck-tooldefinition.schema.json`
 
-## Minimal Example
-
-```yaml
-apiVersion: deck/v1
-kind: ToolDefinition
-metadata:
-  name: File
-spec:
-  version: v1
-  summary: Manage files
-  category: shared
-  inputSchema: {}
-```
-
-## Realistic Example
+## Example
 
 ```yaml
 apiVersion: deck/v1

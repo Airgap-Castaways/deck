@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/config"
-	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 func BuildPrefetchWorkflow(wf *config.Workflow) *config.Workflow {
@@ -16,7 +15,7 @@ func BuildPrefetchWorkflow(wf *config.Workflow) *config.Workflow {
 	prefetchSteps := make([]config.Step, 0)
 	for _, phase := range wf.Phases {
 		for _, step := range phase.Steps {
-			if step.Kind == "File" && workflowexec.InferStepAction(step.Kind, step.Spec) == "download" {
+			if step.Kind == "DownloadFile" {
 				prefetchSteps = append(prefetchSteps, step)
 			}
 		}
@@ -25,7 +24,6 @@ func BuildPrefetchWorkflow(wf *config.Workflow) *config.Workflow {
 		return &config.Workflow{}
 	}
 	return &config.Workflow{
-		Role:           "prepare",
 		Version:        wf.Version,
 		Vars:           wf.Vars,
 		Phases:         []config.Phase{{Name: "prefetch", Steps: prefetchSteps}},
@@ -42,7 +40,6 @@ func BuildExecutionWorkflow(wf *config.Workflow, phaseName string) (*config.Work
 		phases := make([]config.Phase, len(wf.Phases))
 		copy(phases, wf.Phases)
 		return &config.Workflow{
-			Role:           wf.Role,
 			Version:        wf.Version,
 			Vars:           wf.Vars,
 			Phases:         phases,
@@ -55,7 +52,6 @@ func BuildExecutionWorkflow(wf *config.Workflow, phaseName string) (*config.Work
 		return nil, fmt.Errorf("%s phase not found", phaseName)
 	}
 	return &config.Workflow{
-		Role:           wf.Role,
 		Version:        wf.Version,
 		Vars:           wf.Vars,
 		Phases:         []config.Phase{{Name: selectedPhase.Name, Steps: selectedPhase.Steps}},

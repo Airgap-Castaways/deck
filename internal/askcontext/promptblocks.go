@@ -9,8 +9,8 @@ func InvariantPromptBlock() PromptBlock {
 	manifest := Current()
 	b := &strings.Builder{}
 	b.WriteString("Workflow invariants:\n")
-	b.WriteString("- Supported roles: ")
-	b.WriteString(strings.Join(manifest.Workflow.SupportedRoles, ", "))
+	b.WriteString("- Supported command modes: ")
+	b.WriteString(strings.Join(manifest.Workflow.SupportedModes, ", "))
 	b.WriteString("\n")
 	b.WriteString("- Supported workflow version: ")
 	b.WriteString(manifest.Workflow.SupportedVersion)
@@ -36,7 +36,7 @@ func PolicyPromptBlock() PromptBlock {
 	b.WriteString("- Prefer workflows/vars.yaml for repeated configurable values instead of scattering literals across steps.\n")
 	b.WriteString("- Do not replace schema-typed arrays or objects with string templates. Keep arrays as YAML arrays and objects as YAML objects so schema validation still passes.\n")
 	b.WriteString("- Split repeated logic into reusable components and import them under phases[].imports.\n")
-	b.WriteString("- Use prepare for online collection or offline artifact preparation and apply for local node changes.\n")
+	b.WriteString("- Use the `prepare` command for online collection or offline bundle preparation and `apply` for local node changes.\n")
 	return PromptBlock{Topic: TopicPolicy, Title: "Workflow authoring policy", Content: strings.TrimSpace(b.String())}
 }
 
@@ -61,7 +61,7 @@ func WorkspaceTopologyBlock() string {
 	b.WriteString("- Shared variables file: ")
 	b.WriteString(manifest.Topology.VarsPath)
 	b.WriteString("\n")
-	b.WriteString("- Canonical prepare scenario: ")
+	b.WriteString("- Canonical prepare entrypoint: ")
 	b.WriteString(manifest.Topology.CanonicalPrepare)
 	b.WriteString("\n")
 	b.WriteString("- Canonical apply scenario: ")
@@ -82,21 +82,22 @@ func WorkspaceTopologyPromptBlock() PromptBlock {
 func RoleGuidanceBlock() string {
 	manifest := Current()
 	b := &strings.Builder{}
-	b.WriteString("Prepare/apply guidance:\n")
-	for _, role := range manifest.Roles {
+	b.WriteString("Command-mode guidance:\n")
+	for _, mode := range manifest.Modes {
 		b.WriteString("- ")
-		b.WriteString(role.Role)
-		b.WriteString(": ")
-		b.WriteString(role.Summary)
+		b.WriteString("`")
+		b.WriteString(mode.Mode)
+		b.WriteString("` command: ")
+		b.WriteString(mode.Summary)
 		b.WriteString(" Use when: ")
-		b.WriteString(role.WhenToUse)
+		b.WriteString(mode.WhenToUse)
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())
 }
 
 func RoleGuidancePromptBlock() PromptBlock {
-	return PromptBlock{Topic: TopicPrepareApplyGuidance, Title: "Prepare/apply guidance", Content: RoleGuidanceBlock()}
+	return PromptBlock{Topic: TopicPrepareApplyGuidance, Title: "Command-mode guidance", Content: RoleGuidanceBlock()}
 }
 
 func ComponentGuidanceBlock() string {
@@ -198,11 +199,11 @@ func RelevantStepKindsBlock(prompt string) string {
 			}
 			b.WriteString("\n")
 		}
-		if step.Kind == "Packages" {
+		if step.Kind == "InstallPackage" || step.Kind == "DownloadPackage" {
 			b.WriteString("  - spec.packages must stay a real YAML array, not a quoted template string.\n")
 			b.WriteString("  - Do not set spec.packages to `{{ .vars.* }}` or any other whole-value template expression; inline the package list as YAML items instead.\n")
 		}
-		if step.Kind == "Repository" {
+		if step.Kind == "ConfigureRepository" {
 			b.WriteString("  - spec.repositories must stay a real YAML array of repository objects, not a scalar shortcut.\n")
 			b.WriteString("  - Do not set spec.repositories to `{{ .vars.* }}` or any other whole-value template expression; inline repository objects as YAML list items instead.\n")
 		}
@@ -276,18 +277,18 @@ func RelevantStepKinds(prompt string) []StepKindContext {
 				score += 4
 			}
 		}
-		if strings.Contains(lower, "repo") || strings.Contains(lower, "repository") {
-			if step.Kind == "Repository" {
+		if strings.Contains(lower, "repo") || strings.Contains(lower, "Repository") {
+			if step.Kind == "ConfigureRepository" || step.Kind == "RefreshRepository" {
 				score += 60
 			}
 		}
 		if strings.Contains(lower, "docker") || strings.Contains(lower, "package") || strings.Contains(lower, "dnf") {
-			if step.Kind == "Packages" || step.Kind == "Repository" || step.Kind == "Service" {
+			if step.Kind == "InstallPackage" || step.Kind == "DownloadPackage" || step.Kind == "ConfigureRepository" || step.Kind == "RefreshRepository" || step.Kind == "ManageService" {
 				score += 30
 			}
 		}
 		if strings.Contains(lower, "file") || strings.Contains(lower, "config") {
-			if step.Kind == "File" || step.Kind == "Directory" {
+			if strings.HasPrefix(step.Kind, "File") || step.Kind == "EnsureDirectory" {
 				score += 20
 			}
 		}
@@ -311,7 +312,7 @@ func RelevantStepKinds(prompt string) []StepKindContext {
 	}
 	if len(out) == 0 {
 		for _, kind := range manifest.StepKinds {
-			if kind.Kind == "File" || kind.Kind == "Repository" || kind.Kind == "Service" || kind.Kind == "Command" {
+			if kind.Kind == "WriteFile" || kind.Kind == "ConfigureRepository" || kind.Kind == "ManageService" || kind.Kind == "Command" {
 				out = append(out, kind)
 			}
 		}

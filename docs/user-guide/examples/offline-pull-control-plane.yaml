@@ -1,4 +1,3 @@
-role: apply
 version: v1alpha1
 vars:
   serverURL: 192.168.56.1:8080
@@ -18,14 +17,10 @@ phases:
       - id: configure-offline-repo-apt
         when: vars.osFamily == "debian"
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: ConfigureRepository
         spec:
-          action: configure
           format: apt
           replaceExisting: true
-          refreshCache:
-            enabled: true
-            clean: true
           repositories:
             - id: deck-os
               baseurl: http://{{ .vars.serverURL }}/packages/deb/{{ .vars.release }}
@@ -33,17 +28,21 @@ phases:
             - id: deck-k8s
               baseurl: http://{{ .vars.serverURL }}/packages/deb-k8s/{{ .vars.release }}
               trusted: true
+      - id: refresh-offline-repo-apt
+        when: vars.osFamily == "debian"
+        apiVersion: deck/v1alpha1
+        kind: RefreshRepository
+        spec:
+          manager: apt
+          clean: true
+          update: true
       - id: configure-offline-repo-yum
         when: vars.osFamily == "rhel"
         apiVersion: deck/v1alpha1
-        kind: Repository
+        kind: ConfigureRepository
         spec:
-          action: configure
           format: yum
           replaceExisting: true
-          refreshCache:
-            enabled: true
-            clean: true
           repositories:
             - id: deck-os
               name: deck-os
@@ -55,19 +54,31 @@ phases:
               baseurl: http://{{ .vars.serverURL }}/packages/rpm-k8s/{{ .vars.release }}
               enabled: true
               gpgcheck: false
+      - id: refresh-offline-repo-yum
+        when: vars.osFamily == "rhel"
+        apiVersion: deck/v1alpha1
+        kind: RefreshRepository
+        spec:
+          manager: dnf
+          clean: true
+          update: true
       - id: install-k8s-deps
         apiVersion: deck/v1alpha1
-        kind: Packages
+        kind: InstallPackage
         spec:
-          action: install
           packages: [containerd, kubelet, kubeadm, kubectl]
       - id: configure-containerd-runtime
         apiVersion: deck/v1alpha1
-        kind: Containerd
+        kind: WriteContainerdConfig
         spec:
           path: /etc/containerd/config.toml
           configPath: /etc/containerd/certs.d
           systemdCgroup: true
+      - id: configure-containerd-registry-hosts
+        apiVersion: deck/v1alpha1
+        kind: WriteContainerdRegistryHosts
+        spec:
+          path: /etc/containerd/certs.d
           registryHosts:
             - registry: registry.k8s.io
               server: https://registry.k8s.io
@@ -76,24 +87,23 @@ phases:
               skipVerify: true
       - id: restart-containerd
         apiVersion: deck/v1alpha1
-        kind: Service
+        kind: ManageService
         spec:
           name: containerd
           enabled: true
           state: restarted
       - id: start-kubelet
         apiVersion: deck/v1alpha1
-        kind: Service
+        kind: ManageService
         spec:
           name: kubelet
           enabled: true
           state: started
       - id: kubeadm-init
         apiVersion: deck/v1alpha1
-        kind: Kubeadm
+        kind: InitKubeadm
         spec:
-          action: init
           outputJoinFile: /tmp/deck/join.txt
           criSocket: unix:///run/containerd/containerd.sock
-          ignorePreflightErrors: [Swap]
+          ignorePreflightErrors: [swap]
           extraArgs: ["--kubernetes-version", "{{ .vars.kubernetesVersion }}"]
