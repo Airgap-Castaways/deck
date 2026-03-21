@@ -317,7 +317,7 @@ apply_control_plane_workflow() {
   CONTROL_PLANE_WORKFLOW_URL="${SERVER_URL}/workflows/scenarios/control-plane-bootstrap.yaml"
   local server_no_scheme="${SERVER_URL#http://}"
   server_no_scheme="${server_no_scheme#https://}"
-  sudo -n "${DECK_BIN}" apply --file "${CONTROL_PLANE_WORKFLOW_URL}" \
+  sudo -n "${DECK_BIN}" apply --workflow "${CONTROL_PLANE_WORKFLOW_URL}" \
     --var "serverURL=${server_no_scheme}" \
     --var "registryHost=${server_no_scheme}" \
     --var "release=${OFFLINE_RELEASE_CONTROL_PLANE}" \
@@ -448,7 +448,7 @@ apply_worker_join_once() {
   local server_no_scheme="$4"
   local log_path="$5"
   clear_install_state
-  sudo -n "${DECK_BIN}" apply --file "${workflow_url}" \
+  sudo -n "${DECK_BIN}" apply --workflow "${workflow_url}" \
     --var "serverURL=${server_no_scheme}" \
     --var "registryHost=${server_no_scheme}" \
     --var "release=${release}" \
@@ -504,7 +504,7 @@ apply_node_reset_worker_lifecycle() {
   printf '%s\n' "ok" > "${ART_DIR}/${ROLE}-apply-done.txt"
 
   clear_install_state
-  sudo -n "${DECK_BIN}" apply --file "${node_reset_url}" \
+  sudo -n "${DECK_BIN}" apply --workflow "${node_reset_url}" \
     --var "allowDestructive=true" \
     --var "resetReason=${reset_reason}" \
     --var "resetStatePath=${REPORT_DIR}/reset-state.txt" > "${CASE_DIR}/05-reset-${ROLE}.log" 2>&1
