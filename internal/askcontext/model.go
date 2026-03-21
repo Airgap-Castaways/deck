@@ -4,7 +4,7 @@ type Manifest struct {
 	CLI        CLIContext
 	Topology   WorkspaceTopology
 	Workflow   WorkflowRules
-	Roles      []RoleGuidance
+	Modes      []ModeGuidance
 	Components ComponentGuidance
 	Vars       VarsGuidance
 	StepKinds  []StepKindContext
@@ -58,14 +58,14 @@ type WorkspaceTopology struct {
 type WorkflowRules struct {
 	Summary          string
 	TopLevelModes    []string
-	SupportedRoles   []string
+	SupportedModes   []string
 	SupportedVersion string
 	ImportRule       string
 	Notes            []string
 }
 
-type RoleGuidance struct {
-	Role        string
+type ModeGuidance struct {
+	Mode        string
 	Summary     string
 	WhenToUse   string
 	Prefer      []string

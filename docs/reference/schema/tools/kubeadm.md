@@ -42,23 +42,22 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.advertiseAddress` | `string` | no | `` | `` | API server advertise address for `init`. Use `auto` to detect the primary interface, or provide an explicit IP. | `auto` |
-| `spec.configFile` | `string` | no | `` | `` | Path to an explicit kubeadm config file passed with `--config`. For `join`, provide this or `joinFile`. For `init`, combine it with `configTemplate` or a pre-rendered kubeadm config. | `/tmp/deck/kubeadm.conf` |
-| `spec.configTemplate` | `string` | no | `` | `` | For `init`, use `default` for the deck-managed kubeadm config template. Any other non-empty value is written literally as inline kubeadm YAML content to `configFile`. | `default` |
+| `spec.advertiseAddress` | `string` | no | `` | `` | API server advertise address for `InitKubeadm`. Use `auto` to detect the primary interface, or provide an explicit IP. | `auto` |
+| `spec.configFile` | `string` | no | `` | `` | Path to an explicit kubeadm config file passed with `--config`. For `JoinKubeadm`, provide this or `joinFile`. For `InitKubeadm`, combine it with `configTemplate` or a pre-rendered kubeadm config. | `/tmp/deck/kubeadm.conf` |
+| `spec.configTemplate` | `string` | no | `` | `` | For `InitKubeadm`, use `default` for the deck-managed kubeadm config template. Any other non-empty value is written literally as inline kubeadm YAML content to `configFile`. | `default` |
 | `spec.criSocket` | `string` | no | `` | `` | CRI socket path passed to kubeadm. Required when multiple container runtimes are installed on the node. | `unix:///run/containerd/containerd.sock` |
 | `spec.extraArgs` | `array<string>` | no | `` | `` | Additional flags passed directly to the kubeadm subcommand as `--key=value` pairs. | `[--skip-phases=addon/kube-proxy]` |
 | `spec.ignorePreflightErrors` | `array<string>` | no | `` | `` | Kubeadm preflight check names to suppress. Use sparingly and only for known-safe deviations. | `[swap]` |
 | `spec.kubernetesVersion` | `string` | no | `` | `` | Kubernetes version string passed to kubeadm. Accepts the `{{ .vars.* }}` template syntax. | `v1.30.1` |
-| `spec.outputJoinFile` | `string` | yes | `` | `` | Path where the generated join command is written after `init`. Worker nodes read this file to join the cluster. | `/tmp/deck/join.txt` |
-| `spec.podNetworkCIDR` | `string` | no | `` | `` | CIDR range for the pod network passed to `init`. Must not overlap with node or service CIDRs. | `10.244.0.0/16` |
-| `spec.skipIfAdminConfExists` | `boolean` | no | `true` | `` | Skip the `init` step if `/etc/kubernetes/admin.conf` already exists, treating the node as already bootstrapped. Defaults to `true`. | `true` |
+| `spec.outputJoinFile` | `string` | yes | `` | `` | Path where the generated join command is written after `InitKubeadm`. Worker nodes read this file to join the cluster. | `/tmp/deck/join.txt` |
+| `spec.podNetworkCIDR` | `string` | no | `` | `` | CIDR range for the pod network passed to `InitKubeadm`. Must not overlap with node or service CIDRs. | `10.244.0.0/16` |
+| `spec.skipIfAdminConfExists` | `boolean` | no | `true` | `` | Skip the `InitKubeadm` step if `/etc/kubernetes/admin.conf` already exists, treating the node as already bootstrapped. Defaults to `true`. | `true` |
 
 ### Notes
 
-- The action controls the contract: `init` requires `outputJoinFile`, `join` requires exactly one of `joinFile` or `configFile`, and `reset` focuses on cleanup fields.
-- Kubeadm fields are action-scoped: validation rejects `join`-only fields on `init`, `init`-only fields on `reset`, and other cross-action mixes.
-- When `skipIfAdminConfExists` skips `init`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
-- Place host preparation steps (`WriteContainerdConfig`, `ConfigureSwap`, `ConfigureKernelModule`, `ConfigureSysctl`) before `Kubeadm` so bootstrap failures point to the correct step.
+- `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, and `ResetKubeadm` focuses on cleanup fields.
+- When `skipIfAdminConfExists` skips `InitKubeadm`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
+- Place host preparation steps (`WriteContainerdConfig`, `ConfigureSwap`, `ConfigureKernelModule`, `ConfigureSysctl`) before kubeadm bootstrap so failures point to the correct step.
 
 ## `JoinKubeadm`
 
@@ -84,16 +83,15 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.asControlPlane` | `boolean` | no | `false` | `` | When `true`, adds `--control-plane` so the node joins as an additional control-plane member rather than a worker. | `false` |
-| `spec.configFile` | `string` | no | `` | `` | Path to an explicit kubeadm config file passed with `--config`. For `join`, provide this or `joinFile`. For `init`, combine it with `configTemplate` or a pre-rendered kubeadm config. | `/tmp/deck/kubeadm.conf` |
+| `spec.configFile` | `string` | no | `` | `` | Path to an explicit kubeadm config file passed with `--config`. For `JoinKubeadm`, provide this or `joinFile`. For `InitKubeadm`, combine it with `configTemplate` or a pre-rendered kubeadm config. | `/tmp/deck/kubeadm.conf` |
 | `spec.extraArgs` | `array<string>` | no | `` | `` | Additional flags passed directly to the kubeadm subcommand as `--key=value` pairs. | `[--skip-phases=addon/kube-proxy]` |
-| `spec.joinFile` | `string` | no | `` | `` | Path to the join command file produced by a prior `init` run. For `join`, provide this or `configFile`. | `/tmp/deck/join.txt` |
+| `spec.joinFile` | `string` | no | `` | `` | Path to the join command file produced by a prior `InitKubeadm` run. For `JoinKubeadm`, provide this or `configFile`. | `/tmp/deck/join.txt` |
 
 ### Notes
 
-- The action controls the contract: `init` requires `outputJoinFile`, `join` requires exactly one of `joinFile` or `configFile`, and `reset` focuses on cleanup fields.
-- Kubeadm fields are action-scoped: validation rejects `join`-only fields on `init`, `init`-only fields on `reset`, and other cross-action mixes.
-- When `skipIfAdminConfExists` skips `init`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
-- Place host preparation steps (`WriteContainerdConfig`, `ConfigureSwap`, `ConfigureKernelModule`, `ConfigureSysctl`) before `Kubeadm` so bootstrap failures point to the correct step.
+- `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, and `ResetKubeadm` focuses on cleanup fields.
+- When `skipIfAdminConfExists` skips `InitKubeadm`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
+- Place host preparation steps (`WriteContainerdConfig`, `ConfigureSwap`, `ConfigureKernelModule`, `ConfigureSysctl`) before kubeadm bootstrap so failures point to the correct step.
 
 ## `ResetKubeadm`
 
@@ -118,22 +116,21 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.cleanupContainers` | `array<string>` | no | `` | `` | Container names to stop and remove during `reset`. Useful when the runtime has stale control-plane containers. | `[kube-apiserver,etcd]` |
+| `spec.cleanupContainers` | `array<string>` | no | `` | `` | Container names to stop and remove during `ResetKubeadm`. Useful when the runtime has stale control-plane containers. | `[kube-apiserver,etcd]` |
 | `spec.criSocket` | `string` | no | `` | `` | CRI socket path passed to kubeadm. Required when multiple container runtimes are installed on the node. | `unix:///run/containerd/containerd.sock` |
 | `spec.extraArgs` | `array<string>` | no | `` | `` | Additional flags passed directly to the kubeadm subcommand as `--key=value` pairs. | `[--skip-phases=addon/kube-proxy]` |
-| `spec.force` | `boolean` | no | `false` | `` | Pass `--force` to `kubeadm reset` to skip interactive confirmation prompts. | `true` |
-| `spec.ignoreErrors` | `boolean` | no | `false` | `` | For `reset`, continue with filesystem and runtime cleanup even if the `kubeadm reset` command itself fails. Later cleanup steps still fail the step if they error. | `true` |
-| `spec.removeFiles` | `array<string>` | no | `` | `` | Individual files to delete during `reset` cleanup, such as kubeconfig files. | `[/etc/kubernetes/admin.conf]` |
-| `spec.removePaths` | `array<string>` | no | `` | `` | Directories to delete during `reset` cleanup, such as CNI and etcd data. | `[/etc/cni/net.d,/var/lib/etcd]` |
-| `spec.restartRuntimeService` | `string` | no | `` | `` | Container runtime service name to restart after `reset` cleanup completes. | `containerd` |
-| `spec.stopKubelet` | `boolean` | no | `true` | `` | Stop the kubelet service before running `reset`. Defaults to `true`. | `true` |
+| `spec.force` | `boolean` | no | `false` | `` | Pass `--force` to `ResetKubeadm` to skip interactive confirmation prompts. | `true` |
+| `spec.ignoreErrors` | `boolean` | no | `false` | `` | For `ResetKubeadm`, continue with filesystem and runtime cleanup even if the kubeadm command itself fails. Later cleanup steps still fail the step if they error. | `true` |
+| `spec.removeFiles` | `array<string>` | no | `` | `` | Individual files to delete during `ResetKubeadm` cleanup, such as kubeconfig files. | `[/etc/kubernetes/admin.conf]` |
+| `spec.removePaths` | `array<string>` | no | `` | `` | Directories to delete during `ResetKubeadm` cleanup, such as CNI and etcd data. | `[/etc/cni/net.d,/var/lib/etcd]` |
+| `spec.restartRuntimeService` | `string` | no | `` | `` | Container runtime service name to restart after `ResetKubeadm` cleanup completes. | `containerd` |
+| `spec.stopKubelet` | `boolean` | no | `true` | `` | Stop the kubelet service before running `ResetKubeadm`. Defaults to `true`. | `true` |
 
 ### Notes
 
-- The action controls the contract: `init` requires `outputJoinFile`, `join` requires exactly one of `joinFile` or `configFile`, and `reset` focuses on cleanup fields.
-- Kubeadm fields are action-scoped: validation rejects `join`-only fields on `init`, `init`-only fields on `reset`, and other cross-action mixes.
-- When `skipIfAdminConfExists` skips `init`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
-- Place host preparation steps (`WriteContainerdConfig`, `ConfigureSwap`, `ConfigureKernelModule`, `ConfigureSysctl`) before `Kubeadm` so bootstrap failures point to the correct step.
+- `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, and `ResetKubeadm` focuses on cleanup fields.
+- When `skipIfAdminConfExists` skips `InitKubeadm`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
+- Place host preparation steps (`WriteContainerdConfig`, `ConfigureSwap`, `ConfigureKernelModule`, `ConfigureSysctl`) before kubeadm bootstrap so failures point to the correct step.
 
 ## Related
 

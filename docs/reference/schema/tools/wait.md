@@ -47,7 +47,7 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
 | `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
-| `spec.name` | `string` | yes | `` | `` | ManageService name to check. Required for `serviceActive`. | `containerd` |
+| `spec.name` | `string` | yes | `` | `` | Service name to check. Required for `WaitForService`. | `containerd` |
 | `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
 | `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
 
@@ -82,7 +82,7 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.command` | `array<string>` | yes | `` | `` | RunCommand vector to run on each poll attempt. Required for `commandSuccess`. The step succeeds when the command exits 0. | `[test,-f,/etc/kubernetes/admin.conf]` |
+| `spec.command` | `array<string>` | yes | `` | `` | Command vector to run on each poll attempt. Required for `WaitForCommand`. The step succeeds when the command exits 0. | `[test,-f,/etc/kubernetes/admin.conf]` |
 | `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
 | `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
 | `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
@@ -122,8 +122,8 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
 | `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
-| `spec.nonEmpty` | `boolean` | no | `` | `` | For `fileExists`, also assert that the file has non-zero size. Useful when waiting for a file that is written progressively. | `true` |
-| `spec.path` | `string` | yes | `` | `` | Filesystem path to check. Required for `fileExists` and `fileAbsent`. | `/etc/kubernetes/admin.conf` |
+| `spec.nonEmpty` | `boolean` | no | `` | `` | For `WaitForFile`, also assert that the file has non-zero size. Useful when waiting for a file that is written progressively. | `true` |
+| `spec.path` | `string` | yes | `` | `` | Filesystem path to check. Required for `WaitForFile` and `WaitForMissingFile`. | `/etc/kubernetes/admin.conf` |
 | `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
 | `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
 | `spec.type` | `string` | no | `` | `any, file, dir` | Restricts the path check to a specific filesystem entry type. `file` matches regular files only, `dir` matches directories, `any` matches either. Defaults to `any`. | `file` |
@@ -160,7 +160,7 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
 | `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
-| `spec.path` | `string` | yes | `` | `` | Filesystem path to check. Required for `fileExists` and `fileAbsent`. | `/etc/kubernetes/admin.conf` |
+| `spec.path` | `string` | yes | `` | `` | Filesystem path to check. Required for `WaitForFile` and `WaitForMissingFile`. | `/etc/kubernetes/admin.conf` |
 | `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
 | `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
 | `spec.type` | `string` | no | `` | `any, file, dir` | Restricts the path check to a specific filesystem entry type. `file` matches regular files only, `dir` matches directories, `any` matches either. Defaults to `any`. | `file` |
@@ -199,7 +199,7 @@ spec:
 | `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
 | `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
 | `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
-| `spec.port` | `string` | yes | `` | `` | TCP port number to check. Required for `tcpPortOpen` and `tcpPortClosed`. | `6443` |
+| `spec.port` | `string` | yes | `` | `` | TCP port number to check. Required for `WaitForTCPPort` and `WaitForMissingTCPPort`. | `6443` |
 | `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
 
 ### Notes
@@ -236,7 +236,7 @@ spec:
 | `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
 | `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
 | `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
-| `spec.port` | `string` | yes | `` | `` | TCP port number to check. Required for `tcpPortOpen` and `tcpPortClosed`. | `6443` |
+| `spec.port` | `string` | yes | `` | `` | TCP port number to check. Required for `WaitForTCPPort` and `WaitForMissingTCPPort`. | `6443` |
 | `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
 
 ### Notes

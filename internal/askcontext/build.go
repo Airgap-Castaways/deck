@@ -53,14 +53,14 @@ func buildManifest() Manifest {
 		Workflow: WorkflowRules{
 			Summary:          workflow.Summary,
 			TopLevelModes:    validate.WorkflowTopLevelModes(),
-			SupportedRoles:   validate.SupportedWorkflowRoles(),
+			SupportedModes:   validate.SupportedWorkflowRoles(),
 			SupportedVersion: validate.SupportedWorkflowVersion(),
 			ImportRule:       validate.WorkflowImportRule(),
 			Notes:            append([]string(nil), validate.WorkflowInvariantNotes()...),
 		},
-		Roles: []RoleGuidance{
+		Modes: []ModeGuidance{
 			{
-				Role:        "prepare",
+				Mode:        "prepare",
 				Summary:     "Prepare collects online inputs and produces offline-ready artifacts.",
 				WhenToUse:   "Use prepare when the request needs downloads, mirrored images, package caches, or bundle content created before apply.",
 				Prefer:      []string{"download-oriented File, Image, and Package steps", "variables shared by later apply steps", "named phases when collection has multiple stages"},
@@ -68,7 +68,7 @@ func buildManifest() Manifest {
 				OutputFiles: []string{workspacepaths.CanonicalPrepareWorkflowRel, pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowVarsRel)},
 			},
 			{
-				Role:        "apply",
+				Mode:        "apply",
 				Summary:     "Apply changes the local node using prepared inputs and typed host actions.",
 				WhenToUse:   "Use apply for package installation, file writes, service changes, runtime config, and host convergence steps.",
 				Prefer:      []string{"typed steps such as File, ConfigureRepository, RefreshRepository, ManageService, WriteContainerdConfig, and Package", "named phases for multi-step installs", "components for reusable imported logic"},
@@ -133,14 +133,14 @@ func buildStepKinds() []StepKindContext {
 
 func buildStepKeyFields(kind string, meta schemadoc.ToolMetadata) []StepFieldContext {
 	preferred := map[string][]string{
-		"DownloadPackage":     {"spec.packages", "spec.distro", "spec.repo", "spec.backend", "spec.output"},
+		"DownloadPackage":     {"spec.packages", "spec.distro", "spec.repo", "spec.backend", "spec.outputDir"},
 		"InstallPackage":      {"spec.packages", "spec.source", "spec.restrictToRepos", "spec.excludeRepos"},
 		"ConfigureRepository": {"spec.format", "spec.path", "spec.repositories", "spec.replaceExisting", "spec.cleanupPaths"},
 		"RefreshRepository":   {"spec.manager", "spec.clean", "spec.update", "spec.restrictToRepos", "spec.excludeRepos"},
 		"ManageService":       {"spec.name", "spec.names", "spec.state", "spec.enabled"},
-		"DownloadFile":        {"spec.source", "spec.fetch", "spec.output"},
+		"DownloadFile":        {"spec.source", "spec.fetch", "spec.outputPath", "spec.mode"},
 		"WriteFile":           {"spec.path", "spec.content", "spec.template", "spec.mode"},
-		"CopyFile":            {"spec.src", "spec.dest", "spec.mode"},
+		"CopyFile":            {"spec.source", "spec.path", "spec.mode"},
 		"EditFile":            {"spec.path", "spec.edits", "spec.backup", "spec.mode"},
 	}
 	keys := preferred[kind]

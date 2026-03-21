@@ -10,7 +10,7 @@ func InvariantPromptBlock() PromptBlock {
 	b := &strings.Builder{}
 	b.WriteString("Workflow invariants:\n")
 	b.WriteString("- Supported command modes: ")
-	b.WriteString(strings.Join(manifest.Workflow.SupportedRoles, ", "))
+	b.WriteString(strings.Join(manifest.Workflow.SupportedModes, ", "))
 	b.WriteString("\n")
 	b.WriteString("- Supported workflow version: ")
 	b.WriteString(manifest.Workflow.SupportedVersion)
@@ -83,14 +83,14 @@ func RoleGuidanceBlock() string {
 	manifest := Current()
 	b := &strings.Builder{}
 	b.WriteString("Command-mode guidance:\n")
-	for _, role := range manifest.Roles {
+	for _, mode := range manifest.Modes {
 		b.WriteString("- ")
 		b.WriteString("`")
-		b.WriteString(role.Role)
+		b.WriteString(mode.Mode)
 		b.WriteString("` command: ")
-		b.WriteString(role.Summary)
+		b.WriteString(mode.Summary)
 		b.WriteString(" Use when: ")
-		b.WriteString(role.WhenToUse)
+		b.WriteString(mode.WhenToUse)
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())

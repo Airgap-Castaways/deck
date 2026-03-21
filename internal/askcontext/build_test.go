@@ -50,8 +50,8 @@ func TestManifestWorkflowRulesMatchValidatorAndSchema(t *testing.T) {
 	if got := manifest.Workflow.SupportedVersion; got != validate.SupportedWorkflowVersion() {
 		t.Fatalf("unexpected supported version: %s", got)
 	}
-	if strings.Join(manifest.Workflow.SupportedRoles, ",") != strings.Join(validate.SupportedWorkflowRoles(), ",") {
-		t.Fatalf("unexpected supported roles: %v", manifest.Workflow.SupportedRoles)
+	if strings.Join(manifest.Workflow.SupportedModes, ",") != strings.Join(validate.SupportedWorkflowRoles(), ",") {
+		t.Fatalf("unexpected supported modes: %v", manifest.Workflow.SupportedModes)
 	}
 	schemaRaw, err := deckschemas.WorkflowSchema()
 	if err != nil {
