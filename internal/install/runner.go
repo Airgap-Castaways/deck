@@ -15,6 +15,7 @@ type RunOptions struct {
 	BundleRoot string
 	StatePath  string
 	EventSink  StepEventSink
+	Fresh      bool
 }
 
 const (
@@ -105,14 +106,18 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 		}
 		statePath = resolvedStatePath
 	}
-	stateReadPath, err := resolveStateReadPath(wf, statePath)
-	if err != nil {
-		return err
-	}
+	st := &State{CompletedSteps: []string{}, SkippedSteps: []string{}, RuntimeVars: map[string]any{}}
+	if !opts.Fresh {
+		stateReadPath, err := resolveStateReadPath(wf, statePath)
+		if err != nil {
+			return err
+		}
 
-	st, err := LoadState(stateReadPath)
-	if err != nil {
-		return err
+		loadedState, err := LoadState(stateReadPath)
+		if err != nil {
+			return err
+		}
+		st = loadedState
 	}
 	completed := make(map[string]bool, len(st.CompletedSteps))
 	for _, id := range st.CompletedSteps {

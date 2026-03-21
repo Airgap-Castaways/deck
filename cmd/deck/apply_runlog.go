@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taedi90/deck/internal/applycli"
 	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/install"
 	"github.com/taedi90/deck/internal/userdirs"
@@ -20,7 +21,11 @@ type applyRunRecord struct {
 	WorkflowSource string               `json:"workflow_source,omitempty"`
 	Scenario       string               `json:"scenario,omitempty"`
 	BundleRoot     string               `json:"bundle_root,omitempty"`
+	Fresh          bool                 `json:"fresh,omitempty"`
 	SelectedPhase  string               `json:"selected_phase,omitempty"`
+	SelectedStep   string               `json:"selected_step,omitempty"`
+	FromStep       string               `json:"from_step,omitempty"`
+	ToStep         string               `json:"to_step,omitempty"`
 	Hostname       string               `json:"hostname,omitempty"`
 	StartedAt      string               `json:"started_at,omitempty"`
 	EndedAt        string               `json:"ended_at,omitempty"`
@@ -69,7 +74,7 @@ func (l *applyRunLogger) Dir() string {
 	return l.dir
 }
 
-func newApplyRunLogger(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (*applyRunLogger, error) {
+func newApplyRunLogger(request applycli.ExecutionRequest, workflowSource, scenario, bundleRoot string) (*applyRunLogger, error) {
 	runsRoot, err := userdirs.RunsRoot()
 	if err != nil {
 		return nil, err
@@ -92,11 +97,15 @@ func newApplyRunLogger(workflowPath, workflowSource, scenario, bundleRoot, selec
 		record: applyRunRecord{
 			ID:             runID,
 			Command:        "apply",
-			WorkflowRef:    strings.TrimSpace(workflowPath),
+			WorkflowRef:    strings.TrimSpace(request.WorkflowPath),
 			WorkflowSource: strings.TrimSpace(workflowSource),
 			Scenario:       strings.TrimSpace(scenario),
 			BundleRoot:     strings.TrimSpace(bundleRoot),
-			SelectedPhase:  strings.TrimSpace(selectedPhase),
+			Fresh:          request.Fresh,
+			SelectedPhase:  strings.TrimSpace(request.SelectedPhase),
+			SelectedStep:   strings.TrimSpace(request.StepSelection.SelectedStep),
+			FromStep:       strings.TrimSpace(request.StepSelection.FromStep),
+			ToStep:         strings.TrimSpace(request.StepSelection.ToStep),
 			Hostname:       strings.TrimSpace(hostname),
 			StartedAt:      time.Now().UTC().Format(time.RFC3339Nano),
 			Status:         "running",

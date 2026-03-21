@@ -56,7 +56,7 @@ These commands are additive. They do not replace the default local execution pat
 
 `deck lint -o json` returns a structured report with the validated workflow list, summary counts, supported workflow contracts, and warning-level `findings` such as opaque `Command` steps or remote artifacts without integrity checks.
 
-`deck plan -o json` returns the resolved workflow path, state path, runtime var keys, per-step actions, and a summary section.
+`deck plan -o json` returns the resolved workflow path, selector metadata, state path, runtime var keys, per-step actions, and a summary section.
 
 `deck server health -o json` returns the resolved server URL, `/healthz` URL, and HTTP status.
 
@@ -181,6 +181,8 @@ Optional ask augmentation config example:
 - scenario entrypoints live under `workflows/scenarios/`
 - `plan` and `apply` accept `--scenario` for named scenarios and `--workflow` for an explicit path or URL.
 - `--source` controls whether `--scenario` resolves from the local workspace or the saved remote server.
+- `plan` and `apply` accept `--fresh` to ignore saved workflow state for the current invocation.
+- `plan` and `apply` accept `--step`, `--from-step`, and `--to-step` for step-level selection.
 - workspace-local metadata stays under `./.deck/`, while user-global config, state, cache, and run history use standard XDG locations.
 - `ask` workspace context lives under `./.deck/ask/`, while saved ask config defaults live under `~/.config/deck/config.json` as the top-level `ask` object.
 - `deck ask plan` writes plan artifacts under `./.deck/plan/` by default (`<timestamp>-<slug>.md`, `<timestamp>-<slug>.json`, `latest.md`, `latest.json`).
@@ -191,6 +193,9 @@ Optional ask augmentation config example:
 - optional MCP and LSP augmentation is disabled by default and degrades gracefully when configured tools are unavailable.
 - phase imports resolve from `workflows/components/` using component-relative paths
 - `apply` runs all phases by default when phases are used; `--phase` narrows execution to one phase.
+- `--step <id>` selects one step; `--from-step` and `--to-step` define an inclusive step range after any `--phase` filter is applied.
+- `--fresh` ignores saved completed-step and runtime state for the current command, but still writes new progress back to the normal state path.
+- apply-state details, including workflow state-key behavior and skip semantics, are documented in [Apply State](apply-state.md).
 - `bundle build` archives the canonical workspace bundle inputs: `deck`, `workflows/`, `outputs/`, and `.deck/manifest.json`, and respects `.deckignore` within those paths.
 - Help text is shown on stdout only when you request it with `--help` or `help`.
 - Command and flag errors are written to stderr without automatic usage output.

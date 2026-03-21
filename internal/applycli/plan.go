@@ -44,7 +44,11 @@ type PlanSummary struct {
 
 type PlanReport struct {
 	WorkflowPath   string      `json:"workflowPath"`
+	Fresh          bool        `json:"fresh,omitempty"`
 	SelectedPhase  string      `json:"selectedPhase,omitempty"`
+	SelectedStep   string      `json:"selectedStep,omitempty"`
+	FromStep       string      `json:"fromStep,omitempty"`
+	ToStep         string      `json:"toStep,omitempty"`
 	StatePath      string      `json:"statePath"`
 	RuntimeVarKeys []string    `json:"runtimeVarKeys,omitempty"`
 	Summary        PlanSummary `json:"summary"`
@@ -67,7 +71,7 @@ func ExecutePlan(ctx context.Context, opts PlanOptions) error {
 		workflowVarKeys = append(workflowVarKeys, key)
 	}
 	slices.Sort(workflowVarKeys)
-	if err := verbosef(opts.Verbosef, 1, "deck: plan workflow=%s phase=%s state=%s\n", report.WorkflowPath, report.SelectedPhase, report.StatePath); err != nil {
+	if err := verbosef(opts.Verbosef, 1, "deck: plan workflow=%s phase=%s state=%s fresh=%t stepSelector=%s\n", report.WorkflowPath, report.SelectedPhase, report.StatePath, report.Fresh, opts.Request.StepSelection.Summary()); err != nil {
 		return err
 	}
 	if err := verbosef(opts.Verbosef, 3, "deck: plan workflowVars=%s runtimeVars=%s completedSteps=%d\n", joinOrDash(workflowVarKeys), joinOrDash(report.RuntimeVarKeys), report.Summary.CompletedSteps); err != nil {
@@ -91,7 +95,7 @@ func BuildPlanReport(request ExecutionRequest) (PlanReport, error) {
 	if request.ExecutionWorkflow == nil {
 		return PlanReport{}, fmt.Errorf("execution workflow is nil")
 	}
-	state, err := LoadInstallDryRunState(request.ExecutionWorkflow)
+	state, err := LoadInstallDryRunState(request)
 	if err != nil {
 		return PlanReport{}, err
 	}
@@ -146,13 +150,24 @@ func BuildPlanReport(request ExecutionRequest) (PlanReport, error) {
 		runtimeVarKeys = append(runtimeVarKeys, key)
 	}
 	slices.Sort(runtimeVarKeys)
-	return PlanReport{WorkflowPath: request.WorkflowPath, SelectedPhase: request.SelectedPhase, StatePath: request.StatePath, RuntimeVarKeys: runtimeVarKeys, Summary: summary, Steps: steps}, nil
+	return PlanReport{
+		WorkflowPath:   request.WorkflowPath,
+		Fresh:          request.Fresh,
+		SelectedPhase:  request.SelectedPhase,
+		SelectedStep:   request.StepSelection.SelectedStep,
+		FromStep:       request.StepSelection.FromStep,
+		ToStep:         request.StepSelection.ToStep,
+		StatePath:      request.StatePath,
+		RuntimeVarKeys: runtimeVarKeys,
+		Summary:        summary,
+		Steps:          steps,
+	}, nil
 }
 
 func writePlanText(stdoutPrintf func(format string, args ...any) error, report PlanReport) error {
 	multiPhase := report.Summary.PhaseCount > 1
 	currentPhase := ""
-	if err := stdoutPrintf("PLAN workflow=%s state=%s selectedPhase=%s runtimeVars=%d completed=%d\n", report.WorkflowPath, displayValueOrDash(report.SelectedPhase), report.StatePath, len(report.RuntimeVarKeys), report.Summary.CompletedSteps); err != nil {
+	if err := stdoutPrintf("PLAN workflow=%s state=%s selectedPhase=%s fresh=%t stepSelector=%s runtimeVars=%d completed=%d\n", report.WorkflowPath, displayValueOrDash(report.SelectedPhase), report.StatePath, report.Fresh, stepSelectorSummary(report.SelectedStep, report.FromStep, report.ToStep), len(report.RuntimeVarKeys), report.Summary.CompletedSteps); err != nil {
 		return err
 	}
 	for _, step := range report.Steps {
@@ -173,6 +188,10 @@ func writePlanText(stdoutPrintf func(format string, args ...any) error, report P
 		}
 	}
 	return stdoutPrintf("SUMMARY steps=%d run=%d skip=%d skipCompleted=%d skipWhen=%d phases=%d\n", report.Summary.TotalSteps, report.Summary.RunSteps, report.Summary.SkipSteps, report.Summary.SkipCompleted, report.Summary.SkipWhen, report.Summary.PhaseCount)
+}
+
+func stepSelectorSummary(selectedStep, fromStep, toStep string) string {
+	return (StepSelection{SelectedStep: selectedStep, FromStep: fromStep, ToStep: toStep}).Summary()
 }
 
 func logPlanDetails(verbose func(level int, format string, args ...any) error, report PlanReport) error {

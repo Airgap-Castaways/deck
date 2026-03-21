@@ -70,9 +70,11 @@ func TestApplyWritesRunRecordUnderXDGStateHome(t *testing.T) {
 		t.Fatalf("read run record: %v", err)
 	}
 	var record struct {
-		Command string `json:"command"`
-		Status  string `json:"status"`
-		Steps   []struct {
+		Command      string `json:"command"`
+		Fresh        bool   `json:"fresh"`
+		SelectedStep string `json:"selected_step"`
+		Status       string `json:"status"`
+		Steps        []struct {
 			StepID string `json:"step_id"`
 			Status string `json:"status"`
 		} `json:"steps"`
@@ -82,6 +84,12 @@ func TestApplyWritesRunRecordUnderXDGStateHome(t *testing.T) {
 	}
 	if record.Command != "apply" || record.Status != "ok" {
 		t.Fatalf("unexpected run record: %+v", record)
+	}
+	if record.Fresh {
+		t.Fatalf("expected fresh=false run record, got %+v", record)
+	}
+	if record.SelectedStep != "" {
+		t.Fatalf("expected empty selected step, got %+v", record)
 	}
 	if len(record.Steps) == 0 || record.Steps[len(record.Steps)-1].Status != "succeeded" {
 		t.Fatalf("expected succeeded step record, got %+v", record.Steps)
@@ -442,7 +450,7 @@ func TestPlan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load workflow: %v", err)
 	}
-	execWf, err := applycli.BuildExecutionWorkflow(wf, "install")
+	execWf, err := applycli.BuildExecutionWorkflow(wf, "install", applycli.StepSelection{})
 	if err != nil {
 		t.Fatalf("build execution workflow: %v", err)
 	}
@@ -545,6 +553,214 @@ func TestApplyVerboseDiagnostics(t *testing.T) {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 		}
+	}
+}
+
+func TestApplyFreshReexecutesCompletedSteps(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	root := t.TempDir()
+	bundle := root
+	createValidBundleManifest(t, bundle)
+	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle workflows: %v", err)
+	}
+
+	logPath := filepath.Join(root, "fresh.log")
+	wfPath := filepath.Join(root, "fresh.yaml")
+	writeWorkflowYAML(t, wfPath, fmt.Sprintf("version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: fresh-step\n        kind: Command\n        spec:\n          command: [\"sh\", \"-c\", \"echo fresh >> %s\"]\n", strings.ReplaceAll(logPath, "\\", "\\\\")))
+
+	if _, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, bundle}); err != nil {
+		t.Fatalf("first apply failed: %v", err)
+	}
+	if _, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, bundle}); err != nil {
+		t.Fatalf("second apply failed: %v", err)
+	}
+	out, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--dry-run", bundle})
+	if err != nil {
+		t.Fatalf("dry-run apply failed: %v", err)
+	}
+	if !strings.Contains(out, "fresh-step Command SKIP (completed)") {
+		t.Fatalf("expected completed skip, got %q", out)
+	}
+	freshOut, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--dry-run", "--fresh", bundle})
+	if err != nil {
+		t.Fatalf("fresh dry-run apply failed: %v", err)
+	}
+	if !strings.Contains(freshOut, "fresh-step Command PLAN") {
+		t.Fatalf("expected plan output with --fresh, got %q", freshOut)
+	}
+	if _, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--fresh", bundle}); err != nil {
+		t.Fatalf("fresh apply failed: %v", err)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read fresh log: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected two executions after --fresh rerun, got %d (%q)", len(lines), string(raw))
+	}
+}
+
+func TestApplyStepSelectionAndRunLogMetadata(t *testing.T) {
+	stateHome := filepath.Join(t.TempDir(), "state-home")
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv("HOME", filepath.Join(t.TempDir(), "home"))
+
+	root := t.TempDir()
+	bundle := root
+	createValidBundleManifest(t, bundle)
+	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle workflows: %v", err)
+	}
+
+	logPath := filepath.Join(root, "steps.log")
+	escapedLogPath := strings.ReplaceAll(logPath, "\\", "\\\\")
+	wfPath := filepath.Join(root, "steps.yaml")
+	writeWorkflowYAML(t, wfPath, fmt.Sprintf("version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: step-a\n        kind: Command\n        spec:\n          command: [\"sh\", \"-c\", \"echo a >> %s\"]\n      - id: step-b\n        kind: Command\n        spec:\n          command: [\"sh\", \"-c\", \"echo b >> %s\"]\n  - name: verify\n    steps:\n      - id: step-c\n        kind: Command\n        spec:\n          command: [\"sh\", \"-c\", \"echo c >> %s\"]\n", escapedLogPath, escapedLogPath, escapedLogPath))
+
+	out, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--dry-run", "--step", "step-b", bundle})
+	if err != nil {
+		t.Fatalf("step dry-run failed: %v", err)
+	}
+	if strings.Contains(out, "step-a") || strings.Contains(out, "step-c") {
+		t.Fatalf("expected only selected step in dry-run, got %q", out)
+	}
+	if !strings.Contains(out, "step-b Command PLAN") {
+		t.Fatalf("expected selected step in dry-run, got %q", out)
+	}
+
+	if _, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--fresh", "--step", "step-b", bundle}); err != nil {
+		t.Fatalf("step apply failed: %v", err)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read step log: %v", err)
+	}
+	if strings.TrimSpace(string(raw)) != "b" {
+		t.Fatalf("expected only selected step to execute, got %q", string(raw))
+	}
+	runsRoot := filepath.Join(stateHome, "deck", "runs")
+	entries, err := os.ReadDir(runsRoot)
+	if err != nil {
+		t.Fatalf("read runs root: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected one run directory, got %d", len(entries))
+	}
+	recordPath := filepath.Join(runsRoot, entries[0].Name(), "record.json")
+	recordRaw, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatalf("read run record: %v", err)
+	}
+	var record struct {
+		Fresh        bool   `json:"fresh"`
+		SelectedStep string `json:"selected_step"`
+		FromStep     string `json:"from_step"`
+		ToStep       string `json:"to_step"`
+	}
+	if err := json.Unmarshal(recordRaw, &record); err != nil {
+		t.Fatalf("parse run record: %v", err)
+	}
+	if !record.Fresh || record.SelectedStep != "step-b" || record.FromStep != "" || record.ToStep != "" {
+		t.Fatalf("unexpected selector metadata: %+v", record)
+	}
+}
+
+func TestApplyStepRangeSelection(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	root := t.TempDir()
+	bundle := root
+	createValidBundleManifest(t, bundle)
+	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle workflows: %v", err)
+	}
+
+	logPath := filepath.Join(root, "range.log")
+	escapedLogPath := strings.ReplaceAll(logPath, "\\", "\\\\")
+	wfPath := filepath.Join(root, "range.yaml")
+	writeWorkflowYAML(t, wfPath, fmt.Sprintf("version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: step-a\n        kind: Command\n        spec:\n          command: [\"sh\", \"-c\", \"echo a >> %s\"]\n      - id: step-b\n        kind: Command\n        spec:\n          command: [\"sh\", \"-c\", \"echo b >> %s\"]\n  - name: verify\n    steps:\n      - id: step-c\n        kind: Command\n        spec:\n          command: [\"sh\", \"-c\", \"echo c >> %s\"]\n", escapedLogPath, escapedLogPath, escapedLogPath))
+
+	out, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--dry-run", "--from-step", "step-b", "--to-step", "step-c", bundle})
+	if err != nil {
+		t.Fatalf("range dry-run failed: %v", err)
+	}
+	if strings.Contains(out, "step-a") {
+		t.Fatalf("expected step-a to be excluded, got %q", out)
+	}
+	for _, want := range []string{"step-b Command PLAN", "step-c Command PLAN", "PHASE=install", "PHASE=verify"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in range dry-run, got %q", want, out)
+		}
+	}
+	if _, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--fresh", "--from-step", "step-b", "--to-step", "step-c", bundle}); err != nil {
+		t.Fatalf("range apply failed: %v", err)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read range log: %v", err)
+	}
+	if strings.TrimSpace(string(raw)) != "b\nc" {
+		t.Fatalf("expected step range output, got %q", string(raw))
+	}
+}
+
+func TestApplyStepSelectionFlagValidation(t *testing.T) {
+	wfPath := writeInstallTrueWorkflowFixture(t)
+	bundle := t.TempDir()
+	createValidBundleManifest(t, bundle)
+	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle workflows: %v", err)
+	}
+	_, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--step", "run-true", "--from-step", "run-true", bundle})
+	if err == nil {
+		t.Fatalf("expected selector validation error")
+	}
+	if !strings.Contains(err.Error(), "--step cannot be combined") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPlanFreshAndSelectorJSON(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	wfPath := filepath.Join(t.TempDir(), "apply-plan-selector.json.yaml")
+	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: step-a\n        kind: Command\n        spec:\n          command: [\"true\"]\n      - id: step-b\n        kind: Command\n        spec:\n          command: [\"true\"]\n")
+
+	res := execute([]string{"plan", "--workflow", wfPath, "--fresh", "--step", "step-b", "-o", "json"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	var payload struct {
+		Fresh        bool   `json:"fresh"`
+		SelectedStep string `json:"selectedStep"`
+		FromStep     string `json:"fromStep"`
+		ToStep       string `json:"toStep"`
+		Summary      struct {
+			TotalSteps int `json:"totalSteps"`
+			RunSteps   int `json:"runSteps"`
+		} `json:"summary"`
+		Steps []struct {
+			ID string `json:"id"`
+		} `json:"steps"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &payload); err != nil {
+		t.Fatalf("parse plan json: %v stdout=%q", err, res.stdout)
+	}
+	if !payload.Fresh || payload.SelectedStep != "step-b" || payload.FromStep != "" || payload.ToStep != "" {
+		t.Fatalf("unexpected selector payload: %+v", payload)
+	}
+	if payload.Summary.TotalSteps != 1 || payload.Summary.RunSteps != 1 || len(payload.Steps) != 1 || payload.Steps[0].ID != "step-b" {
+		t.Fatalf("unexpected plan payload: %+v", payload)
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/taedi90/deck/internal/config"
 	"github.com/taedi90/deck/internal/install"
 )
 
@@ -27,7 +26,7 @@ type ExecuteOptions struct {
 	StdoutPrintf   func(format string, args ...any) error
 	StdoutPrintln  func(args ...any) error
 	AdditionalSink install.StepEventSink
-	NewRunLogger   func(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (RunLogger, error)
+	NewRunLogger   func(request ExecutionRequest, workflowSource, scenario, bundleRoot string) (RunLogger, error)
 }
 
 func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
@@ -41,16 +40,16 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 	if request.ExecutionWorkflow == nil {
 		return fmt.Errorf("execution workflow is nil")
 	}
-	if err := verbosef(opts.Verbosef, 1, "deck: apply workflow=%s phase=%s state=%s bundle=%s dryRun=%t prefetch=%t\n", request.WorkflowPath, request.SelectedPhase, request.StatePath, strings.TrimSpace(opts.BundleRoot), opts.DryRun, opts.Prefetch); err != nil {
+	if err := verbosef(opts.Verbosef, 1, "deck: apply workflow=%s phase=%s state=%s bundle=%s dryRun=%t prefetch=%t fresh=%t stepSelector=%s\n", request.WorkflowPath, request.SelectedPhase, request.StatePath, strings.TrimSpace(opts.BundleRoot), opts.DryRun, opts.Prefetch, request.Fresh, request.StepSelection.Summary()); err != nil {
 		return err
 	}
 	if opts.DryRun {
-		return writeApplyDryRun(opts.StdoutPrintf, request.ExecutionWorkflow, request.SelectedPhase, opts.BundleRoot)
+		return writeApplyDryRun(opts.StdoutPrintf, request)
 	}
 	if opts.NewRunLogger == nil {
 		return fmt.Errorf("run logger factory is nil")
 	}
-	runLogger, err := opts.NewRunLogger(request.WorkflowPath, strings.TrimSpace(opts.WorkflowSource), strings.TrimSpace(opts.Scenario), strings.TrimSpace(opts.BundleRoot), request.SelectedPhase)
+	runLogger, err := opts.NewRunLogger(request, strings.TrimSpace(opts.WorkflowSource), strings.TrimSpace(opts.Scenario), strings.TrimSpace(opts.BundleRoot))
 	if err != nil {
 		return err
 	}
@@ -70,18 +69,18 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 	}()
 
 	if opts.Prefetch {
-		prefetchWorkflow := BuildPrefetchWorkflow(request.Workflow)
+		prefetchWorkflow := BuildPrefetchWorkflow(request.ExecutionWorkflow)
 		if len(prefetchWorkflow.Phases) > 0 && len(prefetchWorkflow.Phases[0].Steps) > 0 {
 			if err := verbosef(opts.Verbosef, 1, "deck: apply prefetchSteps=%d\n", len(prefetchWorkflow.Phases[0].Steps)); err != nil {
 				return err
 			}
-			if err := install.Run(ctx, prefetchWorkflow, install.RunOptions{BundleRoot: opts.BundleRoot, StatePath: request.StatePath, EventSink: eventSink}); err != nil {
+			if err := install.Run(ctx, prefetchWorkflow, install.RunOptions{BundleRoot: opts.BundleRoot, StatePath: request.StatePath, EventSink: eventSink, Fresh: request.Fresh}); err != nil {
 				return err
 			}
 		}
 	}
 
-	if err := install.Run(ctx, request.ExecutionWorkflow, install.RunOptions{BundleRoot: opts.BundleRoot, StatePath: request.StatePath, EventSink: eventSink}); err != nil {
+	if err := install.Run(ctx, request.ExecutionWorkflow, install.RunOptions{BundleRoot: opts.BundleRoot, StatePath: request.StatePath, EventSink: eventSink, Fresh: request.Fresh}); err != nil {
 		return err
 	}
 	if opts.StdoutPrintln == nil {
@@ -90,18 +89,19 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 	return opts.StdoutPrintln("apply: ok")
 }
 
-func writeApplyDryRun(stdoutPrintf func(format string, args ...any) error, wf *config.Workflow, selectedPhaseName string, bundleRoot string) error {
+func writeApplyDryRun(stdoutPrintf func(format string, args ...any) error, request ExecutionRequest) error {
 	if stdoutPrintf == nil {
 		return fmt.Errorf("stdout printf is nil")
 	}
+	wf := request.ExecutionWorkflow
 	if wf == nil || len(wf.Phases) == 0 {
-		if selectedPhaseName == "" {
+		if request.SelectedPhase == "" {
 			return errors.New("no phases found")
 		}
-		return fmt.Errorf("%s phase not found", selectedPhaseName)
+		return fmt.Errorf("%s phase not found", request.SelectedPhase)
 	}
 
-	state, err := LoadInstallDryRunState(wf)
+	state, err := LoadInstallDryRunState(request)
 	if err != nil {
 		return err
 	}

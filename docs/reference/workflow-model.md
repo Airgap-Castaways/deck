@@ -29,6 +29,8 @@ Static `vars` flow from two sources, in order of precedence:
 
 Runtime values flow separately through `register` outputs and built-in runtime facts such as `runtime.host`.
 
+Saved apply state is tracked separately from authoring structure. For how state keys are computed, how completed-step skipping works, and what `--fresh` changes, see [Apply State](apply-state.md).
+
 **`workflows/vars.yaml`** — define shared defaults once:
 
 ```yaml
@@ -174,6 +176,8 @@ phases:
 ```
 
 Import paths are relative to `workflows/components/`. Write `k8s/prereq.yaml`, not `../components/k8s/prereq.yaml`.
+
+`deck apply` runs all phases by default, `--phase` narrows to one phase, and step selectors such as `--step`, `--from-step`, and `--to-step` can narrow execution further within the selected workflow scope.
 
 ## Step kinds
 

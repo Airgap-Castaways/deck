@@ -141,6 +141,21 @@ func TestWorkflowIntegrationUpgrade(t *testing.T) {
 	)
 }
 
+func TestWorkflowIntegrationStepSelectionDryRun(t *testing.T) {
+	root := projectRoot(t)
+	workflowPath := filepath.Join(root, "test", "workflows", "scenarios", "control-plane-bootstrap.yaml")
+
+	out := runWorkflowApplyDryRunWithArgs(t, root, workflowPath, []string{"--step", "bootstrap-report"})
+	if !strings.Contains(out, "bootstrap-report Command PLAN") {
+		t.Fatalf("expected selected step in dry-run output, got %q", out)
+	}
+	for _, avoid := range []string{"prep-disable-swap", "bootstrap-init"} {
+		if strings.Contains(out, avoid) {
+			t.Fatalf("expected selector output to exclude %q, got %q", avoid, out)
+		}
+	}
+}
+
 func TestWorkflowIntegrationRejectsBrokenImports(t *testing.T) {
 	dir := t.TempDir()
 	workflowsDir := filepath.Join(dir, "workflows")
@@ -310,6 +325,11 @@ func flattenWorkflowSteps(phases []config.Phase) []config.Step {
 
 func runWorkflowApplyDryRun(t *testing.T, repoRoot, workflowPath string, vars ...string) string {
 	t.Helper()
+	return runWorkflowApplyDryRunWithArgs(t, repoRoot, workflowPath, nil, vars...)
+}
+
+func runWorkflowApplyDryRunWithArgs(t *testing.T, repoRoot, workflowPath string, extraArgs []string, vars ...string) string {
+	t.Helper()
 
 	bundleRoot := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(bundleRoot, "workflows"), 0o755); err != nil {
@@ -317,6 +337,7 @@ func runWorkflowApplyDryRun(t *testing.T, repoRoot, workflowPath string, vars ..
 	}
 
 	args := []string{"run", "./cmd/deck", "apply", "--workflow", workflowPath, "--dry-run"}
+	args = append(args, extraArgs...)
 	for _, item := range vars {
 		args = append(args, "--var", item)
 	}

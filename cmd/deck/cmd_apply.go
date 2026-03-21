@@ -17,7 +17,11 @@ type diffOptions struct {
 	workflowPath  string
 	scenario      string
 	source        string
+	fresh         bool
 	selectedPhase string
+	selectedStep  string
+	fromStep      string
+	toStep        string
 	output        string
 	varOverrides  map[string]string
 }
@@ -45,6 +49,22 @@ func newPlanCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			fresh, err := cmdFlagBoolValue(cmd, "fresh")
+			if err != nil {
+				return err
+			}
+			selectedStep, err := cmdFlagValue(cmd, "step")
+			if err != nil {
+				return err
+			}
+			fromStep, err := cmdFlagValue(cmd, "from-step")
+			if err != nil {
+				return err
+			}
+			toStep, err := cmdFlagValue(cmd, "to-step")
+			if err != nil {
+				return err
+			}
 			output, err := cmdFlagValue(cmd, "output")
 			if err != nil {
 				return err
@@ -53,7 +73,11 @@ func newPlanCommand() *cobra.Command {
 				workflowPath:  workflowPath,
 				scenario:      scenario,
 				source:        source,
+				fresh:         fresh,
 				selectedPhase: selectedPhase,
+				selectedStep:  selectedStep,
+				fromStep:      fromStep,
+				toStep:        toStep,
 				output:        output,
 				varOverrides:  vars.AsMap(),
 			})
@@ -64,6 +88,10 @@ func newPlanCommand() *cobra.Command {
 	cmd.Flags().String("scenario", "", "scenario name to plan")
 	cmd.Flags().String("source", scenarioSourceLocal, "scenario source (local|server)")
 	cmd.Flags().String("phase", "", "phase name to plan (defaults to all phases)")
+	cmd.Flags().Bool("fresh", false, "ignore saved workflow state and plan from the beginning")
+	cmd.Flags().String("step", "", "step ID to plan")
+	cmd.Flags().String("from-step", "", "inclusive starting step ID to plan")
+	cmd.Flags().String("to-step", "", "inclusive ending step ID to plan")
 	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	registerScenarioSourceCompletion(cmd, "source", false)
@@ -77,10 +105,14 @@ func runDiffWithOptions(ctx context.Context, opts diffOptions) error {
 		return err
 	}
 	selectedPhase := strings.TrimSpace(opts.selectedPhase)
-	return executeDiff(ctx, workflowPath, selectedPhase, opts.output, varsAsAnyMap(opts.varOverrides))
+	selection, err := resolveStepSelection(opts.selectedStep, opts.fromStep, opts.toStep)
+	if err != nil {
+		return err
+	}
+	return executeDiff(ctx, workflowPath, opts.fresh, selectedPhase, selection, opts.output, varsAsAnyMap(opts.varOverrides))
 }
 
-func executeDiff(ctx context.Context, workflowPath, selectedPhase, output string, varOverrides map[string]any) error {
+func executeDiff(ctx context.Context, workflowPath string, fresh bool, selectedPhase string, selection applycli.StepSelection, output string, varOverrides map[string]any) error {
 	resolvedOutput, err := resolveOutputFormat(output)
 	if err != nil {
 		return err
@@ -89,7 +121,9 @@ func executeDiff(ctx context.Context, workflowPath, selectedPhase, output string
 		CommandName:                  "diff",
 		WorkflowPath:                 workflowPath,
 		VarOverrides:                 varOverrides,
+		Fresh:                        fresh,
 		SelectedPhase:                selectedPhase,
+		StepSelection:                selection,
 		DefaultPhase:                 "",
 		BuildExecutionWorkflow:       true,
 		ResolveStatePath:             true,
@@ -111,7 +145,11 @@ type applyOptions struct {
 	workflowPath  string
 	scenario      string
 	source        string
+	fresh         bool
 	selectedPhase string
+	selectedStep  string
+	fromStep      string
+	toStep        string
 	prefetch      bool
 	dryRun        bool
 	varOverrides  map[string]string
@@ -146,6 +184,22 @@ func newApplyCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			fresh, err := cmdFlagBoolValue(cmd, "fresh")
+			if err != nil {
+				return err
+			}
+			selectedStep, err := cmdFlagValue(cmd, "step")
+			if err != nil {
+				return err
+			}
+			fromStep, err := cmdFlagValue(cmd, "from-step")
+			if err != nil {
+				return err
+			}
+			toStep, err := cmdFlagValue(cmd, "to-step")
+			if err != nil {
+				return err
+			}
 			prefetch, err := cmdFlagBoolValue(cmd, "prefetch")
 			if err != nil {
 				return err
@@ -158,7 +212,11 @@ func newApplyCommand() *cobra.Command {
 				workflowPath:  workflowPath,
 				scenario:      scenario,
 				source:        source,
+				fresh:         fresh,
 				selectedPhase: selectedPhase,
+				selectedStep:  selectedStep,
+				fromStep:      fromStep,
+				toStep:        toStep,
 				prefetch:      prefetch,
 				dryRun:        dryRun,
 				varOverrides:  vars.AsMap(),
@@ -171,6 +229,10 @@ func newApplyCommand() *cobra.Command {
 	cmd.Flags().String("scenario", "", "scenario name to execute")
 	cmd.Flags().String("source", scenarioSourceLocal, "scenario source (local|server)")
 	cmd.Flags().String("phase", "", "phase name to execute (defaults to all phases)")
+	cmd.Flags().Bool("fresh", false, "ignore saved workflow state and start from the beginning")
+	cmd.Flags().String("step", "", "step ID to execute")
+	cmd.Flags().String("from-step", "", "inclusive starting step ID to execute")
+	cmd.Flags().String("to-step", "", "inclusive ending step ID to execute")
 	cmd.Flags().Bool("prefetch", false, "execute File download steps before other steps")
 	cmd.Flags().Bool("dry-run", false, "print apply plan without executing steps")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
@@ -195,12 +257,18 @@ func runApplyWithOptions(ctx context.Context, opts applyOptions) error {
 	if err != nil {
 		return err
 	}
+	selection, err := resolveStepSelection(opts.selectedStep, opts.fromStep, opts.toStep)
+	if err != nil {
+		return err
+	}
 	resolvedRequest, err := applycli.ResolveExecutionRequest(ctx, applycli.ExecutionRequestOptions{
 		CommandName:                  "apply",
 		WorkflowPath:                 workflowPath,
 		AllowRemoteWorkflow:          true,
 		VarOverrides:                 varsAsAnyMap(opts.varOverrides),
+		Fresh:                        opts.fresh,
 		SelectedPhase:                strings.TrimSpace(opts.selectedPhase),
+		StepSelection:                selection,
 		DefaultPhase:                 "",
 		BuildExecutionWorkflow:       true,
 		ResolveStatePath:             true,
@@ -220,10 +288,27 @@ func runApplyWithOptions(ctx context.Context, opts applyOptions) error {
 		StdoutPrintf:   stdoutPrintf,
 		StdoutPrintln:  stdoutPrintln,
 		AdditionalSink: verboseApplyStepSink(),
-		NewRunLogger: func(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (applycli.RunLogger, error) {
-			return newApplyRunLogger(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase)
+		NewRunLogger: func(request applycli.ExecutionRequest, workflowSource, scenario, bundleRoot string) (applycli.RunLogger, error) {
+			return newApplyRunLogger(request, workflowSource, scenario, bundleRoot)
 		},
 	})
+}
+
+func resolveStepSelection(selectedStep, fromStep, toStep string) (applycli.StepSelection, error) {
+	selection := applycli.StepSelection{SelectedStep: selectedStep, FromStep: fromStep, ToStep: toStep}.Normalize()
+	if selection.SelectedStep != "" && (selection.FromStep != "" || selection.ToStep != "") {
+		return applycli.StepSelection{}, fmt.Errorf("--step cannot be combined with --from-step or --to-step")
+	}
+	if selection.FromStep == "" && selection.ToStep == "" && selection.SelectedStep == "" {
+		return selection, nil
+	}
+	if selection.SelectedStep == "" && selection.FromStep == "" && selection.ToStep != "" {
+		return selection, nil
+	}
+	if selection.SelectedStep == "" && selection.FromStep != "" && selection.ToStep == "" {
+		return selection, nil
+	}
+	return selection, nil
 }
 
 func verboseApplyStepSink() install.StepEventSink {

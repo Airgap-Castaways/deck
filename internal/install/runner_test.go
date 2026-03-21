@@ -371,6 +371,43 @@ func TestRun_ResumeFromFailedStep(t *testing.T) {
 	}
 }
 
+func TestRun_FreshIgnoresCompletedState(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state", "state.json")
+	outputPath := filepath.Join(dir, "fresh.txt")
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name:  "install",
+			Steps: []config.Step{{ID: "s1", Kind: "Command", Spec: map[string]any{"command": []any{"sh", "-c", "echo run >> " + outputPath}}}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+		t.Fatalf("initial run failed: %v", err)
+	}
+	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+		t.Fatalf("resume run failed: %v", err)
+	}
+	raw, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if strings.TrimSpace(string(raw)) != "run" {
+		t.Fatalf("expected single execution without fresh, got %q", string(raw))
+	}
+	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath, Fresh: true}); err != nil {
+		t.Fatalf("fresh run failed: %v", err)
+	}
+	raw, err = os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read fresh output: %v", err)
+	}
+	if strings.TrimSpace(string(raw)) != "run\nrun" {
+		t.Fatalf("expected second execution with fresh, got %q", string(raw))
+	}
+}
+
 func TestRun_UnsupportedInstallKindFails(t *testing.T) {
 	dir := t.TempDir()
 	bundle := filepath.Join(dir, "bundle")

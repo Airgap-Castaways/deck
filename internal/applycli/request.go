@@ -29,7 +29,9 @@ type ExecutionRequestOptions struct {
 	AllowRemoteWorkflow          bool
 	NormalizeLocalWorkflowPath   bool
 	VarOverrides                 map[string]any
+	Fresh                        bool
 	SelectedPhase                string
+	StepSelection                StepSelection
 	DefaultPhase                 string
 	BuildExecutionWorkflow       bool
 	ResolveStatePath             bool
@@ -39,7 +41,9 @@ type ExecutionRequestOptions struct {
 type ExecutionRequest struct {
 	WorkflowPath      string
 	Workflow          *config.Workflow
+	Fresh             bool
 	SelectedPhase     string
+	StepSelection     StepSelection
 	ExecutionWorkflow *config.Workflow
 	StatePath         string
 }
@@ -87,10 +91,11 @@ func ResolveExecutionRequest(ctx context.Context, opts ExecutionRequestOptions) 
 	if selectedPhase == "" {
 		selectedPhase = strings.TrimSpace(opts.DefaultPhase)
 	}
+	stepSelection := opts.StepSelection.Normalize()
 
 	var executionWorkflow *config.Workflow
 	if opts.BuildExecutionWorkflow {
-		executionWorkflow, err = BuildExecutionWorkflow(wf, selectedPhase)
+		executionWorkflow, err = BuildExecutionWorkflow(wf, selectedPhase, stepSelection)
 		if err != nil {
 			return ExecutionRequest{}, err
 		}
@@ -112,18 +117,31 @@ func ResolveExecutionRequest(ctx context.Context, opts ExecutionRequestOptions) 
 	return ExecutionRequest{
 		WorkflowPath:      workflowPath,
 		Workflow:          wf,
+		Fresh:             opts.Fresh,
 		SelectedPhase:     selectedPhase,
+		StepSelection:     stepSelection,
 		ExecutionWorkflow: executionWorkflow,
 		StatePath:         statePath,
 	}, nil
 }
 
-func LoadInstallDryRunState(wf *config.Workflow) (*install.State, error) {
-	statePath, err := ResolveInstallStatePath(wf)
-	if err != nil {
-		return nil, err
+func LoadInstallDryRunState(request ExecutionRequest) (*install.State, error) {
+	if request.Fresh {
+		return &install.State{CompletedSteps: []string{}, SkippedSteps: []string{}, RuntimeVars: map[string]any{}}, nil
 	}
-	statePath, err = install.ResolveStateReadPathForWorkflow(wf, statePath)
+	stateWorkflow := request.Workflow
+	if stateWorkflow == nil {
+		stateWorkflow = request.ExecutionWorkflow
+	}
+	statePath := strings.TrimSpace(request.StatePath)
+	var err error
+	if statePath == "" {
+		statePath, err = ResolveInstallStatePath(stateWorkflow)
+		if err != nil {
+			return nil, err
+		}
+	}
+	statePath, err = install.ResolveStateReadPathForWorkflow(stateWorkflow, statePath)
 	if err != nil {
 		return nil, err
 	}
