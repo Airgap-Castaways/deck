@@ -74,6 +74,7 @@ jobs:
           ./bin/deck lint --file test/workflows/scenarios/control-plane-bootstrap.yaml
           ./bin/deck lint --file test/workflows/scenarios/worker-join.yaml
           ./bin/deck lint --file test/workflows/scenarios/node-reset.yaml
+          ./bin/deck lint --file test/workflows/scenarios/upgrade.yaml
 
       - name: Run AI test set
         run: make test-ai

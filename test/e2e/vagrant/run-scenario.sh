@@ -85,15 +85,19 @@ run_role_action() {
   local stage="${3:-}"
   local role_env=""
   local worker_release=""
+  local kubernetes_version=""
+  local upgrade_kubernetes_version=""
 
   load_state_env
+  kubernetes_version="$(scenario_kubernetes_version || printf '%s' 'v1.30.1')"
+  upgrade_kubernetes_version="$(scenario_upgrade_kubernetes_version || true)"
   case "${role}" in
     control-plane)
-      role_env="DECK_KUBEADM_ADVERTISE_ADDRESS=${SERVER_IP} DECK_OFFLINE_RELEASE_CONTROL_PLANE=ubuntu2204 DECK_OFFLINE_RELEASE_WORKER=ubuntu2404 DECK_OFFLINE_RELEASE_WORKER_2=rocky9 DECK_PREPARED_BUNDLE_REL=${PREPARED_BUNDLE_REL:-}"
+      role_env="DECK_KUBEADM_ADVERTISE_ADDRESS=${SERVER_IP} DECK_OFFLINE_RELEASE_CONTROL_PLANE=ubuntu2204 DECK_OFFLINE_RELEASE_WORKER=ubuntu2404 DECK_OFFLINE_RELEASE_WORKER_2=rocky9 DECK_PREPARED_BUNDLE_REL=${PREPARED_BUNDLE_REL:-} DECK_KUBERNETES_VERSION=${kubernetes_version} DECK_KUBERNETES_UPGRADE_VERSION=${upgrade_kubernetes_version}"
       ;;
     worker|worker-2)
       worker_release="$(role_release "${role}")"
-      role_env="DECK_OFFLINE_RELEASE=${worker_release}"
+      role_env="DECK_OFFLINE_RELEASE=${worker_release} DECK_KUBERNETES_VERSION=${kubernetes_version} DECK_KUBERNETES_UPGRADE_VERSION=${upgrade_kubernetes_version}"
       ;;
   esac
 

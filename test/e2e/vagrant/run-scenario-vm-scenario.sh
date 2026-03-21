@@ -182,6 +182,10 @@ if os.environ["SCENARIO_REQUIRES_RESET_PROOF"] == "1":
     evidence["resetState"] = "reports/reset-state.txt"
     evidence["kubeletRejoinState"] = "reports/rejoin-kubelet.txt"
 
+if scenario in {"upgrade", "k8s-upgrade"}:
+    evidence["upgradeVersion"] = "reports/upgrade-version.txt"
+    evidence["upgradeNodes"] = "reports/upgrade-nodes.txt"
+
 print(json.dumps({
     "scenario": scenario,
     "result": "PASS",
@@ -618,6 +622,7 @@ scenario_action_prepare() {
     control-plane-bootstrap|k8s-control-plane-bootstrap) bootstrap_prepare ;;
     worker-join|k8s-worker-join) worker_join_prepare ;;
     node-reset|k8s-node-reset) node_reset_prepare ;;
+    upgrade|k8s-upgrade) upgrade_prepare ;;
   esac
 }
 
@@ -628,6 +633,7 @@ scenario_action_apply() {
     control-plane-bootstrap|k8s-control-plane-bootstrap) bootstrap_apply ;;
     worker-join|k8s-worker-join) worker_join_apply ;;
     node-reset|k8s-node-reset) node_reset_apply ;;
+    upgrade|k8s-upgrade) upgrade_apply ;;
   esac
 }
 
@@ -640,5 +646,6 @@ scenario_action_verify() {
     control-plane-bootstrap|k8s-control-plane-bootstrap) bootstrap_verify "${stage}" ;;
     worker-join|k8s-worker-join) worker_join_verify "${stage}" ;;
     node-reset|k8s-node-reset) node_reset_verify "${stage}" ;;
+    upgrade|k8s-upgrade) upgrade_verify "${stage}" ;;
   esac
 }

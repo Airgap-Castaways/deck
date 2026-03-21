@@ -49,6 +49,14 @@ func TestE2ELayoutContracts(t *testing.T) {
 		t.Fatalf("node-reset result contract check failed: %v\n%s", err, string(out))
 	}
 
+	upgradeContractCmd := "ART_DIR='" + filepath.Join(tmp, "upgrade") + "'; SERVER_URL=http://127.0.0.1:18080; E2E_SCENARIO=k8s-upgrade; E2E_RUN_ID=run-c; E2E_PROVIDER=libvirt; E2E_CACHE_KEY=cache-c; E2E_STARTED_AT=2026-01-01T00:00:00Z; VERIFY_STAGE_DEFAULT=upgrade; USES_WORKERS=0; REQUIRES_RESET_PROOF=0; export SERVER_URL E2E_SCENARIO E2E_RUN_ID E2E_PROVIDER E2E_CACHE_KEY E2E_STARTED_AT VERIFY_STAGE_DEFAULT USES_WORKERS REQUIRES_RESET_PROOF; source '" + scenarioHelperPath + "'; mkdir -p \"${ART_DIR}\"; write_result_contract; test -f \"${ART_DIR}/pass.txt\"; python3 - <<'PY' \"${ART_DIR}/result.json\"\nimport json\nimport sys\npath = sys.argv[1]\nwith open(path, 'r', encoding='utf-8') as fp:\n    data = json.load(fp)\nassert data['scenario'] == 'k8s-upgrade'\nassert data['result'] == 'PASS'\nevidence = data['evidence']\nassert evidence['upgradeVersion'] == 'reports/upgrade-version.txt'\nassert evidence['upgradeNodes'] == 'reports/upgrade-nodes.txt'\nassert 'workerApply' not in evidence\nPY"
+	cmd = exec.Command("bash", "-lc", upgradeContractCmd)
+	cmd.Dir = root
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("upgrade result contract check failed: %v\n%s", err, string(out))
+	}
+
 	hostMetadataCmd := "ROOT_DIR='" + root + "'; DECK_VAGRANT_SCENARIO=k8s-control-plane-bootstrap; source '" + filepath.Join(root, "test", "e2e", "vagrant", "common.sh") + "'; load_scenario_metadata; test \"${SCENARIO_METADATA_LOADED}\" = 1; test \"${SCENARIO_METADATA_NODES}\" = control-plane; test \"${SCENARIO_METADATA_USES_WORKERS}\" = 0"
 	cmd = exec.Command("bash", "-lc", hostMetadataCmd)
 	cmd.Dir = root
@@ -57,12 +65,28 @@ func TestE2ELayoutContracts(t *testing.T) {
 		t.Fatalf("host metadata normalization contract check failed: %v\n%s", err, string(out))
 	}
 
+	upgradeMetadataCmd := "ROOT_DIR='" + root + "'; DECK_VAGRANT_SCENARIO=k8s-upgrade; source '" + filepath.Join(root, "test", "e2e", "vagrant", "common.sh") + "'; load_scenario_metadata; test \"${SCENARIO_METADATA_LOADED}\" = 1; test \"${SCENARIO_METADATA_KUBERNETES_VERSION}\" = v1.30.1; test \"${SCENARIO_METADATA_UPGRADE_KUBERNETES_VERSION}\" = v1.31.0"
+	cmd = exec.Command("bash", "-lc", upgradeMetadataCmd)
+	cmd.Dir = root
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("upgrade metadata contract check failed: %v\n%s", err, string(out))
+	}
+
 	guestHelperCmd := "ROOT_DIR='" + root + "'; E2E_SCENARIO=k8s-control-plane-bootstrap; source '" + scenarioHelperPath + "'; source_scenario_vm_helper >/dev/null 2>&1; declare -F bootstrap_prepare >/dev/null"
 	cmd = exec.Command("bash", "-lc", guestHelperCmd)
 	cmd.Dir = root
 	out, err = cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("guest helper normalization contract check failed: %v\n%s", err, string(out))
+	}
+
+	upgradeHelperCmd := "ROOT_DIR='" + root + "'; E2E_SCENARIO=k8s-upgrade; source '" + scenarioHelperPath + "'; source_scenario_vm_helper >/dev/null 2>&1; declare -F upgrade_apply >/dev/null"
+	cmd = exec.Command("bash", "-lc", upgradeHelperCmd)
+	cmd.Dir = root
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("upgrade helper normalization contract check failed: %v\n%s", err, string(out))
 	}
 
 	renderDir := filepath.Join(tmp, "rendered")
@@ -78,6 +102,13 @@ func TestE2ELayoutContracts(t *testing.T) {
 	}
 	if !strings.Contains(string(applyContent), "bootstrap.yaml") {
 		t.Fatalf("expected rendered scenario workflow to keep canonical imports, got:\n%s", string(applyContent))
+	}
+	upgradeContent, err := os.ReadFile(filepath.Join(renderDir, "scenarios", "upgrade.yaml"))
+	if err != nil {
+		t.Fatalf("read rendered upgrade workflow: %v", err)
+	}
+	if !strings.Contains(string(upgradeContent), "upgrade-control-plane") {
+		t.Fatalf("expected rendered upgrade workflow to keep upgrade steps, got:\n%s", string(upgradeContent))
 	}
 }
 

@@ -108,6 +108,39 @@ func TestWorkflowIntegrationNodeReset(t *testing.T) {
 	)
 }
 
+func TestWorkflowIntegrationUpgrade(t *testing.T) {
+	root := projectRoot(t)
+	workflowPath := filepath.Join(root, "test", "workflows", "scenarios", "upgrade.yaml")
+
+	wf, err := config.LoadWithOptions(context.Background(), workflowPath, config.LoadOptions{VarOverrides: map[string]any{
+		"kubernetesVersion":        "v1.30.1",
+		"upgradeKubernetesVersion": "v1.31.0",
+	}})
+	if err != nil {
+		t.Fatalf("load upgrade workflow: %v", err)
+	}
+
+	if got := wf.Vars["kubernetesVersion"]; got != "v1.30.1" {
+		t.Fatalf("expected CLI kubernetesVersion override, got %v", got)
+	}
+	if got := wf.Vars["upgradeKubernetesVersion"]; got != "v1.31.0" {
+		t.Fatalf("expected CLI upgradeKubernetesVersion override, got %v", got)
+	}
+
+	out := runWorkflowApplyDryRun(t, root, workflowPath)
+	requireDryRunOutput(t, out,
+		"PHASE=host-prereqs",
+		"PHASE=runtime",
+		"PHASE=bootstrap",
+		"PHASE=upgrade-runtime",
+		"PHASE=upgrade",
+		"bootstrap-init InitKubeadm PLAN",
+		"install-upgrade-binaries Command PLAN",
+		"upgrade-control-plane Command PLAN",
+		"upgrade-report Command PLAN",
+	)
+}
+
 func TestWorkflowIntegrationRejectsBrokenImports(t *testing.T) {
 	dir := t.TempDir()
 	workflowsDir := filepath.Join(dir, "workflows")

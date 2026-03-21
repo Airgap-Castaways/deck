@@ -91,3 +91,51 @@ steps:
       source:
         url: https://github.com/containernetworking/plugins/releases/download/v1.5.1/cni-plugins-linux-arm64-v1.5.1.tgz
       outputPath: files/bin/linux/arm64/cni-plugins.tgz
+  - id: download-upgrade-kubelet-amd64
+    kind: DownloadFile
+    when: vars.upgradeKubernetesVersion != ""
+    spec:
+      source:
+        url: https://dl.k8s.io/release/{{ .vars.upgradeKubernetesVersion }}/bin/linux/amd64/kubelet
+      outputPath: files/bin/linux/amd64/upgrade/{{ .vars.upgradeKubernetesVersion }}/kubelet
+      mode: "0755"
+  - id: download-upgrade-kubelet-arm64
+    kind: DownloadFile
+    when: vars.upgradeKubernetesVersion != ""
+    spec:
+      source:
+        url: https://dl.k8s.io/release/{{ .vars.upgradeKubernetesVersion }}/bin/linux/arm64/kubelet
+      outputPath: files/bin/linux/arm64/upgrade/{{ .vars.upgradeKubernetesVersion }}/kubelet
+      mode: "0755"
+  - id: download-upgrade-kubeadm-amd64
+    kind: DownloadFile
+    when: vars.upgradeKubernetesVersion != ""
+    spec:
+      source:
+        url: https://dl.k8s.io/release/{{ .vars.upgradeKubernetesVersion }}/bin/linux/amd64/kubeadm
+      outputPath: files/bin/linux/amd64/upgrade/{{ .vars.upgradeKubernetesVersion }}/kubeadm
+      mode: "0755"
+  - id: download-upgrade-kubeadm-arm64
+    kind: DownloadFile
+    when: vars.upgradeKubernetesVersion != ""
+    spec:
+      source:
+        url: https://dl.k8s.io/release/{{ .vars.upgradeKubernetesVersion }}/bin/linux/arm64/kubeadm
+      outputPath: files/bin/linux/arm64/upgrade/{{ .vars.upgradeKubernetesVersion }}/kubeadm
+      mode: "0755"
+  - id: download-upgrade-kubectl-amd64
+    kind: DownloadFile
+    when: vars.upgradeKubernetesVersion != ""
+    spec:
+      source:
+        url: https://dl.k8s.io/release/{{ .vars.upgradeKubernetesVersion }}/bin/linux/amd64/kubectl
+      outputPath: files/bin/linux/amd64/upgrade/{{ .vars.upgradeKubernetesVersion }}/kubectl
+      mode: "0755"
+  - id: download-upgrade-kubectl-arm64
+    kind: DownloadFile
+    when: vars.upgradeKubernetesVersion != ""
+    spec:
+      source:
+        url: https://dl.k8s.io/release/{{ .vars.upgradeKubernetesVersion }}/bin/linux/arm64/kubectl
+      outputPath: files/bin/linux/arm64/upgrade/{{ .vars.upgradeKubernetesVersion }}/kubectl
+      mode: "0755"
