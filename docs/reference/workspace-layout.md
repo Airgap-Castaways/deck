@@ -8,8 +8,8 @@ A `deck` workspace is organized into three main functional areas: **Workflows**,
 
 ```text
 .
-├── prepare.yaml         # Root prepare entry workflow
 ├── workflows/
+│   ├── prepare.yaml    # Prepare entry workflow
 │   ├── scenarios/      # Apply scenario entry workflows
 │   ├── components/     # Reusable step fragments (Component Fragments)
 │   └── vars.yaml       # Shared variable definitions
@@ -24,8 +24,8 @@ A `deck` workspace is organized into three main functional areas: **Workflows**,
 
 The `workflows/` directory contains all your operational logic.
 
-### Prepare Entrypoint (`prepare.yaml`)
-`prepare.yaml` is the fixed root-level entry workflow for `deck prepare`.
+### Prepare Entrypoint (`workflows/prepare.yaml`)
+`workflows/prepare.yaml` is the fixed entry workflow for `deck prepare`.
 
 ### Scenarios (`workflows/scenarios/`)
 Scenarios are the primary entrypoints for `deck apply`.

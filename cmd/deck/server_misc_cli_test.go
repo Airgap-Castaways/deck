@@ -598,7 +598,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err := os.WriteFile(applyPath, []byte("version: v1alpha1\nphases:\n  - name: install\n    imports:\n      - path: shared/checks.yaml\n"), 0o644); err != nil {
 			t.Fatalf("write apply: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(root, "prepare.yaml"), []byte("version: v1alpha1\nphases:\n  - name: prepare\n    imports:\n      - path: shared/checks.yaml\n"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, "workflows", "prepare.yaml"), []byte("version: v1alpha1\nphases:\n  - name: prepare\n    imports:\n      - path: shared/checks.yaml\n"), 0o644); err != nil {
 			t.Fatalf("write prepare: %v", err)
 		}
 		componentPath := filepath.Join(root, "workflows", "components", "shared", "checks.yaml")
@@ -637,7 +637,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte("version: v1alpha1\nphases:\n  - name: install\n    steps: []\n"), 0o644); err != nil {
 			t.Fatalf("write apply: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(root, "prepare.yaml"), []byte("version: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, "workflows", "prepare.yaml"), []byte("version: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
 			t.Fatalf("write prepare: %v", err)
 		}
 
@@ -671,7 +671,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err := os.WriteFile(applyPath, []byte("version: v1alpha1\nphases:\n  - name: install\n    steps: []\n"), 0o644); err != nil {
 			t.Fatalf("write apply: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(root, "prepare.yaml"), []byte("version: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(root, "workflows", "prepare.yaml"), []byte("version: v1alpha1\nphases:\n  - name: prepare\n    steps: []\n"), 0o644); err != nil {
 			t.Fatalf("write prepare: %v", err)
 		}
 

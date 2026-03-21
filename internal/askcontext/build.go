@@ -48,7 +48,7 @@ func buildManifest() Manifest {
 			AllowedPaths:      AllowedGeneratedPathPatterns(),
 			CanonicalPrepare:  workspacepaths.CanonicalPrepareWorkflowRel,
 			CanonicalApply:    pathJoin(workspacepaths.WorkflowRootDir, workspacepaths.CanonicalApplyWorkflowRel),
-			GeneratedPathNote: "New ask-generated files must stay under prepare.yaml, workflows/scenarios/, workflows/components/, or workflows/vars.yaml.",
+			GeneratedPathNote: "New ask-generated files must stay under workflows/prepare.yaml, workflows/scenarios/, workflows/components/, or workflows/vars.yaml.",
 		},
 		Workflow: WorkflowRules{
 			Summary:          workflow.Summary,
@@ -95,7 +95,7 @@ func buildManifest() Manifest {
 }
 
 func AllowedGeneratedPathPatterns() []string {
-	return []string{"prepare.yaml", "workflows/scenarios/*.yaml", "workflows/components/*.yaml", "workflows/vars.yaml"}
+	return []string{"workflows/prepare.yaml", "workflows/scenarios/*.yaml", "workflows/components/*.yaml", "workflows/vars.yaml"}
 }
 
 func AllowedGeneratedPath(path string) bool {
@@ -103,7 +103,7 @@ func AllowedGeneratedPath(path string) bool {
 	if clean == "" || strings.Contains(clean, "..") {
 		return false
 	}
-	return clean == "prepare.yaml" || strings.HasPrefix(clean, "workflows/scenarios/") || strings.HasPrefix(clean, "workflows/components/") || clean == "workflows/vars.yaml"
+	return clean == "workflows/prepare.yaml" || strings.HasPrefix(clean, "workflows/scenarios/") || strings.HasPrefix(clean, "workflows/components/") || clean == "workflows/vars.yaml"
 }
 
 func buildStepKinds() []StepKindContext {

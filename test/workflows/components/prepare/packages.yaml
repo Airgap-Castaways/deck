@@ -1,8 +1,8 @@
 steps:
-  - id: download-debian-packages
+  - id: download-ubuntu2204-runtime-deps
     kind: DownloadPackage
     spec:
-      packages: [containerd, kubelet, kubeadm, kubectl]
+      packages: [containerd, containernetworking-plugins]
       distro:
         family: debian
         release: ubuntu2204
@@ -14,10 +14,25 @@ steps:
         runtime: auto
         image: ubuntu:22.04
       outputDir: packages/apt/ubuntu2204
-  - id: download-rhel-packages
+  - id: download-ubuntu2404-runtime-deps
     kind: DownloadPackage
     spec:
-      packages: [containerd, kubelet, kubeadm, kubectl]
+      packages: [containerd, containernetworking-plugins]
+      distro:
+        family: debian
+        release: ubuntu2404
+      repo:
+        type: apt-flat
+        generate: true
+      backend:
+        mode: container
+        runtime: auto
+        image: ubuntu:24.04
+      outputDir: packages/apt/ubuntu2404
+  - id: download-rocky9-runtime-deps
+    kind: DownloadPackage
+    spec:
+      packages: [bash]
       distro:
         family: rhel
         release: rocky9

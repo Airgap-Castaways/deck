@@ -129,7 +129,7 @@ func inferTarget(prompt string) Target {
 		return Target{Kind: "scenario", Name: "apply", Path: "workflows/scenarios/apply.yaml"}
 	}
 	if strings.Contains(prompt, "prepare") {
-		return Target{Kind: "scenario", Name: "prepare", Path: "prepare.yaml"}
+		return Target{Kind: "scenario", Name: "prepare", Path: "workflows/prepare.yaml"}
 	}
 	if strings.Contains(prompt, "component") {
 		return Target{Kind: "component"}

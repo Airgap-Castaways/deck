@@ -53,6 +53,9 @@ func TestScenarioWorkspaceValidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("validate scenario workspace: %v", err)
 	}
+	if err := File(filepath.Join("..", "..", "test", "workflows", "prepare.yaml")); err != nil {
+		t.Fatalf("validate canonical test prepare workflow: %v", err)
+	}
 }
 
 func TestWorkflowModelDocsDescribeRuntimeRegisterNamespace(t *testing.T) {

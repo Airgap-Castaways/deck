@@ -51,8 +51,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err := emitDiagnostic(opts, 1, "deck: prepare workflow=%s\n", filepath.ToSlash(prepareWorkflowPath)); err != nil {
 		return err
 	}
-	workspaceRoot := filepath.Dir(prepareWorkflowPath)
-	workflowRootDirPath := filepath.Join(workspaceRoot, workspacepaths.WorkflowRootDir)
+	workflowRootDirPath := filepath.Dir(prepareWorkflowPath)
 	varsWorkflowPath, err := resolveOptionalVarsWorkflowPath(workflowRootDirPath)
 	if err != nil {
 		return err

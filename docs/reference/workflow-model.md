@@ -205,7 +205,7 @@ Supported kinds:
 - `DownloadFile` writes bundle-relative outputs through `outputPath`
 - `DownloadImage` writes prepared image archives under `outputDir` or the default `images/` root
 - `DownloadPackage` writes prepared package content under `outputDir` or the default `packages/` root
-- `prepare.yaml` is the fixed root entrypoint for prepare workflows
+- `workflows/prepare.yaml` is the fixed entrypoint for prepare workflows
 
 ## When to use RunCommand
 

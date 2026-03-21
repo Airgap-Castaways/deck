@@ -138,7 +138,7 @@ func TestInit(t *testing.T) {
 		t.Helper()
 		want := map[string]string{
 			filepath.Join("workflows", "vars.yaml"): wantVars,
-			"prepare.yaml": strings.Join([]string{
+			filepath.Join("workflows", "prepare.yaml"): strings.Join([]string{
 				"version: v1alpha1",
 				"phases:",
 				"  - name: prepare",
@@ -225,7 +225,10 @@ func TestInit(t *testing.T) {
 		if err := os.MkdirAll(conflictDir, 0o755); err != nil {
 			t.Fatalf("mkdir workflows: %v", err)
 		}
-		existingPath := filepath.Join(conflictDir, "prepare.yaml")
+		existingPath := filepath.Join(conflictDir, "workflows", "prepare.yaml")
+		if err := os.MkdirAll(filepath.Dir(existingPath), 0o755); err != nil {
+			t.Fatalf("mkdir workflows: %v", err)
+		}
 		if err := os.WriteFile(existingPath, []byte("seed\n"), 0o644); err != nil {
 			t.Fatalf("seed prepare.yaml: %v", err)
 		}
@@ -252,7 +255,7 @@ func TestInit(t *testing.T) {
 
 	t.Run("fails when target path exists as directory", func(t *testing.T) {
 		outputDir := t.TempDir()
-		targetDir := filepath.Join(outputDir, "prepare.yaml")
+		targetDir := filepath.Join(outputDir, "workflows", "prepare.yaml")
 		if err := os.MkdirAll(targetDir, 0o755); err != nil {
 			t.Fatalf("mkdir conflicting directory: %v", err)
 		}

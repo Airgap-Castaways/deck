@@ -22,7 +22,7 @@ func WorkflowPath(root string, rel string) string {
 }
 
 func CanonicalPrepareWorkflowPath(root string) string {
-	return filepath.Join(root, CanonicalPrepareWorkflowRel)
+	return WorkflowPath(root, CanonicalPrepareWorkflowRel)
 }
 
 func CanonicalApplyWorkflowPath(root string) string {

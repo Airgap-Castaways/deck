@@ -54,7 +54,7 @@ func TestRunPrepareCreatesPreparedBundleDir(t *testing.T) {
 			t.Fatalf("missing prepared path %s: %v", required, err)
 		}
 	}
-	for _, required := range []string{"deck", filepath.Join(".deck", "manifest.json"), "prepare.yaml"} {
+	for _, required := range []string{"deck", filepath.Join(".deck", "manifest.json"), filepath.Join("workflows", "prepare.yaml")} {
 		if _, err := os.Stat(filepath.Join(root, required)); err != nil {
 			t.Fatalf("missing workspace path %s: %v", required, err)
 		}
@@ -188,7 +188,7 @@ func TestRunPrepareVarFlagOverridesWorkflowVars(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(workflowsDir, "components"), 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	packPath := filepath.Join(root, "prepare.yaml")
+	packPath := filepath.Join(root, "workflows", "prepare.yaml")
 	packBody := fmt.Sprintf(`version: v1alpha1
 vars:
   relPath: default.bin

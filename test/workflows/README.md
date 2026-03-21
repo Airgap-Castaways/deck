@@ -28,4 +28,4 @@ E2E harness sidecars live outside the workflow tree:
 - `test/e2e/scenario-meta/<name>.env`, VM topology and verify-stage metadata
 - `test/e2e/scenario-hooks/<name>.sh`, scenario-specific VM helper hooks
 
-`test/workflows/prepare.yaml` is the shared `prepare` entrypoint used to build the prepared bundle cache for the regression scenarios. It imports the prepare components that collect binaries, images, and packages into the bundle layout used by the regression scenarios.
+`test/workflows/prepare.yaml` is the canonical shared `prepare` workflow for the regression scenarios.

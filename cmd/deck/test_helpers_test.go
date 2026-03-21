@@ -155,7 +155,7 @@ func writePrepareDownloadWorkflowFixture(t *testing.T, root string, relOutputPat
 	if err := os.WriteFile(filepath.Join(seedDir, "source.bin"), []byte("seed\n"), 0o644); err != nil {
 		t.Fatalf("write seed source: %v", err)
 	}
-	path := filepath.Join(root, "prepare.yaml")
+	path := filepath.Join(root, "workflows", "prepare.yaml")
 	content := fmt.Sprintf("version: v1alpha1\nphases:\n  - name: prepare\n    steps:\n      - id: seed\n        kind: DownloadFile\n        spec:\n          source:\n            path: files/source.bin\n          fetch:\n            sources:\n              - type: local\n                path: %q\n          outputPath: %s\n", filepath.Join(root, "seed"), relOutputPath)
 	writeWorkflowYAML(t, path, content)
 	return path
