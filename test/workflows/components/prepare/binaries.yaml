@@ -1,0 +1,47 @@
+steps:
+  - id: download-kubelet-binary
+    kind: DownloadFile
+    spec:
+      source:
+        url: https://example.invalid/kubernetes/{{ .vars.kubernetesVersion }}/linux/{{ .vars.arch }}/kubelet
+      outputPath: files/bin/linux/{{ .vars.arch }}/kubelet
+      mode: "0755"
+  - id: download-kubeadm-binary
+    kind: DownloadFile
+    spec:
+      source:
+        url: https://example.invalid/kubernetes/{{ .vars.kubernetesVersion }}/linux/{{ .vars.arch }}/kubeadm
+      outputPath: files/bin/linux/{{ .vars.arch }}/kubeadm
+      mode: "0755"
+  - id: download-kubectl-binary
+    kind: DownloadFile
+    spec:
+      source:
+        url: https://example.invalid/kubernetes/{{ .vars.kubernetesVersion }}/linux/{{ .vars.arch }}/kubectl
+      outputPath: files/bin/linux/{{ .vars.arch }}/kubectl
+      mode: "0755"
+  - id: download-runc-binary
+    kind: DownloadFile
+    spec:
+      source:
+        url: https://example.invalid/container-runtime/{{ .vars.arch }}/runc
+      outputPath: files/bin/linux/{{ .vars.arch }}/runc
+      mode: "0755"
+  - id: download-containerd-archive
+    kind: DownloadFile
+    spec:
+      source:
+        url: https://example.invalid/container-runtime/{{ .vars.arch }}/containerd.tar.gz
+      outputPath: files/bin/linux/{{ .vars.arch }}/containerd.tar.gz
+  - id: download-crictl-archive
+    kind: DownloadFile
+    spec:
+      source:
+        url: https://example.invalid/container-runtime/{{ .vars.arch }}/crictl.tar.gz
+      outputPath: files/bin/linux/{{ .vars.arch }}/crictl.tar.gz
+  - id: download-cni-plugins-archive
+    kind: DownloadFile
+    spec:
+      source:
+        url: https://example.invalid/container-runtime/{{ .vars.arch }}/cni-plugins.tgz
+      outputPath: files/bin/linux/{{ .vars.arch }}/cni-plugins.tgz

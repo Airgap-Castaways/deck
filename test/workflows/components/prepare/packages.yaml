@@ -1,0 +1,31 @@
+steps:
+  - id: download-debian-packages
+    kind: DownloadPackage
+    spec:
+      packages: [containerd, kubelet, kubeadm, kubectl]
+      distro:
+        family: debian
+        release: ubuntu2204
+      repo:
+        type: apt-flat
+        generate: true
+      backend:
+        mode: container
+        runtime: auto
+        image: ubuntu:22.04
+      outputDir: packages/apt/ubuntu2204
+  - id: download-rhel-packages
+    kind: DownloadPackage
+    spec:
+      packages: [containerd, kubelet, kubeadm, kubectl]
+      distro:
+        family: rhel
+        release: rocky9
+      repo:
+        type: yum
+        generate: true
+      backend:
+        mode: container
+        runtime: auto
+        image: rockylinux:9
+      outputDir: packages/yum/rocky9
