@@ -35,27 +35,22 @@ kind: WriteContainerdConfig
 spec:
   path: /etc/containerd/config.toml
   systemdCgroup: true
-  registryHosts:
-    - registry: registry.k8s.io
-      server: https://registry.k8s.io
-      host: http://registry.local:5000
-      capabilities: [pull, resolve]
-      skipVerify: true
+  createDefault: true
 ```
 
 ### Spec Fields
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.configPath` | `string` | no | `` | `` | EnsureDirectory for per-registry `hosts.toml` files, used by containerd's registry host configuration model. | `/etc/containerd/certs.d` |
+| `spec.configPath` | `string` | no | `` | `` |  | `example` |
 | `spec.createDefault` | `boolean` | no | `true` | `` | Write a minimal default config when no explicit config exists. Defaults to `true`. | `true` |
 | `spec.path` | `string` | no | `` | `` | Destination path for the generated `config.toml`. Defaults to `/etc/containerd/config.toml`. | `/etc/containerd/config.toml` |
 | `spec.systemdCgroup` | `boolean` | no | `` | `` | Enable systemd cgroup driver in the generated config. Required for Kubernetes nodes managed by systemd. | `true` |
 
 ### Notes
 
-- Set `systemdCgroup: true` on all Kubernetes nodes to match the kubelet cgroup driver.
-- Use `registryHosts` to point the runtime at an internal mirror instead of the public registry.
+- Use `WriteContainerdConfig` for the main `config.toml` only.
+- Use `WriteContainerdRegistryHosts` separately when mirrors or trust policy need per-registry `hosts.toml` files.
 
 ## `WriteContainerdRegistryHosts`
 
@@ -71,26 +66,27 @@ Use this when containerd should resolve pulls through explicit registry host con
 ### Example
 
 ```yaml
-apiVersion: deck/v1alpha1
-id: example-writecontainerdregistryhosts
 kind: WriteContainerdRegistryHosts
 spec:
-    path: example
-    registryHosts:
-        - capabilities:
-            - example
-          host: example
-          registry: example
-          server: example
-          skipVerify: true
+  path: /etc/containerd/certs.d
+  registryHosts:
+    - registry: registry.k8s.io
+      server: https://registry.k8s.io
+      host: http://registry.local:5000
+      capabilities: [pull, resolve]
+      skipVerify: true
 ```
 
 ### Spec Fields
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.path` | `string` | yes | `` | `` |  | `example` |
-| `spec.registryHosts` | `array<object>` | yes | `` | `` |  | `[{...}]` |
+| `spec.path` | `string` | yes | `` | `` | Directory where per-registry `hosts.toml` files are written. | `/etc/containerd/certs.d` |
+| `spec.registryHosts` | `array<object>` | yes | `` | `` | Per-registry host entries written as `hosts.toml` files under `path`. Each entry redirects a registry to a local mirror. | `[{registry:registry.k8s.io,host:http://mirror.local:5000}]` |
+
+### Notes
+
+- Use this step when the runtime should resolve pulls through an internal mirror or custom trust policy.
 
 ## Related
 

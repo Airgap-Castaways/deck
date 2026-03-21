@@ -40,18 +40,18 @@ spec:
     bundle:
       root: files
       path: upstream/runc
-  output:
-    path: files/bin/runc
+  outputPath: files/bin/runc
+  mode: "0755"
 ```
 
 ### Spec Fields
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.fetch` | `object` | no | `` | `` | Optional download transport settings applied to `download` fetches. | `{offlineOnly:true}` |
-| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, or `edit` actions complete. | `0644` |
-| `spec.outputPath` | `string` | no | `` | `` |  | `example` |
-| `spec.source` | `object` | yes | `` | `` | Download source descriptor. `path` or `bundle` may be combined with `url` to allow an online fallback when local resolution fails. | `{url:https://example.invalid/file.tar.gz}` |
+| `spec.fetch` | `object` | no | `` | `` | Optional download transport settings applied to `DownloadFile` fetches. | `{offlineOnly:true}` |
+| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, `edit`, or `extractArchive` completes. | `0644` |
+| `spec.outputPath` | `string` | no | `` | `` | Prepare-side output path for a downloaded file written into bundle storage. Defaults to `files/<basename>` when omitted. | `files/bin/runc` |
+| `spec.source` | `object` | yes | `` | `` | Structured source descriptor for download, copy, or archive extraction. `path`, `bundle`, or `url` may be used depending on the step. | `{url:https://example.invalid/file.tar.gz}` |
 
 ### Nested Objects
 
@@ -67,7 +67,7 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.source.bundle` | `object` | no | `` | `` | Reference to a file already inside the bundle. Used to stage a bundle-resident file into a new output location. | `{root:files,path:bin/linux/amd64/runc}` |
-| `spec.source.path` | `string` | no | `` | `` | Local filesystem path to use as the source during prepare. | `/opt/cache/runc` |
+| `spec.source.path` | `string` | no | `` | `` | Local filesystem path to use as the source. Applies to prepare downloads and apply-time copy or extraction when the source is already on disk. | `/opt/cache/runc` |
 | `spec.source.sha256` | `string` | no | `` | `` | Expected SHA-256 checksum. Fails the step if the fetched file does not match. | `abc123...` |
 | `spec.source.url` | `string` | no | `` | `` | URL to fetch the file from during prepare. | `https://mirror.example.com/runc` |
 
@@ -76,13 +76,13 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.source.bundle.path` | `string` | yes | `` | `` | Relative path within the bundle root to the source file. | `bin/linux/amd64/runc` |
-| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from (`files`, `images`, or `package`). | `files` |
+| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from (`files`, `images`, or `packages`). | `files` |
 
 
 ### Notes
 
-- `File` is usually the best first choice for host file changes because it stays declarative and validates action-specific inputs.
-- `download` writes into a bundle output target during prepare, while `copy`, `write`, and `edit` operate on live node paths during apply.
+- `DownloadFile` writes into prepared bundle storage through `outputPath`, while `WriteFile`, `CopyFile`, `EditFile`, and `ExtractArchive` operate on node paths through `path`.
+- Use `source.path` when the input is a simple local path and `source.bundle` or `source.url` when the source is structured or external.
 - Use `template` instead of `content` when the body includes variable substitution.
 
 ## `WriteFile`
@@ -112,10 +112,12 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.content` | `string` | no | `` | `` | Inline file content written verbatim to `path`. Used with `write`. | `[offline-base]\nbaseurl=http://repo.local` |
-| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, or `edit` actions complete. | `0644` |
-| `spec.path` | `string` | yes | `` | `` | Destination path on the node. Required for `write` and `edit`. | `/etc/containerd/config.toml` |
-| `spec.template` | `string` | no | `` | `` | Inline multi-line content rendered with the current vars before writing. Use this instead of `content` when the body includes template expressions such as `{{ .vars.* }}`. | `[ManageService]\nEnvironment=ROLE={{ .vars.role }}` |
+| `spec.content` | `string` | no | `` | `` | Inline file content written verbatim to `path`. Used with `write`. | `[offline-base]
+baseurl=http://repo.local` |
+| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, `edit`, or `extractArchive` completes. | `0644` |
+| `spec.path` | `string` | yes | `` | `` | Destination path on the node. Used by `write`, `copy`, `edit`, and `extractArchive`. | `/etc/containerd/config.toml` |
+| `spec.template` | `string` | no | `` | `` | Inline multi-line content rendered with the current vars before writing. Use this instead of `content` when the body includes template expressions such as `{{ .vars.* }}`. | `[Service]
+Environment=ROLE={{ .vars.role }}` |
 
 ### Validation Rules
 
@@ -123,8 +125,8 @@ spec:
 
 ### Notes
 
-- `File` is usually the best first choice for host file changes because it stays declarative and validates action-specific inputs.
-- `download` writes into a bundle output target during prepare, while `copy`, `write`, and `edit` operate on live node paths during apply.
+- `DownloadFile` writes into prepared bundle storage through `outputPath`, while `WriteFile`, `CopyFile`, `EditFile`, and `ExtractArchive` operate on node paths through `path`.
+- Use `source.path` when the input is a simple local path and `source.bundle` or `source.url` when the source is structured or external.
 - Use `template` instead of `content` when the body includes variable substitution.
 
 ## `CopyFile`
@@ -143,8 +145,9 @@ Use this to place a prepared or local file at its final location on the node.
 ```yaml
 kind: CopyFile
 spec:
-  src: /etc/kubernetes/admin.conf
-  dest: /home/vagrant/.kube/config
+  source:
+    path: /etc/kubernetes/admin.conf
+  path: /home/vagrant/.kube/config
   mode: "0644"
 ```
 
@@ -152,9 +155,9 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, or `edit` actions complete. | `0644` |
-| `spec.path` | `string` | yes | `` | `` | Destination path on the node. Required for `write` and `edit`. | `/etc/containerd/config.toml` |
-| `spec.source` | `object` | yes | `` | `` | Download source descriptor. `path` or `bundle` may be combined with `url` to allow an online fallback when local resolution fails. | `{url:https://example.invalid/file.tar.gz}` |
+| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, `edit`, or `extractArchive` completes. | `0644` |
+| `spec.path` | `string` | yes | `` | `` | Destination path on the node. Used by `write`, `copy`, `edit`, and `extractArchive`. | `/etc/containerd/config.toml` |
+| `spec.source` | `object` | yes | `` | `` | Structured source descriptor for download, copy, or archive extraction. `path`, `bundle`, or `url` may be used depending on the step. | `{url:https://example.invalid/file.tar.gz}` |
 
 ### Nested Objects
 
@@ -163,7 +166,7 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.source.bundle` | `object` | no | `` | `` | Reference to a file already inside the bundle. Used to stage a bundle-resident file into a new output location. | `{root:files,path:bin/linux/amd64/runc}` |
-| `spec.source.path` | `string` | no | `` | `` | Local filesystem path to use as the source during prepare. | `/opt/cache/runc` |
+| `spec.source.path` | `string` | no | `` | `` | Local filesystem path to use as the source. Applies to prepare downloads and apply-time copy or extraction when the source is already on disk. | `/opt/cache/runc` |
 | `spec.source.sha256` | `string` | no | `` | `` | Expected SHA-256 checksum. Fails the step if the fetched file does not match. | `abc123...` |
 | `spec.source.url` | `string` | no | `` | `` | URL to fetch the file from during prepare. | `https://mirror.example.com/runc` |
 
@@ -172,13 +175,13 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.source.bundle.path` | `string` | yes | `` | `` | Relative path within the bundle root to the source file. | `bin/linux/amd64/runc` |
-| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from (`files`, `images`, or `package`). | `files` |
+| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from (`files`, `images`, or `packages`). | `files` |
 
 
 ### Notes
 
-- `File` is usually the best first choice for host file changes because it stays declarative and validates action-specific inputs.
-- `download` writes into a bundle output target during prepare, while `copy`, `write`, and `edit` operate on live node paths during apply.
+- `DownloadFile` writes into prepared bundle storage through `outputPath`, while `WriteFile`, `CopyFile`, `EditFile`, and `ExtractArchive` operate on node paths through `path`.
+- Use `source.path` when the input is a simple local path and `source.bundle` or `source.url` when the source is structured or external.
 - Use `template` instead of `content` when the body includes variable substitution.
 
 ## `EditFile`
@@ -200,7 +203,7 @@ spec:
   path: /etc/containerd/config.toml
   edits:
     - match: SystemdCgroup = false
-      with: SystemdCgroup = true
+      replaceWith: SystemdCgroup = true
 ```
 
 ### Spec Fields
@@ -208,14 +211,14 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.backup` | `boolean` | no | `` | `` | Create a `.bak` copy of the original file before overwriting it. | `true` |
-| `spec.edits` | `array<object>` | yes | `` | `` | Ordered list of match/replace rules applied sequentially to the file. Required for `edit`. | `[{match:SystemdCgroup = false,with:SystemdCgroup = true}]` |
-| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, or `edit` actions complete. | `0644` |
-| `spec.path` | `string` | yes | `` | `` | Destination path on the node. Required for `write` and `edit`. | `/etc/containerd/config.toml` |
+| `spec.edits` | `array<object>` | yes | `` | `` | Ordered list of match/replace rules applied sequentially to the file. Required for `edit`. | `[{match:SystemdCgroup = false,replaceWith:SystemdCgroup = true}]` |
+| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, `edit`, or `extractArchive` completes. | `0644` |
+| `spec.path` | `string` | yes | `` | `` | Destination path on the node. Used by `write`, `copy`, `edit`, and `extractArchive`. | `/etc/containerd/config.toml` |
 
 ### Notes
 
-- `File` is usually the best first choice for host file changes because it stays declarative and validates action-specific inputs.
-- `download` writes into a bundle output target during prepare, while `copy`, `write`, and `edit` operate on live node paths during apply.
+- `DownloadFile` writes into prepared bundle storage through `outputPath`, while `WriteFile`, `CopyFile`, `EditFile`, and `ExtractArchive` operate on node paths through `path`.
+- Use `source.path` when the input is a simple local path and `source.bundle` or `source.url` when the source is structured or external.
 - Use `template` instead of `content` when the body includes variable substitution.
 
 ## `ExtractArchive`
@@ -232,23 +235,22 @@ Use this when prepared tarballs or local archives should be expanded onto the no
 ### Example
 
 ```yaml
-apiVersion: deck/v1alpha1
-id: example-extractarchive
 kind: ExtractArchive
 spec:
-    path: example
-    source:
-        url: example
+  source:
+    path: /tmp/cni-plugins.tgz
+  path: /opt/cni/bin
+  include: [bridge, loopback]
 ```
 
 ### Spec Fields
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.include` | `array<string>` | no | `` | `` |  | `[example]` |
-| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, or `edit` actions complete. | `0644` |
-| `spec.path` | `string` | yes | `` | `` | Destination path on the node. Required for `write` and `edit`. | `/etc/containerd/config.toml` |
-| `spec.source` | `object` | yes | `` | `` | Download source descriptor. `path` or `bundle` may be combined with `url` to allow an online fallback when local resolution fails. | `{url:https://example.invalid/file.tar.gz}` |
+| `spec.include` | `array<string>` | no | `` | `` | Optional archive members to extract when using `ExtractArchive`. Extract all members when omitted. | `[bridge,loopback]` |
+| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, `edit`, or `extractArchive` completes. | `0644` |
+| `spec.path` | `string` | yes | `` | `` | Destination path on the node. Used by `write`, `copy`, `edit`, and `extractArchive`. | `/etc/containerd/config.toml` |
+| `spec.source` | `object` | yes | `` | `` | Structured source descriptor for download, copy, or archive extraction. `path`, `bundle`, or `url` may be used depending on the step. | `{url:https://example.invalid/file.tar.gz}` |
 
 ### Nested Objects
 
@@ -257,7 +259,7 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.source.bundle` | `object` | no | `` | `` | Reference to a file already inside the bundle. Used to stage a bundle-resident file into a new output location. | `{root:files,path:bin/linux/amd64/runc}` |
-| `spec.source.path` | `string` | no | `` | `` | Local filesystem path to use as the source during prepare. | `/opt/cache/runc` |
+| `spec.source.path` | `string` | no | `` | `` | Local filesystem path to use as the source. Applies to prepare downloads and apply-time copy or extraction when the source is already on disk. | `/opt/cache/runc` |
 | `spec.source.sha256` | `string` | no | `` | `` | Expected SHA-256 checksum. Fails the step if the fetched file does not match. | `abc123...` |
 | `spec.source.url` | `string` | no | `` | `` | URL to fetch the file from during prepare. | `https://mirror.example.com/runc` |
 
@@ -266,13 +268,13 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.source.bundle.path` | `string` | yes | `` | `` | Relative path within the bundle root to the source file. | `bin/linux/amd64/runc` |
-| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from (`files`, `images`, or `package`). | `files` |
+| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from (`files`, `images`, or `packages`). | `files` |
 
 
 ### Notes
 
-- `File` is usually the best first choice for host file changes because it stays declarative and validates action-specific inputs.
-- `download` writes into a bundle output target during prepare, while `copy`, `write`, and `edit` operate on live node paths during apply.
+- `DownloadFile` writes into prepared bundle storage through `outputPath`, while `WriteFile`, `CopyFile`, `EditFile`, and `ExtractArchive` operate on node paths through `path`.
+- Use `source.path` when the input is a simple local path and `source.bundle` or `source.url` when the source is structured or external.
 - Use `template` instead of `content` when the body includes variable substitution.
 
 ## Related

@@ -499,7 +499,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
-		if out != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=phases,steps\n", wf) {
+		if out != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 modes=prepare,apply topLevelModes=phases,steps\n", wf) {
 			t.Fatalf("unexpected output: %q", out)
 		}
 	})
@@ -509,7 +509,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
-		if out != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=phases,steps\n", wf) {
+		if out != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 modes=prepare,apply topLevelModes=phases,steps\n", wf) {
 			t.Fatalf("unexpected output: %q", out)
 		}
 	})
@@ -531,7 +531,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 			} `json:"summary"`
 			Contracts struct {
 				SupportedVersion string   `json:"supportedVersion"`
-				SupportedRoles   []string `json:"supportedRoles"`
+				SupportedModes   []string `json:"supportedModes"`
 				TopLevelModes    []string `json:"topLevelModes"`
 				ImportRule       string   `json:"importRule"`
 				InvariantNotes   []string `json:"invariantNotes"`
@@ -550,7 +550,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if len(payload.Workflows) != 1 || payload.Workflows[0] != wf {
 			t.Fatalf("unexpected workflows: %+v", payload.Workflows)
 		}
-		if payload.Contracts.SupportedVersion != "v1alpha1" || len(payload.Contracts.SupportedRoles) != 2 || len(payload.Contracts.TopLevelModes) != 2 || len(payload.Contracts.InvariantNotes) == 0 {
+		if payload.Contracts.SupportedVersion != "v1alpha1" || len(payload.Contracts.SupportedModes) != 2 || len(payload.Contracts.TopLevelModes) != 2 || len(payload.Contracts.InvariantNotes) == 0 {
 			t.Fatalf("unexpected contracts: %+v", payload.Contracts)
 		}
 		if len(payload.Findings) != 1 {
@@ -573,7 +573,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
-		if res.stdout != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=phases,steps\n", wf) {
+		if res.stdout != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 modes=prepare,apply topLevelModes=phases,steps\n", wf) {
 			t.Fatalf("unexpected stdout: %q", res.stdout)
 		}
 		for _, want := range []string{"deck: lint root=", "scenario=", fmt.Sprintf("deck: lint workflow=%s", wf), "deck: lint finding code=W_COMMAND_OPAQUE severity=warning"} {
@@ -654,7 +654,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
-		if out != "lint: ok (1 workflows)\nSUMMARY mode=workspace workflows=1 warnings=0 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=phases,steps\n" {
+		if out != "lint: ok (1 workflows)\nSUMMARY mode=workspace workflows=1 warnings=0 errors=0 supportedVersion=v1alpha1 modes=prepare,apply topLevelModes=phases,steps\n" {
 			t.Fatalf("unexpected output: %q", out)
 		}
 	})
@@ -679,7 +679,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
-		if out != "lint: ok (1 workflows)\nSUMMARY mode=scenario workflows=1 warnings=0 errors=0 supportedVersion=v1alpha1 roles=prepare,apply topLevelModes=phases,steps\n" {
+		if out != "lint: ok (1 workflows)\nSUMMARY mode=scenario workflows=1 warnings=0 errors=0 supportedVersion=v1alpha1 modes=prepare,apply topLevelModes=phases,steps\n" {
 			t.Fatalf("unexpected output: %q", out)
 		}
 	})

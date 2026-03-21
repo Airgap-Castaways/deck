@@ -42,8 +42,7 @@ spec:
       basic:
         username: "{{ .vars.registryUser }}"
         password: "{{ .vars.registryPassword }}"
-  output:
-    dir: images/control-plane
+  outputDir: images/control-plane
 ```
 
 ### Spec Fields
@@ -51,9 +50,9 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.auth` | `array<object>` | no | `` | `` | Optional registry authentication entries for `download`. Match each private registry with credentials while leaving public registries to the default keychain. | `[{registry:registry.example.com,basic:{username:robot,password:${REGISTRY_PASSWORD}}}]` |
-| `spec.backend` | `object` | no | `` | `` | Backend-specific download settings such as image transfer engine configuration. Applies to `download` only. | `{engine:go-containerregistry}` |
-| `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download or verify. | `[registry.k8s.io/pause:3.9]` |
-| `spec.outputDir` | `string` | no | `` | `` |  | `example` |
+| `spec.backend` | `object` | no | `` | `` | Backend-specific download settings such as image transfer engine configuration. Applies to `DownloadImage` only. | `{engine:go-containerregistry}` |
+| `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download, load, or verify. | `[registry.k8s.io/pause:3.9]` |
+| `spec.outputDir` | `string` | no | `` | `` | Bundle-relative directory where per-image tar archives are written during `DownloadImage`. Defaults to `images` when omitted. | `images/control-plane` |
 
 ### Nested Objects
 
@@ -73,9 +72,9 @@ spec:
 
 ### Notes
 
-- Prefer `Image` over ad-hoc shell commands so workflows keep an explicit list of required images.
+- Use `DownloadImage` during prepare, `LoadImage` during apply when archives must be imported, and `VerifyImage` when the runtime should already contain the required images.
 - Use explicit image tags or digests to keep prepared bundles reproducible.
-- `spec.auth` is optional and only applies to `download`; when omitted, deck falls back to the environment's default registry keychain.
+- `spec.auth` is optional and only applies to `DownloadImage`; when omitted, deck falls back to the environment's default registry keychain.
 
 ## `LoadImage`
 
@@ -90,28 +89,28 @@ Use this during apply before verifying or using images from an offline bundle.
 ### Example
 
 ```yaml
-apiVersion: deck/v1alpha1
-id: example-loadimage
 kind: LoadImage
 spec:
-    images:
-        - example
+  sourceDir: images/control-plane
+  runtime: ctr
+  images:
+    - registry.k8s.io/kube-apiserver:v1.30.1
 ```
 
 ### Spec Fields
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.command` | `array<string>` | no | `` | `` | Optional image-listing command used by `verify` when the default runtime command is not appropriate. | `[ctr,-n,k8s.io,images,list,-q]` |
-| `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download or verify. | `[registry.k8s.io/pause:3.9]` |
-| `spec.runtime` | `string` | no | `` | `auto, ctr, docker, podman` |  | `auto` |
-| `spec.sourceDir` | `string` | no | `` | `` |  | `example` |
+| `spec.command` | `array<string>` | no | `` | `` | Optional runtime command override. For `VerifyImage`, this is the image-listing command. For `LoadImage`, this command may include `{archive}` placeholders that deck substitutes per image archive. | `[ctr,-n,k8s.io,images,list,-q]` |
+| `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download, load, or verify. | `[registry.k8s.io/pause:3.9]` |
+| `spec.runtime` | `string` | no | `` | `auto, ctr, docker, podman` | Runtime loader used by `LoadImage`. `auto` picks the default runtime integration; explicit values include `ctr`, `docker`, and `podman`. | `ctr` |
+| `spec.sourceDir` | `string` | no | `` | `` | Directory containing prepared image archives to load into the runtime. Defaults to `images` when omitted. | `images/control-plane` |
 
 ### Notes
 
-- Prefer `Image` over ad-hoc shell commands so workflows keep an explicit list of required images.
+- Use `DownloadImage` during prepare, `LoadImage` during apply when archives must be imported, and `VerifyImage` when the runtime should already contain the required images.
 - Use explicit image tags or digests to keep prepared bundles reproducible.
-- `spec.auth` is optional and only applies to `download`; when omitted, deck falls back to the environment's default registry keychain.
+- `spec.auth` is optional and only applies to `DownloadImage`; when omitted, deck falls back to the environment's default registry keychain.
 
 ## `VerifyImage`
 
@@ -137,14 +136,14 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.command` | `array<string>` | no | `` | `` | Optional image-listing command used by `verify` when the default runtime command is not appropriate. | `[ctr,-n,k8s.io,images,list,-q]` |
-| `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download or verify. | `[registry.k8s.io/pause:3.9]` |
+| `spec.command` | `array<string>` | no | `` | `` | Optional runtime command override. For `VerifyImage`, this is the image-listing command. For `LoadImage`, this command may include `{archive}` placeholders that deck substitutes per image archive. | `[ctr,-n,k8s.io,images,list,-q]` |
+| `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download, load, or verify. | `[registry.k8s.io/pause:3.9]` |
 
 ### Notes
 
-- Prefer `Image` over ad-hoc shell commands so workflows keep an explicit list of required images.
+- Use `DownloadImage` during prepare, `LoadImage` during apply when archives must be imported, and `VerifyImage` when the runtime should already contain the required images.
 - Use explicit image tags or digests to keep prepared bundles reproducible.
-- `spec.auth` is optional and only applies to `download`; when omitted, deck falls back to the environment's default registry keychain.
+- `spec.auth` is optional and only applies to `DownloadImage`; when omitted, deck falls back to the environment's default registry keychain.
 
 ## Related
 

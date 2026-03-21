@@ -9,7 +9,7 @@ func InvariantPromptBlock() PromptBlock {
 	manifest := Current()
 	b := &strings.Builder{}
 	b.WriteString("Workflow invariants:\n")
-	b.WriteString("- Supported roles: ")
+	b.WriteString("- Supported command modes: ")
 	b.WriteString(strings.Join(manifest.Workflow.SupportedRoles, ", "))
 	b.WriteString("\n")
 	b.WriteString("- Supported workflow version: ")
@@ -36,7 +36,7 @@ func PolicyPromptBlock() PromptBlock {
 	b.WriteString("- Prefer workflows/vars.yaml for repeated configurable values instead of scattering literals across steps.\n")
 	b.WriteString("- Do not replace schema-typed arrays or objects with string templates. Keep arrays as YAML arrays and objects as YAML objects so schema validation still passes.\n")
 	b.WriteString("- Split repeated logic into reusable components and import them under phases[].imports.\n")
-	b.WriteString("- Use prepare for online collection or offline artifact preparation and apply for local node changes.\n")
+	b.WriteString("- Use the `prepare` command for online collection or offline bundle preparation and `apply` for local node changes.\n")
 	return PromptBlock{Topic: TopicPolicy, Title: "Workflow authoring policy", Content: strings.TrimSpace(b.String())}
 }
 
@@ -61,7 +61,7 @@ func WorkspaceTopologyBlock() string {
 	b.WriteString("- Shared variables file: ")
 	b.WriteString(manifest.Topology.VarsPath)
 	b.WriteString("\n")
-	b.WriteString("- Canonical prepare scenario: ")
+	b.WriteString("- Canonical prepare entrypoint: ")
 	b.WriteString(manifest.Topology.CanonicalPrepare)
 	b.WriteString("\n")
 	b.WriteString("- Canonical apply scenario: ")
@@ -82,11 +82,12 @@ func WorkspaceTopologyPromptBlock() PromptBlock {
 func RoleGuidanceBlock() string {
 	manifest := Current()
 	b := &strings.Builder{}
-	b.WriteString("Prepare/apply guidance:\n")
+	b.WriteString("Command-mode guidance:\n")
 	for _, role := range manifest.Roles {
 		b.WriteString("- ")
+		b.WriteString("`")
 		b.WriteString(role.Role)
-		b.WriteString(": ")
+		b.WriteString("` command: ")
 		b.WriteString(role.Summary)
 		b.WriteString(" Use when: ")
 		b.WriteString(role.WhenToUse)
@@ -96,7 +97,7 @@ func RoleGuidanceBlock() string {
 }
 
 func RoleGuidancePromptBlock() PromptBlock {
-	return PromptBlock{Topic: TopicPrepareApplyGuidance, Title: "Prepare/apply guidance", Content: RoleGuidanceBlock()}
+	return PromptBlock{Topic: TopicPrepareApplyGuidance, Title: "Command-mode guidance", Content: RoleGuidanceBlock()}
 }
 
 func ComponentGuidanceBlock() string {
