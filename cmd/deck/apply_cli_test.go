@@ -672,6 +672,39 @@ func TestApplyStepSelectionAndRunLogMetadata(t *testing.T) {
 	}
 }
 
+func TestApplyPhaseAndStepSelection(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	root := t.TempDir()
+	bundle := root
+	createValidBundleManifest(t, bundle)
+	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle workflows: %v", err)
+	}
+
+	logPath := filepath.Join(root, "phase-step.log")
+	escapedLogPath := strings.ReplaceAll(logPath, "\\", "\\\\")
+	wfPath := filepath.Join(root, "phase-step.yaml")
+	writeWorkflowYAML(t, wfPath, fmt.Sprintf("version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: install-step\n        kind: Command\n        spec:\n          command: [\"sh\", \"-c\", \"echo install >> %s\"]\n  - name: post\n    steps:\n      - id: post-step\n        kind: Command\n        spec:\n          command: [\"sh\", \"-c\", \"echo post >> %s\"]\n      - id: post-other\n        kind: Command\n        spec:\n          command: [\"sh\", \"-c\", \"echo other >> %s\"]\n", escapedLogPath, escapedLogPath, escapedLogPath))
+
+	out, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--phase", "post", "--dry-run", "--step", "post-step", bundle})
+	if err != nil {
+		t.Fatalf("phase+step dry-run failed: %v", err)
+	}
+	if !strings.Contains(out, "PHASE=post") || !strings.Contains(out, "post-step Command PLAN") {
+		t.Fatalf("expected selected post step output, got %q", out)
+	}
+	for _, avoid := range []string{"install-step", "post-other"} {
+		if strings.Contains(out, avoid) {
+			t.Fatalf("expected %q to be excluded, got %q", avoid, out)
+		}
+	}
+}
+
 func TestApplyStepRangeSelection(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "home")
 	if err := os.MkdirAll(home, 0o755); err != nil {
@@ -728,6 +761,48 @@ func TestApplyStepSelectionFlagValidation(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--step cannot be combined") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	_, err = runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--step", "   ", bundle})
+	if err == nil {
+		t.Fatalf("expected empty selector validation error")
+	}
+	if !strings.Contains(err.Error(), "--step requires a non-empty step ID") {
+		t.Fatalf("unexpected error for empty step: %v", err)
+	}
+	if _, err = runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--dry-run", "--from-step", "run-true", "--to-step", "run-true", bundle}); err != nil {
+		t.Fatalf("expected equal range endpoints to work, got %v", err)
+	}
+}
+
+func TestApplyStepSelectionErrors(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatalf("mkdir home: %v", err)
+	}
+	t.Setenv("HOME", home)
+
+	bundle := t.TempDir()
+	createValidBundleManifest(t, bundle)
+	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle workflows: %v", err)
+	}
+	wfPath := filepath.Join(t.TempDir(), "selector-errors.yaml")
+	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: step-a\n        kind: Command\n        spec:\n          command: [\"true\"]\n      - id: step-b\n        kind: Command\n        spec:\n          command: [\"true\"]\n")
+
+	_, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--step", "missing-step", bundle})
+	if err == nil {
+		t.Fatalf("expected missing step error")
+	}
+	if !strings.Contains(err.Error(), "step missing-step not found") {
+		t.Fatalf("unexpected missing step error: %v", err)
+	}
+
+	_, err = runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--from-step", "step-b", "--to-step", "step-a", bundle})
+	if err == nil {
+		t.Fatalf("expected range ordering error")
+	}
+	if !strings.Contains(err.Error(), "step range is invalid") {
+		t.Fatalf("unexpected range error: %v", err)
 	}
 }
 

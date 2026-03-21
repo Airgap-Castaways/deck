@@ -295,18 +295,18 @@ func runApplyWithOptions(ctx context.Context, opts applyOptions) error {
 }
 
 func resolveStepSelection(selectedStep, fromStep, toStep string) (applycli.StepSelection, error) {
+	if selectedStep != "" && strings.TrimSpace(selectedStep) == "" {
+		return applycli.StepSelection{}, fmt.Errorf("--step requires a non-empty step ID")
+	}
+	if fromStep != "" && strings.TrimSpace(fromStep) == "" {
+		return applycli.StepSelection{}, fmt.Errorf("--from-step requires a non-empty step ID")
+	}
+	if toStep != "" && strings.TrimSpace(toStep) == "" {
+		return applycli.StepSelection{}, fmt.Errorf("--to-step requires a non-empty step ID")
+	}
 	selection := applycli.StepSelection{SelectedStep: selectedStep, FromStep: fromStep, ToStep: toStep}.Normalize()
 	if selection.SelectedStep != "" && (selection.FromStep != "" || selection.ToStep != "") {
 		return applycli.StepSelection{}, fmt.Errorf("--step cannot be combined with --from-step or --to-step")
-	}
-	if selection.FromStep == "" && selection.ToStep == "" && selection.SelectedStep == "" {
-		return selection, nil
-	}
-	if selection.SelectedStep == "" && selection.FromStep == "" && selection.ToStep != "" {
-		return selection, nil
-	}
-	if selection.SelectedStep == "" && selection.FromStep != "" && selection.ToStep == "" {
-		return selection, nil
 	}
 	return selection, nil
 }
