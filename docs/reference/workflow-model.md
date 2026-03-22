@@ -187,8 +187,9 @@ Supported kinds:
 - `EnsureDirectory`
 - `DownloadFile`, `WriteFile`, `CopyFile`, `EditFile`, `ExtractArchive`
 - `DownloadImage`, `LoadImage`, `VerifyImage`
+- `CheckCluster`
 - `KernelModule`
-- `InitKubeadm`, `JoinKubeadm`, `ResetKubeadm`
+- `InitKubeadm`, `JoinKubeadm`, `ResetKubeadm`, `UpgradeKubeadm`
 - `DownloadPackage`, `InstallPackage`
 - `ConfigureRepository`, `RefreshRepository`
 - `ManageService`

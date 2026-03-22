@@ -31,17 +31,12 @@ steps:
            ]
          }
   - id: ensure-cni-bin-path
-    kind: Command
+    kind: CreateSymlink
     spec:
-      command:
-        - bash
-        - -lc
-        - |
-          set -euo pipefail
-          if [[ -d /usr/lib/cni ]] && [[ ! -e /opt/cni/bin ]]; then
-            mkdir -p /opt/cni
-            ln -s /usr/lib/cni /opt/cni/bin
-          fi
+      path: /opt/cni/bin
+      target: /usr/lib/cni
+      createParent: true
+      ignoreMissingTarget: true
   - id: restart-kubelet-after-cni
     kind: ManageService
     spec:

@@ -183,13 +183,19 @@ func generateWaitForFileToolSchema() map[string]any {
 }
 
 func generateWaitForMissingFileToolSchema() map[string]any {
-	return generateWaitToolSchema("WaitForMissingFile", "WaitForMissingFileStep", "Waits until a file or directory is absent.", []string{"path"}, map[string]any{
+	return generateWaitToolSchema("WaitForMissingFile", "WaitForMissingFileStep", "Waits until a file, set of files, or glob match is absent.", nil, map[string]any{
 		"interval":     durationStringSchema(),
 		"initialDelay": durationStringSchema(),
 		"path":         minLenStringSchema(),
+		"paths":        stringArraySchema(1, false),
+		"glob":         minLenStringSchema(),
 		"type":         enumStringSchema("any", "file", "dir"),
 		"timeout":      durationStringSchema(),
 		"pollInterval": durationStringSchema(),
+	}, []any{
+		map[string]any{"required": []any{"path"}, "not": map[string]any{"anyOf": []any{map[string]any{"required": []any{"paths"}}, map[string]any{"required": []any{"glob"}}}}},
+		map[string]any{"required": []any{"paths"}, "not": map[string]any{"anyOf": []any{map[string]any{"required": []any{"path"}}, map[string]any{"required": []any{"glob"}}}}},
+		map[string]any{"required": []any{"glob"}, "not": map[string]any{"anyOf": []any{map[string]any{"required": []any{"path"}}, map[string]any{"required": []any{"paths"}}}}},
 	})
 }
 
@@ -215,14 +221,20 @@ func generateWaitForMissingTCPPortToolSchema() map[string]any {
 	})
 }
 
-func generateWaitToolSchema(kind, title, description string, required []string, properties map[string]any) map[string]any {
+func generateWaitToolSchema(kind, title, description string, required []string, properties map[string]any, extraConstraints ...[]any) map[string]any {
 	root := stepEnvelopeSchema(kind, title, description, "public")
 	props := propertyMap(root)
-	setMap(props, "spec", map[string]any{
+	spec := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
-		"required":             toAnySlice(required),
 		"properties":           properties,
-	})
+	}
+	if len(required) > 0 {
+		spec["required"] = toAnySlice(required)
+	}
+	if len(extraConstraints) > 0 && len(extraConstraints[0]) > 0 {
+		spec["oneOf"] = extraConstraints[0]
+	}
+	setMap(props, "spec", spec)
 	return root
 }

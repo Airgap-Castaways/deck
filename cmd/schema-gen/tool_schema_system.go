@@ -46,11 +46,12 @@ func generateCreateSymlinkToolSchema() map[string]any {
 		"additionalProperties": false,
 		"required":             []any{"path", "target"},
 		"properties": map[string]any{
-			"path":          minLenStringSchema(),
-			"target":        minLenStringSchema(),
-			"force":         map[string]any{"type": "boolean", "default": false},
-			"createParent":  map[string]any{"type": "boolean", "default": false},
-			"requireTarget": map[string]any{"type": "boolean", "default": false},
+			"path":                minLenStringSchema(),
+			"target":              minLenStringSchema(),
+			"force":               map[string]any{"type": "boolean", "default": false},
+			"createParent":        map[string]any{"type": "boolean", "default": false},
+			"requireTarget":       map[string]any{"type": "boolean", "default": false},
+			"ignoreMissingTarget": map[string]any{"type": "boolean", "default": false},
 		},
 	})
 	return root

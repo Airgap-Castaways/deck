@@ -61,6 +61,10 @@ func executeStep(ctx context.Context, kind string, spec map[string]any, execCtx 
 		return runJoinKubeadm(ctx, spec)
 	case "ResetKubeadm":
 		return runResetKubeadm(ctx, spec)
+	case "UpgradeKubeadm":
+		return runUpgradeKubeadm(ctx, spec)
+	case "CheckCluster":
+		return runCheckCluster(ctx, spec)
 	case "WaitForService", "WaitForCommand", "WaitForFile", "WaitForMissingFile", "WaitForTCPPort", "WaitForMissingTCPPort":
 		decoded, err := workflowexec.DecodeSpec[waitSpec](spec)
 		if err != nil {

@@ -13,11 +13,10 @@ phases:
   - name: verify
     steps:
       - id: reset-summary
-        kind: Command
+        kind: WaitForFile
         spec:
-          command:
-            - bash
-            - -lc
-            - |
-              set -euo pipefail
-              [[ -f "{{ .vars.resetStatePath }}" ]]
+          path: "{{ .vars.resetStatePath }}"
+          type: file
+          nonEmpty: true
+          timeout: 1m
+          interval: 2s

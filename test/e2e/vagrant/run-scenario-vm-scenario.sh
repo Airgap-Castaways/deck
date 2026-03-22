@@ -512,9 +512,6 @@ apply_node_reset_worker_lifecycle() {
     --var "allowDestructive=true" \
     --var "resetReason=${reset_reason}" \
     --var "resetStatePath=${REPORT_DIR}/reset-state.txt" > "${CASE_DIR}/05-reset-${ROLE}.log" 2>&1
-  if [[ ! -s "${REPORT_DIR}/reset-state.txt" ]]; then
-    synthesize_reset_state_report "${reset_reason}"
-  fi
   printf '%s\n' "ok" > "${ART_DIR}/${ROLE}-reset-done.txt"
 
   apply_worker_join_once "${workflow_url}" "${release}" "${os_family}" "${server_no_scheme}" "${rejoin_log_path}"

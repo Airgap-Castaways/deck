@@ -21,48 +21,42 @@ steps:
         - kube-scheduler
         - etcd
       restartRuntimeService: containerd
-  - id: bootstrap-runtime-ready
-    kind: Command
+  - id: bootstrap-runtime-service-ready
+    kind: WaitForService
     spec:
       timeout: 5m
-      command:
-        - bash
-        - -lc
-        - |
-          set -euo pipefail
-          for i in $(seq 1 60); do
-            if systemctl is-active --quiet containerd; then
-              break
-            fi
-            sleep 2
-          done
-          systemctl is-active --quiet containerd
-          for i in $(seq 1 60); do
-            if crictl --runtime-endpoint unix:///run/containerd/containerd.sock info >/dev/null 2>&1; then
-              break
-            fi
-            sleep 2
-          done
-          crictl --runtime-endpoint unix:///run/containerd/containerd.sock info >/dev/null 2>&1
-          for i in $(seq 1 30); do
-            if ss -lnt | grep -E ':(10257|10259)\s' >/dev/null 2>&1; then
-              sleep 2
-              continue
-            fi
-            break
-          done
-          if ss -lnt | grep -E ':(10257|10259)\s' >/dev/null 2>&1; then
-            echo "stale control-plane ports still in use" >&2
-            ss -lntp | grep -E ':(10257|10259)\s' || true
-            exit 1
-          fi
-          if ls /etc/kubernetes/manifests/*.yaml >/dev/null 2>&1; then
-            echo "stale static pod manifests still present" >&2
-            ls -l /etc/kubernetes/manifests || true
-            exit 1
-          fi
-          systemctl enable --now kubelet
-          systemctl is-active --quiet kubelet
+      interval: 2s
+      name: containerd
+  - id: bootstrap-runtime-cri-ready
+    kind: WaitForCommand
+    spec:
+      timeout: 5m
+      interval: 2s
+      command: [crictl, --runtime-endpoint, unix:///run/containerd/containerd.sock, info]
+  - id: bootstrap-controller-manager-port-closed
+    kind: WaitForMissingTCPPort
+    spec:
+      timeout: 1m
+      interval: 2s
+      port: "10257"
+  - id: bootstrap-scheduler-port-closed
+    kind: WaitForMissingTCPPort
+    spec:
+      timeout: 1m
+      interval: 2s
+      port: "10259"
+  - id: bootstrap-manifests-cleared
+    kind: WaitForMissingFile
+    spec:
+      timeout: 1m
+      interval: 2s
+      glob: /etc/kubernetes/manifests/*.yaml
+  - id: bootstrap-kubelet-ready
+    kind: ManageService
+    spec:
+      name: kubelet
+      enabled: true
+      state: started
   - id: bootstrap-init
     kind: InitKubeadm
     timeout: 20m

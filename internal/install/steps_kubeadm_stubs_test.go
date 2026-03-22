@@ -3,6 +3,7 @@ package install
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/taedi90/deck/internal/filemode"
@@ -45,8 +46,66 @@ func runResetKubeadmStub(spec kubeadmResetSpec) error {
 	_ = trimmedStringSlice(spec.RemovePaths)
 	_ = trimmedStringSlice(spec.RemoveFiles)
 	_ = trimmedStringSlice(spec.CleanupContainers)
+	_ = trimmedStringSlice(spec.VerifyContainersAbsent)
 	_ = trimmedStringSlice(spec.ExtraArgs)
 	_ = strings.TrimSpace(spec.CriSocket)
 	_ = strings.TrimSpace(spec.RestartRuntimeManageService)
+	if strings.TrimSpace(spec.ReportFile) != "" {
+		if err := filemode.WritePrivateFile(spec.ReportFile, []byte("kubeadmReset=ok\ncontainerd=active\nkubeletService=inactive\n")); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runUpgradeKubeadmStub(spec kubeadmUpgradeSpec) error {
+	if strings.TrimSpace(spec.KubernetesVersion) == "" {
+		return fmt.Errorf("%s: UpgradeKubeadm requires kubernetesVersion", errCodeInstallUpgradeFailed)
+	}
+	return nil
+}
+
+func runCheckClusterStub(spec clusterCheckSpec) error {
+	if strings.TrimSpace(spec.Reports.NodesPath) != "" {
+		if err := os.MkdirAll(filepath.Dir(spec.Reports.NodesPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(spec.Reports.NodesPath, []byte("NAME STATUS ROLES AGE VERSION\ncontrol-plane Ready control-plane 1m v1.31.0\n"), 0o644); err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(spec.Reports.ClusterNodesPath) != "" {
+		if err := os.MkdirAll(filepath.Dir(spec.Reports.ClusterNodesPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(spec.Reports.ClusterNodesPath, []byte("NAME STATUS ROLES AGE VERSION\ncontrol-plane Ready control-plane 1m v1.31.0\n"), 0o644); err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(spec.Versions.ReportPath) != "" {
+		if err := os.MkdirAll(filepath.Dir(spec.Versions.ReportPath), 0o755); err != nil {
+			return err
+		}
+		body := fmt.Sprintf("targetVersion=%s\nserverVersion=%s\nkubeletVersion=%s\nkubeadmVersion=%s\n", spec.Versions.TargetVersion, spec.Versions.Server, spec.Versions.Kubelet, spec.Versions.Kubeadm)
+		if err := os.WriteFile(spec.Versions.ReportPath, []byte(body), 0o644); err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(spec.KubeSystem.ReportPath) != "" {
+		if err := os.MkdirAll(filepath.Dir(spec.KubeSystem.ReportPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(spec.KubeSystem.ReportPath, []byte("ok\n"), 0o644); err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(spec.KubeSystem.JSONReportPath) != "" {
+		if err := os.MkdirAll(filepath.Dir(spec.KubeSystem.JSONReportPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(spec.KubeSystem.JSONReportPath, []byte("{\"items\":[]}\n"), 0o644); err != nil {
+			return err
+		}
+	}
 	return nil
 }

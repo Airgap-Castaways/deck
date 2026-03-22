@@ -559,6 +559,13 @@ func validateSemantics(name string, wf *config.Workflow) error {
 				return fmt.Errorf("E_SCHEMA_INVALID: step %s (wait.file-absent): nonEmpty is only valid for wait.file-exists", step.ID)
 			}
 		}
+		if step.Kind == "CreateSymlink" {
+			requireTarget, _ := step.Spec["requireTarget"].(bool)
+			ignoreMissingTarget, _ := step.Spec["ignoreMissingTarget"].(bool)
+			if requireTarget && ignoreMissingTarget {
+				return fmt.Errorf("E_SCHEMA_INVALID: step %s (%s): requireTarget and ignoreMissingTarget cannot both be true", step.ID, step.Kind)
+			}
+		}
 	}
 
 	return nil

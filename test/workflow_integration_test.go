@@ -51,7 +51,7 @@ func TestWorkflowIntegrationBootstrap(t *testing.T) {
 		"prep-disable-swap Swap PLAN",
 		"bootstrap-reset-preflight ResetKubeadm PLAN",
 		"bootstrap-init InitKubeadm PLAN",
-		"bootstrap-report Command PLAN",
+		"bootstrap-report CheckCluster PLAN",
 	)
 }
 
@@ -102,9 +102,7 @@ func TestWorkflowIntegrationNodeReset(t *testing.T) {
 		"PHASE=verify",
 		"prep-disable-swap Swap PLAN",
 		"reset-node ResetKubeadm SKIP",
-		"reset-runtime-ready Command PLAN",
-		"reset-state-report Command PLAN",
-		"reset-summary Command PLAN",
+		"reset-summary WaitForFile PLAN",
 	)
 }
 
@@ -135,9 +133,9 @@ func TestWorkflowIntegrationUpgrade(t *testing.T) {
 		"PHASE=upgrade-runtime",
 		"PHASE=upgrade",
 		"bootstrap-init InitKubeadm PLAN",
-		"install-upgrade-binaries Command PLAN",
-		"upgrade-control-plane Command PLAN",
-		"upgrade-report Command PLAN",
+		"install-upgrade-kubelet CopyFile PLAN",
+		"upgrade-control-plane UpgradeKubeadm PLAN",
+		"upgrade-report CheckCluster PLAN",
 	)
 }
 

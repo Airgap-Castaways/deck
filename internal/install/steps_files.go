@@ -225,6 +225,13 @@ func runCreateSymlink(spec map[string]any) error {
 			}
 			return err
 		}
+	} else if boolValue(spec, "ignoreMissingTarget") {
+		if _, err := os.Lstat(target); err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
 	}
 
 	if info, err := pathRef.Lstat(); err == nil {

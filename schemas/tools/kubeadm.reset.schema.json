@@ -68,11 +68,35 @@
           },
           "type": "array"
         },
+        "reportFile": {
+          "type": "string"
+        },
+        "reportResetReason": {
+          "type": "string"
+        },
         "restartRuntimeService": {
           "type": "string"
         },
         "stopKubelet": {
           "default": true,
+          "type": "boolean"
+        },
+        "stopKubeletAfterReset": {
+          "type": "boolean"
+        },
+        "verifyContainersAbsent": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "waitForMissingManifestsGlob": {
+          "type": "string"
+        },
+        "waitForRuntimeReady": {
+          "type": "boolean"
+        },
+        "waitForRuntimeService": {
           "type": "boolean"
         }
       },

@@ -3,6 +3,11 @@
 
 Reference documentation for each typed workflow step supported by deck.
 
+## [ClusterCheck](cluster-check.md)
+
+- **Summary**: Reference for the `ClusterCheck` family of typed workflow steps.
+- **Kinds**: `CheckCluster`
+
 ## [Command](command.md)
 
 - **Summary**: Reference for the `Command` family of typed workflow steps.
@@ -41,7 +46,7 @@ Reference documentation for each typed workflow step supported by deck.
 ## [Kubeadm](kubeadm.md)
 
 - **Summary**: Reference for the `Kubeadm` family of typed workflow steps.
-- **Kinds**: `InitKubeadm`, `JoinKubeadm`, `ResetKubeadm`
+- **Kinds**: `InitKubeadm`, `JoinKubeadm`, `ResetKubeadm`, `UpgradeKubeadm`
 
 ## [Package](package.md)
 

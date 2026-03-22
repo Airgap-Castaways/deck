@@ -19,28 +19,13 @@ phases:
   - name: verify
     steps:
       - id: bootstrap-report
-        kind: Command
+        kind: CheckCluster
         spec:
           timeout: 10m
-          command:
-            - bash
-            - -lc
-            - |
-              set -euo pipefail
-              for i in $(seq 1 120); do
-                if sudo -n env KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes >/tmp/deck/bootstrap-nodes.txt 2>/dev/null; then
-                  total="$(awk 'NR>1 && NF>0 {c++} END {print c+0}' /tmp/deck/bootstrap-nodes.txt)"
-                  ready="$(awk 'NR>1 && $2=="Ready" {c++} END {print c+0}' /tmp/deck/bootstrap-nodes.txt)"
-                  control_plane_ready="$(awk 'NR>1 && $2=="Ready" && $3 ~ /control-plane/ {c++} END {print c+0}' /tmp/deck/bootstrap-nodes.txt)"
-                  if [[ "${total}" == "1" && "${ready}" == "1" && "${control_plane_ready}" == "1" ]]; then
-                    mkdir -p /tmp/deck/reports
-                    cp /tmp/deck/bootstrap-nodes.txt /tmp/deck/reports/bootstrap-nodes.txt
-                    exit 0
-                  fi
-                fi
-                sleep 5
-              done
-              sudo -n env KUBECONFIG=/etc/kubernetes/admin.conf kubectl get nodes > /tmp/deck/bootstrap-nodes.txt || true
-              cat /tmp/deck/bootstrap-nodes.txt >&2 || true
-              echo "expected exactly one Ready control-plane node" >&2
-              exit 1
+          interval: 5s
+          nodes:
+            total: 1
+            ready: 1
+            controlPlaneReady: 1
+          reports:
+            nodesPath: /tmp/deck/reports/bootstrap-nodes.txt

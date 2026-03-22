@@ -158,9 +158,11 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
+| `spec.glob` | `string` | no | `` | `` | For `WaitForMissingFile`, require the glob to resolve to zero matches before the step succeeds. | `/etc/kubernetes/manifests/*.yaml` |
 | `spec.initialDelay` | `string` | no | `` | `` | Duration to wait before the first poll attempt. Useful when a service needs a moment before it becomes checkable. | `1s` |
 | `spec.interval` | `string` | no | `` | `` | Duration between poll attempts. Accepts Go duration strings. | `2s` |
-| `spec.path` | `string` | yes | `` | `` | Filesystem path to check. Required for `WaitForFile` and `WaitForMissingFile`. | `/etc/kubernetes/admin.conf` |
+| `spec.path` | `string` | no | `` | `` | Filesystem path to check. Required for `WaitForFile` and `WaitForMissingFile`. | `/etc/kubernetes/admin.conf` |
+| `spec.paths` | `array<string>` | no | `` | `` | For `WaitForMissingFile`, require every listed path to be absent before the step succeeds. | `[/etc/kubernetes/manifests/a.yaml,/etc/kubernetes/manifests/b.yaml]` |
 | `spec.pollInterval` | `string` | no | `` | `` | Deprecated alias for `interval`. Use `interval` instead. | `2s` |
 | `spec.timeout` | `string` | no | `` | `` | Maximum total duration to wait before failing the step. | `5m` |
 | `spec.type` | `string` | no | `` | `any, file, dir` | Restricts the path check to a specific filesystem entry type. `file` matches regular files only, `dir` matches directories, `any` matches either. Defaults to `any`. | `file` |

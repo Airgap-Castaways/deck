@@ -5,6 +5,7 @@ This directory contains JSON Schema files for typed workflow steps.
 
 ## Current schemas
 
+- `cluster-check.schema.json`: `CheckCluster` (`public`)
 - `host-check.schema.json`: `CheckHost` (`public`)
 - `command.schema.json`: `Command` (`public`)
 - `repository.configure.schema.json`: `ConfigureRepository` (`public`)
@@ -26,6 +27,7 @@ This directory contains JSON Schema files for typed workflow steps.
 - `kubeadm.reset.schema.json`: `ResetKubeadm` (`public`)
 - `swap.schema.json`: `Swap` (`public`)
 - `sysctl.schema.json`: `Sysctl` (`public`)
+- `kubeadm.upgrade.schema.json`: `UpgradeKubeadm` (`public`)
 - `image.verify.schema.json`: `VerifyImage` (`public`)
 - `wait.command.schema.json`: `WaitForCommand` (`public`)
 - `wait.file-exists.schema.json`: `WaitForFile` (`public`)

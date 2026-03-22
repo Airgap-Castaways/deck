@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/taedi90/deck/internal/executil"
@@ -15,6 +16,8 @@ type waitSpec struct {
 	PollInterval string   `json:"pollInterval"`
 	InitialDelay string   `json:"initialDelay"`
 	Path         string   `json:"path"`
+	Paths        []string `json:"paths"`
+	Glob         string   `json:"glob"`
 	Type         string   `json:"type"`
 	NonEmpty     bool     `json:"nonEmpty"`
 	Name         string   `json:"name"`
@@ -70,6 +73,8 @@ func runWaitDecoded(parent context.Context, kind string, decoded waitSpec, timeo
 				} else {
 					detail = fmt.Sprintf("%s (%s)", kind, p)
 				}
+			} else if kind == "WaitForMissingFile" {
+				detail = waitMissingPathExpectedCondition(decoded)
 			}
 			return fmt.Errorf("%s: timed out after %s for %s", errCodeInstallWaitTimeout, timeout, detail)
 		case <-time.After(interval):
@@ -82,7 +87,7 @@ func waitConditionMet(ctx context.Context, kind string, spec waitSpec) (bool, er
 	case "WaitForFile":
 		return waitPathConditionMet(spec.Path, "exists", waitPathType(spec), spec.NonEmpty)
 	case "WaitForMissingFile":
-		return waitPathConditionMet(spec.Path, "absent", waitPathType(spec), false)
+		return waitMissingPathConditionMet(spec)
 	case "WaitForService":
 		name := spec.Name
 		if name == "" {
@@ -133,6 +138,32 @@ func waitConditionMet(ctx context.Context, kind string, spec waitSpec) (bool, er
 	default:
 		return false, fmt.Errorf("unsupported wait kind %q", kind)
 	}
+}
+
+func waitMissingPathConditionMet(spec waitSpec) (bool, error) {
+	if spec.Path != "" {
+		return waitPathConditionMet(spec.Path, "absent", waitPathType(spec), false)
+	}
+	if len(spec.Paths) > 0 {
+		for _, path := range spec.Paths {
+			ok, err := waitPathConditionMet(path, "absent", waitPathType(spec), false)
+			if err != nil {
+				return false, err
+			}
+			if !ok {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
+	if spec.Glob != "" {
+		matches, err := filepath.Glob(spec.Glob)
+		if err != nil {
+			return false, err
+		}
+		return len(matches) == 0, nil
+	}
+	return false, fmt.Errorf("wait.file-absent requires path, paths, or glob")
 }
 
 func waitPathType(spec waitSpec) string {
@@ -196,4 +227,14 @@ func waitPathExpectedCondition(path, state, pathType string, nonEmpty bool) stri
 		condition += " and be non-empty"
 	}
 	return fmt.Sprintf("%s to %s", path, condition)
+}
+
+func waitMissingPathExpectedCondition(spec waitSpec) string {
+	if len(spec.Paths) > 0 {
+		return fmt.Sprintf("%d paths to be absent", len(spec.Paths))
+	}
+	if spec.Glob != "" {
+		return fmt.Sprintf("glob %s to have no matches", spec.Glob)
+	}
+	return "path to be absent"
 }

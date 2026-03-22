@@ -2,7 +2,7 @@
   "$id": "https://deck.local/schemas/tools/wait.file-absent.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Waits until a file or directory is absent.",
+  "description": "Waits until a file, set of files, or glob match is absent.",
   "properties": {
     "apiVersion": {
       "const": "deck/v1alpha1"
@@ -32,7 +32,70 @@
     },
     "spec": {
       "additionalProperties": false,
+      "oneOf": [
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "paths"
+                ]
+              },
+              {
+                "required": [
+                  "glob"
+                ]
+              }
+            ]
+          },
+          "required": [
+            "path"
+          ]
+        },
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "path"
+                ]
+              },
+              {
+                "required": [
+                  "glob"
+                ]
+              }
+            ]
+          },
+          "required": [
+            "paths"
+          ]
+        },
+        {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "path"
+                ]
+              },
+              {
+                "required": [
+                  "paths"
+                ]
+              }
+            ]
+          },
+          "required": [
+            "glob"
+          ]
+        }
+      ],
       "properties": {
+        "glob": {
+          "minLength": 1,
+          "type": "string"
+        },
         "initialDelay": {
           "pattern": "^[0-9]+(ms|s|m|h)$",
           "type": "string"
@@ -44,6 +107,13 @@
         "path": {
           "minLength": 1,
           "type": "string"
+        },
+        "paths": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
         },
         "pollInterval": {
           "pattern": "^[0-9]+(ms|s|m|h)$",
@@ -62,9 +132,6 @@
           "type": "string"
         }
       },
-      "required": [
-        "path"
-      ],
       "type": "object"
     },
     "timeout": {

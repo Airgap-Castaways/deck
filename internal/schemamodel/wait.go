@@ -39,12 +39,14 @@ type WaitForFileStepSpec struct {
 }
 
 type WaitForMissingFileStepSpec struct {
-	Interval     string `json:"interval,omitempty"`
-	InitialDelay string `json:"initialDelay,omitempty"`
-	Path         string `json:"path,omitempty"`
-	Type         string `json:"type,omitempty"`
-	Timeout      string `json:"timeout,omitempty"`
-	PollInterval string `json:"pollInterval,omitempty"`
+	Interval     string   `json:"interval,omitempty"`
+	InitialDelay string   `json:"initialDelay,omitempty"`
+	Path         string   `json:"path,omitempty"`
+	Paths        []string `json:"paths,omitempty"`
+	Glob         string   `json:"glob,omitempty"`
+	Type         string   `json:"type,omitempty"`
+	Timeout      string   `json:"timeout,omitempty"`
+	PollInterval string   `json:"pollInterval,omitempty"`
 }
 
 type WaitTCPPortStepSpec struct {
