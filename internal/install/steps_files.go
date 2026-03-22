@@ -13,6 +13,7 @@ import (
 	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/hostfs"
+	"github.com/taedi90/deck/internal/stepspec"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -24,41 +25,8 @@ var (
 
 var yumEnabledTruePattern = regexp.MustCompile(`(?i)^\s*enabled\s*=\s*(1|yes|true)\s*$`)
 
-type editEditFileSpec struct {
-	Match       string `json:"match"`
-	ReplaceWith string `json:"replaceWith"`
-	Op          string `json:"op"`
-}
-
-type editFileSpec struct {
-	Path   string             `json:"path"`
-	Backup *bool              `json:"backup"`
-	Edits  []editEditFileSpec `json:"edits"`
-	Mode   string             `json:"mode"`
-}
-
-type copyFileSpec struct {
-	Source fileDownloadSourceSpec `json:"source"`
-	Fetch  fileDownloadFetchSpec  `json:"fetch"`
-	Path   string                 `json:"path"`
-	Mode   string                 `json:"mode"`
-}
-
-type writeFileSpec struct {
-	Path     string `json:"path"`
-	Content  string `json:"content"`
-	Template string `json:"template"`
-	Mode     string `json:"mode"`
-}
-
-type templateFileSpec struct {
-	Path     string `json:"path"`
-	Template string `json:"template"`
-	Mode     string `json:"mode"`
-}
-
 func runEditFile(spec map[string]any) error {
-	decoded, err := workflowexec.DecodeSpec[editFileSpec](spec)
+	decoded, err := workflowexec.DecodeSpec[stepspec.EditFile](spec)
 	if err != nil {
 		return fmt.Errorf("decode EditFile spec: %w", err)
 	}
@@ -113,7 +81,7 @@ func runEditFile(spec map[string]any) error {
 }
 
 func runCopyFile(ctx context.Context, bundleRoot string, spec map[string]any) error {
-	decoded, err := workflowexec.DecodeSpec[copyFileSpec](spec)
+	decoded, err := workflowexec.DecodeSpec[stepspec.CopyFile](spec)
 	if err != nil {
 		return fmt.Errorf("decode CopyFile spec: %w", err)
 	}
@@ -175,7 +143,11 @@ func runCopyFile(ctx context.Context, bundleRoot string, spec map[string]any) er
 }
 
 func runEnsureDir(spec map[string]any) error {
-	path := stringValue(spec, "path")
+	decoded, err := workflowexec.DecodeSpec[stepspec.EnsureDirectory](spec)
+	if err != nil {
+		return fmt.Errorf("decode EnsureDirectory spec: %w", err)
+	}
+	path := strings.TrimSpace(decoded.Path)
 	if path == "" {
 		return fmt.Errorf("%s: EnsureDir requires path", errCodeInstallEnsureDirPathMis)
 	}
@@ -186,7 +158,7 @@ func runEnsureDir(spec map[string]any) error {
 	if err := hostPath.EnsureDir(filemode.PublishedArtifact); err != nil {
 		return err
 	}
-	if modeRaw := stringValue(spec, "mode"); modeRaw != "" {
+	if modeRaw := strings.TrimSpace(decoded.Mode); modeRaw != "" {
 		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
 		if err != nil {
 			return fmt.Errorf("invalid mode: %w", err)
@@ -199,11 +171,15 @@ func runEnsureDir(spec map[string]any) error {
 }
 
 func runCreateSymlink(spec map[string]any) error {
-	path := stringValue(spec, "path")
+	decoded, err := workflowexec.DecodeSpec[stepspec.CreateSymlink](spec)
+	if err != nil {
+		return fmt.Errorf("decode CreateSymlink spec: %w", err)
+	}
+	path := strings.TrimSpace(decoded.Path)
 	if path == "" {
 		return fmt.Errorf("%s: CreateSymlink requires path", errCodeInstallCreateSymlinkPathMiss)
 	}
-	target := stringValue(spec, "target")
+	target := strings.TrimSpace(decoded.Target)
 	if target == "" {
 		return fmt.Errorf("%s: CreateSymlink requires target", errCodeInstallCreateSymlinkTargetMis)
 	}
@@ -212,20 +188,20 @@ func runCreateSymlink(spec map[string]any) error {
 	if err != nil {
 		return err
 	}
-	if boolValue(spec, "createParent") {
+	if decoded.CreateParent {
 		if err := pathRef.EnsureParentDir(filemode.PublishedArtifact); err != nil {
 			return err
 		}
 	}
 
-	if boolValue(spec, "requireTarget") {
+	if decoded.RequireTarget {
 		if _, err := os.Lstat(target); err != nil {
 			if os.IsNotExist(err) {
 				return fmt.Errorf("symlink target does not exist: %s", target)
 			}
 			return err
 		}
-	} else if boolValue(spec, "ignoreMissingTarget") {
+	} else if decoded.IgnoreMissingTarget {
 		if _, err := os.Lstat(target); err != nil {
 			if os.IsNotExist(err) {
 				return nil
@@ -245,7 +221,7 @@ func runCreateSymlink(spec map[string]any) error {
 			}
 		}
 
-		if !boolValue(spec, "force") {
+		if !decoded.Force {
 			return fmt.Errorf("destination already exists: %s", path)
 		}
 		if info.IsDir() {
@@ -263,7 +239,7 @@ func runCreateSymlink(spec map[string]any) error {
 }
 
 func runWriteFile(spec map[string]any) error {
-	decoded, err := workflowexec.DecodeSpec[writeFileSpec](spec)
+	decoded, err := workflowexec.DecodeSpec[stepspec.WriteFile](spec)
 	if err != nil {
 		return fmt.Errorf("decode WriteFile spec: %w", err)
 	}
@@ -294,7 +270,7 @@ func runWriteFile(spec map[string]any) error {
 	return applyOptionalFileMode(hostPath, strings.TrimSpace(decoded.Mode))
 }
 
-func fetchSourcesAny(items []fileDownloadFetchSourceSpec) []any {
+func fetchSourcesAny(items []stepspec.FileFetchSource) []any {
 	out := make([]any, 0, len(items))
 	for _, item := range items {
 		out = append(out, map[string]any{"type": item.Type, "path": item.Path, "url": item.URL})
@@ -314,7 +290,7 @@ func applyOptionalFileMode(path hostfs.HostPath, modeRaw string) error {
 }
 
 func runTemplateFile(spec map[string]any) error {
-	decoded, err := workflowexec.DecodeSpec[templateFileSpec](spec)
+	decoded, err := workflowexec.DecodeSpec[stepspec.WriteFile](spec)
 	if err != nil {
 		return fmt.Errorf("decode TemplateFile spec: %w", err)
 	}
@@ -337,12 +313,16 @@ func runRepoConfig(ctx context.Context, spec map[string]any) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
-	format, err := resolveRepoConfigFormat(spec)
+	decoded, err := workflowexec.DecodeSpec[stepspec.ConfigureRepository](spec)
+	if err != nil {
+		return fmt.Errorf("decode ConfigureRepository spec: %w", err)
+	}
+	format, err := resolveRepoConfigFormat(decoded.Format)
 	if err != nil {
 		return err
 	}
 
-	path := stringValue(spec, "path")
+	path := strings.TrimSpace(decoded.Path)
 	if path == "" {
 		path = repoConfigDefaultPathFunc(format)
 	}
@@ -350,16 +330,15 @@ func runRepoConfig(ctx context.Context, spec map[string]any) error {
 		return fmt.Errorf("%s: RepoConfig requires path", errCodeInstallRepoConfigPath)
 	}
 
-	repositories, ok := spec["repositories"].([]any)
-	if !ok || len(repositories) == 0 {
+	if len(decoded.Repositories) == 0 {
 		return fmt.Errorf("RepoConfig requires repositories")
 	}
 
-	replaceExisting := boolValue(spec, "replaceExisting")
-	disableExisting := boolValue(spec, "disableExisting")
+	replaceExisting := decoded.ReplaceExisting
+	disableExisting := decoded.DisableExisting
 
-	backupPatterns := append([]string{}, stringSlice(spec["backupPaths"])...)
-	cleanupPatterns := append([]string{}, stringSlice(spec["cleanupPaths"])...)
+	backupPatterns := append([]string{}, decoded.BackupPaths...)
+	cleanupPatterns := append([]string{}, decoded.CleanupPaths...)
 
 	if (replaceExisting || disableExisting) && len(backupPatterns) == 0 {
 		backupPatterns = append(backupPatterns, defaultRepoConfigBackupPatterns(format)...)
@@ -367,14 +346,14 @@ func runRepoConfig(ctx context.Context, spec map[string]any) error {
 	if replaceExisting && len(cleanupPatterns) == 0 {
 		cleanupPatterns = append(cleanupPatterns, defaultRepoConfigCleanupPatterns(format)...)
 	}
-	if format == "apt" && disableExisting && !replaceExisting && len(cleanupPatterns) == 0 {
+	if format == "deb" && disableExisting && !replaceExisting && len(cleanupPatterns) == 0 {
 		cleanupPatterns = append(cleanupPatterns, backupPatterns...)
 	}
 
 	if err := backupRepoConfigPaths(backupPatterns); err != nil {
 		return err
 	}
-	if format == "yum" && disableExisting && !replaceExisting {
+	if format == "rpm" && disableExisting && !replaceExisting {
 		if err := disableYumRepoPaths(backupPatterns, path); err != nil {
 			return err
 		}
@@ -383,7 +362,7 @@ func runRepoConfig(ctx context.Context, spec map[string]any) error {
 		return err
 	}
 
-	content, err := renderRepoConfigContent(format, repositories)
+	content, err := renderRepoConfigContent(format, decoded.Repositories)
 	if err != nil {
 		return err
 	}
@@ -401,7 +380,7 @@ func runRepoConfig(ctx context.Context, spec map[string]any) error {
 	if err := writeFileIfChanged(path, []byte(content), 0o644); err != nil {
 		return err
 	}
-	if modeRaw := stringValue(spec, "mode"); modeRaw != "" {
+	if modeRaw := strings.TrimSpace(decoded.Mode); modeRaw != "" {
 		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
 		if err != nil {
 			return fmt.Errorf("invalid mode: %w", err)
@@ -414,13 +393,13 @@ func runRepoConfig(ctx context.Context, spec map[string]any) error {
 	return nil
 }
 
-func resolveRepoConfigFormat(spec map[string]any) (string, error) {
-	format := stringValue(spec, "format")
+func resolveRepoConfigFormat(format string) (string, error) {
+	format = strings.TrimSpace(format)
 	if format == "" {
 		format = "auto"
 	}
 	switch format {
-	case "apt", "yum":
+	case "deb", "rpm":
 		return format, nil
 	case "auto":
 		facts := repoConfigDetectHostFacts()
@@ -428,33 +407,33 @@ func resolveRepoConfigFormat(spec map[string]any) (string, error) {
 		family := strings.ToLower(strings.TrimSpace(stringValue(osFacts, "family")))
 		switch family {
 		case "debian":
-			return "apt", nil
+			return "deb", nil
 		case "rhel":
-			return "yum", nil
+			return "rpm", nil
 		default:
 			return "", fmt.Errorf("unable to resolve RepoConfig format from host family %q", family)
 		}
 	default:
-		return "", fmt.Errorf("RepoConfig format must be one of auto, apt, yum")
+		return "", fmt.Errorf("RepoConfig format must be one of auto, deb, rpm")
 	}
 }
 
 func defaultRepoConfigPath(format string) string {
-	if format == "apt" {
+	if format == "deb" {
 		return "/etc/apt/sources.list.d/deck-offline.list"
 	}
 	return "/etc/yum.repos.d/deck-offline.repo"
 }
 
 func defaultRepoConfigBackupPatterns(format string) []string {
-	if format == "apt" {
+	if format == "deb" {
 		return []string{"/etc/apt/sources.list", "/etc/apt/sources.list.d/*.list", "/etc/apt/sources.list.d/*.sources"}
 	}
 	return defaultYumRepoPatterns()
 }
 
 func defaultRepoConfigCleanupPatterns(format string) []string {
-	if format == "apt" {
+	if format == "deb" {
 		return []string{"/etc/apt/sources.list", "/etc/apt/sources.list.d/*.list", "/etc/apt/sources.list.d/*.sources"}
 	}
 	return defaultYumRepoPatterns()
@@ -464,36 +443,32 @@ func defaultYumRepoPatterns() []string {
 	return []string{"/etc/yum.repos.d/*.repo"}
 }
 
-func renderRepoConfigContent(format string, repositories []any) (string, error) {
-	if format == "apt" {
+func renderRepoConfigContent(format string, repositories []stepspec.RepositoryEntry) (string, error) {
+	if format == "deb" {
 		return renderAptRepositoryList(repositories)
 	}
 	return renderYumRepositoryList(repositories)
 }
 
-func renderAptRepositoryList(repositories []any) (string, error) {
+func renderAptRepositoryList(repositories []stepspec.RepositoryEntry) (string, error) {
 	lines := make([]string, 0, len(repositories))
-	for _, raw := range repositories {
-		repo, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		baseURL := stringValue(repo, "baseurl")
+	for _, repo := range repositories {
+		baseURL := strings.TrimSpace(repo.BaseURL)
 		if baseURL == "" {
 			continue
 		}
-		repoType := stringValue(repo, "type")
+		repoType := strings.TrimSpace(repo.Type)
 		if repoType == "" {
 			repoType = "deb"
 		}
-		suite := stringValue(repo, "suite")
+		suite := strings.TrimSpace(repo.Suite)
 		if suite == "" {
 			suite = "./"
 		}
-		component := stringValue(repo, "component")
+		component := strings.TrimSpace(repo.Component)
 
 		opts := make([]string, 0, 1)
-		if trusted, ok := repo["trusted"].(bool); ok && trusted {
+		if repo.Trusted != nil && *repo.Trusted {
 			opts = append(opts, "trusted=yes")
 		}
 
@@ -508,59 +483,50 @@ func renderAptRepositoryList(repositories []any) (string, error) {
 		lines = append(lines, line)
 	}
 	if len(lines) == 0 {
-		return "", fmt.Errorf("RepoConfig requires at least one apt repository with baseurl")
+		return "", fmt.Errorf("RepoConfig requires at least one deb repository with baseurl")
 	}
 	return strings.Join(lines, "\n"), nil
 }
 
-func renderYumRepositoryList(repositories []any) (string, error) {
+func renderYumRepositoryList(repositories []stepspec.RepositoryEntry) (string, error) {
 	lines := make([]string, 0, len(repositories)*6)
-	for _, raw := range repositories {
-		repo, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := stringValue(repo, "id")
+	for _, repo := range repositories {
+		id := strings.TrimSpace(repo.ID)
 		if id == "" {
 			continue
 		}
 		lines = append(lines, fmt.Sprintf("[%s]", id))
-		if name := stringValue(repo, "name"); name != "" {
+		if name := strings.TrimSpace(repo.Name); name != "" {
 			lines = append(lines, fmt.Sprintf("name=%s", name))
 		}
-		if baseURL := stringValue(repo, "baseurl"); baseURL != "" {
+		if baseURL := strings.TrimSpace(repo.BaseURL); baseURL != "" {
 			lines = append(lines, fmt.Sprintf("baseurl=%s", baseURL))
 		}
-		if enabled, ok := repo["enabled"].(bool); ok {
-			if enabled {
+		if repo.Enabled != nil {
+			if *repo.Enabled {
 				lines = append(lines, "enabled=1")
 			} else {
 				lines = append(lines, "enabled=0")
 			}
 		}
-		if gpgcheck, ok := repo["gpgcheck"].(bool); ok {
-			if gpgcheck {
+		if repo.GPGCheck != nil {
+			if *repo.GPGCheck {
 				lines = append(lines, "gpgcheck=1")
 			} else {
 				lines = append(lines, "gpgcheck=0")
 			}
 		}
-		if gpgkey := stringValue(repo, "gpgkey"); gpgkey != "" {
+		if gpgkey := strings.TrimSpace(repo.GPGKey); gpgkey != "" {
 			lines = append(lines, fmt.Sprintf("gpgkey=%s", gpgkey))
 		}
 
-		extraKeys := make([]string, 0)
-		for k := range repo {
-			switch k {
-			case "id", "name", "baseurl", "enabled", "gpgcheck", "gpgkey", "trusted", "suite", "component", "type":
-				continue
-			default:
-				extraKeys = append(extraKeys, k)
-			}
+		extraKeys := make([]string, 0, len(repo.Extra))
+		for k := range repo.Extra {
+			extraKeys = append(extraKeys, k)
 		}
 		sort.Strings(extraKeys)
 		for _, key := range extraKeys {
-			switch v := repo[key].(type) {
+			switch v := repo.Extra[key].(type) {
 			case string:
 				if strings.TrimSpace(v) == "" {
 					continue

@@ -5,7 +5,8 @@
   "description": "Writes containerd registry host configuration for mirrors and trust policy.",
   "properties": {
     "apiVersion": {
-      "const": "deck/v1alpha1"
+      "const": "deck/v1alpha1",
+      "type": "string"
     },
     "id": {
       "type": "string"

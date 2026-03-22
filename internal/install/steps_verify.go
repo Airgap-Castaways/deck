@@ -6,26 +6,27 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/taedi90/deck/internal/stepspec"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 func runVerifyImages(ctx context.Context, spec map[string]any) error {
-	required := stringSlice(spec["images"])
+	decoded, err := workflowexec.DecodeSpec[stepspec.VerifyImage](spec)
+	if err != nil {
+		return fmt.Errorf("decode VerifyImage spec: %w", err)
+	}
+	required := decoded.Images
 	if len(required) == 0 {
 		return fmt.Errorf("%s: VerifyImages requires images", errCodeInstallImagesMissing)
 	}
 
-	cmdArgs := stringSlice(spec["command"])
+	cmdArgs := decoded.Command
 	if len(cmdArgs) == 0 {
 		cmdArgs = []string{"ctr", "-n", "k8s.io", "images", "list", "-q"}
 	}
 
-	timeout := 20 * time.Second
-	if ts := stringValue(spec, "timeout"); ts != "" {
-		d, err := time.ParseDuration(ts)
-		if err == nil && d > 0 {
-			timeout = d
-		}
-	}
+	timeout := parseStepTimeout(decoded.Timeout, 20*time.Second)
 
 	output, err := runCommandOutputWithContext(ctx, cmdArgs, timeout)
 	if err != nil {

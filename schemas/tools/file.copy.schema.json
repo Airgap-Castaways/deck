@@ -5,7 +5,8 @@
   "description": "Copies a file already present on the node.",
   "properties": {
     "apiVersion": {
-      "const": "deck/v1alpha1"
+      "const": "deck/v1alpha1",
+      "type": "string"
     },
     "id": {
       "type": "string"
@@ -35,8 +36,60 @@
       "type": "integer"
     },
     "spec": {
+      "$id": "https://github.com/taedi90/deck/internal/stepspec/copy-file",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
+        "fetch": {
+          "additionalProperties": false,
+          "properties": {
+            "offlineOnly": {
+              "type": "boolean"
+            },
+            "sources": {
+              "items": {
+                "additionalProperties": false,
+                "anyOf": [
+                  {
+                    "required": [
+                      "path"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "url"
+                    ]
+                  }
+                ],
+                "properties": {
+                  "path": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": {
+                    "enum": [
+                      "local",
+                      "bundle",
+                      "repo",
+                      "online"
+                    ],
+                    "type": "string"
+                  },
+                  "url": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
         "mode": {
           "pattern": "^[0-7]{4}$",
           "type": "string"

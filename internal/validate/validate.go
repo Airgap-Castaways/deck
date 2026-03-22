@@ -16,6 +16,7 @@ import (
 
 	"github.com/taedi90/deck/internal/config"
 	"github.com/taedi90/deck/internal/fsutil"
+	"github.com/taedi90/deck/internal/workflowcontract"
 	"github.com/taedi90/deck/internal/workflowexec"
 	"github.com/taedi90/deck/internal/workflowexpr"
 	deckschemas "github.com/taedi90/deck/schemas"
@@ -123,7 +124,7 @@ func WorkspaceWithContext(ctx context.Context, root string) ([]string, error) {
 	validated := make([]string, 0)
 	visited := map[string]bool{}
 	for _, path := range files {
-		validatedFiles, err := lintLocalEntrypoint(ctx, path, nil, visited)
+		validatedFiles, err := lintLocalEntrypoint(ctx, path, nil, workflowSupportedVersion, visited)
 		if err != nil {
 			return nil, err
 		}
@@ -146,7 +147,7 @@ func EntrypointWithContext(ctx context.Context, path string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve workflow path: %w", err)
 	}
-	return lintLocalEntrypoint(ctx, absPath, nil, map[string]bool{})
+	return lintLocalEntrypoint(ctx, absPath, nil, workflowSupportedVersion, map[string]bool{})
 }
 
 func Workflow(name string, wf *config.Workflow) error {
@@ -202,7 +203,7 @@ func withWorkflowName(name string, err error) error {
 	return fmt.Errorf("%s%w", prefix, err)
 }
 
-func lintLocalEntrypoint(ctx context.Context, path string, inheritedVars map[string]any, visiting map[string]bool) ([]string, error) {
+func lintLocalEntrypoint(ctx context.Context, path string, inheritedVars map[string]any, workflowVersion string, visiting map[string]bool) ([]string, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolve workflow path: %w", err)
@@ -228,7 +229,7 @@ func lintLocalEntrypoint(ctx context.Context, path string, inheritedVars map[str
 		if err != nil {
 			return nil, withWorkflowName(absPath, err)
 		}
-		if err := validateComponentFragment(absPath, fragment); err != nil {
+		if err := validateComponentFragmentWithWorkflowVersion(absPath, fragment, workflowVersion); err != nil {
 			return nil, withWorkflowName(absPath, err)
 		}
 		delete(visiting, absPath)
@@ -253,7 +254,7 @@ func lintLocalEntrypoint(ctx context.Context, path string, inheritedVars map[str
 			if err != nil {
 				return nil, withWorkflowName(absPath, err)
 			}
-			files, err := lintLocalEntrypoint(ctx, child, wf.Vars, visiting)
+			files, err := lintLocalEntrypoint(ctx, child, wf.Vars, wf.Version, visiting)
 			if err != nil {
 				return nil, err
 			}
@@ -292,8 +293,8 @@ func validateLoadedWorkflow(name string, wf *config.Workflow) error {
 	if wf.Version == "" {
 		return fmt.Errorf("version is required")
 	}
-	if strings.TrimSpace(wf.Version) != workflowSupportedVersion {
-		return fmt.Errorf("unsupported version: %s (supported: v1alpha1)", wf.Version)
+	if _, ok := workflowcontract.DefaultStepAPIVersionForWorkflowVersion(wf.Version); !ok {
+		return fmt.Errorf("unsupported version: %s (supported: %s)", wf.Version, workflowSupportedVersion)
 	}
 	if err := validateWorkflowMode(wf); err != nil {
 		return err
@@ -309,13 +310,17 @@ func validateLoadedWorkflow(name string, wf *config.Workflow) error {
 }
 
 func validateComponentFragment(name string, fragment *componentFragment) error {
+	return validateComponentFragmentWithWorkflowVersion(name, fragment, workflowSupportedVersion)
+}
+
+func validateComponentFragmentWithWorkflowVersion(name string, fragment *componentFragment, workflowVersion string) error {
 	if fragment == nil {
 		return fmt.Errorf("component fragment is nil")
 	}
 	if len(fragment.Steps) == 0 {
 		return fmt.Errorf("steps is required")
 	}
-	wf := &config.Workflow{Version: "v1alpha1", Steps: fragment.Steps}
+	wf := &config.Workflow{Version: workflowVersion, Steps: fragment.Steps}
 	if err := validateToolSchemas(wf); err != nil {
 		return err
 	}
@@ -414,7 +419,11 @@ func validateWorkflowMode(wf *config.Workflow) error {
 
 func validateToolSchemas(wf *config.Workflow) error {
 	for _, step := range workflowSteps(wf) {
-		schemaFile, ok := workflowexec.StepSchemaFile(step.Kind)
+		key, err := effectiveStepTypeKey(wf.Version, step)
+		if err != nil {
+			return err
+		}
+		schemaFile, ok := workflowexec.StepSchemaFileForKey(key)
 		if !ok {
 			continue
 		}
@@ -424,9 +433,7 @@ func validateToolSchemas(wf *config.Workflow) error {
 		}
 
 		stepForSchema := step
-		if strings.TrimSpace(stepForSchema.APIVersion) == "" {
-			stepForSchema.APIVersion = "deck/v1alpha1"
-		}
+		stepForSchema.APIVersion = key.APIVersion
 
 		raw, err := json.Marshal(stepForSchema)
 		if err != nil {
@@ -549,7 +556,7 @@ func validateSemantics(name string, wf *config.Workflow) error {
 			if strings.TrimSpace(outputKey) == "" {
 				return fmt.Errorf("E_REGISTER_OUTPUT_NOT_FOUND: empty output key in step %s", step.ID)
 			}
-			if !isValidOutputKey(step.Kind, step.Spec, outputKey) {
+			if !isValidOutputKey(wf.Version, step, outputKey) {
 				return fmt.Errorf("E_REGISTER_OUTPUT_NOT_FOUND: step %s (%s) has no output key %s", step.ID, step.Kind, outputKey)
 			}
 			if previous, exists := assignedRuntime[runtimeVar]; exists {
@@ -748,7 +755,11 @@ func validateRoleKinds(name string, wf *config.Workflow) error {
 		return nil
 	}
 	for _, step := range workflowSteps(wf) {
-		if workflowexec.StepAllowedForRole(role, step.Kind) {
+		key, err := effectiveStepTypeKey(wf.Version, step)
+		if err != nil {
+			return err
+		}
+		if workflowexec.StepAllowedForRoleForKey(role, key) {
 			continue
 		}
 		return fmt.Errorf("E_KIND_ROLE_MISMATCH: step %s (%s) is not supported for role %s", step.ID, step.Kind, role)
@@ -767,10 +778,14 @@ func inferWorkflowMode(name string, wf *config.Workflow) string {
 	seenPrepare := false
 	seenApply := false
 	for _, step := range workflowSteps(wf) {
-		if workflowexec.StepAllowedForRole("prepare", step.Kind) {
+		key, err := effectiveStepTypeKey(wf.Version, step)
+		if err != nil {
+			continue
+		}
+		if workflowexec.StepAllowedForRoleForKey("prepare", key) {
 			seenPrepare = true
 		}
-		if workflowexec.StepAllowedForRole("apply", step.Kind) {
+		if workflowexec.StepAllowedForRoleForKey("apply", key) {
 			seenApply = true
 		}
 	}
@@ -788,8 +803,20 @@ func isReservedRuntimeVar(runtimeVar string) bool {
 	return trimmed == "host" || strings.HasPrefix(trimmed, "host.")
 }
 
-func isValidOutputKey(kind string, spec map[string]any, outputKey string) bool {
-	return workflowexec.StepHasOutput(kind, outputKey)
+func isValidOutputKey(workflowVersion string, step config.Step, outputKey string) bool {
+	key, err := effectiveStepTypeKey(workflowVersion, step)
+	if err != nil {
+		return false
+	}
+	return workflowexec.StepHasOutputForKey(key, outputKey)
+}
+
+func effectiveStepTypeKey(workflowVersion string, step config.Step) (workflowexec.StepTypeKey, error) {
+	apiVersion, err := workflowcontract.ResolveStepAPIVersion(workflowVersion, step.APIVersion)
+	if err != nil {
+		return workflowexec.StepTypeKey{}, fmt.Errorf("E_SCHEMA_INVALID: step %s (%s): %w", step.ID, step.Kind, err)
+	}
+	return workflowexec.StepTypeKey{APIVersion: strings.TrimSpace(apiVersion), Kind: strings.TrimSpace(step.Kind)}, nil
 }
 
 func workflowSteps(wf *config.Workflow) []config.Step {

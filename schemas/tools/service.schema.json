@@ -5,7 +5,8 @@
   "description": "Starts, stops, enables, or disables local services.",
   "properties": {
     "apiVersion": {
-      "const": "deck/v1alpha1"
+      "const": "deck/v1alpha1",
+      "type": "string"
     },
     "id": {
       "type": "string"
@@ -35,6 +36,8 @@
       "type": "integer"
     },
     "spec": {
+      "$id": "https://github.com/taedi90/deck/internal/stepspec/manage-service",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "oneOf": [
         {

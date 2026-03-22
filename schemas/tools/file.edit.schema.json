@@ -5,7 +5,8 @@
   "description": "Edits an existing file in place.",
   "properties": {
     "apiVersion": {
-      "const": "deck/v1alpha1"
+      "const": "deck/v1alpha1",
+      "type": "string"
     },
     "id": {
       "type": "string"
@@ -35,6 +36,8 @@
       "type": "integer"
     },
     "spec": {
+      "$id": "https://github.com/taedi90/deck/internal/stepspec/edit-file",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
         "backup": {

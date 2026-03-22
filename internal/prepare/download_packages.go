@@ -12,6 +12,8 @@ import (
 	"github.com/taedi90/deck/internal/config"
 	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
+	"github.com/taedi90/deck/internal/stepspec"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 type packageCacheMeta struct {
@@ -27,45 +29,47 @@ type rpmModuleSpec struct {
 }
 
 func runDownloadPackage(ctx context.Context, runner CommandRunner, bundleRoot string, step config.Step, spec map[string]any, inputVars map[string]string, defaultDir string, opts RunOptions) ([]string, error) {
-	dir := stringValue(spec, "outputDir")
+	decoded, err := workflowexec.DecodeSpec[stepspec.DownloadPackage](spec)
+	if err != nil {
+		return nil, fmt.Errorf("decode DownloadPackage spec: %w", err)
+	}
+	dir := strings.TrimSpace(decoded.OutputDir)
 	if dir == "" {
 		dir = defaultDir
 	}
 
-	packages := stringSlice(spec["packages"])
+	packages := decoded.Packages
 	if len(packages) == 0 {
 		return nil, fmt.Errorf("packages action download requires packages")
 	}
 
-	backend := mapValue(spec, "backend")
-	if stringValue(backend, "mode") == "container" && stringValue(backend, "image") != "" {
-		repo := mapValue(spec, "repo")
-		if len(repo) > 0 {
-			distro := mapValue(spec, "distro")
-			family := stringValue(distro, "family")
+	if decoded.Backend.Mode == "container" && decoded.Backend.Image != "" {
+		repo := decoded.Repo
+		if repo.Type != "" || repo.Generate || repo.PkgsDir != "" || len(repo.Modules) > 0 {
+			family := decoded.Distro.Family
 			if family == "" {
 				family = "debian"
 			}
-			release := strings.TrimSpace(stringValue(distro, "release"))
+			release := strings.TrimSpace(decoded.Distro.Release)
 			if release == "" {
 				return nil, fmt.Errorf("packages action download repo mode requires distro.release")
 			}
 
-			repoType := strings.TrimSpace(stringValue(repo, "type"))
-			generate := boolValue(repo, "generate")
-			pkgsDir := strings.TrimSpace(stringValue(repo, "pkgsDir"))
+			repoType := strings.TrimSpace(repo.Type)
+			generate := repo.Generate
+			pkgsDir := strings.TrimSpace(repo.PkgsDir)
 			if pkgsDir == "" {
 				pkgsDir = "pkgs"
 			}
 
 			var repoRoot string
 			switch repoType {
-			case "apt-flat":
-				repoRoot = filepath.ToSlash(filepath.Join("packages", "apt", release))
-			case "yum":
-				repoRoot = filepath.ToSlash(filepath.Join("packages", "yum", release))
+			case "deb-flat":
+				repoRoot = filepath.ToSlash(filepath.Join("packages", "deb", release))
+			case "rpm":
+				repoRoot = filepath.ToSlash(filepath.Join("packages", "rpm", release))
 			default:
-				return nil, fmt.Errorf("packages action download repo.type must be apt-flat or yum")
+				return nil, fmt.Errorf("packages action download repo.type must be deb-flat or rpm")
 			}
 
 			if files, reused, err := tryReusePackageArtifact(bundleRoot, repoRoot, packages, opts); err != nil {
@@ -73,7 +77,7 @@ func runDownloadPackage(ctx context.Context, runner CommandRunner, bundleRoot st
 			} else if reused {
 				return files, nil
 			}
-			files, err := runContainerPackageRepoBuild(ctx, runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, step, spec, inputVars, repo, packages, opts)
+			files, err := runContainerPackageRepoBuild(ctx, runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, step, decoded, inputVars, packages, opts)
 			if err != nil {
 				return nil, err
 			}
@@ -89,7 +93,7 @@ func runDownloadPackage(ctx context.Context, runner CommandRunner, bundleRoot st
 			return files, nil
 		}
 
-		files, err := runContainerDownloadPackageAll(ctx, runner, bundleRoot, dir, step, spec, inputVars, repo, packages, opts)
+		files, err := runContainerDownloadPackageAll(ctx, runner, bundleRoot, dir, step, decoded, inputVars, packages, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -112,23 +116,21 @@ func runContainerPackageRepoBuild(
 	generate bool,
 	pkgsDir string,
 	step config.Step,
-	spec map[string]any,
+	spec stepspec.DownloadPackage,
 	inputVars map[string]string,
-	repo map[string]any,
 	packages []string,
 	opts RunOptions,
 ) ([]string, error) {
-	backend := mapValue(spec, "backend")
-	runtimeSel, err := detectRuntime(runner, stringValue(backend, "runtime"))
+	runtimeSel, err := detectRuntime(runner, spec.Backend.Runtime)
 	if err != nil {
 		return nil, err
 	}
-	image := stringValue(backend, "image")
+	image := spec.Backend.Image
 	if image == "" {
 		return nil, fmt.Errorf("backend.image is required for container package download")
 	}
 
-	modules, err := parseRPMModules(repo)
+	modules, err := parseRPMModules(spec.Repo)
 	if err != nil {
 		return nil, err
 	}
@@ -136,28 +138,26 @@ func runContainerPackageRepoBuild(
 	if err != nil {
 		return nil, err
 	}
-	return runContainerDownloadPackageToCache(ctx, runner, runtimeSel, image, bundleRoot, repoRoot, step, spec, inputVars, packages, cmdScript, opts)
+	return runContainerDownloadPackageToCache(ctx, runner, runtimeSel, image, bundleRoot, repoRoot, step, inputVars, packages, cmdScript, opts)
 }
 
-func runContainerDownloadPackageAll(ctx context.Context, runner CommandRunner, bundleRoot, dir string, step config.Step, spec map[string]any, inputVars map[string]string, repo map[string]any, packages []string, opts RunOptions) ([]string, error) {
-	backend := mapValue(spec, "backend")
-	runtimeSel, err := detectRuntime(runner, stringValue(backend, "runtime"))
+func runContainerDownloadPackageAll(ctx context.Context, runner CommandRunner, bundleRoot, dir string, step config.Step, decoded stepspec.DownloadPackage, inputVars map[string]string, packages []string, opts RunOptions) ([]string, error) {
+	runtimeSel, err := detectRuntime(runner, decoded.Backend.Runtime)
 	if err != nil {
 		return nil, err
 	}
 
-	image := stringValue(backend, "image")
+	image := decoded.Backend.Image
 	if image == "" {
 		return nil, fmt.Errorf("backend.image is required for container package download")
 	}
 
-	distro := mapValue(spec, "distro")
-	family := stringValue(distro, "family")
+	family := decoded.Distro.Family
 	if family == "" {
 		family = "debian"
 	}
 
-	modules, err := parseRPMModules(repo)
+	modules, err := parseRPMModules(decoded.Repo)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func runContainerDownloadPackageAll(ctx context.Context, runner CommandRunner, b
 	if err != nil {
 		return nil, err
 	}
-	return runContainerDownloadPackageToCache(ctx, runner, runtimeSel, image, bundleRoot, dir, step, spec, inputVars, packages, cmdScript, opts)
+	return runContainerDownloadPackageToCache(ctx, runner, runtimeSel, image, bundleRoot, dir, step, inputVars, packages, cmdScript, opts)
 }
 
 func buildDownloadPackageAllScript(family string, packages []string, modules []rpmModuleSpec) (string, error) {
@@ -217,7 +217,7 @@ func buildPackageRepoBuildScript(family string, packages []string, modules []rpm
 	}
 	pkgList := strings.Join(parts, " ")
 
-	if repoType == "yum" || family == "rhel" {
+	if repoType == "rpm" || family == "rhel" {
 		gen := "true"
 		if !generate {
 			gen = "false"
@@ -268,23 +268,14 @@ func shellEscape(v string) string {
 	return strings.ReplaceAll(v, "'", "''")
 }
 
-func parseRPMModules(repo map[string]any) ([]rpmModuleSpec, error) {
-	raw, ok := repo["modules"]
-	if !ok || raw == nil {
+func parseRPMModules(repo stepspec.DownloadPackageRepo) ([]rpmModuleSpec, error) {
+	if len(repo.Modules) == 0 {
 		return nil, nil
 	}
-	items, ok := raw.([]any)
-	if !ok {
-		return nil, fmt.Errorf("packages action download repo.modules must be an array")
-	}
-	modules := make([]rpmModuleSpec, 0, len(items))
-	for _, item := range items {
-		moduleMap, ok := item.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("packages action download repo.modules entries must be objects")
-		}
-		name := strings.TrimSpace(stringValue(moduleMap, "name"))
-		stream := strings.TrimSpace(stringValue(moduleMap, "stream"))
+	modules := make([]rpmModuleSpec, 0, len(repo.Modules))
+	for _, item := range repo.Modules {
+		name := strings.TrimSpace(item.Name)
+		stream := strings.TrimSpace(item.Stream)
 		if name == "" || stream == "" {
 			return nil, fmt.Errorf("packages action download repo.modules entries require name and stream")
 		}
@@ -310,7 +301,7 @@ func buildRPMModuleEnableCommand(modules []rpmModuleSpec) (string, error) {
 	return "dnf -y module enable " + strings.Join(parts, " ") + " >/dev/null 2>&1", nil
 }
 
-func runContainerDownloadPackageToCache(ctx context.Context, runner CommandRunner, runtimeSel, image, bundleRoot, rootRel string, step config.Step, spec map[string]any, inputVars map[string]string, packages []string, script string, opts RunOptions) ([]string, error) {
+func runContainerDownloadPackageToCache(ctx context.Context, runner CommandRunner, runtimeSel, image, bundleRoot, rootRel string, step config.Step, inputVars map[string]string, packages []string, script string, opts RunOptions) ([]string, error) {
 	cacheKey := computeStepCacheKey(step)
 	cachePath, err := exportedPackageCachePath(cacheKey, inputVars)
 	if err != nil {

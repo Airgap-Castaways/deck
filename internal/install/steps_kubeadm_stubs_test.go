@@ -7,9 +7,10 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/stepspec"
 )
 
-func runInitKubeadmStub(spec kubeadmInitSpec) error {
+func runInitKubeadmStub(spec stepspec.KubeadmInit) error {
 	joinFile := strings.TrimSpace(spec.OutputJoinFile)
 	if joinFile == "" {
 		return fmt.Errorf("%s: InitKubeadm requires outputJoinFile", errCodeInstallInitJoinMissing)
@@ -21,7 +22,7 @@ func runInitKubeadmStub(spec kubeadmInitSpec) error {
 	return filemode.WritePrivateFile(joinFile, []byte(content))
 }
 
-func runJoinKubeadmStub(spec kubeadmJoinSpec) error {
+func runJoinKubeadmStub(spec stepspec.KubeadmJoin) error {
 	joinFile := strings.TrimSpace(spec.JoinFile)
 	configFile := strings.TrimSpace(spec.ConfigFile)
 	if joinFile != "" && configFile != "" {
@@ -42,7 +43,7 @@ func runJoinKubeadmStub(spec kubeadmJoinSpec) error {
 	return nil
 }
 
-func runResetKubeadmStub(spec kubeadmResetSpec) error {
+func runResetKubeadmStub(spec stepspec.KubeadmReset) error {
 	_ = trimmedStringSlice(spec.RemovePaths)
 	_ = trimmedStringSlice(spec.RemoveFiles)
 	_ = trimmedStringSlice(spec.CleanupContainers)
@@ -58,14 +59,14 @@ func runResetKubeadmStub(spec kubeadmResetSpec) error {
 	return nil
 }
 
-func runUpgradeKubeadmStub(spec kubeadmUpgradeSpec) error {
+func runUpgradeKubeadmStub(spec stepspec.KubeadmUpgrade) error {
 	if strings.TrimSpace(spec.KubernetesVersion) == "" {
 		return fmt.Errorf("%s: UpgradeKubeadm requires kubernetesVersion", errCodeInstallUpgradeFailed)
 	}
 	return nil
 }
 
-func runCheckClusterStub(spec clusterCheckSpec) error {
+func runCheckClusterStub(spec stepspec.ClusterCheck) error {
 	if strings.TrimSpace(spec.Reports.NodesPath) != "" {
 		if err := os.MkdirAll(filepath.Dir(spec.Reports.NodesPath), 0o755); err != nil {
 			return err

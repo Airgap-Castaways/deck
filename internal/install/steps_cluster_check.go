@@ -10,58 +10,9 @@ import (
 
 	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/hostfs"
+	"github.com/taedi90/deck/internal/stepspec"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
-
-type clusterCheckSpec struct {
-	Kubeconfig   string                      `json:"kubeconfig"`
-	Interval     string                      `json:"interval"`
-	InitialDelay string                      `json:"initialDelay"`
-	Timeout      string                      `json:"timeout"`
-	Nodes        clusterCheckNodesSpec       `json:"nodes"`
-	Versions     clusterCheckVersionsSpec    `json:"versions"`
-	KubeSystem   clusterCheckKubeSystemSpec  `json:"kubeSystem"`
-	FileChecks   []clusterCheckFileCheckSpec `json:"fileAssertions"`
-	Reports      clusterCheckReportsSpec     `json:"reports"`
-}
-
-type clusterCheckNodesSpec struct {
-	Total             *int `json:"total"`
-	Ready             *int `json:"ready"`
-	ControlPlaneReady *int `json:"controlPlaneReady"`
-}
-
-type clusterCheckVersionsSpec struct {
-	TargetVersion string `json:"targetVersion"`
-	Server        string `json:"server"`
-	Kubelet       string `json:"kubelet"`
-	Kubeadm       string `json:"kubeadm"`
-	NodeName      string `json:"nodeName"`
-	ReportPath    string `json:"reportPath"`
-}
-
-type clusterCheckKubeSystemSpec struct {
-	ReadyNames          []string                             `json:"readyNames"`
-	ReadyPrefixes       []string                             `json:"readyPrefixes"`
-	ReadyPrefixMinimums []clusterCheckReadyPrefixMinimumSpec `json:"readyPrefixMinimums"`
-	ReportPath          string                               `json:"reportPath"`
-	JSONReportPath      string                               `json:"jsonReportPath"`
-}
-
-type clusterCheckReadyPrefixMinimumSpec struct {
-	Prefix   string `json:"prefix"`
-	MinReady int    `json:"minReady"`
-}
-
-type clusterCheckFileCheckSpec struct {
-	Path     string   `json:"path"`
-	Contains []string `json:"contains"`
-}
-
-type clusterCheckReportsSpec struct {
-	NodesPath        string `json:"nodesPath"`
-	ClusterNodesPath string `json:"clusterNodesPath"`
-}
 
 type clusterNodeSummary struct {
 	Total             int
@@ -86,7 +37,7 @@ type clusterCheckResult struct {
 var checkClusterExecutor = runCheckClusterReal
 
 func runCheckCluster(ctx context.Context, spec map[string]any) error {
-	decoded, err := workflowexec.DecodeSpec[clusterCheckSpec](spec)
+	decoded, err := workflowexec.DecodeSpec[stepspec.ClusterCheck](spec)
 	if err != nil {
 		return fmt.Errorf("decode CheckCluster spec: %w", err)
 	}
@@ -96,7 +47,7 @@ func runCheckCluster(ctx context.Context, spec map[string]any) error {
 	return checkClusterExecutor(ctx, decoded)
 }
 
-func runCheckClusterReal(parent context.Context, spec clusterCheckSpec) error {
+func runCheckClusterReal(parent context.Context, spec stepspec.ClusterCheck) error {
 	timeout := parseStepTimeout(spec.Timeout, 10*time.Minute)
 	interval := parseStepTimeout(spec.Interval, 5*time.Second)
 	initialDelay := time.Duration(0)
@@ -130,7 +81,7 @@ func runCheckClusterReal(parent context.Context, spec clusterCheckSpec) error {
 	}
 }
 
-func collectClusterCheckResult(ctx context.Context, spec clusterCheckSpec) (clusterCheckResult, error) {
+func collectClusterCheckResult(ctx context.Context, spec stepspec.ClusterCheck) (clusterCheckResult, error) {
 	var result clusterCheckResult
 	needNodes := spec.Nodes.Total != nil || spec.Nodes.Ready != nil || spec.Nodes.ControlPlaneReady != nil || strings.TrimSpace(spec.Reports.NodesPath) != "" || strings.TrimSpace(spec.Reports.ClusterNodesPath) != ""
 	if needNodes {
@@ -203,7 +154,7 @@ func collectClusterCheckResult(ctx context.Context, spec clusterCheckSpec) (clus
 	return result, runClusterFileAssertions(spec.FileChecks)
 }
 
-func verifyClusterCheckResult(spec clusterCheckSpec, result clusterCheckResult) error {
+func verifyClusterCheckResult(spec stepspec.ClusterCheck, result clusterCheckResult) error {
 	if spec.Nodes.Total != nil && result.NodesSummary.Total != *spec.Nodes.Total {
 		return fmt.Errorf("expected %d nodes, got %d", *spec.Nodes.Total, result.NodesSummary.Total)
 	}
@@ -279,7 +230,7 @@ func parseClusterNodeSummary(text string) clusterNodeSummary {
 	return out
 }
 
-func runClusterFileAssertions(items []clusterCheckFileCheckSpec) error {
+func runClusterFileAssertions(items []stepspec.ClusterCheckFileCheck) error {
 	for _, item := range items {
 		if strings.TrimSpace(item.Path) == "" {
 			continue
@@ -298,7 +249,7 @@ func runClusterFileAssertions(items []clusterCheckFileCheckSpec) error {
 	return nil
 }
 
-func verifyKubeSystemPods(spec clusterCheckKubeSystemSpec, podsJSON string) error {
+func verifyKubeSystemPods(spec stepspec.ClusterCheckKubeSystem, podsJSON string) error {
 	if len(spec.ReadyNames) == 0 && len(spec.ReadyPrefixes) == 0 && len(spec.ReadyPrefixMinimums) == 0 {
 		return nil
 	}

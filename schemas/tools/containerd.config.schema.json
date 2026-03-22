@@ -5,7 +5,8 @@
   "description": "Writes the containerd config.toml file on the node.",
   "properties": {
     "apiVersion": {
-      "const": "deck/v1alpha1"
+      "const": "deck/v1alpha1",
+      "type": "string"
     },
     "id": {
       "type": "string"

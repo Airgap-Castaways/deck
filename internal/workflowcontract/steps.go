@@ -1,8 +1,12 @@
 package workflowcontract
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 type StepDefinition struct {
+	APIVersion          string
 	Kind                string
 	Family              string
 	FamilyTitle         string
@@ -16,6 +20,11 @@ type StepDefinition struct {
 	WhenToUse           string
 	Roles               []string
 	Outputs             []string
+}
+
+type StepTypeKey struct {
+	APIVersion string
+	Kind       string
 }
 
 func StepDefinitions() []StepDefinition {
@@ -59,9 +68,9 @@ func StepDefinitions() []StepDefinition {
 	return defs
 }
 
-func StepDefinitionForKind(kind string) (StepDefinition, bool) {
+func StepDefinitionForKey(key StepTypeKey) (StepDefinition, bool) {
 	for _, def := range StepDefinitions() {
-		if def.Kind == kind {
+		if def.APIVersion == strings.TrimSpace(key.APIVersion) && def.Kind == strings.TrimSpace(key.Kind) {
 			return def, true
 		}
 	}
@@ -70,6 +79,7 @@ func StepDefinitionForKind(kind string) (StepDefinition, bool) {
 
 func stepDef(kind, family, familyTitle, docsPage string, docsOrder int, schemaFile, generator, visibility, category, summary, whenToUse string, roles, outputs []string) StepDefinition {
 	def := StepDefinition{
+		APIVersion:          BuiltInStepAPIVersion,
 		Kind:                kind,
 		Family:              family,
 		FamilyTitle:         familyTitle,

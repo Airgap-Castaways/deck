@@ -6,6 +6,7 @@ import (
 	jsonschema "github.com/invopop/jsonschema"
 
 	"github.com/taedi90/deck/internal/schemamodel"
+	"github.com/taedi90/deck/internal/workflowcontract"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -37,7 +38,7 @@ func generateWorkflowSchema() (map[string]any, error) {
 	}
 
 	props := propertyMap(root)
-	setMap(props, "version", map[string]any{"type": "string", "const": "v1alpha1"})
+	setMap(props, "version", supportedWorkflowVersionSchema())
 	mergeMap(props, "vars", map[string]any{"type": "object", "additionalProperties": true, "default": map[string]any{}})
 	setMap(props, "steps", map[string]any{"type": "array", "minItems": 1, "items": stepBaseSchema()})
 	setMap(props, "phases", map[string]any{"type": "array", "minItems": 1, "items": phases})
@@ -124,7 +125,7 @@ func stepBaseSchema() map[string]any {
 		"required":             []any{"id", "kind", "spec"},
 		"properties": map[string]any{
 			"id":            map[string]any{"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,127}$"},
-			"apiVersion":    map[string]any{"type": "string", "const": "deck/v1alpha1"},
+			"apiVersion":    supportedStepAPIVersionSchema(),
 			"kind":          map[string]any{"type": "string", "enum": toAnySlice(workflowexec.StepKinds())},
 			"metadata":      map[string]any{"type": "object", "additionalProperties": true},
 			"when":          map[string]any{"type": "string", "minLength": 1},
@@ -148,10 +149,7 @@ func registerContractClauses() []any {
 	clauses := make([]any, 0, len(defs))
 	for _, def := range defs {
 		clauses = append(clauses, map[string]any{
-			"if": map[string]any{
-				"properties": map[string]any{"kind": map[string]any{"const": def.Kind}},
-				"required":   []any{"kind"},
-			},
+			"if": builtInStepIdentityCondition(def.APIVersion, def.Kind),
 			"then": map[string]any{
 				"properties": map[string]any{"register": registerValueSchema(def.Outputs)},
 			},
@@ -175,6 +173,10 @@ func registerValueSchema(outputs []string) map[string]any {
 }
 
 func stepEnvelopeSchema(kind, title, description, visibility string) map[string]any {
+	apiVersion := workflowcontract.BuiltInStepAPIVersion
+	if def, ok := workflowexec.StepDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind}); ok && def.APIVersion != "" {
+		apiVersion = def.APIVersion
+	}
 	root := map[string]any{
 		"$schema":              "https://json-schema.org/draft/2020-12/schema",
 		"$id":                  "https://deck.local/schemas/tools/" + schemaFileName(kind),
@@ -186,7 +188,7 @@ func stepEnvelopeSchema(kind, title, description, visibility string) map[string]
 		"required":             []any{"id", "kind", "spec"},
 		"properties": map[string]any{
 			"id":            map[string]any{"type": "string"},
-			"apiVersion":    map[string]any{"const": "deck/v1alpha1"},
+			"apiVersion":    map[string]any{"type": "string", "const": apiVersion},
 			"kind":          map[string]any{"const": kind},
 			"metadata":      map[string]any{"type": "object", "additionalProperties": true},
 			"when":          map[string]any{"type": "string"},
@@ -201,6 +203,34 @@ func stepEnvelopeSchema(kind, title, description, visibility string) map[string]
 		},
 	}
 	return root
+}
+
+func supportedWorkflowVersionSchema() map[string]any {
+	return map[string]any{"type": "string", "enum": toAnySlice(workflowcontract.SupportedWorkflowVersions())}
+}
+
+func supportedStepAPIVersionSchema() map[string]any {
+	return map[string]any{"type": "string", "enum": toAnySlice([]string{workflowcontract.BuiltInStepAPIVersion})}
+}
+
+func builtInStepIdentityCondition(apiVersion, kind string) map[string]any {
+	return map[string]any{
+		"allOf": []any{
+			map[string]any{
+				"properties": map[string]any{"kind": map[string]any{"const": kind}},
+				"required":   []any{"kind"},
+			},
+			map[string]any{
+				"anyOf": []any{
+					map[string]any{"not": map[string]any{"required": []any{"apiVersion"}}},
+					map[string]any{
+						"properties": map[string]any{"apiVersion": map[string]any{"const": apiVersion}},
+						"required":   []any{"apiVersion"},
+					},
+				},
+			},
+		},
+	}
 }
 
 func bundleRefSchema() map[string]any {
@@ -248,7 +278,7 @@ func stringArraySchema(minItems int, minLen bool) map[string]any {
 }
 
 func schemaFileName(kind string) string {
-	if def, ok := workflowexec.StepDefinitionForKind(kind); ok {
+	if def, ok := workflowexec.StepDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind}); ok {
 		return def.SchemaFile
 	}
 	return strings.ToLower(kind) + ".schema.json"

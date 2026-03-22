@@ -17,18 +17,18 @@ phases:
             APT::Get::AllowUnauthenticated "true";
             Acquire::AllowInsecureRepositories "true";
             Acquire::AllowDowngradeToInsecureRepositories "true";
-      - id: apply-offline-repo-config-apt
+      - id: apply-offline-repo-config-deb
         when: vars.osFamily == "debian"
         apiVersion: deck/v1alpha1
         kind: ConfigureRepository
         spec:
-          format: apt
+          format: deb
           replaceExisting: true
           repositories:
             - id: offline-repo
               baseurl: http://{{ .vars.serverURL }}/packages/deb/{{ .vars.release }}
               trusted: true
-      - id: refresh-offline-repo-cache-apt
+      - id: refresh-offline-repo-cache-deb
         when: vars.osFamily == "debian"
         apiVersion: deck/v1alpha1
         kind: RefreshRepository
@@ -38,12 +38,12 @@ phases:
           update: true
           restrictToRepos:
             - /etc/apt/sources.list.d/deck-offline.list
-      - id: apply-offline-repo-config-yum
+      - id: apply-offline-repo-config-rpm
         when: vars.osFamily == "rhel"
         apiVersion: deck/v1alpha1
         kind: ConfigureRepository
         spec:
-          format: yum
+          format: rpm
           replaceExisting: true
           repositories:
             - id: offline-repo
@@ -51,8 +51,9 @@ phases:
               baseurl: http://{{ .vars.serverURL }}/packages/rpm/{{ .vars.release }}
               enabled: true
               gpgcheck: false
-              module_hotfixes: true
-      - id: refresh-offline-repo-cache-yum
+              extra:
+                module_hotfixes: true
+      - id: refresh-offline-repo-cache-rpm
         when: vars.osFamily == "rhel"
         apiVersion: deck/v1alpha1
         kind: RefreshRepository

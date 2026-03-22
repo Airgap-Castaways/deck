@@ -155,11 +155,19 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
+| `spec.fetch` | `object` | no | `` | `` | Optional download transport settings applied to `DownloadFile` fetches. | `{offlineOnly:true}` |
 | `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, `edit`, or `extractArchive` completes. | `0644` |
 | `spec.path` | `string` | yes | `` | `` | Destination path on the node. Used by `write`, `copy`, `edit`, and `extractArchive`. | `/etc/containerd/config.toml` |
 | `spec.source` | `object` | yes | `` | `` | Structured source descriptor for download, copy, or archive extraction. `path`, `bundle`, or `url` may be used depending on the step. | `{url:https://example.invalid/file.tar.gz}` |
 
 ### Nested Objects
+
+### `spec.fetch`
+
+| Key | Type | Required | Default | Enum | Description | Example |
+|---|---|---:|---|---|---|---|
+| `spec.fetch.offlineOnly` | `boolean` | no | `` | `` |  | `true` |
+| `spec.fetch.sources` | `array<object>` | no | `` | `` |  | `[{...}]` |
 
 ### `spec.source`
 
@@ -247,12 +255,20 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
+| `spec.fetch` | `object` | no | `` | `` | Optional download transport settings applied to `DownloadFile` fetches. | `{offlineOnly:true}` |
 | `spec.include` | `array<string>` | no | `` | `` | Optional archive members to extract when using `ExtractArchive`. Extract all members when omitted. | `[bridge,loopback]` |
 | `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, `edit`, or `extractArchive` completes. | `0644` |
 | `spec.path` | `string` | yes | `` | `` | Destination path on the node. Used by `write`, `copy`, `edit`, and `extractArchive`. | `/etc/containerd/config.toml` |
 | `spec.source` | `object` | yes | `` | `` | Structured source descriptor for download, copy, or archive extraction. `path`, `bundle`, or `url` may be used depending on the step. | `{url:https://example.invalid/file.tar.gz}` |
 
 ### Nested Objects
+
+### `spec.fetch`
+
+| Key | Type | Required | Default | Enum | Description | Example |
+|---|---|---:|---|---|---|---|
+| `spec.fetch.offlineOnly` | `boolean` | no | `` | `` |  | `true` |
+| `spec.fetch.sources` | `array<object>` | no | `` | `` |  | `[{...}]` |
 
 ### `spec.source`
 

@@ -2,13 +2,13 @@ steps:
   - id: apply-offline-repo-config-debian
     kind: ConfigureRepository
     spec:
-      format: apt
+      format: deb
       path: /etc/apt/sources.list.d/offline.list
       replaceExisting: true
       repositories:
         - type: deb
           trusted: true
-          baseurl: http://{{ .vars.serverURL  }}/packages/apt/{{ .vars.release  }}
+          baseurl: http://{{ .vars.serverURL  }}/packages/deb/{{ .vars.release  }}
           suite: ./
   - id: refresh-apt-package-cache
     kind: RefreshRepository

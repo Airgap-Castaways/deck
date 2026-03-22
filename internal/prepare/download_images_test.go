@@ -5,19 +5,19 @@ import (
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/name"
+
+	"github.com/taedi90/deck/internal/stepspec"
 )
 
 func TestParseImageRegistryAuth(t *testing.T) {
-	auth, err := parseImageRegistryAuth(map[string]any{
-		"auth": []any{
-			map[string]any{
-				"registry": "registry.example.com",
-				"basic": map[string]any{
-					"username": "robot",
-					"password": "secret",
-				},
+	auth, err := parseImageRegistryAuth(stepspec.DownloadImage{
+		Auth: []stepspec.ImageAuth{{
+			Registry: "registry.example.com",
+			Basic: stepspec.ImageAuthBasic{
+				Username: "robot",
+				Password: "secret",
 			},
-		},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("parseImageRegistryAuth failed: %v", err)
@@ -32,10 +32,10 @@ func TestParseImageRegistryAuth(t *testing.T) {
 }
 
 func TestParseImageRegistryAuthRejectsDuplicateRegistry(t *testing.T) {
-	_, err := parseImageRegistryAuth(map[string]any{
-		"auth": []any{
-			map[string]any{"registry": "registry.example.com", "basic": map[string]any{"username": "a", "password": "b"}},
-			map[string]any{"registry": "registry.example.com", "basic": map[string]any{"username": "c", "password": "d"}},
+	_, err := parseImageRegistryAuth(stepspec.DownloadImage{
+		Auth: []stepspec.ImageAuth{
+			{Registry: "registry.example.com", Basic: stepspec.ImageAuthBasic{Username: "a", Password: "b"}},
+			{Registry: "registry.example.com", Basic: stepspec.ImageAuthBasic{Username: "c", Password: "d"}},
 		},
 	})
 	if err == nil {

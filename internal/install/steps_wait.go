@@ -9,25 +9,10 @@ import (
 	"time"
 
 	"github.com/taedi90/deck/internal/executil"
+	"github.com/taedi90/deck/internal/stepspec"
 )
 
-type waitSpec struct {
-	Interval     string   `json:"interval"`
-	PollInterval string   `json:"pollInterval"`
-	InitialDelay string   `json:"initialDelay"`
-	Path         string   `json:"path"`
-	Paths        []string `json:"paths"`
-	Glob         string   `json:"glob"`
-	Type         string   `json:"type"`
-	NonEmpty     bool     `json:"nonEmpty"`
-	Name         string   `json:"name"`
-	Command      []string `json:"command"`
-	Address      string   `json:"address"`
-	Port         string   `json:"port"`
-	Timeout      string   `json:"timeout"`
-}
-
-func runWaitDecoded(parent context.Context, kind string, decoded waitSpec, timeout time.Duration) error {
+func runWaitDecoded(parent context.Context, kind string, decoded stepspec.Wait, timeout time.Duration) error {
 	interval := 500 * time.Millisecond
 	if raw := firstNonEmpty(decoded.Interval, decoded.PollInterval); raw != "" {
 		parsed, err := time.ParseDuration(raw)
@@ -82,7 +67,7 @@ func runWaitDecoded(parent context.Context, kind string, decoded waitSpec, timeo
 	}
 }
 
-func waitConditionMet(ctx context.Context, kind string, spec waitSpec) (bool, error) {
+func waitConditionMet(ctx context.Context, kind string, spec stepspec.Wait) (bool, error) {
 	switch kind {
 	case "WaitForFile":
 		return waitPathConditionMet(spec.Path, "exists", waitPathType(spec), spec.NonEmpty)
@@ -140,7 +125,7 @@ func waitConditionMet(ctx context.Context, kind string, spec waitSpec) (bool, er
 	}
 }
 
-func waitMissingPathConditionMet(spec waitSpec) (bool, error) {
+func waitMissingPathConditionMet(spec stepspec.Wait) (bool, error) {
 	if spec.Path != "" {
 		return waitPathConditionMet(spec.Path, "absent", waitPathType(spec), false)
 	}
@@ -166,7 +151,7 @@ func waitMissingPathConditionMet(spec waitSpec) (bool, error) {
 	return false, fmt.Errorf("wait.file-absent requires path, paths, or glob")
 }
 
-func waitPathType(spec waitSpec) string {
+func waitPathType(spec stepspec.Wait) string {
 	pathType := spec.Type
 	if pathType == "" {
 		pathType = "any"
@@ -229,7 +214,7 @@ func waitPathExpectedCondition(path, state, pathType string, nonEmpty bool) stri
 	return fmt.Sprintf("%s to %s", path, condition)
 }
 
-func waitMissingPathExpectedCondition(spec waitSpec) string {
+func waitMissingPathExpectedCondition(spec stepspec.Wait) string {
 	if len(spec.Paths) > 0 {
 		return fmt.Sprintf("%d paths to be absent", len(spec.Paths))
 	}

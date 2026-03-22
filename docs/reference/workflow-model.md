@@ -116,17 +116,23 @@ steps:
   - id: add-debian-repo
     kind: ConfigureRepository
     spec:
-      type: apt
-      name: offline-base
-      baseurl: file:///srv/offline-repo
+      format: deb
+      repositories:
+        - id: offline-base
+          baseurl: file:///srv/offline-repo
+          trusted: true
     when: vars.osFamily == "debian"
 
   - id: add-rhel-repo
     kind: ConfigureRepository
     spec:
-      type: yum
-      name: offline-base
-      baseurl: file:///srv/offline-repo
+      format: rpm
+      repositories:
+        - id: offline-base
+          name: offline-base
+          baseurl: file:///srv/offline-repo
+          enabled: true
+          gpgcheck: false
     when: vars.osFamily == "rhel"
 ```
 
@@ -198,7 +204,7 @@ phases:
             family: debian
             release: ubuntu2204
           repo:
-            type: apt-flat
+            type: deb-flat
           backend:
             mode: container
             runtime: docker
@@ -213,7 +219,7 @@ phases:
             family: rhel
             release: rhel9
           repo:
-            type: yum
+            type: rpm
           backend:
             mode: container
             runtime: docker

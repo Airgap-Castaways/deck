@@ -37,9 +37,9 @@ type PageMetadata struct {
 // These are merged into every tool's FieldDocs so non-action pages and any action-specific references
 // to shared fields use the same wording.
 var commonFieldDocs = map[string]FieldDoc{
-	"apiVersion": {Description: "Optional step API version. When omitted, deck uses the current default. When set, it must be a supported deck step API version.", Example: "deck/v1alpha1"},
+	"apiVersion": {Description: "Optional step API version. When omitted, deck resolves it from the top-level workflow `version`. When set, it must be a supported deck step API version.", Example: "deck/v1alpha1"},
 	"id":         {Description: "Unique identifier for the step within the workflow. Used in logs and plan output.", Example: "configure-containerd"},
-	"kind":       {Description: "Concrete typed step kind. Determines which schema is applied to `spec`.", Example: "WriteFile"},
+	"kind":       {Description: "Concrete typed step kind. Together with the effective `apiVersion`, it determines which schema is applied to `spec`.", Example: "WriteFile"},
 	"spec":       {Description: "Step-specific configuration payload. Shape depends on the chosen `kind`.", Example: "{...}"},
 	"when":       {Description: workflowcontract.WhenDescription(), Example: workflowcontract.WhenExample()},
 	"retry":      {Description: "Number of times to retry the step after a failure before marking it as failed.", Example: "3"},
@@ -258,6 +258,7 @@ var toolMetadata = map[string]ToolMetadata{
 		Notes: []string{
 			"`InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, `ResetKubeadm` focuses on cleanup fields, and `UpgradeKubeadm` performs local control-plane upgrades.",
 			"When `skipIfAdminConfExists` skips `InitKubeadm`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.",
+			"Load prepared control-plane images with `LoadImage` before `InitKubeadm` instead of relying on kubeadm image pulls hidden inside the bootstrap step.",
 			"Place host preparation steps (`WriteContainerdConfig`, `Swap`, `KernelModule`, `Sysctl`) before kubeadm bootstrap so failures point to the correct step.",
 		},
 	},
@@ -275,7 +276,7 @@ var toolMetadata = map[string]ToolMetadata{
 
 	"Package": {
 		ActionExamples: map[string]string{
-			"download": "kind: Package\nspec:\n  packages: [podman]\n  distro:\n    family: rhel\n    release: rocky9\n  repo:\n    type: yum\n    modules:\n      - name: container-tools\n        stream: \"4.0\"\n  backend:\n    mode: container\n    runtime: docker\n    image: rockylinux:9\n  outputDir: packages/rhel9\n",
+			"download": "kind: Package\nspec:\n  packages: [podman]\n  distro:\n    family: rhel\n    release: rocky9\n  repo:\n    type: rpm\n    modules:\n      - name: container-tools\n        stream: \"4.0\"\n  backend:\n    mode: container\n    runtime: docker\n    image: rockylinux:9\n  outputDir: packages/rpm/rocky9\n",
 			"install":  "kind: Package\nspec:\n  packages: [kubelet, kubeadm, kubectl]\n  source:\n    type: local-repo\n    path: /opt/deck/repos/kubernetes\n",
 		},
 		FieldDocs: map[string]FieldDoc{
@@ -283,11 +284,11 @@ var toolMetadata = map[string]ToolMetadata{
 			"spec.source":                {Description: "Local repository source for `InstallPackage`. Points to a pre-prepared on-disk package repo instead of relying on configured package manager sources.", Example: "{type:local-repo,path:/opt/deck/repos/kubernetes}"},
 			"spec.source.type":           {Description: "Source type. Currently `local-repo` is the only supported value.", Example: "local-repo"},
 			"spec.source.path":           {Description: "Filesystem path to the pre-prepared local package repository.", Example: "/opt/deck/repos/kubernetes"},
-			"spec.restrictToRepos":       {Description: "For `InstallPackage`, limit package manager visibility to these repository selectors. For apt, use repo file paths or globs; for dnf, use repo IDs.", Example: "[offline-kubernetes]"},
-			"spec.excludeRepos":          {Description: "For `InstallPackage`, repository selectors to exclude from package resolution. For apt, selectors match repo file paths; for dnf, they match repo IDs.", Example: "[updates]"},
+			"spec.restrictToRepos":       {Description: "For `InstallPackage`, limit package manager visibility to these repository selectors. For deb-family systems, use repo file paths or globs; for rpm-family systems, use repo IDs.", Example: "[offline-kubernetes]"},
+			"spec.excludeRepos":          {Description: "For `InstallPackage`, repository selectors to exclude from package resolution. For deb-family systems, selectors match repo file paths; for rpm-family systems, they match repo IDs.", Example: "[updates]"},
 			"spec.distro":                {Description: "Target distribution hint used by `DownloadPackage` to select the correct package manager and resolver backend.", Example: "{family:rhel,release:rocky9}"},
-			"spec.repo":                  {Description: "Package-manager repository settings applied before `DownloadPackage`, including repo layout generation and RPM module streams.", Example: "{type:yum,modules:[...]}"},
-			"spec.repo.type":             {Description: "Repository output type for `DownloadPackage` repo mode. Supported values are `apt-flat` and `yum`.", Example: "yum"},
+			"spec.repo":                  {Description: "Package repository settings applied before `DownloadPackage`, including repo layout generation and RPM module streams.", Example: "{type:rpm,modules:[...]}"},
+			"spec.repo.type":             {Description: "Repository output type for `DownloadPackage` repo mode. Supported values are `deb-flat` and `rpm`.", Example: "rpm"},
 			"spec.repo.generate":         {Description: "When `true`, generate repository metadata after the package payload is collected. Used with `repo.type` in download repo mode.", Example: "true"},
 			"spec.repo.pkgsDir":          {Description: "Subdirectory under the generated repo root where package payloads are written. Defaults to `pkgs`.", Example: "pkgs"},
 			"spec.repo.modules":          {Description: "RPM module streams to enable before resolving downloads on RHEL-family systems.", Example: "[{name:container-tools,stream:4.0}]"},
@@ -303,8 +304,8 @@ var toolMetadata = map[string]ToolMetadata{
 			"Use `DownloadPackage` and `InstallPackage` with `ConfigureRepository` and `RefreshRepository` for a complete typed package-management flow.",
 			"Keeping the same package list across `download` and `install` helps maintain offline parity.",
 			"Use `restrictToRepos` on the `InstallPackage` step to prevent the node's default online repos from being consulted during an offline apply.",
-			"When `repo` is set for `DownloadPackage`, deck expects `repo.type` and `distro.release` so it can build an apt-flat or yum-style repository layout.",
-			"Container-backed `DownloadPackage` exports completed artifacts into a host-owned cache and does not bind-mount apt/dnf package-manager cache directories.",
+			"When `repo` is set for `DownloadPackage`, deck expects `repo.type` and `distro.release` so it can build a `deb-flat` or `rpm` repository layout.",
+			"Container-backed `DownloadPackage` exports completed artifacts into a host-owned cache and does not bind-mount deb/rpm package-manager cache directories.",
 			"Older releases may have left root-owned content under legacy package cache paths; clean those directories manually after upgrading if needed.",
 			"Without a container download backend, `download` currently writes placeholder package markers instead of resolving real packages.",
 		},
@@ -312,23 +313,24 @@ var toolMetadata = map[string]ToolMetadata{
 
 	"Repository": {
 		ActionExamples: map[string]string{
-			"configure": "kind: ConfigureRepository\nspec:\n  format: apt\n  path: /etc/apt/sources.list.d/offline.list\n  repositories:\n    - id: offline\n      baseurl: http://repo.local/debian\n      trusted: true\n",
+			"configure": "kind: ConfigureRepository\nspec:\n  format: deb\n  path: /etc/apt/sources.list.d/offline.list\n  repositories:\n    - baseurl: http://repo.local/debian\n      trusted: true\n",
 			"refresh":   "kind: RefreshRepository\nspec:\n  manager: apt\n  clean: true\n  update: true\n  restrictToRepos:\n    - /etc/apt/sources.list.d/offline.list\n",
 		},
 		FieldDocs: map[string]FieldDoc{
-			"spec.format":          {Description: "Repository file format to write. `auto` detects from the host family, `apt` produces a sources.list entry, and `yum` produces a `.repo` file.", Example: "apt"},
-			"spec.path":            {Description: "Explicit output path for the generated repository file. Defaults to `/etc/apt/sources.list.d/deck-offline.list` for apt or `/etc/yum.repos.d/deck-offline.repo` for yum when omitted.", Example: "/etc/apt/sources.list.d/offline.list"},
-			"spec.mode":            {Description: "File permissions applied to the generated repository file in octal notation.", Example: "0644"},
-			"spec.replaceExisting": {Description: "Replace an existing repository file at the target path before writing the new definition.", Example: "true"},
-			"spec.disableExisting": {Description: "Disable all existing repository definitions before writing the new one. Prevents conflicts from online repos during offline installs.", Example: "true"},
-			"spec.backupPaths":     {Description: "Paths to back up before modifying. Backed-up files are saved with a `.bak` suffix.", Example: "[/etc/apt/sources.list]"},
-			"spec.cleanupPaths":    {Description: "Paths to remove before writing the new repository definition.", Example: "[/etc/apt/sources.list.d/ubuntu.list]"},
-			"spec.repositories":    {Description: "Repository entries to write. Each entry maps to one repository block in the generated file.", Example: "[{id:offline,baseurl:http://repo.local/debian}]"},
-			"spec.manager":         {Description: "Package manager to use for repository metadata refresh. `auto` detects from the host OS. Supports `apt` and `dnf`.", Example: "apt"},
-			"spec.clean":           {Description: "Run a cache clean before updating metadata (`apt clean` / `dnf clean all`).", Example: "true"},
-			"spec.update":          {Description: "Fetch fresh package metadata from the configured repositories (`apt update` / `dnf makecache`).", Example: "true"},
-			"spec.restrictToRepos": {Description: "Limit the metadata update to these repository selectors. For apt, use repo file paths or globs; for dnf, use repo IDs. Prevents fetching from online repos during an offline install.", Example: "[/etc/apt/sources.list.d/offline.list]"},
-			"spec.excludeRepos":    {Description: "Repository selectors to skip during metadata update. For apt, selectors match repo file paths; for dnf, they match repo IDs.", Example: "[updates]"},
+			"spec.format":               {Description: "Repository file format to write. `auto` detects from the host family, `deb` produces a sources.list style entry, and `rpm` produces a `.repo` file.", Example: "deb"},
+			"spec.path":                 {Description: "Explicit output path for the generated repository file. Defaults to `/etc/apt/sources.list.d/deck-offline.list` for deb-family systems or `/etc/yum.repos.d/deck-offline.repo` for rpm-family systems when omitted.", Example: "/etc/apt/sources.list.d/offline.list"},
+			"spec.mode":                 {Description: "File permissions applied to the generated repository file in octal notation.", Example: "0644"},
+			"spec.replaceExisting":      {Description: "Replace an existing repository file at the target path before writing the new definition.", Example: "true"},
+			"spec.disableExisting":      {Description: "Disable all existing repository definitions before writing the new one. Prevents conflicts from online repos during offline installs.", Example: "true"},
+			"spec.backupPaths":          {Description: "Paths to back up before modifying. Backed-up files are saved with a `.bak` suffix.", Example: "[/etc/apt/sources.list]"},
+			"spec.cleanupPaths":         {Description: "Paths to remove before writing the new repository definition.", Example: "[/etc/apt/sources.list.d/ubuntu.list]"},
+			"spec.repositories":         {Description: "Repository entries to write. deb entries use fields like `baseurl`, `suite`, `component`, and optional `trusted`; rpm entries use fields like `id`, `name`, `baseurl`, and optional `extra` for additional repo keys.", Example: "[{baseurl:http://repo.local/debian,trusted:true}]"},
+			"spec.repositories[].extra": {Description: "Additional rpm-style repository key-value pairs written after the typed fields. Use this sparingly for repository-specific options not modeled directly.", Example: "{priority:10,module_hotfixes:true}"},
+			"spec.manager":              {Description: "Package manager to use for repository metadata refresh. `auto` detects from the host OS. Supports `apt` and `dnf`.", Example: "apt"},
+			"spec.clean":                {Description: "Run a cache clean before updating metadata (`apt clean` / `dnf clean all`).", Example: "true"},
+			"spec.update":               {Description: "Fetch fresh package metadata from the configured repositories (`apt update` / `dnf makecache`).", Example: "true"},
+			"spec.restrictToRepos":      {Description: "Limit the metadata update to these repository selectors. For apt, use repo file paths or globs; for dnf, use repo IDs. Prevents fetching from online repos during an offline install.", Example: "[/etc/apt/sources.list.d/offline.list]"},
+			"spec.excludeRepos":         {Description: "Repository selectors to skip during metadata update. For apt, selectors match repo file paths; for dnf, they match repo IDs.", Example: "[updates]"},
 		},
 		Notes: []string{
 			"`ConfigureRepository` only writes repository definition files. Use `RefreshRepository` when the package manager needs an explicit metadata refresh.",
@@ -426,21 +428,19 @@ var toolMetadata = map[string]ToolMetadata{
 	},
 }
 
-func ToolMeta(kind string) ToolMetadata {
-	def, hasDefinition := workflowcontract.StepDefinitionForKind(kind)
+func ToolMetaForDefinition(def workflowcontract.StepDefinition) ToolMetadata {
+	kind := def.Kind
 	meta, ok := toolMetadata[kind]
-	if !ok && hasDefinition {
+	if !ok {
 		meta, ok = toolMetadata[def.FamilyTitle]
 	}
-	if !ok && !hasDefinition {
+	if !ok {
 		return ToolMetadata{Kind: kind, Category: "other", Summary: "Generated schema reference.", WhenToUse: "Use this schema according to the workflow contract."}
 	}
 	meta.Kind = kind
-	if hasDefinition {
-		meta.Category = def.Category
-		meta.Summary = def.Summary
-		meta.WhenToUse = def.WhenToUse
-	}
+	meta.Category = def.Category
+	meta.Summary = def.Summary
+	meta.WhenToUse = def.WhenToUse
 	meta.Example = normalizedToolExample(kind, def, meta)
 	// Merge common field docs so every tool page documents shared execution controls.
 	merged := make(map[string]FieldDoc, len(commonFieldDocs)+len(meta.FieldDocs))
@@ -519,8 +519,8 @@ func WorkflowMeta() PageMetadata {
 		FieldDocs: map[string]FieldDoc{
 			"phases":                  {Description: "Ordered execution phases. Each phase can contain imports, steps, or both.", Example: "[{name:install,steps:[...]}]"},
 			"steps":                   {Description: "Flat step list for workflows that do not need named phases. Execution normalizes these steps into an implicit `default` phase.", Example: "[{id:configure-runtime,kind:WriteContainerdConfig,spec:{...}}]"},
-			"steps[].kind":            {Description: "Typed step kind selected from the shipped public step inventory.", Example: "WriteFile"},
-			"steps[].spec":            {Description: "Step payload validated against the schema for the chosen kind.", Example: "{path:/etc/example.conf,content:hello}"},
+			"steps[].kind":            {Description: "Typed step kind selected from the shipped public step inventory. Deck resolves step identity from effective `apiVersion` plus `kind`.", Example: "WriteFile"},
+			"steps[].spec":            {Description: "Step payload validated against the schema for the resolved step identity.", Example: "{path:/etc/example.conf,content:hello}"},
 			"steps[].when":            {Description: workflowcontract.WhenDescription(), Example: `vars.skipSetup != "true"`},
 			"steps[].parallelGroup":   {Description: "Optional batch label. Consecutive steps with the same value in a phase may run in parallel and publish register outputs only after the whole batch succeeds.", Example: "downloads"},
 			"steps[].retry":           {Description: "Number of times to retry the step after a failure before marking it as failed.", Example: "3"},
@@ -535,6 +535,7 @@ func WorkflowMeta() PageMetadata {
 			"A workflow cannot define both top-level `phases` and top-level `steps` at the same time.",
 			"Top-level `steps` execute as an implicit phase named `default`.",
 			"Imports are only supported under `phases[].imports` and resolve from `workflows/components/`.",
+			"When a step omits `apiVersion`, deck resolves it from the top-level workflow `version` before schema and role checks run.",
 			"Workflow mode is determined by command context or file location, not by an in-file `role` field.",
 			"Each step still validates against its own kind-specific schema after the top-level workflow schema passes.",
 		},

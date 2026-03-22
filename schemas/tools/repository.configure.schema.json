@@ -5,7 +5,8 @@
   "description": "Configures repository definitions on the local node.",
   "properties": {
     "apiVersion": {
-      "const": "deck/v1alpha1"
+      "const": "deck/v1alpha1",
+      "type": "string"
     },
     "id": {
       "type": "string"
@@ -35,6 +36,8 @@
       "type": "integer"
     },
     "spec": {
+      "$id": "https://github.com/taedi90/deck/internal/stepspec/configure-repository",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
         "backupPaths": {
@@ -55,8 +58,8 @@
         "format": {
           "enum": [
             "auto",
-            "apt",
-            "yum"
+            "deb",
+            "rpm"
           ],
           "type": "string"
         },
@@ -72,7 +75,68 @@
         },
         "repositories": {
           "items": {
-            "additionalProperties": true,
+            "additionalProperties": false,
+            "properties": {
+              "baseurl": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "component": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "extra": {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              "gpgcheck": {
+                "type": "boolean"
+              },
+              "gpgkey": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "suite": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "trusted": {
+                "type": "boolean"
+              },
+              "type": {
+                "enum": [
+                  "deb",
+                  "deb-src"
+                ],
+                "type": "string"
+              }
+            },
             "type": "object"
           },
           "minItems": 1,

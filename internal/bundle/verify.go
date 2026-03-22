@@ -355,22 +355,22 @@ func isManifestTrackedPath(rel string) bool {
 }
 
 func verifyOfflineArtifactCoverage(bundleRoot string, manifestPaths map[string]struct{}) error {
-	for _, repoRoot := range []string{filepath.Join("outputs", "packages", "apt"), filepath.Join("packages", "apt")} {
+	for _, repoRoot := range []string{filepath.Join("outputs", "packages", "deb"), filepath.Join("packages", "deb")} {
 		if err := verifyAPTRepoCoverage(bundleRoot, manifestPaths, repoRoot); err != nil {
 			return err
 		}
 	}
-	for _, repoRoot := range []string{filepath.Join("outputs", "packages", "apt-k8s"), filepath.Join("packages", "apt-k8s")} {
+	for _, repoRoot := range []string{filepath.Join("outputs", "packages", "deb-k8s"), filepath.Join("packages", "deb-k8s")} {
 		if err := verifyAPTRepoCoverage(bundleRoot, manifestPaths, repoRoot); err != nil {
 			return err
 		}
 	}
-	for _, repoRoot := range []string{filepath.Join("outputs", "packages", "yum"), filepath.Join("packages", "yum")} {
+	for _, repoRoot := range []string{filepath.Join("outputs", "packages", "rpm"), filepath.Join("packages", "rpm")} {
 		if err := verifyYUMRepoCoverage(bundleRoot, manifestPaths, repoRoot); err != nil {
 			return err
 		}
 	}
-	for _, repoRoot := range []string{filepath.Join("outputs", "packages", "yum-k8s"), filepath.Join("packages", "yum-k8s")} {
+	for _, repoRoot := range []string{filepath.Join("outputs", "packages", "rpm-k8s"), filepath.Join("packages", "rpm-k8s")} {
 		if err := verifyYUMRepoCoverage(bundleRoot, manifestPaths, repoRoot); err != nil {
 			return err
 		}
@@ -380,22 +380,22 @@ func verifyOfflineArtifactCoverage(bundleRoot string, manifestPaths map[string]s
 }
 
 func verifyOfflineArtifactCoverageFromTar(files map[string]tarFileInfo, dirs map[string]struct{}, manifestPaths map[string]struct{}) error {
-	for _, repoRoot := range []string{path.Join("outputs", "packages", "apt"), path.Join("packages", "apt")} {
+	for _, repoRoot := range []string{path.Join("outputs", "packages", "deb"), path.Join("packages", "deb")} {
 		if err := verifyAPTRepoCoverageFromTar(files, dirs, manifestPaths, repoRoot); err != nil {
 			return err
 		}
 	}
-	for _, repoRoot := range []string{path.Join("outputs", "packages", "apt-k8s"), path.Join("packages", "apt-k8s")} {
+	for _, repoRoot := range []string{path.Join("outputs", "packages", "deb-k8s"), path.Join("packages", "deb-k8s")} {
 		if err := verifyAPTRepoCoverageFromTar(files, dirs, manifestPaths, repoRoot); err != nil {
 			return err
 		}
 	}
-	for _, repoRoot := range []string{path.Join("outputs", "packages", "yum"), path.Join("packages", "yum")} {
+	for _, repoRoot := range []string{path.Join("outputs", "packages", "rpm"), path.Join("packages", "rpm")} {
 		if err := verifyYUMRepoCoverageFromTar(files, dirs, manifestPaths, repoRoot); err != nil {
 			return err
 		}
 	}
-	for _, repoRoot := range []string{path.Join("outputs", "packages", "yum-k8s"), path.Join("packages", "yum-k8s")} {
+	for _, repoRoot := range []string{path.Join("outputs", "packages", "rpm-k8s"), path.Join("packages", "rpm-k8s")} {
 		if err := verifyYUMRepoCoverageFromTar(files, dirs, manifestPaths, repoRoot); err != nil {
 			return err
 		}

@@ -244,7 +244,12 @@ func executePrepareStep(ctx context.Context, runner CommandRunner, bundleRoot st
 			break
 		}
 		inputVars := collectStepInputVarValues(step.Spec, wf.Vars)
-		stepFiles, outputs, stepErr := runPrepareRenderedStep(ctx, runner, bundleRoot, step, rendered, inputVars, opts)
+		key, keyErr := workflowexec.ResolveStepTypeKey(wf.Version, step.APIVersion, step.Kind)
+		if keyErr != nil {
+			execErr = keyErr
+			continue
+		}
+		stepFiles, outputs, stepErr := runPrepareRenderedStepWithKey(ctx, runner, bundleRoot, step, rendered, key, inputVars, opts)
 		if stepErr == nil {
 			return prepareBatchResult{files: stepFiles, outputs: outputs}, nil
 		}
@@ -274,60 +279,6 @@ func evaluateWhen(expr string, vars map[string]any, runtime map[string]any) (boo
 
 func EvaluateWhen(expr string, vars map[string]any, runtime map[string]any) (bool, error) {
 	return evaluateWhen(expr, vars, runtime)
-}
-
-func mapValue(v map[string]any, key string) map[string]any {
-	if v == nil {
-		return map[string]any{}
-	}
-	if mv, ok := v[key].(map[string]any); ok {
-		return mv
-	}
-	return map[string]any{}
-}
-
-func stringValue(v map[string]any, key string) string {
-	if v == nil {
-		return ""
-	}
-	raw, ok := v[key]
-	if !ok {
-		return ""
-	}
-	s, ok := raw.(string)
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(s)
-}
-
-func stringSlice(v any) []string {
-	items, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	result := make([]string, 0, len(items))
-	for _, it := range items {
-		if s, ok := it.(string); ok && strings.TrimSpace(s) != "" {
-			result = append(result, strings.TrimSpace(s))
-		}
-	}
-	return result
-}
-
-func boolValue(v map[string]any, key string) bool {
-	if v == nil {
-		return false
-	}
-	raw, ok := v[key]
-	if !ok {
-		return false
-	}
-	b, ok := raw.(bool)
-	if !ok {
-		return false
-	}
-	return b
 }
 
 func fileManifestEntry(bundleRoot, rel string) (manifestEntry, error) {

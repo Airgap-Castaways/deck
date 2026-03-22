@@ -20,6 +20,9 @@ import (
 	"time"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/stepspec"
+	"github.com/taedi90/deck/internal/workflowcontract"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 func useStubInitJoinKubeadm(t *testing.T) {
@@ -30,10 +33,10 @@ func useStubInitJoinKubeadm(t *testing.T) {
 		kubeadmInitExecutor = origInit
 		kubeadmJoinExecutor = origJoin
 	})
-	kubeadmInitExecutor = func(_ context.Context, spec kubeadmInitSpec) error {
+	kubeadmInitExecutor = func(_ context.Context, spec stepspec.KubeadmInit) error {
 		return runInitKubeadmStub(spec)
 	}
-	kubeadmJoinExecutor = func(_ context.Context, spec kubeadmJoinSpec) error {
+	kubeadmJoinExecutor = func(_ context.Context, spec stepspec.KubeadmJoin) error {
 		return runJoinKubeadmStub(spec)
 	}
 }
@@ -44,7 +47,7 @@ func useStubResetKubeadm(t *testing.T) {
 	t.Cleanup(func() {
 		kubeadmResetExecutor = origReset
 	})
-	kubeadmResetExecutor = func(_ context.Context, spec kubeadmResetSpec) error {
+	kubeadmResetExecutor = func(_ context.Context, spec stepspec.KubeadmReset) error {
 		return runResetKubeadmStub(spec)
 	}
 }
@@ -55,7 +58,7 @@ func useStubUpgradeKubeadm(t *testing.T) {
 	t.Cleanup(func() {
 		kubeadmUpgradeExecutor = origUpgrade
 	})
-	kubeadmUpgradeExecutor = func(_ context.Context, spec kubeadmUpgradeSpec) error {
+	kubeadmUpgradeExecutor = func(_ context.Context, spec stepspec.KubeadmUpgrade) error {
 		return runUpgradeKubeadmStub(spec)
 	}
 }
@@ -66,7 +69,7 @@ func useStubCheckCluster(t *testing.T) {
 	t.Cleanup(func() {
 		checkClusterExecutor = origCheckCluster
 	})
-	checkClusterExecutor = func(_ context.Context, spec clusterCheckSpec) error {
+	checkClusterExecutor = func(_ context.Context, spec stepspec.ClusterCheck) error {
 		return runCheckClusterStub(spec)
 	}
 }
@@ -1449,7 +1452,7 @@ func TestRun_KubeadmRealModeSupportsImagePullAndConfigWrite(t *testing.T) {
 	}
 	kubeadmLog := filepath.Join(dir, "kubeadm.log")
 	fakeKubeadmPath := filepath.Join(binDir, "kubeadm")
-	fakeKubeadmScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + kubeadmLog + "\"\nif [[ \"${1:-}\" == \"config\" && \"${2:-}\" == \"images\" && \"${3:-}\" == \"pull\" ]]; then\n  exit 0\nfi\nif [[ \"${1:-}\" == \"init\" ]]; then\n  exit 0\nfi\nif [[ \"${1:-}\" == \"token\" && \"${2:-}\" == \"create\" ]]; then\n  echo \"kubeadm join 10.1.0.10:6443 --token fake.token --discovery-token-ca-cert-hash sha256:fake\"\n  exit 0\nfi\necho \"unsupported kubeadm invocation\" >&2\nexit 1\n"
+	fakeKubeadmScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + kubeadmLog + "\"\nif [[ \"${1:-}\" == \"init\" ]]; then\n  exit 0\nfi\nif [[ \"${1:-}\" == \"token\" && \"${2:-}\" == \"create\" ]]; then\n  echo \"kubeadm join 10.1.0.10:6443 --token fake.token --discovery-token-ca-cert-hash sha256:fake\"\n  exit 0\nfi\necho \"unsupported kubeadm invocation\" >&2\nexit 1\n"
 	if err := os.WriteFile(fakeKubeadmPath, []byte(fakeKubeadmScript), 0o755); err != nil {
 		t.Fatalf("write fake kubeadm: %v", err)
 	}
@@ -1475,7 +1478,6 @@ func TestRun_KubeadmRealModeSupportsImagePullAndConfigWrite(t *testing.T) {
 					"outputJoinFile":        joinPath,
 					"configFile":            configPath,
 					"configTemplate":        "default",
-					"pullImages":            true,
 					"kubernetesVersion":     "v1.30.14",
 					"podNetworkCIDR":        "10.244.0.0/16",
 					"criSocket":             "unix:///run/containerd/containerd.sock",
@@ -1513,9 +1515,6 @@ func TestRun_KubeadmRealModeSupportsImagePullAndConfigWrite(t *testing.T) {
 		t.Fatalf("read kubeadm log: %v", err)
 	}
 	logText := string(logRaw)
-	if !strings.Contains(logText, "config images pull --kubernetes-version v1.30.14 --cri-socket unix:///run/containerd/containerd.sock") {
-		t.Fatalf("expected kubeadm image pull invocation, got %q", logText)
-	}
 	if !strings.Contains(logText, "init --config "+configPath+" --ignore-preflight-errors swap --skip-phases=addon/kube-proxy") {
 		t.Fatalf("expected kubeadm init args with config file only, got %q", logText)
 	}
@@ -2217,7 +2216,7 @@ func TestCommandOutputWithContext_RejectsNilContext(t *testing.T) {
 }
 
 func TestExecuteStep_CopyFileDecodeError(t *testing.T) {
-	err := executeStep(context.Background(), "CopyFile", map[string]any{"source": 42, "path": "/tmp/out"}, ExecutionContext{})
+	err := executeWorkflowStep(context.Background(), config.Step{Kind: "CopyFile", Spec: map[string]any{"source": 42, "path": "/tmp/out"}}, map[string]any{"source": 42, "path": "/tmp/out"}, workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: "CopyFile"}, ExecutionContext{})
 	if err == nil {
 		t.Fatalf("expected decode error")
 	}
@@ -3348,11 +3347,11 @@ func TestWriteSystemdUnitStep(t *testing.T) {
 }
 
 func TestRepoConfigStep(t *testing.T) {
-	t.Run("yum with explicit path", func(t *testing.T) {
+	t.Run("rpm with explicit path", func(t *testing.T) {
 		dir := t.TempDir()
 		target := filepath.Join(dir, "repo", "offline.repo")
 		spec := map[string]any{
-			"format": "yum",
+			"format": "rpm",
 			"path":   target,
 			"repositories": []any{map[string]any{
 				"id":       "offline-base",
@@ -3375,11 +3374,11 @@ func TestRepoConfigStep(t *testing.T) {
 		}
 	})
 
-	t.Run("apt list rendering", func(t *testing.T) {
+	t.Run("deb list rendering", func(t *testing.T) {
 		dir := t.TempDir()
 		target := filepath.Join(dir, "repo", "offline.list")
 		spec := map[string]any{
-			"format": "apt",
+			"format": "deb",
 			"path":   target,
 			"repositories": []any{map[string]any{
 				"baseurl":   "http://repo.local/apt/bookworm",
@@ -3413,8 +3412,8 @@ func TestRepoConfigStep(t *testing.T) {
 			return map[string]any{"os": map[string]any{"family": "debian"}}
 		}
 		repoConfigDefaultPathFunc = func(format string) string {
-			if format != "apt" {
-				t.Fatalf("expected apt format, got %s", format)
+			if format != "deb" {
+				t.Fatalf("expected deb format, got %s", format)
 			}
 			return target
 		}
@@ -3450,7 +3449,7 @@ func TestRepoConfigStep(t *testing.T) {
 		}
 
 		spec := map[string]any{
-			"format":       "yum",
+			"format":       "rpm",
 			"path":         target,
 			"cleanupPaths": []any{filepath.Join(dir, "legacy-*.repo")},
 			"backupPaths":  []any{filepath.Join(dir, "legacy-*.repo")},
@@ -3476,7 +3475,7 @@ func TestRepoConfigStep(t *testing.T) {
 		}
 	})
 
-	t.Run("disable existing yum repositories", func(t *testing.T) {
+	t.Run("disable existing rpm repositories", func(t *testing.T) {
 		dir := t.TempDir()
 		target := filepath.Join(dir, "offline.repo")
 		existing := filepath.Join(dir, "legacy.repo")
@@ -3485,7 +3484,7 @@ func TestRepoConfigStep(t *testing.T) {
 		}
 
 		spec := map[string]any{
-			"format":          "yum",
+			"format":          "rpm",
 			"path":            target,
 			"disableExisting": true,
 			"backupPaths":     []any{existing},
@@ -3507,7 +3506,7 @@ func TestRepoConfigStep(t *testing.T) {
 		}
 	})
 
-	t.Run("disable existing apt source paths", func(t *testing.T) {
+	t.Run("disable existing deb source paths", func(t *testing.T) {
 		dir := t.TempDir()
 		target := filepath.Join(dir, "offline.list")
 		existing := filepath.Join(dir, "legacy.list")
@@ -3516,7 +3515,7 @@ func TestRepoConfigStep(t *testing.T) {
 		}
 
 		spec := map[string]any{
-			"format":          "apt",
+			"format":          "deb",
 			"path":            target,
 			"disableExisting": true,
 			"backupPaths":     []any{existing},
@@ -3559,7 +3558,7 @@ func TestRepoConfigStep(t *testing.T) {
 		}
 
 		spec := map[string]any{
-			"format": "apt",
+			"format": "deb",
 			"path":   target,
 			"repositories": []any{map[string]any{
 				"baseurl": "http://repo.local/apt/bookworm",
@@ -3585,7 +3584,7 @@ func TestRepoConfigStep(t *testing.T) {
 		}
 
 		spec := map[string]any{
-			"format": "apt",
+			"format": "deb",
 			"path":   target,
 			"repositories": []any{map[string]any{
 				"baseurl": "http://repo.local/apt/bookworm",
@@ -3920,7 +3919,7 @@ func TestRun_RepositoryRequiresExplicitAction(t *testing.T) {
 				ID:   "repo-config",
 				Kind: "ConfigureRepository",
 				Spec: map[string]any{
-					"format":       "apt",
+					"format":       "deb",
 					"path":         target,
 					"repositories": []any{map[string]any{"id": "offline", "baseurl": "http://repo.local/debian"}},
 				},

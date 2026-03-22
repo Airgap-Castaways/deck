@@ -5,7 +5,8 @@
   "description": "Loads and persists required kernel modules on the local node.",
   "properties": {
     "apiVersion": {
-      "const": "deck/v1alpha1"
+      "const": "deck/v1alpha1",
+      "type": "string"
     },
     "id": {
       "type": "string"

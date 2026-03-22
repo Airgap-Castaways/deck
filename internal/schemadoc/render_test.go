@@ -96,7 +96,7 @@ func testFamilyPageInput(t *testing.T, family string) PageInput {
 			Description: def.Summary,
 			SchemaPath:  filepath.ToSlash(filepath.Join("schemas", "tools", def.SchemaFile)),
 			Schema:      schema,
-			Meta:        ToolMeta(def.Kind),
+			Meta:        ToolMetaForDefinition(def),
 			Required:    toRequiredStrings(spec["required"]),
 			Spec:        spec,
 			Outputs:     append([]string(nil), def.Outputs...),

@@ -110,8 +110,8 @@ func buildStepKinds() []StepKindContext {
 	defs := workflowexec.StepDefinitions()
 	out := make([]StepKindContext, 0, len(defs))
 	for _, def := range defs {
-		meta := schemadoc.ToolMeta(def.Kind)
-		contract, _ := workflowexec.StepContractForKind(def.Kind)
+		meta := schemadoc.ToolMetaForDefinition(def)
+		contract, _ := workflowexec.StepContractForKey(workflowexec.StepTypeKey{APIVersion: def.APIVersion, Kind: def.Kind})
 		ctx := StepKindContext{
 			Kind:         def.Kind,
 			Category:     def.Category,

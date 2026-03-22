@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/taedi90/deck/internal/stepspec"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 const defaultRefreshRepositoryTimeout = 2 * time.Minute
@@ -14,19 +17,31 @@ func runRefreshRepository(ctx context.Context, spec map[string]any) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
-	return runRefreshRepositoryWithRunner(spec, func(name string, args []string, timeout time.Duration) error {
+	decoded, err := workflowexec.DecodeSpec[stepspec.RefreshRepository](spec)
+	if err != nil {
+		return fmt.Errorf("decode RefreshRepository spec: %w", err)
+	}
+	return runRefreshRepositoryWithRunnerSpec(decoded, func(name string, args []string, timeout time.Duration) error {
 		return runTimedCommandWithContext(ctx, name, args, timeout)
 	})
 }
 
 func runRefreshRepositoryWithRunner(spec map[string]any, runner func(name string, args []string, timeout time.Duration) error) error {
+	decoded, err := workflowexec.DecodeSpec[stepspec.RefreshRepository](spec)
+	if err != nil {
+		return fmt.Errorf("decode RefreshRepository spec: %w", err)
+	}
+	return runRefreshRepositoryWithRunnerSpec(decoded, runner)
+}
+
+func runRefreshRepositoryWithRunnerSpec(spec stepspec.RefreshRepository, runner func(name string, args []string, timeout time.Duration) error) error {
 	manager, err := resolveRefreshRepositoryManager(spec)
 	if err != nil {
 		return err
 	}
 
-	clean := boolValue(spec, "clean")
-	update := boolValue(spec, "update")
+	clean := spec.Clean
+	update := spec.Update
 	if !clean && !update {
 		return fmt.Errorf("%s: RefreshRepository requires clean and/or update", errCodeInstallRefreshRepositoryMgr)
 	}
@@ -35,15 +50,15 @@ func runRefreshRepositoryWithRunner(spec map[string]any, runner func(name string
 		manager,
 		clean,
 		update,
-		packageRepoPolicyFromSpec(spec),
-		commandTimeoutWithDefault(spec, defaultRefreshRepositoryTimeout),
+		buildPackageRepoPolicy(spec.RestrictToRepos, spec.ExcludeRepos),
+		parseStepTimeout(spec.Timeout, defaultRefreshRepositoryTimeout),
 		runner,
 		"package cache refresh",
 	)
 }
 
-func resolveRefreshRepositoryManager(spec map[string]any) (string, error) {
-	manager := stringValue(spec, "manager")
+func resolveRefreshRepositoryManager(spec stepspec.RefreshRepository) (string, error) {
+	manager := strings.TrimSpace(spec.Manager)
 	if manager == "" {
 		manager = "auto"
 	}
@@ -52,7 +67,7 @@ func resolveRefreshRepositoryManager(spec map[string]any) (string, error) {
 	case "apt", "dnf":
 		return manager, nil
 	case "auto":
-		autoFormat, err := resolveRepoConfigFormat(map[string]any{"format": "auto"})
+		autoFormat, err := resolveRepoConfigFormat("auto")
 		if err != nil {
 			return "", err
 		}
@@ -63,7 +78,7 @@ func resolveRefreshRepositoryManager(spec map[string]any) (string, error) {
 }
 
 func repoConfigFormatToPackageManager(format string) string {
-	if format == "apt" {
+	if format == "deb" {
 		return "apt"
 	}
 	return "dnf"

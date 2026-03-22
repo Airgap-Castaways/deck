@@ -21,10 +21,10 @@ type aptRepoSelection struct {
 	Cleanup  func()
 }
 
-func packageRepoPolicyFromSpec(spec map[string]any) packageRepoPolicy {
+func buildPackageRepoPolicy(restrictTo, exclude []string) packageRepoPolicy {
 	return packageRepoPolicy{
-		RestrictTo: stringSlice(spec["restrictToRepos"]),
-		Exclude:    stringSlice(spec["excludeRepos"]),
+		RestrictTo: restrictTo,
+		Exclude:    exclude,
 	}
 }
 
@@ -97,7 +97,7 @@ func selectAPTRepoPaths(policy packageRepoPolicy) ([]string, error) {
 			return nil, err
 		}
 	} else {
-		paths, err = resolveRepoConfigPaths(defaultRepoConfigCleanupPatterns("apt"))
+		paths, err = resolveRepoConfigPaths(defaultRepoConfigCleanupPatterns("deb"))
 		if err != nil {
 			return nil, err
 		}
