@@ -1,9 +1,11 @@
 package validate
 
+import "github.com/taedi90/deck/internal/workflowcontract"
+
 var workflowTopLevelModes = []string{"phases", "steps"}
 
 const (
-	workflowSupportedVersion = "v1alpha1"
+	workflowSupportedVersion = workflowcontract.SupportedWorkflowVersion
 	workflowImportRule       = "Imports are only supported under phases[].imports and resolve from workflows/components/."
 )
 

@@ -10,19 +10,16 @@ import (
 	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/hostfs"
+	"github.com/taedi90/deck/internal/stepspec"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
-type kernelModuleSpec struct {
-	Name        string   `json:"name"`
-	Names       []string `json:"names"`
-	Load        *bool    `json:"load"`
-	Persist     *bool    `json:"persist"`
-	PersistFile string   `json:"persistFile"`
-}
-
 func runSysctl(ctx context.Context, spec map[string]any) error {
-	path := stringValue(spec, "writeFile")
+	decoded, err := workflowexec.DecodeSpec[stepspec.Sysctl](spec)
+	if err != nil {
+		return fmt.Errorf("decode Sysctl spec: %w", err)
+	}
+	path := strings.TrimSpace(decoded.WriteFile)
 	if path == "" {
 		return fmt.Errorf("%s: Sysctl requires writeFile", errCodeInstallSysctlPathMiss)
 	}
@@ -31,8 +28,8 @@ func runSysctl(ctx context.Context, spec map[string]any) error {
 		return err
 	}
 
-	values, ok := spec["values"].(map[string]any)
-	if !ok || len(values) == 0 {
+	values := decoded.Values
+	if len(values) == 0 {
 		return fmt.Errorf("%s: Sysctl requires values", errCodeInstallSysctlValsMiss)
 	}
 
@@ -44,9 +41,9 @@ func runSysctl(ctx context.Context, spec map[string]any) error {
 	if err := hostPath.WriteFile([]byte(strings.Join(lines, "\n")+"\n"), filemode.PublishedArtifact); err != nil {
 		return err
 	}
-	if boolValue(spec, "apply") {
+	if decoded.Apply {
 		applySpec := map[string]any{"file": path}
-		if timeout := stringValue(spec, "timeout"); timeout != "" {
+		if timeout := strings.TrimSpace(decoded.Timeout); timeout != "" {
 			applySpec["timeout"] = timeout
 		}
 		return runSysctlApply(ctx, applySpec)
@@ -55,8 +52,12 @@ func runSysctl(ctx context.Context, spec map[string]any) error {
 }
 
 func runManageService(ctx context.Context, spec map[string]any) error {
-	name := stringValue(spec, "name")
-	names := stringSlice(spec["names"])
+	decoded, err := workflowexec.DecodeSpec[stepspec.ManageService](spec)
+	if err != nil {
+		return fmt.Errorf("decode ManageService spec: %w", err)
+	}
+	name := strings.TrimSpace(decoded.Name)
+	names := decoded.Names
 	if name == "" && len(names) == 0 {
 		return fmt.Errorf("%s: ManageService requires name or names", errCodeInstallManageServiceNameMiss)
 	}
@@ -67,14 +68,14 @@ func runManageService(ctx context.Context, spec map[string]any) error {
 		names = []string{name}
 	}
 
-	timeout := commandTimeoutWithDefault(spec, 30*time.Second)
-	if boolValue(spec, "daemonReload") {
+	timeout := parseStepTimeout(decoded.Timeout, 30*time.Second)
+	if decoded.DaemonReload {
 		if err := runTimedCommandWithContext(ctx, "systemctl", []string{"daemon-reload"}, timeout); err != nil {
 			return err
 		}
 	}
-	ifExists := boolValue(spec, "ifExists")
-	ignoreMissing := boolValue(spec, "ignoreMissing")
+	ifExists := decoded.IfExists
+	ignoreMissing := decoded.IgnoreMissing
 
 	for _, serviceName := range names {
 		if ifExists {
@@ -87,7 +88,8 @@ func runManageService(ctx context.Context, spec map[string]any) error {
 			}
 		}
 
-		if enabled, ok := spec["enabled"].(bool); ok {
+		if decoded.Enabled != nil {
+			enabled := *decoded.Enabled
 			isEnabled, err := isManageServiceEnabled(ctx, serviceName, timeout)
 			if err != nil {
 				return err
@@ -103,7 +105,7 @@ func runManageService(ctx context.Context, spec map[string]any) error {
 			}
 		}
 
-		state := strings.ToLower(stringValue(spec, "state"))
+		state := strings.ToLower(strings.TrimSpace(decoded.State))
 		switch state {
 		case "", "unchanged":
 			continue
@@ -161,13 +163,17 @@ func runServiceCommand(ctx context.Context, name string, args []string, timeout 
 }
 
 func runSwap(ctx context.Context, spec map[string]any) error {
+	decoded, err := workflowexec.DecodeSpec[stepspec.Swap](spec)
+	if err != nil {
+		return fmt.Errorf("decode Swap spec: %w", err)
+	}
 	disable := true
-	if v, ok := spec["disable"].(bool); ok {
-		disable = v
+	if decoded.Disable != nil {
+		disable = *decoded.Disable
 	}
 	persist := true
-	if v, ok := spec["persist"].(bool); ok {
-		persist = v
+	if decoded.Persist != nil {
+		persist = *decoded.Persist
 	}
 
 	if disable {
@@ -176,14 +182,14 @@ func runSwap(ctx context.Context, spec map[string]any) error {
 			return err
 		}
 		if active {
-			if err := runTimedCommandWithContext(ctx, "swapoff", []string{"-a"}, commandTimeoutWithDefault(spec, 30*time.Second)); err != nil {
+			if err := runTimedCommandWithContext(ctx, "swapoff", []string{"-a"}, parseStepTimeout(decoded.Timeout, 30*time.Second)); err != nil {
 				return err
 			}
 		}
 	}
 
 	if persist {
-		fstabPath := stringValue(spec, "fstabPath")
+		fstabPath := strings.TrimSpace(decoded.FstabPath)
 		if fstabPath == "" {
 			fstabPath = "/etc/fstab"
 		}
@@ -226,7 +232,7 @@ func runSwap(ctx context.Context, spec map[string]any) error {
 }
 
 func runKernelModule(ctx context.Context, spec map[string]any) error {
-	decoded, err := workflowexec.DecodeSpec[kernelModuleSpec](spec)
+	decoded, err := workflowexec.DecodeSpec[stepspec.KernelModule](spec)
 	if err != nil {
 		return fmt.Errorf("decode KernelModule spec: %w", err)
 	}
@@ -295,7 +301,7 @@ func runKernelModule(ctx context.Context, spec map[string]any) error {
 				return err
 			}
 			if !loaded {
-				if err := runTimedCommandWithContext(ctx, "modprobe", []string{module}, commandTimeoutWithDefault(spec, 30*time.Second)); err != nil {
+				if err := runTimedCommandWithContext(ctx, "modprobe", []string{module}, parseStepTimeout(decoded.Timeout, 30*time.Second)); err != nil {
 					return err
 				}
 			}
@@ -305,7 +311,7 @@ func runKernelModule(ctx context.Context, spec map[string]any) error {
 	return nil
 }
 
-func kernelModuleNames(spec kernelModuleSpec) []string {
+func kernelModuleNames(spec stepspec.KernelModule) []string {
 	items := make([]string, 0, 1+len(spec.Names))
 	seen := map[string]bool{}
 	appendName := func(name string) {

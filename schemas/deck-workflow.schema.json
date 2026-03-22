@@ -83,13 +83,38 @@
               "allOf": [
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "CheckCluster"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "CheckCluster"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -107,13 +132,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "CheckHost"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "CheckHost"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -135,13 +185,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Command"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "Command"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -159,13 +234,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "ConfigureRepository"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "ConfigureRepository"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -186,13 +286,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "CopyFile"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "CopyFile"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -213,13 +338,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "CreateSymlink"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "CreateSymlink"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -240,13 +390,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "DownloadFile"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "DownloadFile"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -268,13 +443,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "DownloadImage"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "DownloadImage"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -295,13 +495,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "DownloadPackage"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "DownloadPackage"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -322,13 +547,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "EditFile"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "EditFile"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -349,13 +599,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "EnsureDirectory"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "EnsureDirectory"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -376,13 +651,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "ExtractArchive"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "ExtractArchive"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -403,13 +703,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "InitKubeadm"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "InitKubeadm"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -430,13 +755,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "InstallPackage"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "InstallPackage"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -454,13 +804,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "JoinKubeadm"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "JoinKubeadm"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -478,13 +853,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "KernelModule"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "KernelModule"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -506,13 +906,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "LoadImage"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "LoadImage"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -530,13 +955,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "ManageService"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "ManageService"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -558,13 +1008,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "RefreshRepository"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "RefreshRepository"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -582,13 +1057,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "ResetKubeadm"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "ResetKubeadm"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -606,13 +1106,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Swap"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "Swap"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -630,13 +1155,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "Sysctl"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "Sysctl"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -654,13 +1204,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "UpgradeKubeadm"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "UpgradeKubeadm"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -678,13 +1253,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "VerifyImage"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "VerifyImage"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -702,13 +1302,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "WaitForCommand"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "WaitForCommand"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -726,13 +1351,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "WaitForFile"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "WaitForFile"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -750,13 +1400,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "WaitForMissingFile"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "WaitForMissingFile"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -774,13 +1449,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "WaitForMissingTCPPort"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "WaitForMissingTCPPort"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -798,13 +1498,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "WaitForService"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "WaitForService"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -822,13 +1547,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "WaitForTCPPort"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "WaitForTCPPort"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -846,13 +1596,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "WriteContainerdConfig"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "WriteContainerdConfig"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -873,13 +1648,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "WriteContainerdRegistryHosts"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "WriteContainerdRegistryHosts"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -900,13 +1700,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "WriteFile"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "WriteFile"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -927,13 +1752,38 @@
                 },
                 {
                   "if": {
-                    "properties": {
-                      "kind": {
-                        "const": "WriteSystemdUnit"
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "WriteSystemdUnit"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
                       }
-                    },
-                    "required": [
-                      "kind"
                     ]
                   },
                   "then": {
@@ -955,7 +1805,9 @@
               ],
               "properties": {
                 "apiVersion": {
-                  "const": "deck/v1alpha1",
+                  "enum": [
+                    "deck/v1alpha1"
+                  ],
                   "type": "string"
                 },
                 "id": {
@@ -1058,13 +1910,38 @@
         "allOf": [
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "CheckCluster"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "CheckCluster"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1082,13 +1959,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "CheckHost"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "CheckHost"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1110,13 +2012,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "Command"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "Command"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1134,13 +2061,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "ConfigureRepository"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "ConfigureRepository"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1161,13 +2113,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "CopyFile"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "CopyFile"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1188,13 +2165,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "CreateSymlink"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "CreateSymlink"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1215,13 +2217,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "DownloadFile"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "DownloadFile"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1243,13 +2270,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "DownloadImage"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "DownloadImage"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1270,13 +2322,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "DownloadPackage"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "DownloadPackage"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1297,13 +2374,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "EditFile"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "EditFile"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1324,13 +2426,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "EnsureDirectory"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "EnsureDirectory"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1351,13 +2478,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "ExtractArchive"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "ExtractArchive"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1378,13 +2530,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "InitKubeadm"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "InitKubeadm"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1405,13 +2582,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "InstallPackage"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "InstallPackage"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1429,13 +2631,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "JoinKubeadm"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "JoinKubeadm"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1453,13 +2680,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "KernelModule"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "KernelModule"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1481,13 +2733,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "LoadImage"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "LoadImage"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1505,13 +2782,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "ManageService"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "ManageService"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1533,13 +2835,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "RefreshRepository"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "RefreshRepository"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1557,13 +2884,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "ResetKubeadm"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "ResetKubeadm"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1581,13 +2933,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "Swap"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "Swap"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1605,13 +2982,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "Sysctl"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "Sysctl"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1629,13 +3031,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "UpgradeKubeadm"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "UpgradeKubeadm"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1653,13 +3080,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "VerifyImage"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "VerifyImage"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1677,13 +3129,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "WaitForCommand"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "WaitForCommand"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1701,13 +3178,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "WaitForFile"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "WaitForFile"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1725,13 +3227,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "WaitForMissingFile"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "WaitForMissingFile"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1749,13 +3276,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "WaitForMissingTCPPort"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "WaitForMissingTCPPort"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1773,13 +3325,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "WaitForService"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "WaitForService"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1797,13 +3374,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "WaitForTCPPort"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "WaitForTCPPort"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1821,13 +3423,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "WriteContainerdConfig"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "WriteContainerdConfig"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1848,13 +3475,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "WriteContainerdRegistryHosts"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "WriteContainerdRegistryHosts"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1875,13 +3527,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "WriteFile"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "WriteFile"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1902,13 +3579,38 @@
           },
           {
             "if": {
-              "properties": {
-                "kind": {
-                  "const": "WriteSystemdUnit"
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "WriteSystemdUnit"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
                 }
-              },
-              "required": [
-                "kind"
               ]
             },
             "then": {
@@ -1930,7 +3632,9 @@
         ],
         "properties": {
           "apiVersion": {
-            "const": "deck/v1alpha1",
+            "enum": [
+              "deck/v1alpha1"
+            ],
             "type": "string"
           },
           "id": {
@@ -2025,7 +3729,9 @@
       "type": "object"
     },
     "version": {
-      "const": "v1alpha1",
+      "enum": [
+        "v1alpha1"
+      ],
       "type": "string"
     }
   },

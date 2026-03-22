@@ -11,27 +11,21 @@ import (
 	"time"
 
 	"github.com/taedi90/deck/internal/executil"
+	"github.com/taedi90/deck/internal/stepspec"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 var ErrStepCommandTimeout = errors.New("step command timeout")
 
-type runCommandSpec struct {
-	Command []string          `json:"command"`
-	Env     map[string]string `json:"env"`
-	Sudo    bool              `json:"sudo"`
-	Timeout string            `json:"timeout"`
-}
-
 func runCommand(ctx context.Context, spec map[string]any) error {
-	decoded, err := workflowexec.DecodeSpec[runCommandSpec](spec)
+	decoded, err := workflowexec.DecodeSpec[stepspec.Command](spec)
 	if err != nil {
 		return fmt.Errorf("decode Command spec: %w", err)
 	}
 	return runCommandDecoded(ctx, decoded)
 }
 
-func runCommandDecoded(ctx context.Context, decoded runCommandSpec) error {
+func runCommandDecoded(ctx context.Context, decoded stepspec.Command) error {
 	cmdArgs := decoded.Command
 	if len(cmdArgs) == 0 {
 		return fmt.Errorf("%s: Command requires command", errCodeInstallCommandMissing)

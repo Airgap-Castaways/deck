@@ -252,12 +252,12 @@ func executeInstallStep(ctx context.Context, wf *config.Workflow, runtimeSnapsho
 			emitStepEvent(sink, StepEvent{StepID: step.ID, Kind: step.Kind, Phase: phaseName, Status: "failed", Attempt: i + 1, StartedAt: startedAt, EndedAt: time.Now().UTC().Format(time.RFC3339Nano), Error: execErr.Error()})
 			break
 		}
-		if strings.TrimSpace(step.Timeout) != "" {
-			if _, exists := rendered["timeout"]; !exists {
-				rendered["timeout"] = strings.TrimSpace(step.Timeout)
-			}
+		key, keyErr := workflowexec.ResolveStepTypeKey(wf.Version, step.APIVersion, step.Kind)
+		if keyErr != nil {
+			execErr = keyErr
+		} else {
+			execErr = executeWorkflowStep(ctx, step, rendered, key, execCtx)
 		}
-		execErr = executeStep(ctx, step.Kind, rendered, execCtx)
 		endedAt := time.Now().UTC().Format(time.RFC3339Nano)
 		if execErr != nil {
 			emitStepEvent(sink, StepEvent{StepID: step.ID, Kind: step.Kind, Phase: phaseName, Status: "failed", Attempt: i + 1, StartedAt: startedAt, EndedAt: endedAt, Error: execErr.Error()})
@@ -315,21 +315,6 @@ func mapValue(v map[string]any, key string) map[string]any {
 		return map[string]any{}
 	}
 	return m
-}
-
-func boolValue(v map[string]any, key string) bool {
-	if v == nil {
-		return false
-	}
-	raw, ok := v[key]
-	if !ok {
-		return false
-	}
-	b, ok := raw.(bool)
-	if !ok {
-		return false
-	}
-	return b
 }
 
 func stringSlice(v any) []string {

@@ -12,19 +12,12 @@ import (
 	"strings"
 
 	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/stepspec"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
-type extractArchiveSpec struct {
-	Source  fileDownloadSourceSpec `json:"source"`
-	Fetch   fileDownloadFetchSpec  `json:"fetch"`
-	Path    string                 `json:"path"`
-	Include []string               `json:"include"`
-	Mode    string                 `json:"mode"`
-}
-
 func runExtractArchive(ctx context.Context, bundleRoot string, spec map[string]any) error {
-	decoded, err := workflowexec.DecodeSpec[extractArchiveSpec](spec)
+	decoded, err := workflowexec.DecodeSpec[stepspec.ExtractArchive](spec)
 	if err != nil {
 		return fmt.Errorf("decode ExtractArchive spec: %w", err)
 	}

@@ -42,7 +42,7 @@ func TestLoadToolPageInputsIncludesOnlyPublicSteps(t *testing.T) {
 			t.Fatalf("expected grouped variants for page %s", page.PageSlug)
 		}
 		for _, variant := range page.Variants {
-			def, ok := workflowcontract.StepDefinitionForKind(variant.Kind)
+			def, ok := workflowcontract.StepDefinitionForKey(workflowcontract.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: variant.Kind})
 			if !ok {
 				t.Fatalf("missing step definition for %s", variant.Kind)
 			}

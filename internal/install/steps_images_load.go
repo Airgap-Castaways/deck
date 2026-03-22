@@ -7,19 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taedi90/deck/internal/stepspec"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
-type loadImageSpec struct {
-	Images    []string `json:"images"`
-	SourceDir string   `json:"sourceDir"`
-	Runtime   string   `json:"runtime"`
-	Command   []string `json:"command"`
-	Timeout   string   `json:"timeout"`
-}
-
 func runLoadImage(ctx context.Context, bundleRoot string, spec map[string]any) error {
-	decoded, err := workflowexec.DecodeSpec[loadImageSpec](spec)
+	decoded, err := workflowexec.DecodeSpec[stepspec.LoadImage](spec)
 	if err != nil {
 		return fmt.Errorf("decode LoadImage spec: %w", err)
 	}
@@ -46,7 +39,7 @@ func runLoadImage(ctx context.Context, bundleRoot string, spec map[string]any) e
 	return nil
 }
 
-func loadImageCommandArgs(spec loadImageSpec, archivePath string) ([]string, error) {
+func loadImageCommandArgs(spec stepspec.LoadImage, archivePath string) ([]string, error) {
 	if len(spec.Command) > 0 {
 		args := append([]string(nil), spec.Command...)
 		for i := range args {

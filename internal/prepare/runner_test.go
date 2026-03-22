@@ -25,6 +25,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/workflowcontract"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 func nilContextForPrepareTest() context.Context { return nil }
@@ -151,8 +153,8 @@ func TestRun_PrepareParallelGroupRunsContainerDownloadsConcurrently(t *testing.T
 			Name:           "prepare",
 			MaxParallelism: 2,
 			Steps: []config.Step{
-				{ID: "ubuntu", Kind: "DownloadPackage", ParallelGroup: "distros", Spec: map[string]any{"packages": []any{"containerd"}, "distro": map[string]any{"family": "debian", "release": "ubuntu2204"}, "repo": map[string]any{"type": "apt-flat"}, "backend": map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"}}},
-				{ID: "rhel", Kind: "DownloadPackage", ParallelGroup: "distros", Spec: map[string]any{"packages": []any{"containerd"}, "distro": map[string]any{"family": "rhel", "release": "rhel9"}, "repo": map[string]any{"type": "yum"}, "backend": map[string]any{"mode": "container", "runtime": "docker", "image": "rockylinux:9"}}},
+				{ID: "ubuntu", Kind: "DownloadPackage", ParallelGroup: "distros", Spec: map[string]any{"packages": []any{"containerd"}, "distro": map[string]any{"family": "debian", "release": "ubuntu2204"}, "repo": map[string]any{"type": "deb-flat"}, "backend": map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"}}},
+				{ID: "rhel", Kind: "DownloadPackage", ParallelGroup: "distros", Spec: map[string]any{"packages": []any{"containerd"}, "distro": map[string]any{"family": "rhel", "release": "rhel9"}, "repo": map[string]any{"type": "rpm"}, "backend": map[string]any{"mode": "container", "runtime": "docker", "image": "rockylinux:9"}}},
 			},
 		}},
 	}
@@ -884,7 +886,9 @@ func TestWhen_NamespaceEnforced(t *testing.T) {
 }
 
 func TestRunPrepareStep_DownloadFileDecodeError(t *testing.T) {
-	_, _, err := runPrepareStep(context.Background(), &fakeRunner{}, t.TempDir(), "DownloadFile", map[string]any{"source": 42}, RunOptions{})
+	step := config.Step{Kind: "DownloadFile", Spec: map[string]any{"source": 42}}
+	key := workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: "DownloadFile"}
+	_, _, err := runPrepareRenderedStepWithKey(context.Background(), &fakeRunner{}, t.TempDir(), step, step.Spec, key, nil, RunOptions{})
 	if err == nil {
 		t.Fatalf("expected decode error")
 	}
@@ -1007,7 +1011,7 @@ func TestRun_CheckHostStep(t *testing.T) {
 	})
 }
 
-func TestRun_PackagesKubernetesSetRepoModeAptFlatGeneratesMetadata(t *testing.T) {
+func TestRun_PackagesKubernetesSetRepoModeDebFlatGeneratesMetadata(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	bundle := t.TempDir()
 	r := &fakeRunner{}
@@ -1026,7 +1030,7 @@ func TestRun_PackagesKubernetesSetRepoModeAptFlatGeneratesMetadata(t *testing.T)
 						"release": "ubuntu2204",
 					},
 					"repo": map[string]any{
-						"type": "apt-flat",
+						"type": "deb-flat",
 					},
 					"backend": map[string]any{
 						"mode":    "container",
@@ -1042,18 +1046,18 @@ func TestRun_PackagesKubernetesSetRepoModeAptFlatGeneratesMetadata(t *testing.T)
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "apt", "ubuntu2204", "pkgs", "mock-package.deb")); err != nil {
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "deb", "ubuntu2204", "pkgs", "mock-package.deb")); err != nil {
 		t.Fatalf("expected mock deb artifact: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "apt", "ubuntu2204", "Packages.gz")); err != nil {
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "deb", "ubuntu2204", "Packages.gz")); err != nil {
 		t.Fatalf("expected Packages.gz: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "apt", "ubuntu2204", "Release")); err != nil {
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "deb", "ubuntu2204", "Release")); err != nil {
 		t.Fatalf("expected Release: %v", err)
 	}
 }
 
-func TestRun_PackagesKubernetesSetRepoModeYumGeneratesRepodata(t *testing.T) {
+func TestRun_PackagesKubernetesSetRepoModeRpmGeneratesRepodata(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	bundle := t.TempDir()
 	r := &fakeRunner{}
@@ -1072,7 +1076,7 @@ func TestRun_PackagesKubernetesSetRepoModeYumGeneratesRepodata(t *testing.T) {
 						"release": "rhel9",
 					},
 					"repo": map[string]any{
-						"type": "yum",
+						"type": "rpm",
 					},
 					"backend": map[string]any{
 						"mode":    "container",
@@ -1088,7 +1092,7 @@ func TestRun_PackagesKubernetesSetRepoModeYumGeneratesRepodata(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "yum", "rhel9", "repodata", "repomd.xml")); err != nil {
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "rpm", "rhel9", "repodata", "repomd.xml")); err != nil {
 		t.Fatalf("expected repodata/repomd.xml: %v", err)
 	}
 }
@@ -1277,13 +1281,13 @@ func (f *fakeRunner) RunWithIO(_ context.Context, stdout io.Writer, _ io.Writer,
 					return err
 				}
 				// repo-mode simulation: create minimal artifacts + metadata
-				if strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"apt"+string(filepath.Separator)) ||
-					strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"apt-k8s"+string(filepath.Separator)) {
+				if strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"deb"+string(filepath.Separator)) ||
+					strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"deb-k8s"+string(filepath.Separator)) {
 					pkgs := filepath.Join(host, "pkgs")
 					if err := os.MkdirAll(pkgs, 0o755); err != nil {
 						return err
 					}
-					if strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"apt-k8s"+string(filepath.Separator)) {
+					if strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"deb-k8s"+string(filepath.Separator)) {
 						for _, name := range []string{"kubelet.deb", "kubeadm.deb", "kubectl.deb"} {
 							if err := os.WriteFile(filepath.Join(pkgs, name), []byte("pkg"), 0o644); err != nil {
 								return err
@@ -1305,8 +1309,8 @@ func (f *fakeRunner) RunWithIO(_ context.Context, stdout io.Writer, _ io.Writer,
 					}
 					continue
 				}
-				if strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"yum"+string(filepath.Separator)) ||
-					strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"yum-k8s"+string(filepath.Separator)) {
+				if strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"rpm"+string(filepath.Separator)) ||
+					strings.Contains(host, string(filepath.Separator)+"packages"+string(filepath.Separator)+"rpm-k8s"+string(filepath.Separator)) {
 					repodata := filepath.Join(host, "repodata")
 					if err := os.MkdirAll(repodata, 0o755); err != nil {
 						return err

@@ -5,16 +5,13 @@ import (
 	"fmt"
 
 	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/stepspec"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
-func runPrepareStep(ctx context.Context, runner CommandRunner, bundleRoot, kind string, rendered map[string]any, opts RunOptions) ([]string, map[string]any, error) {
-	return runPrepareRenderedStep(ctx, runner, bundleRoot, config.Step{Kind: kind, Spec: rendered}, rendered, nil, opts)
-}
-
-func runPrepareRenderedStep(ctx context.Context, runner CommandRunner, bundleRoot string, step config.Step, rendered map[string]any, inputVars map[string]string, opts RunOptions) ([]string, map[string]any, error) {
+func runPrepareRenderedStepWithKey(ctx context.Context, runner CommandRunner, bundleRoot string, step config.Step, rendered map[string]any, key workflowexec.StepTypeKey, inputVars map[string]string, opts RunOptions) ([]string, map[string]any, error) {
 	kind := step.Kind
-	if !workflowexec.StepAllowedForRole("prepare", kind) {
+	if !workflowexec.StepAllowedForRoleForKey("prepare", key) {
 		return nil, nil, fmt.Errorf("%s: unsupported step kind %s", errCodePrepareKindUnsupported, kind)
 	}
 
@@ -38,7 +35,7 @@ func runPrepareRenderedStep(ctx context.Context, runner CommandRunner, bundleRoo
 		}
 		return files, map[string]any{"artifacts": files}, nil
 	case "CheckHost":
-		decoded, err := workflowexec.DecodeSpec[checksSpec](rendered)
+		decoded, err := workflowexec.DecodeSpec[stepspec.CheckHost](rendered)
 		if err != nil {
 			return nil, nil, fmt.Errorf("decode checks spec: %w", err)
 		}

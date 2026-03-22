@@ -15,6 +15,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/stepspec"
+	"github.com/taedi90/deck/internal/workflowexec"
 )
 
 type imageDownloadOps struct {
@@ -44,18 +46,21 @@ func resolveDownloadImageOps(opts RunOptions) imageDownloadOps {
 
 func runDownloadImage(ctx context.Context, runner CommandRunner, bundleRoot string, spec map[string]any, opts RunOptions) ([]string, error) {
 	_ = runner
-	dir := stringValue(spec, "outputDir")
+	decoded, err := workflowexec.DecodeSpec[stepspec.DownloadImage](spec)
+	if err != nil {
+		return nil, fmt.Errorf("decode DownloadImage spec: %w", err)
+	}
+	dir := strings.TrimSpace(decoded.OutputDir)
 	if dir == "" {
 		dir = "images"
 	}
 
-	images := stringSlice(spec["images"])
+	images := decoded.Images
 	if len(images) == 0 {
 		return nil, fmt.Errorf("image action download requires images")
 	}
 
-	backend := mapValue(spec, "backend")
-	engine := stringValue(backend, "engine")
+	engine := strings.TrimSpace(decoded.Backend.Engine)
 	if engine == "" {
 		engine = "go-containerregistry"
 	}
@@ -64,7 +69,7 @@ func runDownloadImage(ctx context.Context, runner CommandRunner, bundleRoot stri
 		return nil, fmt.Errorf("%s: unsupported image engine: %s", errCodePrepareEngineUnsupported, engine)
 	}
 
-	auth, err := parseImageRegistryAuth(spec)
+	auth, err := parseImageRegistryAuth(decoded)
 	if err != nil {
 		return nil, err
 	}
@@ -163,22 +168,16 @@ func (k imageAuthKeychain) Resolve(resource authn.Resource) (authn.Authenticator
 	return k.fallback.Resolve(resource)
 }
 
-func parseImageRegistryAuth(spec map[string]any) (imageRegistryAuthMap, error) {
-	items, ok := spec["auth"].([]any)
-	if !ok || len(items) == 0 {
+func parseImageRegistryAuth(spec stepspec.DownloadImage) (imageRegistryAuthMap, error) {
+	if len(spec.Auth) == 0 {
 		return nil, nil
 	}
-	entries := make(imageRegistryAuthMap, len(items))
+	entries := make(imageRegistryAuthMap, len(spec.Auth))
 	duplicates := make([]string, 0)
-	for _, item := range items {
-		entryMap, ok := item.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("image auth entries must be objects")
-		}
-		registry := strings.ToLower(strings.TrimSpace(stringValue(entryMap, "registry")))
-		basic := mapValue(entryMap, "basic")
-		username := stringValue(basic, "username")
-		password := stringValue(basic, "password")
+	for _, item := range spec.Auth {
+		registry := strings.ToLower(strings.TrimSpace(item.Registry))
+		username := strings.TrimSpace(item.Basic.Username)
+		password := item.Basic.Password
 		if registry == "" {
 			return nil, fmt.Errorf("image auth entry requires registry")
 		}

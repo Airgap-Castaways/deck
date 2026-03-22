@@ -25,7 +25,7 @@ steps:
 | `phases` | `array<object>` | no | `` | `` | Ordered execution phases. Each phase can contain imports, steps, or both. | `[{name:install,steps:[...]}]` |
 | `steps` | `array<object>` | no | `` | `` | Flat step list for workflows that do not need named phases. Execution normalizes these steps into an implicit `default` phase. | `[{id:configure-runtime,kind:WriteContainerdConfig,spec:{...}}]` |
 | `vars` | `object` | no | `map[]` | `` |  | `map[]` |
-| `version` | `string` | yes | `` | `` |  | `v1alpha1` |
+| `version` | `string` | yes | `` | `v1alpha1` |  | `v1alpha1` |
 
 ## Validation Rules
 
@@ -38,5 +38,6 @@ steps:
 - A workflow cannot define both top-level `phases` and top-level `steps` at the same time.
 - Top-level `steps` execute as an implicit phase named `default`.
 - Imports are only supported under `phases[].imports` and resolve from `workflows/components/`.
+- When a step omits `apiVersion`, deck resolves it from the top-level workflow `version` before schema and role checks run.
 - Workflow mode is determined by command context or file location, not by an in-file `role` field.
 - Each step still validates against its own kind-specific schema after the top-level workflow schema passes.

@@ -5,7 +5,8 @@
   "description": "Downloads packages into bundle output storage.",
   "properties": {
     "apiVersion": {
-      "const": "deck/v1alpha1"
+      "const": "deck/v1alpha1",
+      "type": "string"
     },
     "id": {
       "type": "string"
@@ -35,6 +36,8 @@
       "type": "integer"
     },
     "spec": {
+      "$id": "https://github.com/taedi90/deck/internal/stepspec/download-package",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "properties": {
         "backend": {
@@ -66,7 +69,17 @@
           "type": "object"
         },
         "distro": {
-          "additionalProperties": true,
+          "additionalProperties": false,
+          "properties": {
+            "family": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "release": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
           "type": "object"
         },
         "outputDir": {
@@ -113,15 +126,12 @@
             },
             "type": {
               "enum": [
-                "apt-flat",
-                "yum"
+                "deb-flat",
+                "rpm"
               ],
               "type": "string"
             }
           },
-          "required": [
-            "type"
-          ],
           "type": "object"
         }
       },

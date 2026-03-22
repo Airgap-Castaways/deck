@@ -58,6 +58,7 @@ spec:
 
 - `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, `ResetKubeadm` focuses on cleanup fields, and `UpgradeKubeadm` performs local control-plane upgrades.
 - When `skipIfAdminConfExists` skips `InitKubeadm`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
+- Load prepared control-plane images with `LoadImage` before `InitKubeadm` instead of relying on kubeadm image pulls hidden inside the bootstrap step.
 - Place host preparation steps (`WriteContainerdConfig`, `Swap`, `KernelModule`, `Sysctl`) before kubeadm bootstrap so failures point to the correct step.
 
 ## `JoinKubeadm`
@@ -92,6 +93,7 @@ spec:
 
 - `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, `ResetKubeadm` focuses on cleanup fields, and `UpgradeKubeadm` performs local control-plane upgrades.
 - When `skipIfAdminConfExists` skips `InitKubeadm`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
+- Load prepared control-plane images with `LoadImage` before `InitKubeadm` instead of relying on kubeadm image pulls hidden inside the bootstrap step.
 - Place host preparation steps (`WriteContainerdConfig`, `Swap`, `KernelModule`, `Sysctl`) before kubeadm bootstrap so failures point to the correct step.
 
 ## `ResetKubeadm`
@@ -138,6 +140,7 @@ spec:
 
 - `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, `ResetKubeadm` focuses on cleanup fields, and `UpgradeKubeadm` performs local control-plane upgrades.
 - When `skipIfAdminConfExists` skips `InitKubeadm`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
+- Load prepared control-plane images with `LoadImage` before `InitKubeadm` instead of relying on kubeadm image pulls hidden inside the bootstrap step.
 - Place host preparation steps (`WriteContainerdConfig`, `Swap`, `KernelModule`, `Sysctl`) before kubeadm bootstrap so failures point to the correct step.
 
 ## `UpgradeKubeadm`
@@ -173,6 +176,7 @@ spec:
 
 - `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, `ResetKubeadm` focuses on cleanup fields, and `UpgradeKubeadm` performs local control-plane upgrades.
 - When `skipIfAdminConfExists` skips `InitKubeadm`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
+- Load prepared control-plane images with `LoadImage` before `InitKubeadm` instead of relying on kubeadm image pulls hidden inside the bootstrap step.
 - Place host preparation steps (`WriteContainerdConfig`, `Swap`, `KernelModule`, `Sysctl`) before kubeadm bootstrap so failures point to the correct step.
 
 ## Related

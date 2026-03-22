@@ -14,12 +14,12 @@ Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`,
 
 ## Supported Kinds
 
-- `ConfigureRepository`: Write apt or yum repository definitions.
+- `ConfigureRepository`: Write deb or rpm repository definitions.
 - `RefreshRepository`: Refresh package metadata with repo filtering.
 
 ## `ConfigureRepository`
 
-Write apt or yum repository definitions.
+Write deb or rpm repository definitions.
 
 - schema: `../../../schemas/tools/repository.configure.schema.json`
 - outputs: `path`
@@ -33,11 +33,10 @@ Use this before refreshing caches or installing packages from a local mirror.
 ```yaml
 kind: ConfigureRepository
 spec:
-  format: apt
+  format: deb
   path: /etc/apt/sources.list.d/offline.list
   repositories:
-    - id: offline
-      baseurl: http://repo.local/debian
+    - baseurl: http://repo.local/debian
       trusted: true
 ```
 
@@ -48,11 +47,11 @@ spec:
 | `spec.backupPaths` | `array<string>` | no | `` | `` | Paths to back up before modifying. Backed-up files are saved with a `.bak` suffix. | `[/etc/apt/sources.list]` |
 | `spec.cleanupPaths` | `array<string>` | no | `` | `` | Paths to remove before writing the new repository definition. | `[/etc/apt/sources.list.d/ubuntu.list]` |
 | `spec.disableExisting` | `boolean` | no | `` | `` | Disable all existing repository definitions before writing the new one. Prevents conflicts from online repos during offline installs. | `true` |
-| `spec.format` | `string` | no | `` | `auto, apt, yum` | Repository file format to write. `auto` detects from the host family, `apt` produces a sources.list entry, and `yum` produces a `.repo` file. | `apt` |
+| `spec.format` | `string` | no | `` | `auto, deb, rpm` | Repository file format to write. `auto` detects from the host family, `deb` produces a sources.list style entry, and `rpm` produces a `.repo` file. | `deb` |
 | `spec.mode` | `string` | no | `` | `` | File permissions applied to the generated repository file in octal notation. | `0644` |
-| `spec.path` | `string` | no | `` | `` | Explicit output path for the generated repository file. Defaults to `/etc/apt/sources.list.d/deck-offline.list` for apt or `/etc/yum.repos.d/deck-offline.repo` for yum when omitted. | `/etc/apt/sources.list.d/offline.list` |
+| `spec.path` | `string` | no | `` | `` | Explicit output path for the generated repository file. Defaults to `/etc/apt/sources.list.d/deck-offline.list` for deb-family systems or `/etc/yum.repos.d/deck-offline.repo` for rpm-family systems when omitted. | `/etc/apt/sources.list.d/offline.list` |
 | `spec.replaceExisting` | `boolean` | no | `` | `` | Replace an existing repository file at the target path before writing the new definition. | `true` |
-| `spec.repositories` | `array<object>` | yes | `` | `` | Repository entries to write. Each entry maps to one repository block in the generated file. | `[{id:offline,baseurl:http://repo.local/debian}]` |
+| `spec.repositories` | `array<object>` | yes | `` | `` | Repository entries to write. deb entries use fields like `baseurl`, `suite`, `component`, and optional `trusted`; rpm entries use fields like `id`, `name`, `baseurl`, and optional `extra` for additional repo keys. | `[{baseurl:http://repo.local/debian,trusted:true}]` |
 
 ### Notes
 

@@ -13,10 +13,10 @@ type DownloadFileStepDocument struct {
 }
 
 type DownloadFileStepSpec struct {
-	Source     *FileSource    `json:"source,omitempty"`
-	Fetch      map[string]any `json:"fetch,omitempty"`
-	OutputPath string         `json:"outputPath,omitempty"`
-	Mode       string         `json:"mode,omitempty"`
+	Source     *FileSource `json:"source,omitempty"`
+	Fetch      *FileFetch  `json:"fetch,omitempty"`
+	OutputPath string      `json:"outputPath,omitempty"`
+	Mode       string      `json:"mode,omitempty"`
 }
 
 type WriteFileStepSpec struct {
@@ -62,4 +62,15 @@ type FileSource struct {
 type FileBundleRef struct {
 	Root string `json:"root"`
 	Path string `json:"path"`
+}
+
+type FileFetch struct {
+	OfflineOnly bool              `json:"offlineOnly,omitempty"`
+	Sources     []FileFetchSource `json:"sources,omitempty"`
+}
+
+type FileFetchSource struct {
+	Type string `json:"type"`
+	Path string `json:"path,omitempty"`
+	URL  string `json:"url,omitempty"`
 }

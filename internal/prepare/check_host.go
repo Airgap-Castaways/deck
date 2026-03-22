@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/taedi90/deck/internal/stepspec"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -30,13 +31,7 @@ func resolveCheckHostRuntime(opts RunOptions) checksRuntime {
 	return opts.checksRuntime
 }
 
-type checksSpec struct {
-	Checks   []string `json:"checks"`
-	Binaries []string `json:"binaries"`
-	FailFast *bool    `json:"failFast"`
-}
-
-func runCheckHostDecoded(runner CommandRunner, decoded checksSpec, deps checksRuntime) (map[string]any, error) {
+func runCheckHostDecoded(runner CommandRunner, decoded stepspec.CheckHost, deps checksRuntime) (map[string]any, error) {
 	checks := decoded.Checks
 	if len(checks) == 0 {
 		return nil, fmt.Errorf("%s: CheckHost requires checks", errCodePrepareCheckHostFailed)

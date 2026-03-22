@@ -14,6 +14,7 @@ func TestFileSchemaModelMatchesToolSchema(t *testing.T) {
 	assertStructFieldsPresent(t, reflect.TypeOf(DownloadFileStepSpec{}), schemaAtPath(t, download, "properties.spec.properties"))
 	assertStructFieldsPresent(t, reflect.TypeOf(FileSource{}), schemaAtPath(t, download, "properties.spec.properties.source.properties"))
 	assertStructFieldsPresent(t, reflect.TypeOf(FileBundleRef{}), schemaAtPath(t, download, "properties.spec.properties.source.properties.bundle.properties"))
+	assertStructFieldsPresent(t, reflect.TypeOf(FileFetchSource{}), schemaAtPath(t, download, "properties.spec.properties.fetch.properties.sources.items.properties"))
 
 	copySchema := loadToolSchemaMap(t, "file.copy.schema.json")
 	assertStructFieldsPresent(t, reflect.TypeOf(CopyFileStepSpec{}), schemaAtPath(t, copySchema, "properties.spec.properties"))

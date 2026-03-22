@@ -388,7 +388,7 @@ phases:
         apiVersion: deck/v1alpha1
         kind: ConfigureRepository
         spec:
-          format: apt
+          format: deb
           replaceExisting: true
           refreshCache:
             enabled: true
@@ -439,6 +439,55 @@ phases:
 
 		if err := File(path); err == nil {
 			t.Fatalf("expected error for unsupported version")
+		}
+	})
+
+	t.Run("omitted step apiVersion inherits workflow version default", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: write-config
+        kind: WriteFile
+        spec:
+          path: /tmp/example.conf
+          content: hello
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected omitted apiVersion to inherit workflow version default, got %v", err)
+		}
+	})
+
+	t.Run("unsupported explicit step apiVersion", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: write-config
+        apiVersion: deck/v9
+        kind: WriteFile
+        spec:
+          path: /tmp/example.conf
+          content: hello
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected unsupported step apiVersion error")
+		}
+		if got := err.Error(); !strings.Contains(got, "apiVersion") {
+			t.Fatalf("expected apiVersion validation error, got %q", got)
 		}
 	})
 
@@ -899,7 +948,7 @@ phases:
         apiVersion: deck/v1alpha1
         kind: ConfigureRepository
         spec:
-          format: apt
+          format: deb
           repositories:
             - id: offline
               baseurl: http://repo.local/debian

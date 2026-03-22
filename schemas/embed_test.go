@@ -39,7 +39,11 @@ func TestGeneratedToolPagesExist(t *testing.T) {
 
 func TestToolSchemasCoverStepContracts(t *testing.T) {
 	for _, kind := range workflowexec.StepKinds() {
-		file, ok := workflowexec.StepSchemaFile(kind)
+		def, ok := workflowexec.StepDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind})
+		if !ok {
+			t.Fatalf("missing definition for %s", kind)
+		}
+		file, ok := workflowexec.StepSchemaFileForKey(workflowexec.StepTypeKey{APIVersion: def.APIVersion, Kind: def.Kind})
 		if !ok {
 			t.Fatalf("missing schema file for kind %s", kind)
 		}

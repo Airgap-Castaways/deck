@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/taedi90/deck/internal/config"
+	"github.com/taedi90/deck/internal/workflowcontract"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -72,17 +74,19 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, outputs, err := runPrepareStep(context.Background(), tc.runner, bundle, tc.kind, tc.spec, tc.opts)
+			step := config.Step{Kind: tc.kind, Spec: tc.spec}
+			key := workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: tc.kind}
+			_, outputs, err := runPrepareRenderedStepWithKey(context.Background(), tc.runner, bundle, step, tc.spec, key, nil, tc.opts)
 			if err != nil {
 				t.Fatalf("runPrepareStep failed: %v", err)
 			}
-			for _, key := range tc.expect {
-				covered[coverageKey(tc.kind, key)] = true
-				if _, ok := outputs[key]; !ok {
-					t.Fatalf("expected runtime output %q for %s", key, tc.kind)
+			for _, outputKey := range tc.expect {
+				covered[coverageKey(tc.kind, outputKey)] = true
+				if _, ok := outputs[outputKey]; !ok {
+					t.Fatalf("expected runtime output %q for %s", outputKey, tc.kind)
 				}
-				if !workflowexec.StepHasOutput(tc.kind, key) {
-					t.Fatalf("contract missing output %q for %s", key, tc.kind)
+				if !workflowexec.StepHasOutputForKey(key, outputKey) {
+					t.Fatalf("contract missing output %q for %s", outputKey, tc.kind)
 				}
 			}
 		})

@@ -8,13 +8,13 @@ steps:
         family: debian
         release: ubuntu2204
       repo:
-        type: apt-flat
+        type: deb-flat
         generate: true
       backend:
         mode: container
         runtime: auto
         image: ubuntu:22.04
-      outputDir: packages/apt/ubuntu2204
+      outputDir: packages/deb/ubuntu2204
   - id: download-ubuntu2404-runtime-deps
     kind: DownloadPackage
     parallelGroup: distro-package-downloads
@@ -24,13 +24,13 @@ steps:
         family: debian
         release: ubuntu2404
       repo:
-        type: apt-flat
+        type: deb-flat
         generate: true
       backend:
         mode: container
         runtime: auto
         image: ubuntu:24.04
-      outputDir: packages/apt/ubuntu2404
+      outputDir: packages/deb/ubuntu2404
   - id: download-rocky9-runtime-deps
     kind: DownloadPackage
     parallelGroup: distro-package-downloads
@@ -40,10 +40,10 @@ steps:
         family: rhel
         release: rocky9
       repo:
-        type: yum
+        type: rpm
         generate: true
       backend:
         mode: container
         runtime: auto
         image: rockylinux:9
-      outputDir: packages/yum/rocky9
+      outputDir: packages/rpm/rocky9

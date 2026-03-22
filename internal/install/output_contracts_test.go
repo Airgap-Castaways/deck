@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/taedi90/deck/internal/filemode"
+	"github.com/taedi90/deck/internal/workflowcontract"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -42,13 +43,14 @@ func TestStepOutputsCoverApplyContracts(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			outputs := stepOutputs(tc.kind, tc.spec)
-			for _, key := range tc.output {
-				covered[coverageKey(tc.kind, key)] = true
-				if _, ok := outputs[key]; !ok {
-					t.Fatalf("expected runtime output %q for %s", key, tc.kind)
+			stepKey := workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: tc.kind}
+			for _, outputKey := range tc.output {
+				covered[coverageKey(tc.kind, outputKey)] = true
+				if _, ok := outputs[outputKey]; !ok {
+					t.Fatalf("expected runtime output %q for %s", outputKey, tc.kind)
 				}
-				if !workflowexec.StepHasOutput(tc.kind, key) {
-					t.Fatalf("contract missing output %q for %s", key, tc.kind)
+				if !workflowexec.StepHasOutputForKey(stepKey, outputKey) {
+					t.Fatalf("contract missing output %q for %s", outputKey, tc.kind)
 				}
 			}
 		})
