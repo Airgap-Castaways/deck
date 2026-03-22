@@ -4,6 +4,11 @@ import "github.com/taedi90/deck/internal/stepspec"
 
 func generateRefreshRepositoryToolSchema() map[string]any {
 	root := stepEnvelopeSchema("RefreshRepository", "RefreshRepositoryStep", "Refreshes package metadata and can restrict or exclude repos during refresh.", "public")
+	patchRefreshRepositoryToolSchema(root)
+	return root
+}
+
+func patchRefreshRepositoryToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.RefreshRepository{})
 	if err != nil {
@@ -21,11 +26,15 @@ func generateRefreshRepositoryToolSchema() map[string]any {
 		map[string]any{"properties": map[string]any{"update": map[string]any{"const": true}}, "required": []any{"update"}},
 	}
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateDownloadPackageToolSchema() map[string]any {
 	root := stepEnvelopeSchema("DownloadPackage", "DownloadPackageStep", "Downloads packages into bundle output storage.", "public")
+	patchDownloadPackageToolSchema(root)
+	return root
+}
+
+func patchDownloadPackageToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.DownloadPackage{})
 	if err != nil {
@@ -59,11 +68,15 @@ func generateDownloadPackageToolSchema() map[string]any {
 	setMap(properties, "outputDir", minLenStringSchema())
 	spec["required"] = []any{"packages"}
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateInstallPackageToolSchema() map[string]any {
 	root := stepEnvelopeSchema("InstallPackage", "InstallPackageStep", "Installs packages on the local node.", "public")
+	patchInstallPackageToolSchema(root)
+	return root
+}
+
+func patchInstallPackageToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.InstallPackage{})
 	if err != nil {
@@ -82,11 +95,15 @@ func generateInstallPackageToolSchema() map[string]any {
 	setMap(properties, "excludeRepos", stringArraySchema(0, true))
 	spec["required"] = []any{"packages"}
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateConfigureRepositoryToolSchema() map[string]any {
 	root := stepEnvelopeSchema("ConfigureRepository", "ConfigureRepositoryStep", "Configures repository definitions on the local node.", "public")
+	patchConfigureRepositoryToolSchema(root)
+	return root
+}
+
+func patchConfigureRepositoryToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.ConfigureRepository{})
 	if err != nil {
@@ -120,5 +137,4 @@ func generateConfigureRepositoryToolSchema() map[string]any {
 	}
 	spec["required"] = []any{"repositories"}
 	setMap(props, "spec", spec)
-	return root
 }

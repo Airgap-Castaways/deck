@@ -4,6 +4,11 @@ import "github.com/taedi90/deck/internal/stepspec"
 
 func generateCommandToolSchema() map[string]any {
 	root := stepEnvelopeSchema("Command", "CommandStep", "Escape hatch for commands that are not yet covered by typed steps.", "public")
+	patchCommandToolSchema(root)
+	return root
+}
+
+func patchCommandToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.Command{})
 	if err != nil {
@@ -16,53 +21,66 @@ func generateCommandToolSchema() map[string]any {
 	setMap(properties, "timeout", durationStringSchema())
 	spec["required"] = []any{"command"}
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateWriteContainerdConfigToolSchema() map[string]any {
 	root := stepEnvelopeSchema("WriteContainerdConfig", "WriteContainerdConfigStep", "Writes the containerd config.toml file on the node.", "public")
-	props := propertyMap(root)
-	setMap(props, "spec", map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"properties": map[string]any{
-			"path":          minLenStringSchema(),
-			"configPath":    minLenStringSchema(),
-			"systemdCgroup": map[string]any{"type": "boolean"},
-			"createDefault": map[string]any{"type": "boolean", "default": true},
-		},
-	})
+	patchWriteContainerdConfigToolSchema(root)
 	return root
+}
+
+func patchWriteContainerdConfigToolSchema(root map[string]any) {
+	props := propertyMap(root)
+	spec, err := reflectedSpecSchema(&stepspec.WriteContainerdConfig{})
+	if err != nil {
+		panic(err)
+	}
+	delete(propertyMap(spec), "timeout")
+	properties := propertyMap(spec)
+	setMap(properties, "path", minLenStringSchema())
+	setMap(properties, "configPath", minLenStringSchema())
+	setMap(properties, "systemdCgroup", map[string]any{"type": "boolean"})
+	setMap(properties, "createDefault", map[string]any{"type": "boolean", "default": true})
+	setMap(props, "spec", spec)
 }
 
 func generateWriteContainerdRegistryHostsToolSchema() map[string]any {
 	root := stepEnvelopeSchema("WriteContainerdRegistryHosts", "WriteContainerdRegistryHostsStep", "Writes containerd registry host configuration for mirrors and trust policy.", "public")
-	props := propertyMap(root)
-	setMap(props, "spec", map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"required":             []any{"path", "registryHosts"},
-		"properties": map[string]any{
-			"path": minLenStringSchema(),
-			"registryHosts": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{
-				"type":                 "object",
-				"additionalProperties": false,
-				"required":             []any{"registry", "server", "host", "capabilities", "skipVerify"},
-				"properties": map[string]any{
-					"registry":     minLenStringSchema(),
-					"server":       minLenStringSchema(),
-					"host":         minLenStringSchema(),
-					"capabilities": stringArraySchema(1, true),
-					"skipVerify":   map[string]any{"type": "boolean"},
-				},
-			}},
-		},
-	})
+	patchWriteContainerdRegistryHostsToolSchema(root)
 	return root
+}
+
+func patchWriteContainerdRegistryHostsToolSchema(root map[string]any) {
+	props := propertyMap(root)
+	spec, err := reflectedSpecSchema(&stepspec.WriteContainerdRegistryHosts{})
+	if err != nil {
+		panic(err)
+	}
+	properties := propertyMap(spec)
+	setMap(properties, "path", minLenStringSchema())
+	if registryHosts, ok := properties["registryHosts"].(map[string]any); ok {
+		registryHosts["minItems"] = 1
+		if items, ok := registryHosts["items"].(map[string]any); ok {
+			items["required"] = []any{"registry", "server", "host", "capabilities", "skipVerify"}
+			itemProps := propertyMap(items)
+			setMap(itemProps, "registry", minLenStringSchema())
+			setMap(itemProps, "server", minLenStringSchema())
+			setMap(itemProps, "host", minLenStringSchema())
+			setMap(itemProps, "capabilities", stringArraySchema(1, true))
+			setMap(itemProps, "skipVerify", map[string]any{"type": "boolean"})
+		}
+	}
+	spec["required"] = []any{"path", "registryHosts"}
+	setMap(props, "spec", spec)
 }
 
 func generateEnsureDirectoryToolSchema() map[string]any {
 	root := stepEnvelopeSchema("EnsureDirectory", "EnsureDirectoryStep", "Ensures a directory exists on the local node.", "public")
+	patchEnsureDirectoryToolSchema(root)
+	return root
+}
+
+func patchEnsureDirectoryToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.EnsureDirectory{})
 	if err != nil {
@@ -73,11 +91,15 @@ func generateEnsureDirectoryToolSchema() map[string]any {
 	setMap(properties, "mode", modeSchema())
 	spec["required"] = []any{"path"}
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateDownloadImageToolSchema() map[string]any {
 	root := stepEnvelopeSchema("DownloadImage", "DownloadImageStep", "Downloads images into bundle output storage.", "public")
+	patchDownloadImageToolSchema(root)
+	return root
+}
+
+func patchDownloadImageToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.DownloadImage{})
 	if err != nil {
@@ -91,11 +113,15 @@ func generateDownloadImageToolSchema() map[string]any {
 	setMap(properties, "backend", imageBackendSchema())
 	setMap(properties, "outputDir", minLenStringSchema())
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateImageLoadToolSchema() map[string]any {
 	root := stepEnvelopeSchema("LoadImage", "LoadImageStep", "Loads prepared image archives into the local container runtime.", "public")
+	patchImageLoadToolSchema(root)
+	return root
+}
+
+func patchImageLoadToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.LoadImage{})
 	if err != nil {
@@ -109,11 +135,15 @@ func generateImageLoadToolSchema() map[string]any {
 	setMap(properties, "runtime", enumStringSchema("auto", "ctr", "docker", "podman"))
 	setMap(properties, "command", stringArraySchema(1, false))
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateVerifyImageToolSchema() map[string]any {
 	root := stepEnvelopeSchema("VerifyImage", "VerifyImageStep", "Verifies that required images already exist on the node.", "public")
+	patchVerifyImageToolSchema(root)
+	return root
+}
+
+func patchVerifyImageToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.VerifyImage{})
 	if err != nil {
@@ -125,7 +155,6 @@ func generateVerifyImageToolSchema() map[string]any {
 	setMap(properties, "images", stringArraySchema(1, false))
 	setMap(properties, "command", stringArraySchema(1, false))
 	setMap(props, "spec", spec)
-	return root
 }
 
 func imageAuthSchema() map[string]any {
@@ -164,6 +193,11 @@ func imageBackendSchema() map[string]any {
 
 func generateCheckHostToolSchema() map[string]any {
 	root := stepEnvelopeSchema("CheckHost", "CheckHostStep", "Runs host checks before prepare execution.", "public")
+	patchCheckHostToolSchema(root)
+	return root
+}
+
+func patchCheckHostToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.CheckHost{})
 	if err != nil {
@@ -175,32 +209,41 @@ func generateCheckHostToolSchema() map[string]any {
 	setMap(properties, "failFast", map[string]any{"type": "boolean", "default": true})
 	spec["required"] = []any{"checks"}
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateKernelModuleToolSchema() map[string]any {
 	root := stepEnvelopeSchema("KernelModule", "KernelModuleStep", "Loads and persists required kernel modules on the local node.", "public")
-	props := propertyMap(root)
-	setMap(props, "spec", map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"oneOf": []any{
-			map[string]any{"required": []any{"name"}, "not": map[string]any{"required": []any{"names"}}},
-			map[string]any{"required": []any{"names"}, "not": map[string]any{"required": []any{"name"}}},
-		},
-		"properties": map[string]any{
-			"name":        minLenStringSchema(),
-			"names":       stringArraySchema(1, true),
-			"load":        map[string]any{"type": "boolean", "default": true},
-			"persist":     map[string]any{"type": "boolean", "default": true},
-			"persistFile": map[string]any{"type": "string"},
-		},
-	})
+	patchKernelModuleToolSchema(root)
 	return root
+}
+
+func patchKernelModuleToolSchema(root map[string]any) {
+	props := propertyMap(root)
+	spec, err := reflectedSpecSchema(&stepspec.KernelModule{})
+	if err != nil {
+		panic(err)
+	}
+	delete(propertyMap(spec), "timeout")
+	properties := propertyMap(spec)
+	setMap(properties, "name", minLenStringSchema())
+	setMap(properties, "names", stringArraySchema(1, true))
+	setMap(properties, "load", map[string]any{"type": "boolean", "default": true})
+	setMap(properties, "persist", map[string]any{"type": "boolean", "default": true})
+	setMap(properties, "persistFile", map[string]any{"type": "string"})
+	spec["oneOf"] = []any{
+		map[string]any{"required": []any{"name"}, "not": map[string]any{"required": []any{"names"}}},
+		map[string]any{"required": []any{"names"}, "not": map[string]any{"required": []any{"name"}}},
+	}
+	setMap(props, "spec", spec)
 }
 
 func generateInitKubeadmToolSchema() map[string]any {
 	root := stepEnvelopeSchema("InitKubeadm", "InitKubeadmStep", "Runs kubeadm init and writes a join command file.", "public")
+	patchInitKubeadmToolSchema(root)
+	return root
+}
+
+func patchInitKubeadmToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.KubeadmInit{})
 	if err != nil {
@@ -212,11 +255,15 @@ func generateInitKubeadmToolSchema() map[string]any {
 	setMap(properties, "outputJoinFile", minLenStringSchema())
 	setMap(properties, "skipIfAdminConfExists", map[string]any{"type": "boolean", "default": true})
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateJoinKubeadmToolSchema() map[string]any {
 	root := stepEnvelopeSchema("JoinKubeadm", "JoinKubeadmStep", "Runs kubeadm join.", "public")
+	patchJoinKubeadmToolSchema(root)
+	return root
+}
+
+func patchJoinKubeadmToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.KubeadmJoin{})
 	if err != nil {
@@ -232,11 +279,15 @@ func generateJoinKubeadmToolSchema() map[string]any {
 	setMap(properties, "configFile", minLenStringSchema())
 	setMap(properties, "asControlPlane", map[string]any{"type": "boolean", "default": false})
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateResetKubeadmToolSchema() map[string]any {
 	root := stepEnvelopeSchema("ResetKubeadm", "ResetKubeadmStep", "Runs kubeadm reset and optional cleanup steps.", "public")
+	patchResetKubeadmToolSchema(root)
+	return root
+}
+
+func patchResetKubeadmToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.KubeadmReset{})
 	if err != nil {
@@ -248,11 +299,15 @@ func generateResetKubeadmToolSchema() map[string]any {
 	setMap(properties, "ignoreErrors", map[string]any{"type": "boolean", "default": false})
 	setMap(properties, "stopKubelet", map[string]any{"type": "boolean", "default": true})
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateUpgradeKubeadmToolSchema() map[string]any {
 	root := stepEnvelopeSchema("UpgradeKubeadm", "UpgradeKubeadmStep", "Runs kubeadm upgrade apply and optionally restarts kubelet.", "public")
+	patchUpgradeKubeadmToolSchema(root)
+	return root
+}
+
+func patchUpgradeKubeadmToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.KubeadmUpgrade{})
 	if err != nil {
@@ -265,11 +320,15 @@ func generateUpgradeKubeadmToolSchema() map[string]any {
 	setMap(properties, "restartKubelet", map[string]any{"type": "boolean", "default": true})
 	setMap(properties, "kubeletService", minLenStringSchema())
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateCheckClusterToolSchema() map[string]any {
 	root := stepEnvelopeSchema("CheckCluster", "CheckClusterStep", "Polls and verifies Kubernetes cluster state on the local node.", "public")
+	patchCheckClusterToolSchema(root)
+	return root
+}
+
+func patchCheckClusterToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.ClusterCheck{})
 	if err != nil {
@@ -324,5 +383,4 @@ func generateCheckClusterToolSchema() map[string]any {
 	setMap(reportProps, "clusterNodesPath", minLenStringSchema())
 
 	setMap(props, "spec", spec)
-	return root
 }

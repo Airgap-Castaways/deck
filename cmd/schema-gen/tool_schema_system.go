@@ -4,6 +4,11 @@ import "github.com/taedi90/deck/internal/stepspec"
 
 func generateManageServiceToolSchema() map[string]any {
 	root := stepEnvelopeSchema("ManageService", "ManageServiceStep", "Starts, stops, enables, or disables local services.", "public")
+	patchManageServiceToolSchema(root)
+	return root
+}
+
+func patchManageServiceToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.ManageService{})
 	if err != nil {
@@ -23,11 +28,15 @@ func generateManageServiceToolSchema() map[string]any {
 		map[string]any{"required": []any{"names"}, "not": map[string]any{"required": []any{"name"}}},
 	}
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateSwapToolSchema() map[string]any {
 	root := stepEnvelopeSchema("Swap", "SwapStep", "Enables or disables swap and its persistence settings.", "public")
+	patchSwapToolSchema(root)
+	return root
+}
+
+func patchSwapToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.Swap{})
 	if err != nil {
@@ -39,11 +48,15 @@ func generateSwapToolSchema() map[string]any {
 	setMap(properties, "persist", map[string]any{"type": "boolean", "default": true})
 	setMap(properties, "fstabPath", map[string]any{"type": "string"})
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateCreateSymlinkToolSchema() map[string]any {
 	root := stepEnvelopeSchema("CreateSymlink", "CreateSymlinkStep", "Creates or replaces a symbolic link on the local node.", "public")
+	patchCreateSymlinkToolSchema(root)
+	return root
+}
+
+func patchCreateSymlinkToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.CreateSymlink{})
 	if err != nil {
@@ -58,11 +71,15 @@ func generateCreateSymlinkToolSchema() map[string]any {
 	setMap(properties, "ignoreMissingTarget", map[string]any{"type": "boolean", "default": false})
 	spec["required"] = []any{"path", "target"}
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateSysctlToolSchema() map[string]any {
 	root := stepEnvelopeSchema("Sysctl", "SysctlStep", "Writes and optionally applies sysctl values on the local node.", "public")
+	patchSysctlToolSchema(root)
+	return root
+}
+
+func patchSysctlToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.Sysctl{})
 	if err != nil {
@@ -80,11 +97,15 @@ func generateSysctlToolSchema() map[string]any {
 	setMap(properties, "apply", map[string]any{"type": "boolean", "default": false})
 	spec["required"] = []any{"values", "writeFile"}
 	setMap(props, "spec", spec)
-	return root
 }
 
 func generateWriteSystemdUnitToolSchema() map[string]any {
 	root := stepEnvelopeSchema("WriteSystemdUnit", "WriteSystemdUnitStep", "Writes a systemd unit file on the node.", "public")
+	patchWriteSystemdUnitToolSchema(root)
+	return root
+}
+
+func patchWriteSystemdUnitToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec, err := reflectedSpecSchema(&stepspec.WriteSystemdUnit{})
 	if err != nil {
@@ -100,5 +121,4 @@ func generateWriteSystemdUnitToolSchema() map[string]any {
 	spec["required"] = []any{"path"}
 	spec["oneOf"] = []any{map[string]any{"required": []any{"content"}}, map[string]any{"required": []any{"template"}}}
 	setMap(props, "spec", spec)
-	return root
 }
