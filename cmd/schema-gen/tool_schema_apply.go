@@ -241,15 +241,116 @@ func generateResetKubeadmToolSchema() map[string]any {
 		"type":                 "object",
 		"additionalProperties": false,
 		"properties": map[string]any{
-			"force":                 map[string]any{"type": "boolean", "default": false},
-			"ignoreErrors":          map[string]any{"type": "boolean", "default": false},
-			"stopKubelet":           map[string]any{"type": "boolean", "default": true},
-			"criSocket":             map[string]any{"type": "string"},
+			"force":                       map[string]any{"type": "boolean", "default": false},
+			"ignoreErrors":                map[string]any{"type": "boolean", "default": false},
+			"stopKubelet":                 map[string]any{"type": "boolean", "default": true},
+			"criSocket":                   map[string]any{"type": "string"},
+			"extraArgs":                   stringArraySchema(0, false),
+			"removePaths":                 stringArraySchema(0, false),
+			"removeFiles":                 stringArraySchema(0, false),
+			"cleanupContainers":           stringArraySchema(0, false),
+			"restartRuntimeService":       map[string]any{"type": "string"},
+			"waitForRuntimeService":       map[string]any{"type": "boolean"},
+			"waitForRuntimeReady":         map[string]any{"type": "boolean"},
+			"waitForMissingManifestsGlob": map[string]any{"type": "string"},
+			"stopKubeletAfterReset":       map[string]any{"type": "boolean"},
+			"verifyContainersAbsent":      stringArraySchema(0, false),
+			"reportFile":                  map[string]any{"type": "string"},
+			"reportResetReason":           map[string]any{"type": "string"},
+		},
+	})
+	return root
+}
+
+func generateUpgradeKubeadmToolSchema() map[string]any {
+	root := stepEnvelopeSchema("UpgradeKubeadm", "UpgradeKubeadmStep", "Runs kubeadm upgrade apply and optionally restarts kubelet.", "public")
+	props := propertyMap(root)
+	setMap(props, "spec", map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []any{"kubernetesVersion"},
+		"properties": map[string]any{
+			"kubernetesVersion":     minLenStringSchema(),
+			"ignorePreflightErrors": stringArraySchema(0, false),
 			"extraArgs":             stringArraySchema(0, false),
-			"removePaths":           stringArraySchema(0, false),
-			"removeFiles":           stringArraySchema(0, false),
-			"cleanupContainers":     stringArraySchema(0, false),
-			"restartRuntimeService": map[string]any{"type": "string"},
+			"restartKubelet":        map[string]any{"type": "boolean", "default": true},
+			"kubeletService":        minLenStringSchema(),
+		},
+	})
+	return root
+}
+
+func generateCheckClusterToolSchema() map[string]any {
+	root := stepEnvelopeSchema("CheckCluster", "CheckClusterStep", "Polls and verifies Kubernetes cluster state on the local node.", "public")
+	props := propertyMap(root)
+	setMap(props, "spec", map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"kubeconfig":   minLenStringSchema(),
+			"interval":     durationStringSchema(),
+			"initialDelay": durationStringSchema(),
+			"timeout":      durationStringSchema(),
+			"nodes": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"total":             map[string]any{"type": "integer", "minimum": 0},
+					"ready":             map[string]any{"type": "integer", "minimum": 0},
+					"controlPlaneReady": map[string]any{"type": "integer", "minimum": 0},
+				},
+			},
+			"versions": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"targetVersion": minLenStringSchema(),
+					"server":        minLenStringSchema(),
+					"kubelet":       minLenStringSchema(),
+					"kubeadm":       minLenStringSchema(),
+					"nodeName":      minLenStringSchema(),
+					"reportPath":    minLenStringSchema(),
+				},
+			},
+			"kubeSystem": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"readyNames":    stringArraySchema(0, false),
+					"readyPrefixes": stringArraySchema(0, false),
+					"readyPrefixMinimums": map[string]any{"type": "array", "items": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"required":             []any{"prefix", "minReady"},
+						"properties": map[string]any{
+							"prefix":   minLenStringSchema(),
+							"minReady": map[string]any{"type": "integer", "minimum": 1},
+						},
+					}},
+					"reportPath":     minLenStringSchema(),
+					"jsonReportPath": minLenStringSchema(),
+				},
+			},
+			"fileAssertions": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []any{"path", "contains"},
+					"properties": map[string]any{
+						"path":     minLenStringSchema(),
+						"contains": stringArraySchema(1, false),
+					},
+				},
+			},
+			"reports": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"nodesPath":        minLenStringSchema(),
+					"clusterNodesPath": minLenStringSchema(),
+				},
+			},
 		},
 	})
 	return root

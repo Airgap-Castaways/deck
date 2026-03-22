@@ -1,0 +1,208 @@
+{
+  "$id": "https://deck.local/schemas/tools/cluster-check.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Polls and verifies Kubernetes cluster state on the local node.",
+  "properties": {
+    "apiVersion": {
+      "const": "deck/v1alpha1"
+    },
+    "id": {
+      "type": "string"
+    },
+    "kind": {
+      "const": "CheckCluster"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "parallelGroup": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "register": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "type": "object"
+    },
+    "retry": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "spec": {
+      "additionalProperties": false,
+      "properties": {
+        "fileAssertions": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "contains": {
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "path": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "contains"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "initialDelay": {
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
+        "interval": {
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
+        "kubeSystem": {
+          "additionalProperties": false,
+          "properties": {
+            "jsonReportPath": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "readyNames": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "readyPrefixMinimums": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "minReady": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "prefix": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "prefix",
+                  "minReady"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "readyPrefixes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "reportPath": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "kubeconfig": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "nodes": {
+          "additionalProperties": false,
+          "properties": {
+            "controlPlaneReady": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "ready": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "total": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "reports": {
+          "additionalProperties": false,
+          "properties": {
+            "clusterNodesPath": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "nodesPath": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "timeout": {
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "type": "string"
+        },
+        "versions": {
+          "additionalProperties": false,
+          "properties": {
+            "kubeadm": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "kubelet": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "nodeName": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "reportPath": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "server": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "targetVersion": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "timeout": {
+      "pattern": "^[0-9]+(ms|s|m|h)$",
+      "type": "string"
+    },
+    "when": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "spec"
+  ],
+  "title": "CheckClusterStep",
+  "type": "object",
+  "x-deck-visibility": "public"
+}

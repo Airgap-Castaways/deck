@@ -18,6 +18,7 @@ For the human-facing reference, read `../docs/reference/schema/index.md`.
 
 ## Current tool schemas
 
+- `tools/cluster-check.schema.json`: `CheckCluster` (`public`)
 - `tools/host-check.schema.json`: `CheckHost` (`public`)
 - `tools/command.schema.json`: `Command` (`public`)
 - `tools/repository.configure.schema.json`: `ConfigureRepository` (`public`)
@@ -39,6 +40,7 @@ For the human-facing reference, read `../docs/reference/schema/index.md`.
 - `tools/kubeadm.reset.schema.json`: `ResetKubeadm` (`public`)
 - `tools/swap.schema.json`: `Swap` (`public`)
 - `tools/sysctl.schema.json`: `Sysctl` (`public`)
+- `tools/kubeadm.upgrade.schema.json`: `UpgradeKubeadm` (`public`)
 - `tools/image.verify.schema.json`: `VerifyImage` (`public`)
 - `tools/wait.command.schema.json`: `WaitForCommand` (`public`)
 - `tools/wait.file-exists.schema.json`: `WaitForFile` (`public`)

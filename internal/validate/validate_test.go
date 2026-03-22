@@ -89,6 +89,54 @@ phases:
 		}
 	})
 
+	t.Run("tool schema valid WaitForMissingFile glob", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: wait-missing-glob
+        apiVersion: deck/v1alpha1
+        kind: WaitForMissingFile
+        spec:
+          glob: /etc/kubernetes/manifests/*.yaml
+          interval: 2s
+          timeout: 2m
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema valid WaitForMissingFile paths", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: wait-missing-paths
+        apiVersion: deck/v1alpha1
+        kind: WaitForMissingFile
+        spec:
+          paths:
+            - /etc/kubernetes/manifests/kube-apiserver.yaml
+            - /etc/kubernetes/manifests/kube-scheduler.yaml
+          interval: 2s
+          timeout: 2m
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
 	t.Run("tool schema rejects Image verify with auth", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
@@ -815,6 +863,31 @@ phases:
 		}
 	})
 
+	t.Run("tool schema valid CreateSymlink ignoreMissingTarget", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: symlink-runc
+        apiVersion: deck/v1alpha1
+        kind: CreateSymlink
+        spec:
+          path: /opt/cni/bin
+          target: /usr/lib/cni
+          createParent: true
+          ignoreMissingTarget: true
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
 	t.Run("tool schema valid repository without legacy action", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
@@ -886,6 +959,35 @@ phases:
 			t.Fatalf("expected tool schema validation error")
 		}
 		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects CreateSymlink conflicting target flags", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: symlink-runc
+        apiVersion: deck/v1alpha1
+        kind: CreateSymlink
+        spec:
+          path: /usr/bin/runc
+          target: /usr/local/sbin/runc
+          requireTarget: true
+          ignoreMissingTarget: true
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected validation error")
+		}
+		if !strings.Contains(err.Error(), "E_SCHEMA_INVALID") {
 			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
@@ -1153,6 +1255,99 @@ phases:
 			t.Fatalf("write file: %v", err)
 		}
 
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema valid expanded ResetKubeadm", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: reset-node
+        apiVersion: deck/v1alpha1
+        kind: ResetKubeadm
+        spec:
+          force: true
+          criSocket: unix:///run/containerd/containerd.sock
+          restartRuntimeService: containerd
+          waitForRuntimeService: true
+          waitForRuntimeReady: true
+          waitForMissingManifestsGlob: /etc/kubernetes/manifests/*.yaml
+          stopKubeletAfterReset: true
+          verifyContainersAbsent: [kube-apiserver, etcd]
+          reportFile: /tmp/deck/reports/reset-state.txt
+          reportResetReason: acceptance
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema valid UpgradeKubeadm", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: upgrade-control-plane
+        apiVersion: deck/v1alpha1
+        kind: UpgradeKubeadm
+        spec:
+          kubernetesVersion: v1.31.0
+          ignorePreflightErrors: [Swap]
+          restartKubelet: true
+          kubeletService: kubelet
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema valid CheckCluster", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: verify
+    steps:
+      - id: check-cluster
+        apiVersion: deck/v1alpha1
+        kind: CheckCluster
+        spec:
+          nodes:
+            total: 1
+            ready: 1
+            controlPlaneReady: 1
+          versions:
+            targetVersion: v1.31.0
+            server: v1.31.0
+            kubelet: v1.31.0
+            reportPath: /tmp/deck/reports/version.txt
+          kubeSystem:
+            readyNames: [etcd-control-plane]
+            readyPrefixMinimums:
+              - prefix: coredns-
+                minReady: 2
+          fileAssertions:
+            - path: /etc/containerd/config.toml
+              contains: [registry.k8s.io/pause:3.10]
+          reports:
+            nodesPath: /tmp/deck/reports/nodes.txt
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
 		if err := File(path); err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}

@@ -6,7 +6,7 @@ Reference for the `Kubeadm` family of typed workflow steps.
 ## Summary
 
 - family: `kubeadm`
-- kinds: `InitKubeadm`, `JoinKubeadm`, `ResetKubeadm`
+- kinds: `InitKubeadm`, `JoinKubeadm`, `ResetKubeadm`, `UpgradeKubeadm`
 
 ## Shared Step Fields
 
@@ -17,6 +17,7 @@ Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`,
 - `InitKubeadm`: Run kubeadm init and write the join command to a file.
 - `JoinKubeadm`: Run kubeadm join for a worker or additional control-plane node.
 - `ResetKubeadm`: Run kubeadm reset and optional cleanup steps.
+- `UpgradeKubeadm`: Run kubeadm upgrade apply and optional kubelet restart.
 
 ## `InitKubeadm`
 
@@ -55,7 +56,7 @@ spec:
 
 ### Notes
 
-- `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, and `ResetKubeadm` focuses on cleanup fields.
+- `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, `ResetKubeadm` focuses on cleanup fields, and `UpgradeKubeadm` performs local control-plane upgrades.
 - When `skipIfAdminConfExists` skips `InitKubeadm`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
 - Place host preparation steps (`WriteContainerdConfig`, `Swap`, `KernelModule`, `Sysctl`) before kubeadm bootstrap so failures point to the correct step.
 
@@ -89,7 +90,7 @@ spec:
 
 ### Notes
 
-- `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, and `ResetKubeadm` focuses on cleanup fields.
+- `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, `ResetKubeadm` focuses on cleanup fields, and `UpgradeKubeadm` performs local control-plane upgrades.
 - When `skipIfAdminConfExists` skips `InitKubeadm`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
 - Place host preparation steps (`WriteContainerdConfig`, `Swap`, `KernelModule`, `Sysctl`) before kubeadm bootstrap so failures point to the correct step.
 
@@ -123,12 +124,54 @@ spec:
 | `spec.ignoreErrors` | `boolean` | no | `false` | `` | For `ResetKubeadm`, continue with filesystem and runtime cleanup even if the kubeadm command itself fails. Later cleanup steps still fail the step if they error. | `true` |
 | `spec.removeFiles` | `array<string>` | no | `` | `` | Individual files to delete during `ResetKubeadm` cleanup, such as kubeconfig files. | `[/etc/kubernetes/admin.conf]` |
 | `spec.removePaths` | `array<string>` | no | `` | `` | Directories to delete during `ResetKubeadm` cleanup, such as CNI and etcd data. | `[/etc/cni/net.d,/var/lib/etcd]` |
+| `spec.reportFile` | `string` | no | `` | `` | Optional reset-proof report file written after cleanup and verification complete. | `/tmp/deck/reports/reset-state.txt` |
+| `spec.reportResetReason` | `string` | no | `` | `` | Value written into the reset report as `resetReason`. | `node-reset-acceptance` |
 | `spec.restartRuntimeService` | `string` | no | `` | `` | Container runtime service name to restart after `ResetKubeadm` cleanup completes. | `containerd` |
 | `spec.stopKubelet` | `boolean` | no | `true` | `` | Stop the kubelet service before running `ResetKubeadm`. Defaults to `true`. | `true` |
+| `spec.stopKubeletAfterReset` | `boolean` | no | `` | `` | Stop kubelet again after runtime convergence and verification complete. | `true` |
+| `spec.verifyContainersAbsent` | `array<string>` | no | `` | `` | Container names that must no longer exist after reset cleanup. | `[kube-apiserver,etcd]` |
+| `spec.waitForMissingManifestsGlob` | `string` | no | `` | `` | Glob that must resolve to zero matches before the reset step succeeds. Useful for static pod manifest cleanup. | `/etc/kubernetes/manifests/*.yaml` |
+| `spec.waitForRuntimeReady` | `boolean` | no | `` | `` | After reset cleanup, poll `crictl info` until the runtime responds successfully. | `true` |
+| `spec.waitForRuntimeService` | `boolean` | no | `` | `` | After restarting the runtime service, wait until systemd reports it active. | `true` |
 
 ### Notes
 
-- `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, and `ResetKubeadm` focuses on cleanup fields.
+- `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, `ResetKubeadm` focuses on cleanup fields, and `UpgradeKubeadm` performs local control-plane upgrades.
+- When `skipIfAdminConfExists` skips `InitKubeadm`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
+- Place host preparation steps (`WriteContainerdConfig`, `Swap`, `KernelModule`, `Sysctl`) before kubeadm bootstrap so failures point to the correct step.
+
+## `UpgradeKubeadm`
+
+Run kubeadm upgrade apply and optional kubelet restart.
+
+- schema: `../../../schemas/tools/kubeadm.upgrade.schema.json`
+
+### When To Use
+
+Use this to upgrade a local kubeadm-managed control-plane node with a typed workflow step.
+
+### Example
+
+```yaml
+kind: UpgradeKubeadm
+spec:
+  kubernetesVersion: v1.31.0
+  ignorePreflightErrors: [Swap]
+```
+
+### Spec Fields
+
+| Key | Type | Required | Default | Enum | Description | Example |
+|---|---|---:|---|---|---|---|
+| `spec.extraArgs` | `array<string>` | no | `` | `` | Additional flags passed directly to the kubeadm subcommand as `--key=value` pairs. | `[--skip-phases=addon/kube-proxy]` |
+| `spec.ignorePreflightErrors` | `array<string>` | no | `` | `` | Kubeadm preflight check names to suppress. Use sparingly and only for known-safe deviations. | `[swap]` |
+| `spec.kubeletService` | `string` | no | `` | `` | Service name restarted after a successful `UpgradeKubeadm`. Defaults to `kubelet`. | `kubelet` |
+| `spec.kubernetesVersion` | `string` | yes | `` | `` | Kubernetes version string passed to kubeadm. Accepts the `{{ .vars.* }}` template syntax. | `v1.30.1` |
+| `spec.restartKubelet` | `boolean` | no | `true` | `` | Restart the kubelet service after a successful `UpgradeKubeadm` run. Defaults to `true`. | `true` |
+
+### Notes
+
+- `InitKubeadm` requires `outputJoinFile`, `JoinKubeadm` requires exactly one of `joinFile` or `configFile`, `ResetKubeadm` focuses on cleanup fields, and `UpgradeKubeadm` performs local control-plane upgrades.
 - When `skipIfAdminConfExists` skips `InitKubeadm`, deck does not create a new join artifact and registered `joinFile` outputs are unavailable unless the file already exists.
 - Place host preparation steps (`WriteContainerdConfig`, `Swap`, `KernelModule`, `Sysctl`) before kubeadm bootstrap so failures point to the correct step.
 

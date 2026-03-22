@@ -12,6 +12,30 @@
             "if": {
               "properties": {
                 "kind": {
+                  "const": "CheckCluster"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
                   "const": "CheckHost"
                 }
               },
@@ -559,6 +583,30 @@
             "if": {
               "properties": {
                 "kind": {
+                  "const": "UpgradeKubeadm"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
                   "const": "VerifyImage"
                 }
               },
@@ -843,6 +891,7 @@
           },
           "kind": {
             "enum": [
+              "CheckCluster",
               "CheckHost",
               "Command",
               "ConfigureRepository",
@@ -864,6 +913,7 @@
               "ResetKubeadm",
               "Swap",
               "Sysctl",
+              "UpgradeKubeadm",
               "VerifyImage",
               "WaitForCommand",
               "WaitForFile",

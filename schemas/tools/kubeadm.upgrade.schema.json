@@ -1,8 +1,8 @@
 {
-  "$id": "https://deck.local/schemas/tools/symlink.schema.json",
+  "$id": "https://deck.local/schemas/tools/kubeadm.upgrade.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Creates or replaces a symbolic link on the local node.",
+  "description": "Runs kubeadm upgrade apply and optionally restarts kubelet.",
   "properties": {
     "apiVersion": {
       "const": "deck/v1alpha1"
@@ -11,7 +11,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "CreateSymlink"
+      "const": "UpgradeKubeadm"
     },
     "metadata": {
       "additionalProperties": true,
@@ -37,34 +37,33 @@
     "spec": {
       "additionalProperties": false,
       "properties": {
-        "createParent": {
-          "default": false,
-          "type": "boolean"
+        "extraArgs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
-        "force": {
-          "default": false,
-          "type": "boolean"
+        "ignorePreflightErrors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
-        "ignoreMissingTarget": {
-          "default": false,
-          "type": "boolean"
-        },
-        "path": {
+        "kubeletService": {
           "minLength": 1,
           "type": "string"
         },
-        "requireTarget": {
-          "default": false,
-          "type": "boolean"
-        },
-        "target": {
+        "kubernetesVersion": {
           "minLength": 1,
           "type": "string"
+        },
+        "restartKubelet": {
+          "default": true,
+          "type": "boolean"
         }
       },
       "required": [
-        "path",
-        "target"
+        "kubernetesVersion"
       ],
       "type": "object"
     },
@@ -81,7 +80,7 @@
     "kind",
     "spec"
   ],
-  "title": "CreateSymlinkStep",
+  "title": "UpgradeKubeadmStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

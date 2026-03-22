@@ -18,6 +18,7 @@ This is the entrypoint for deck's generated schema documentation.
 
 ## Tool Step Quick Links
 
+- [ClusterCheck](tools/cluster-check.md)
 - [Command](tools/command.md)
 - [Containerd](tools/containerd.md)
 - [Directory](tools/directory.md)

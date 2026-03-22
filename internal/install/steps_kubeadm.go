@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
+	"github.com/taedi90/deck/internal/hostfs"
 	"github.com/taedi90/deck/internal/workflowexec"
 )
 
@@ -24,6 +26,13 @@ type kubeadmResetSpec struct {
 	RemoveFiles                 []string `json:"removeFiles"`
 	CleanupContainers           []string `json:"cleanupContainers"`
 	RestartRuntimeManageService string   `json:"restartRuntimeService"`
+	WaitForRuntimeService       bool     `json:"waitForRuntimeService"`
+	WaitForRuntimeReady         bool     `json:"waitForRuntimeReady"`
+	WaitForMissingManifestsGlob string   `json:"waitForMissingManifestsGlob"`
+	StopKubeletAfterReset       bool     `json:"stopKubeletAfterReset"`
+	VerifyContainersAbsent      []string `json:"verifyContainersAbsent"`
+	ReportFile                  string   `json:"reportFile"`
+	ReportResetReason           string   `json:"reportResetReason"`
 	Timeout                     string   `json:"timeout"`
 }
 
@@ -45,9 +54,10 @@ type kubeadmInitSpec struct {
 var kubeadmAdminConfPath = "/etc/kubernetes/admin.conf"
 
 var (
-	kubeadmInitExecutor  = runInitKubeadmReal
-	kubeadmJoinExecutor  = runJoinKubeadmReal
-	kubeadmResetExecutor = runResetKubeadmReal
+	kubeadmInitExecutor    = runInitKubeadmReal
+	kubeadmJoinExecutor    = runJoinKubeadmReal
+	kubeadmResetExecutor   = runResetKubeadmReal
+	kubeadmUpgradeExecutor = runUpgradeKubeadmReal
 )
 
 type kubeadmJoinSpec struct {
@@ -56,6 +66,15 @@ type kubeadmJoinSpec struct {
 	AsControlPlane bool     `json:"asControlPlane"`
 	ExtraArgs      []string `json:"extraArgs"`
 	Timeout        string   `json:"timeout"`
+}
+
+type kubeadmUpgradeSpec struct {
+	KubernetesVersion     string   `json:"kubernetesVersion"`
+	IgnorePreflightErrors []string `json:"ignorePreflightErrors"`
+	ExtraArgs             []string `json:"extraArgs"`
+	RestartKubelet        *bool    `json:"restartKubelet"`
+	KubeletService        string   `json:"kubeletService"`
+	Timeout               string   `json:"timeout"`
 }
 
 func runInitKubeadm(ctx context.Context, spec map[string]any) error {
@@ -78,6 +97,17 @@ func runJoinKubeadm(ctx context.Context, spec map[string]any) error {
 		return fmt.Errorf("context is nil")
 	}
 	return kubeadmJoinExecutor(ctx, decoded)
+}
+
+func runUpgradeKubeadm(ctx context.Context, spec map[string]any) error {
+	decoded, err := workflowexec.DecodeSpec[kubeadmUpgradeSpec](spec)
+	if err != nil {
+		return fmt.Errorf("decode UpgradeKubeadm spec: %w", err)
+	}
+	if ctx == nil {
+		return fmt.Errorf("context is nil")
+	}
+	return kubeadmUpgradeExecutor(ctx, decoded)
 }
 
 func runInitKubeadmReal(parent context.Context, spec kubeadmInitSpec) error {
@@ -392,7 +422,83 @@ func runResetKubeadmReal(ctx context.Context, decoded kubeadmResetSpec) error {
 			return fmt.Errorf("%s: restart runtime service %s failed: %w", errCodeInstallResetFailed, restartRuntime, err)
 		}
 	}
+	if decoded.WaitForRuntimeService && restartRuntime != "" {
+		if err := runWaitDecoded(ctx, "WaitForService", waitSpec{Name: restartRuntime}, parseStepTimeout(decoded.Timeout, 2*time.Minute)); err != nil {
+			return fmt.Errorf("%s: runtime service did not become active: %w", errCodeInstallResetFailed, err)
+		}
+	}
+	if decoded.WaitForRuntimeReady {
+		command := []string{"crictl"}
+		if socket := strings.TrimSpace(decoded.CriSocket); socket != "" {
+			command = append(command, "--runtime-endpoint", socket)
+		}
+		command = append(command, "info")
+		if err := runWaitDecoded(ctx, "WaitForCommand", waitSpec{Command: command}, parseStepTimeout(decoded.Timeout, 2*time.Minute)); err != nil {
+			return fmt.Errorf("%s: runtime did not become ready: %w", errCodeInstallResetFailed, err)
+		}
+	}
+	if glob := strings.TrimSpace(decoded.WaitForMissingManifestsGlob); glob != "" {
+		if err := runWaitDecoded(ctx, "WaitForMissingFile", waitSpec{Glob: glob}, parseStepTimeout(decoded.Timeout, 2*time.Minute)); err != nil {
+			return fmt.Errorf("%s: manifests did not disappear: %w", errCodeInstallResetFailed, err)
+		}
+	}
+	for _, name := range trimmedStringSlice(decoded.VerifyContainersAbsent) {
+		present, err := kubeadmContainerPresent(ctx, name, strings.TrimSpace(decoded.CriSocket), parseStepTimeout(decoded.Timeout, 2*time.Minute))
+		if err != nil {
+			return fmt.Errorf("%s: verify stale container %s: %w", errCodeInstallResetFailed, name, err)
+		}
+		if present {
+			return fmt.Errorf("%s: stale container still present: %s", errCodeInstallResetFailed, name)
+		}
+	}
+	if decoded.StopKubeletAfterReset {
+		_ = runTimedCommandWithContext(ctx, "systemctl", []string{"stop", "kubelet"}, parseStepTimeout(decoded.Timeout, 2*time.Minute))
+	}
+	if reportPath := strings.TrimSpace(decoded.ReportFile); reportPath != "" {
+		if err := writeResetReport(ctx, decoded, reportPath); err != nil {
+			return fmt.Errorf("%s: write reset report: %w", errCodeInstallResetFailed, err)
+		}
+	}
 
+	return nil
+}
+
+func runUpgradeKubeadmReal(ctx context.Context, spec kubeadmUpgradeSpec) error {
+	version := strings.TrimSpace(spec.KubernetesVersion)
+	if version == "" {
+		return fmt.Errorf("%s: UpgradeKubeadm requires kubernetesVersion", errCodeInstallUpgradeFailed)
+	}
+	timeout := parseStepTimeout(spec.Timeout, 20*time.Minute)
+	args := []string{"upgrade", "apply", "-y", version}
+	if ignore := trimmedStringSlice(spec.IgnorePreflightErrors); len(ignore) > 0 {
+		args = append(args, "--ignore-preflight-errors", strings.Join(ignore, ","))
+	}
+	if extra := trimmedStringSlice(spec.ExtraArgs); len(extra) > 0 {
+		args = append(args, extra...)
+	}
+	if err := runTimedCommandWithContext(ctx, "kubeadm", args, timeout); err != nil {
+		if errors.Is(err, ErrStepCommandTimeout) {
+			return fmt.Errorf("%s: kubeadm upgrade timed out: %w", errCodeInstallUpgradeFailed, err)
+		}
+		return fmt.Errorf("%s: kubeadm upgrade failed: %w", errCodeInstallUpgradeFailed, err)
+	}
+	restartKubelet := true
+	if spec.RestartKubelet != nil {
+		restartKubelet = *spec.RestartKubelet
+	}
+	if !restartKubelet {
+		return nil
+	}
+	service := strings.TrimSpace(spec.KubeletService)
+	if service == "" {
+		service = "kubelet"
+	}
+	if err := runTimedCommandWithContext(ctx, "systemctl", []string{"restart", service}, parseStepTimeout(spec.Timeout, 2*time.Minute)); err != nil {
+		if errors.Is(err, ErrStepCommandTimeout) {
+			return fmt.Errorf("%s: restart service %s timed out: %w", errCodeInstallUpgradeFailed, service, err)
+		}
+		return fmt.Errorf("%s: restart service %s failed: %w", errCodeInstallUpgradeFailed, service, err)
+	}
 	return nil
 }
 
@@ -438,6 +544,69 @@ func cleanupContainerByName(ctx context.Context, name, criSocket string, timeout
 	rmArgs = append(rmArgs, "rm", "-f")
 	rmArgs = append(rmArgs, ids...)
 	return runTimedCommandWithContext(ctx, "crictl", rmArgs, timeout)
+}
+
+func kubeadmContainerPresent(ctx context.Context, name, criSocket string, timeout time.Duration) (bool, error) {
+	listArgs := []string{}
+	if criSocket != "" {
+		listArgs = append(listArgs, "--runtime-endpoint", criSocket)
+	}
+	listArgs = append(listArgs, "ps", "-a", "--name", name, "-q")
+	out, err := runCommandOutputWithContext(ctx, append([]string{"crictl"}, listArgs...), timeout)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
+func writeResetReport(ctx context.Context, decoded kubeadmResetSpec, reportPath string) error {
+	ref, err := hostfs.NewHostPath(reportPath)
+	if err != nil {
+		return err
+	}
+	if err := ref.EnsureParentDir(filemode.PublishedArtifact); err != nil {
+		return err
+	}
+	manifests := "absent"
+	if glob := strings.TrimSpace(decoded.WaitForMissingManifestsGlob); glob != "" {
+		matches, err := filepath.Glob(glob)
+		if err != nil {
+			return err
+		}
+		if len(matches) > 0 {
+			manifests = "present"
+		}
+	}
+	stale := "absent"
+	for _, name := range trimmedStringSlice(decoded.VerifyContainersAbsent) {
+		present, err := kubeadmContainerPresent(ctx, name, strings.TrimSpace(decoded.CriSocket), 2*time.Minute)
+		if err != nil {
+			return err
+		}
+		if present {
+			stale = "present"
+			break
+		}
+	}
+	kubeletConfig := "absent"
+	if info, err := os.Stat("/var/lib/kubelet/config.yaml"); err == nil && info.Size() > 0 {
+		kubeletConfig = "present"
+	}
+	kubeletService := "inactive"
+	if err := runTimedCommandWithContext(ctx, "systemctl", []string{"is-active", "--quiet", "kubelet"}, 10*time.Second); err == nil {
+		kubeletService = "active"
+	}
+	content := strings.Join([]string{
+		"resetReason=" + strings.TrimSpace(decoded.ReportResetReason),
+		"kubeadmReset=ok",
+		"manifests=" + manifests,
+		"staleControlPlaneContainers=" + stale,
+		"containerd=active",
+		"kubeletConfig=" + kubeletConfig,
+		"kubeletService=" + kubeletService,
+		"",
+	}, "\n")
+	return ref.WriteFile([]byte(content), filemode.PublishedArtifact)
 }
 
 func trimmedStringSlice(items []string) []string {

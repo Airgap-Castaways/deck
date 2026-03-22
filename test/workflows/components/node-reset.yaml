@@ -7,6 +7,7 @@ steps:
       criSocket: unix:///run/containerd/containerd.sock
       removePaths:
         - /etc/cni/net.d
+        - /etc/kubernetes/pki
         - /var/lib/kubelet/pki
         - /var/lib/kubelet/plugins
         - /var/lib/kubelet/plugins_registry
@@ -23,76 +24,14 @@ steps:
         - kube-scheduler
         - etcd
       restartRuntimeService: containerd
-  - id: reset-runtime-ready
-    kind: Command
-    spec:
-      timeout: 5m
-      command:
-        - bash
-        - -lc
-        - |
-          set -euo pipefail
-          for i in $(seq 1 60); do
-            if systemctl is-active --quiet containerd; then
-              break
-            fi
-            sleep 2
-          done
-          systemctl is-active --quiet containerd
-          for i in $(seq 1 60); do
-            if crictl --runtime-endpoint unix:///run/containerd/containerd.sock info >/dev/null 2>&1; then
-              break
-            fi
-            sleep 2
-          done
-          crictl --runtime-endpoint unix:///run/containerd/containerd.sock info >/dev/null 2>&1
-          for i in $(seq 1 30); do
-            if ls /etc/kubernetes/manifests/*.yaml >/dev/null 2>&1; then
-              sleep 2
-              continue
-            fi
-            break
-          done
-          if ls /etc/kubernetes/manifests/*.yaml >/dev/null 2>&1; then
-            echo "stale static pod manifests still present" >&2
-            ls -l /etc/kubernetes/manifests || true
-            exit 1
-          fi
-          systemctl stop kubelet || true
-  - id: reset-state-report
-    kind: Command
-    spec:
-      command:
-        - bash
-        - -lc
-        - |
-          set -euo pipefail
-          mkdir -p "$(dirname "{{ .vars.resetStatePath }}")"
-          {
-            echo "resetReason={{ .vars.resetReason }}"
-            echo "kubeadmReset=ok"
-            if ls /etc/kubernetes/manifests/*.yaml >/dev/null 2>&1; then
-              echo "manifests=present"
-              ls -l /etc/kubernetes/manifests
-              exit 1
-            fi
-            echo "manifests=absent"
-            if crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps -a --name kube-apiserver -q | grep . >/dev/null 2>&1; then
-              echo "staleControlPlaneContainers=present"
-              crictl --runtime-endpoint unix:///run/containerd/containerd.sock ps -a | grep kube- || true
-              exit 1
-            fi
-            echo "staleControlPlaneContainers=absent"
-            systemctl is-active --quiet containerd
-            echo "containerd=active"
-            if [[ -f /var/lib/kubelet/config.yaml ]]; then
-              echo "kubeletConfig=present"
-            else
-              echo "kubeletConfig=absent"
-            fi
-            if systemctl is-active --quiet kubelet; then
-              echo "kubeletManageService=active"
-            else
-              echo "kubeletManageService=inactive"
-            fi
-          } > "{{ .vars.resetStatePath }}"
+      waitForRuntimeService: true
+      waitForRuntimeReady: true
+      waitForMissingManifestsGlob: /etc/kubernetes/manifests/*.yaml
+      stopKubeletAfterReset: true
+      verifyContainersAbsent:
+        - kube-apiserver
+        - kube-controller-manager
+        - kube-scheduler
+        - etcd
+      reportFile: "{{ .vars.resetStatePath }}"
+      reportResetReason: "{{ .vars.resetReason }}"

@@ -49,6 +49,28 @@ func useStubResetKubeadm(t *testing.T) {
 	}
 }
 
+func useStubUpgradeKubeadm(t *testing.T) {
+	t.Helper()
+	origUpgrade := kubeadmUpgradeExecutor
+	t.Cleanup(func() {
+		kubeadmUpgradeExecutor = origUpgrade
+	})
+	kubeadmUpgradeExecutor = func(_ context.Context, spec kubeadmUpgradeSpec) error {
+		return runUpgradeKubeadmStub(spec)
+	}
+}
+
+func useStubCheckCluster(t *testing.T) {
+	t.Helper()
+	origCheckCluster := checkClusterExecutor
+	t.Cleanup(func() {
+		checkClusterExecutor = origCheckCluster
+	})
+	checkClusterExecutor = func(_ context.Context, spec clusterCheckSpec) error {
+		return runCheckClusterStub(spec)
+	}
+}
+
 func nilContextForInstallTest() context.Context { return nil }
 
 func TestRun_InstallTools(t *testing.T) {
@@ -657,6 +679,33 @@ func TestRun_Wait(t *testing.T) {
 			t.Fatalf("expected timeout error to include expected condition, got %v", err)
 		}
 	})
+
+	t.Run("missing file glob succeeds after files disappear", func(t *testing.T) {
+		dir := t.TempDir()
+		statePath := filepath.Join(dir, "state", "state.json")
+		manifestDir := filepath.Join(dir, "manifests")
+		if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+			t.Fatalf("mkdir manifests: %v", err)
+		}
+		target := filepath.Join(manifestDir, "pod.yaml")
+		if err := os.WriteFile(target, []byte("x"), 0o644); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+		go func() {
+			time.Sleep(40 * time.Millisecond)
+			_ = os.Remove(target)
+		}()
+
+		wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "install", Steps: []config.Step{{
+			ID:      "wait-glob",
+			Kind:    "WaitForMissingFile",
+			Timeout: "200ms",
+			Spec:    map[string]any{"glob": filepath.Join(manifestDir, "*.yaml"), "interval": "10ms"},
+		}}}}}
+		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+			t.Fatalf("expected wait glob success, got %v", err)
+		}
+	})
 }
 
 func TestRun_CreateSymlink(t *testing.T) {
@@ -754,6 +803,26 @@ func TestRun_CreateSymlink(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "symlink target does not exist") {
 			t.Fatalf("expected missing target error, got %v", err)
+		}
+	})
+
+	t.Run("ignoreMissingTarget skips missing target", func(t *testing.T) {
+		dir := t.TempDir()
+		statePath := filepath.Join(dir, "state", "state.json")
+		missingTarget := filepath.Join(dir, "missing.txt")
+		linkPath := filepath.Join(dir, "link.txt")
+
+		wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "install", Steps: []config.Step{{
+			ID:   "CreateSymlink",
+			Kind: "CreateSymlink",
+			Spec: map[string]any{"path": linkPath, "target": missingTarget, "ignoreMissingTarget": true},
+		}}}}}
+
+		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+			t.Fatalf("expected missing target skip, got %v", err)
+		}
+		if _, err := os.Lstat(linkPath); !os.IsNotExist(err) {
+			t.Fatalf("expected no symlink created, got err=%v", err)
 		}
 	})
 
@@ -881,6 +950,29 @@ func TestRun_CreateSymlink(t *testing.T) {
 			t.Fatalf("expected symlink target %q, got %q", target, actualTarget)
 		}
 	})
+}
+
+func TestRun_UpgradeAndClusterChecks(t *testing.T) {
+	useStubUpgradeKubeadm(t)
+	useStubCheckCluster(t)
+
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state", "state.json")
+	reportDir := filepath.Join(dir, "reports")
+	wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "install", Steps: []config.Step{
+		{ID: "upgrade", Kind: "UpgradeKubeadm", Spec: map[string]any{"kubernetesVersion": "v1.31.0"}},
+		{ID: "check", Kind: "CheckCluster", Spec: map[string]any{"reports": map[string]any{"nodesPath": filepath.Join(reportDir, "nodes.txt")}, "versions": map[string]any{"reportPath": filepath.Join(reportDir, "version.txt")}}},
+	}}}}
+
+	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+		t.Fatalf("expected typed kubeadm upgrade and cluster check success, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(reportDir, "nodes.txt")); err != nil {
+		t.Fatalf("expected nodes report, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(reportDir, "version.txt")); err != nil {
+		t.Fatalf("expected version report, got %v", err)
+	}
 }
 
 func TestRun_KubeadmMissingFileErrorCode(t *testing.T) {
