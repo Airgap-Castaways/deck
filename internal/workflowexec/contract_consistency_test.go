@@ -9,8 +9,12 @@ import (
 func TestStepRegistryDelegatesToWorkflowContract(t *testing.T) {
 	wantDefs := workflowcontract.StepDefinitions()
 	gotDefs := StepDefinitions()
+	builtIns := BuiltInTypeDefinitions()
 	if len(gotDefs) != len(wantDefs) {
 		t.Fatalf("unexpected step definition count: got %d want %d", len(gotDefs), len(wantDefs))
+	}
+	if len(builtIns) != len(wantDefs) {
+		t.Fatalf("unexpected built-in type definition count: got %d want %d", len(builtIns), len(wantDefs))
 	}
 	for _, want := range wantDefs {
 		got, ok := StepDefinitionForKey(StepTypeKey{APIVersion: want.APIVersion, Kind: want.Kind})
@@ -25,6 +29,13 @@ func TestStepRegistryDelegatesToWorkflowContract(t *testing.T) {
 		}
 		if file, ok := StepSchemaFileForKey(StepTypeKey{APIVersion: want.APIVersion, Kind: want.Kind}); !ok || file != want.SchemaFile {
 			t.Fatalf("StepSchemaFileForKey mismatch for %s: got %q ok=%t want %q", want.Kind, file, ok, want.SchemaFile)
+		}
+		builtIn, ok := BuiltInTypeDefinitionForKey(StepTypeKey{APIVersion: want.APIVersion, Kind: want.Kind})
+		if !ok {
+			t.Fatalf("missing built-in type definition for %s", want.Kind)
+		}
+		if builtIn.Step.SchemaFile != want.SchemaFile {
+			t.Fatalf("built-in type definition schema mismatch for %s: got %q want %q", want.Kind, builtIn.Step.SchemaFile, want.SchemaFile)
 		}
 	}
 }

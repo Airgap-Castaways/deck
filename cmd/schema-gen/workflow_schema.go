@@ -174,8 +174,8 @@ func registerValueSchema(outputs []string) map[string]any {
 
 func stepEnvelopeSchema(kind, title, description, visibility string) map[string]any {
 	apiVersion := workflowcontract.BuiltInStepAPIVersion
-	if def, ok := workflowexec.StepDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind}); ok && def.APIVersion != "" {
-		apiVersion = def.APIVersion
+	if def, ok := workflowexec.BuiltInTypeDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind}); ok && def.Step.APIVersion != "" {
+		apiVersion = def.Step.APIVersion
 	}
 	root := map[string]any{
 		"$schema":              "https://json-schema.org/draft/2020-12/schema",
@@ -278,8 +278,8 @@ func stringArraySchema(minItems int, minLen bool) map[string]any {
 }
 
 func schemaFileName(kind string) string {
-	if def, ok := workflowexec.StepDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind}); ok {
-		return def.SchemaFile
+	if def, ok := workflowexec.BuiltInTypeDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind}); ok {
+		return def.Step.SchemaFile
 	}
 	return strings.ToLower(kind) + ".schema.json"
 }

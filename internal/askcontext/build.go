@@ -107,22 +107,21 @@ func AllowedGeneratedPath(path string) bool {
 }
 
 func buildStepKinds() []StepKindContext {
-	defs := workflowexec.StepDefinitions()
+	defs := workflowexec.BuiltInTypeDefinitions()
 	out := make([]StepKindContext, 0, len(defs))
 	for _, def := range defs {
-		meta := schemadoc.ToolMetaForDefinition(def)
-		contract, _ := workflowexec.StepContractForKey(workflowexec.StepTypeKey{APIVersion: def.APIVersion, Kind: def.Kind})
+		meta := schemadoc.ToolMetaForDefinition(def.Step)
 		ctx := StepKindContext{
-			Kind:         def.Kind,
-			Category:     def.Category,
+			Kind:         def.Step.Kind,
+			Category:     def.Step.Category,
 			Summary:      meta.Summary,
 			WhenToUse:    meta.WhenToUse,
-			SchemaFile:   def.SchemaFile,
-			AllowedRoles: sortedKeys(contract.Roles),
-			Outputs:      sortedKeys(contract.Outputs),
+			SchemaFile:   def.Step.SchemaFile,
+			AllowedRoles: sortedKeys(def.Contract.Roles),
+			Outputs:      sortedKeys(def.Contract.Outputs),
 			MinimalShape: strings.TrimSpace(meta.Example),
 			CuratedShape: strings.TrimSpace(meta.Example),
-			KeyFields:    buildStepKeyFields(def.Kind, meta),
+			KeyFields:    buildStepKeyFields(def.Step.Kind, meta),
 			Notes:        append([]string(nil), meta.Notes...),
 		}
 		ctx.Outputs = dedupe(ctx.Outputs)
