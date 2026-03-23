@@ -72,6 +72,53 @@ func parseVarsYAML(content []byte) (map[string]any, error) {
 
 func mergeVars(dst map[string]any, src map[string]any) {
 	for k, v := range src {
-		dst[k] = v
+		if existing, ok := dst[k]; ok {
+			merged, didMerge := mergeVarValue(existing, v)
+			if didMerge {
+				dst[k] = merged
+				continue
+			}
+		}
+		dst[k] = cloneVarValue(v)
 	}
+}
+
+func mergeVarValue(dst, src any) (any, bool) {
+	srcMap, ok := src.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	dstMap, ok := dst.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	merged := cloneVarMap(dstMap)
+	mergeVars(merged, srcMap)
+	return merged, true
+}
+
+func cloneVarValue(v any) any {
+	switch typed := v.(type) {
+	case map[string]any:
+		return cloneVarMap(typed)
+	case []any:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, cloneVarValue(item))
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+func cloneVarMap(input map[string]any) map[string]any {
+	if input == nil {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(input))
+	for key, value := range input {
+		out[key] = cloneVarValue(value)
+	}
+	return out
 }
