@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/taedi90/deck/internal/errcode"
 	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/hostfs"
@@ -33,7 +34,7 @@ func runEditFile(spec map[string]any) error {
 	}
 	path := strings.TrimSpace(decoded.Path)
 	if path == "" {
-		return fmt.Errorf("%s: EditFile requires path", errCodeInstallEditPathMissing)
+		return errcode.Newf(errCodeInstallEditPathMissing, "EditFile requires path")
 	}
 	hostPath, err := hostfs.NewHostPath(path)
 	if err != nil {
@@ -56,7 +57,7 @@ func runEditFile(spec map[string]any) error {
 	updated := string(content)
 
 	if len(decoded.Edits) == 0 {
-		return fmt.Errorf("%s: EditFile requires edits", errCodeInstallEditsMissing)
+		return errcode.Newf(errCodeInstallEditsMissing, "EditFile requires edits")
 	}
 
 	for _, edit := range decoded.Edits {
@@ -71,7 +72,7 @@ func runEditFile(spec map[string]any) error {
 		case "append":
 			updated = strings.ReplaceAll(updated, match, match+with)
 		default:
-			return fmt.Errorf("%s: unsupported edit op %q", errCodeInstallEditsMissing, edit.Op)
+			return errcode.Newf(errCodeInstallEditsMissing, "unsupported edit op %q", edit.Op)
 		}
 	}
 

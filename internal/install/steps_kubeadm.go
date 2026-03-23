@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/taedi90/deck/internal/errcode"
 	"github.com/taedi90/deck/internal/filemode"
 	"github.com/taedi90/deck/internal/fsutil"
 	"github.com/taedi90/deck/internal/hostfs"
@@ -250,30 +251,30 @@ func runJoinKubeadmReal(ctx context.Context, spec stepspec.KubeadmJoin) error {
 	joinFile := strings.TrimSpace(spec.JoinFile)
 	configFile := strings.TrimSpace(spec.ConfigFile)
 	if joinFile != "" && configFile != "" {
-		return fmt.Errorf("%s: JoinKubeadm accepts joinFile or configFile, not both", errCodeInstallJoinInputConflict)
+		return errcode.Newf(errCodeInstallJoinInputConflict, "JoinKubeadm accepts joinFile or configFile, not both")
 	}
 	if joinFile == "" && configFile == "" {
-		return fmt.Errorf("%s: JoinKubeadm requires joinFile or configFile", errCodeInstallJoinPathMissing)
+		return errcode.Newf(errCodeInstallJoinPathMissing, "JoinKubeadm requires joinFile or configFile")
 	}
 
 	args := []string{"kubeadm", "join"}
 	if configFile != "" {
 		if _, err := os.Stat(configFile); err != nil {
-			return fmt.Errorf("%s: config file not found: %w", errCodeInstallJoinFileMissing, err)
+			return errcode.New(errCodeInstallJoinFileMissing, fmt.Errorf("config file not found: %w", err))
 		}
 		args = append(args, "--config", configFile)
 	} else {
 		raw, err := fsutil.ReadFile(joinFile)
 		if err != nil {
-			return fmt.Errorf("%s: join file not found: %w", errCodeInstallJoinFileMissing, err)
+			return errcode.New(errCodeInstallJoinFileMissing, fmt.Errorf("join file not found: %w", err))
 		}
 		joinCommand := strings.TrimSpace(string(raw))
 		if joinCommand == "" {
-			return fmt.Errorf("%s: join command is empty", errCodeInstallJoinCmdMissing)
+			return errcode.Newf(errCodeInstallJoinCmdMissing, "join command is empty")
 		}
 		args = strings.Fields(joinCommand)
 		if len(args) == 0 || args[0] != "kubeadm" {
-			return fmt.Errorf("%s: join command must start with kubeadm", errCodeInstallJoinCmdInvalid)
+			return errcode.Newf(errCodeInstallJoinCmdInvalid, "join command must start with kubeadm")
 		}
 	}
 	if spec.AsControlPlane && !stringSliceContains(args[1:], "--control-plane") {
