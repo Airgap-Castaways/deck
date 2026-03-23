@@ -31,7 +31,8 @@ func Apply(format Format, raw []byte, edits []stepspec.StructuredEdit) ([]byte, 
 		if err != nil {
 			return nil, fmt.Errorf("edits[%d]: %w", idx, err)
 		}
-		if err := applyEdit(doc, path, edit); err != nil {
+		doc, err = applyEdit(doc, path, edit)
+		if err != nil {
 			return nil, fmt.Errorf("edits[%d]: %w", idx, err)
 		}
 	}
@@ -154,19 +155,19 @@ func ParsePath(rawPath string) ([]pathSegment, error) {
 	return segments, nil
 }
 
-func applyEdit(root any, path []pathSegment, edit stepspec.StructuredEdit) error {
+func applyEdit(root any, path []pathSegment, edit stepspec.StructuredEdit) (any, error) {
 	if len(path) == 0 {
-		return fmt.Errorf("rawPath is required")
+		return nil, fmt.Errorf("rawPath is required")
 	}
 	op := strings.TrimSpace(edit.Op)
 	if op == "" {
-		return fmt.Errorf("op is required")
+		return nil, fmt.Errorf("op is required")
 	}
 	switch op {
 	case "set":
 		value, err := normalizeValue(edit.Value)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		return setAtPath(root, path, value)
 	case "delete":
@@ -174,17 +175,17 @@ func applyEdit(root any, path []pathSegment, edit stepspec.StructuredEdit) error
 	case "appendUnique":
 		items, err := normalizeStringList(edit.Value, true)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		return appendUniqueAtPath(root, path, items)
 	case "replaceList":
 		items, err := normalizeStringList(edit.Value, false)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		return setAtPath(root, path, toAnySlice(items))
 	default:
-		return fmt.Errorf("unsupported op %q", op)
+		return nil, fmt.Errorf("unsupported op %q", op)
 	}
 }
 
@@ -282,66 +283,36 @@ func cleanStringList(items []string) ([]string, error) {
 	return result, nil
 }
 
-func setAtPath(root any, path []pathSegment, value any) error {
-	parent, last, err := ensureParent(root, path)
+func setAtPath(root any, path []pathSegment, value any) (any, error) {
+	updated, err := setNode(root, path, value)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	switch holder := parent.(type) {
-	case map[string]any:
-		holder[last.key] = value
-		return nil
-	case []any:
-		if last.index < 0 || last.index >= len(holder) {
-			return fmt.Errorf("array index %d out of range", last.index)
-		}
-		holder[last.index] = value
-		return nil
-	default:
-		return fmt.Errorf("unsupported parent type %T", parent)
-	}
+	return updated, nil
 }
 
-func deleteAtPath(root any, path []pathSegment) error {
-	parent, last, err := getParent(root, path)
+func deleteAtPath(root any, path []pathSegment) (any, error) {
+	updated, found, err := deleteNode(root, path)
 	if err != nil {
-		if strings.Contains(err.Error(), "missing path segment") {
-			return nil
-		}
-		return err
+		return nil, err
 	}
-	switch holder := parent.(type) {
-	case map[string]any:
-		delete(holder, last.key)
-	case []any:
-		if last.index < 0 || last.index >= len(holder) {
-			return nil
-		}
-		holder[last.index] = nil
-	default:
-		return fmt.Errorf("unsupported parent type %T", parent)
+	if !found {
+		return root, nil
 	}
-	return nil
+	return updated, nil
 }
 
-func appendUniqueAtPath(root any, path []pathSegment, items []string) error {
-	parent, last, err := ensureParent(root, path)
+func appendUniqueAtPath(root any, path []pathSegment, items []string) (any, error) {
+	existing, found, err := getAtPath(root, path)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var existing any
-	switch holder := parent.(type) {
-	case map[string]any:
-		existing = holder[last.key]
-	case []any:
-		existing = holder[last.index]
-	}
-	if existing == nil {
+	if !found || existing == nil {
 		return setAtPath(root, path, toAnySlice(items))
 	}
 	current, err := readStringList(existing)
 	if err != nil {
-		return fmt.Errorf("existing value at rawPath is not a string list")
+		return nil, fmt.Errorf("existing value at rawPath is not a string list")
 	}
 	seen := map[string]struct{}{}
 	merged := make([]string, 0, len(current)+len(items))
@@ -359,68 +330,139 @@ func appendUniqueAtPath(root any, path []pathSegment, items []string) error {
 	return setAtPath(root, path, toAnySlice(merged))
 }
 
-func ensureParent(root any, path []pathSegment) (any, pathSegment, error) {
-	current := root
-	for i, segment := range path[:len(path)-1] {
-		next := path[i+1]
-		switch holder := current.(type) {
-		case map[string]any:
-			child, ok := holder[segment.key]
-			if !ok || child == nil {
-				child = newContainer(next)
-				holder[segment.key] = child
-			}
-			current = child
-		case []any:
-			if !segment.isIndex {
-				return nil, pathSegment{}, fmt.Errorf("path segment %q must be an array index", segment.key)
-			}
-			if segment.index < 0 || segment.index >= len(holder) {
-				return nil, pathSegment{}, fmt.Errorf("array index %d out of range", segment.index)
-			}
-			if holder[segment.index] == nil {
-				holder[segment.index] = newContainer(next)
-			}
-			current = holder[segment.index]
-		default:
-			return nil, pathSegment{}, fmt.Errorf("path conflict at segment %d", i)
+func setNode(current any, path []pathSegment, value any) (any, error) {
+	segment := path[0]
+	if segment.isIndex {
+		holder, ok := current.([]any)
+		if !ok {
+			return nil, fmt.Errorf("path segment must be an array index")
 		}
+		if segment.index < 0 || segment.index > len(holder) {
+			return nil, fmt.Errorf("array index %d out of range", segment.index)
+		}
+		if segment.index == len(holder) {
+			seed := any(nil)
+			if len(path) > 1 {
+				seed = newContainer(path[1])
+			}
+			holder = append(holder, seed)
+		}
+		if len(path) == 1 {
+			holder[segment.index] = value
+			return holder, nil
+		}
+		child := holder[segment.index]
+		if child == nil {
+			child = newContainer(path[1])
+		}
+		updatedChild, err := setNode(child, path[1:], value)
+		if err != nil {
+			return nil, err
+		}
+		holder[segment.index] = updatedChild
+		return holder, nil
 	}
-	last := path[len(path)-1]
-	if _, ok := current.([]any); ok {
-		if !last.isIndex {
-			return nil, pathSegment{}, fmt.Errorf("final path segment must be an array index")
-		}
-		if last.index < 0 {
-			return nil, pathSegment{}, fmt.Errorf("array index %d out of range", last.index)
-		}
+
+	holder, ok := current.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("path conflict at segment %q", segment.key)
 	}
-	return current, last, nil
+	if len(path) == 1 {
+		holder[segment.key] = value
+		return holder, nil
+	}
+	child, ok := holder[segment.key]
+	if !ok || child == nil {
+		child = newContainer(path[1])
+	}
+	updatedChild, err := setNode(child, path[1:], value)
+	if err != nil {
+		return nil, err
+	}
+	holder[segment.key] = updatedChild
+	return holder, nil
 }
 
-func getParent(root any, path []pathSegment) (any, pathSegment, error) {
-	current := root
-	for _, segment := range path[:len(path)-1] {
-		switch holder := current.(type) {
-		case map[string]any:
-			child, ok := holder[segment.key]
-			if !ok {
-				return nil, pathSegment{}, fmt.Errorf("missing path segment %q", segment.key)
-			}
-			current = child
-		case []any:
-			if !segment.isIndex {
-				return nil, pathSegment{}, fmt.Errorf("path segment must be an array index")
-			}
-			if segment.index < 0 || segment.index >= len(holder) {
-				return nil, pathSegment{}, fmt.Errorf("missing path segment index %d", segment.index)
-			}
-			current = holder[segment.index]
-		default:
-			return nil, pathSegment{}, fmt.Errorf("path conflict")
+func getAtPath(current any, path []pathSegment) (any, bool, error) {
+	segment := path[0]
+	if segment.isIndex {
+		holder, ok := current.([]any)
+		if !ok {
+			return nil, false, fmt.Errorf("path segment must be an array index")
 		}
+		if segment.index < 0 || segment.index >= len(holder) {
+			return nil, false, nil
+		}
+		if len(path) == 1 {
+			return holder[segment.index], true, nil
+		}
+		if holder[segment.index] == nil {
+			return nil, false, nil
+		}
+		return getAtPath(holder[segment.index], path[1:])
 	}
-	return current, path[len(path)-1], nil
+	holder, ok := current.(map[string]any)
+	if !ok {
+		return nil, false, fmt.Errorf("path conflict at segment %q", segment.key)
+	}
+	child, ok := holder[segment.key]
+	if !ok {
+		return nil, false, nil
+	}
+	if len(path) == 1 {
+		return child, true, nil
+	}
+	if child == nil {
+		return nil, false, nil
+	}
+	return getAtPath(child, path[1:])
+}
+
+func deleteNode(current any, path []pathSegment) (any, bool, error) {
+	segment := path[0]
+	if segment.isIndex {
+		holder, ok := current.([]any)
+		if !ok {
+			return nil, false, fmt.Errorf("path segment must be an array index")
+		}
+		if segment.index < 0 || segment.index >= len(holder) {
+			return current, false, nil
+		}
+		if len(path) == 1 {
+			holder[segment.index] = nil
+			return holder, true, nil
+		}
+		if holder[segment.index] == nil {
+			return current, false, nil
+		}
+		updatedChild, found, err := deleteNode(holder[segment.index], path[1:])
+		if err != nil || !found {
+			return current, found, err
+		}
+		holder[segment.index] = updatedChild
+		return holder, true, nil
+	}
+	holder, ok := current.(map[string]any)
+	if !ok {
+		return nil, false, fmt.Errorf("path conflict at segment %q", segment.key)
+	}
+	child, ok := holder[segment.key]
+	if !ok {
+		return current, false, nil
+	}
+	if len(path) == 1 {
+		delete(holder, segment.key)
+		return holder, true, nil
+	}
+	if child == nil {
+		return current, false, nil
+	}
+	updatedChild, found, err := deleteNode(child, path[1:])
+	if err != nil || !found {
+		return current, found, err
+	}
+	holder[segment.key] = updatedChild
+	return holder, true, nil
 }
 
 func newContainer(next pathSegment) any {

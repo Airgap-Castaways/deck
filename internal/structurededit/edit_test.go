@@ -66,8 +66,28 @@ func TestApplyJSONEditsListByIndex(t *testing.T) {
 	}
 }
 
+func TestApplyJSONSetAppendsAtSliceBoundary(t *testing.T) {
+	raw := []byte(`{"plugins":[]}`)
+	updated, err := Apply(FormatJSON, raw, []stepspec.StructuredEdit{{Op: "set", RawPath: "plugins.0.type", Value: "bridge"}})
+	if err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(updated, &doc); err != nil {
+		t.Fatalf("unmarshal JSON: %v", err)
+	}
+	plugins := doc["plugins"].([]any)
+	if len(plugins) != 1 {
+		t.Fatalf("unexpected plugin length: %#v", plugins)
+	}
+	first := plugins[0].(map[string]any)
+	if got := first["type"]; got != "bridge" {
+		t.Fatalf("unexpected plugin type: %#v", got)
+	}
+}
+
 func TestApplyRejectsArrayIndexOutOfRange(t *testing.T) {
-	_, err := Apply(FormatJSON, []byte(`{"plugins":[]}`), []stepspec.StructuredEdit{{Op: "set", RawPath: "plugins.0.type", Value: "bridge"}})
+	_, err := Apply(FormatJSON, []byte(`{"plugins":[]}`), []stepspec.StructuredEdit{{Op: "set", RawPath: "plugins.2.type", Value: "bridge"}})
 	if err == nil {
 		t.Fatalf("expected array range error")
 	}
