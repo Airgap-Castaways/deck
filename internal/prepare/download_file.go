@@ -323,9 +323,7 @@ func canReuseDownloadFile(ctx context.Context, bundleRoot string, spec prepareDo
 
 func normalizePrepareDownloadFileItems(spec prepareDownloadFileSpec) []prepareDownloadFileItemSpec {
 	if len(spec.Items) > 0 {
-		out := make([]prepareDownloadFileItemSpec, 0, len(spec.Items))
-		out = append(out, spec.Items...)
-		return out
+		return spec.Items
 	}
 	if strings.TrimSpace(spec.Source.URL) == "" && strings.TrimSpace(spec.Source.Path) == "" && spec.Source.Bundle == nil {
 		return nil

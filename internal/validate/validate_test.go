@@ -67,6 +67,31 @@ phases:
 		}
 	})
 
+	t.Run("conditional step keeps empty string template for schema validation", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+vars:
+  upgradeKubernetesVersion: ""
+phases:
+  - name: apply
+    steps:
+      - id: upgrade-control-plane
+        apiVersion: deck/v1alpha1
+        kind: UpgradeKubeadm
+        when: vars.upgradeKubernetesVersion != ""
+        spec:
+          kubernetesVersion: "{{ .vars.upgradeKubernetesVersion }}"
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
 	t.Run("tool schema valid Image download with auth", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
