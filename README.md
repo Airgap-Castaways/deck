@@ -53,6 +53,16 @@ Requirements:
 - Go 1.25+ (Any OS for build and prepare)
 - Linux target environment (RHEL, Ubuntu) for the `apply` step
 
+Release downloads are published on the GitHub Releases page. Homebrew installs are provided through the Airgap Castaways tap rather than `homebrew-core`.
+
+```bash
+# Homebrew tap
+brew tap Airgap-Castaways/tap
+brew install deck
+```
+
+Release assets are available at `https://github.com/Airgap-Castaways/deck/releases`.
+
 ```bash
 # Build and install from source
 go install ./cmd/deck

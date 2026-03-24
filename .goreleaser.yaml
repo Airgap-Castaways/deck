@@ -1,0 +1,103 @@
+version: 2
+
+project_name: deck
+
+builds:
+  - id: deck
+    main: ./cmd/deck
+    binary: deck
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - >-
+        -s -w
+        -X github.com/Airgap-Castaways/deck/internal/buildinfo.Version={{ .Version }}
+        -X github.com/Airgap-Castaways/deck/internal/buildinfo.Commit={{ .ShortCommit }}
+        -X github.com/Airgap-Castaways/deck/internal/buildinfo.Date={{ .Date }}
+        -X github.com/Airgap-Castaways/deck/internal/buildinfo.Variant=core
+        -X github.com/Airgap-Castaways/deck/internal/buildinfo.Dirty={{ .IsGitDirty }}
+
+archives:
+  - id: deck-archive
+    ids:
+      - deck
+    formats: [tar.gz]
+    files:
+      - LICENSE
+      - README.md
+
+nfpms:
+  - id: deck-packages
+    ids:
+      - deck
+    package_name: deck
+    file_name_template: "{{ .ConventionalFileName }}"
+    homepage: https://github.com/Airgap-Castaways/deck
+    maintainer: Airgap Castaways
+    description: Structured workflows for air-gapped operations.
+    license: Apache-2.0
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    contents:
+      - src: ./LICENSE
+        dst: /usr/share/doc/deck/LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: Airgap-Castaways
+    name: deck
+  draft: false
+  prerelease: auto
+  make_latest: true
+  mode: replace
+  header: |
+    ## Highlights
+
+    - This release publishes versioned `deck` binaries for air-gapped workflow execution.
+    - GitHub Releases include cross-platform tarballs, Linux packages, and checksums.
+    - The Airgap Castaways Homebrew tap is updated alongside each tagged release.
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^Merge pull request'
+      - '^Merge branch'
+
+brews:
+  - ids:
+      - deck-archive
+    name: deck
+    directory: Formula
+    homepage: https://github.com/Airgap-Castaways/deck
+    description: Structured workflows for air-gapped operations.
+    license: Apache-2.0
+    repository:
+      owner: Airgap-Castaways
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: deck-release-bot
+      email: releases@airgap-castaways.dev
+    commit_msg_template: "brew: update deck formula to {{ .Tag }}"
+    test: |
+      system "#{bin}/deck", "version"
+    install: |
+      bin.install "deck"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"

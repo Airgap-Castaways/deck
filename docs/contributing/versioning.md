@@ -65,6 +65,10 @@ Release builds should report the tagged semver instead of `dev`.
 
 ## Release notes and automation
 
-The project does not require GitHub release automation yet.
+Tagged releases are published through GoReleaser.
 
-When real releases start, add release-process details separately rather than overloading this document with a premature checklist.
+- Tag format: `vX.Y.Z`
+- Release target: GitHub Releases in `Airgap-Castaways/deck`
+- Published artifacts: release tarballs, `deb`, `rpm`, checksums, and a Homebrew tap formula update
+
+See [Release Process](release-process.md) for the operational checklist, required secrets, and validation flow.
