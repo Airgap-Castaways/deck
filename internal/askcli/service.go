@@ -416,6 +416,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 		currentPrompt := req.Prompt
 		if attempt > 1 && lastValidation != "" {
 			currentPrompt += "\n\nLocal validation failed. Fix the response and return full JSON again."
+			currentPrompt += "\nValidator summary:\n" + summarizeValidationError(lastValidation)
 			currentPrompt += "\nRaw validator error:\n" + strings.TrimSpace(lastValidation)
 			for _, chunk := range askretrieve.RepairChunks(req.Prompt, lastValidation) {
 				currentPrompt += "\n" + chunk.Content
@@ -531,4 +532,57 @@ func requiredFixesForValidation(message string) []string {
 	}
 	fixes = append(fixes, askcontext.ValidationFixesForError(message)...)
 	return dedupe(fixes)
+}
+
+func summarizeValidationError(message string) string {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return "- validation failed with no additional detail"
+	}
+	lower := strings.ToLower(message)
+	workflowRules := askcontext.Current().Workflow
+	points := []string{}
+	appendPoint := func(point string) {
+		point = strings.TrimSpace(point)
+		if point == "" {
+			return
+		}
+		points = append(points, point)
+	}
+	switch {
+	case strings.Contains(lower, "parse yaml") || strings.Contains(lower, "yaml:"):
+		appendPoint("- YAML parse failure: fix indentation, list markers, or template placement before changing step logic")
+	case strings.Contains(lower, "e_schema_invalid") || strings.Contains(lower, " is required") || strings.Contains(lower, "additional property"):
+		appendPoint("- Schema validation failure: keep only supported fields and include required workflow and step fields")
+	case strings.Contains(lower, "semantic validation failed"):
+		appendPoint("- Semantic validation failure: generated files are inconsistent with the request or plan")
+	}
+	for _, line := range strings.Split(message, ";") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.Contains(strings.ToLower(line), "(root): version is required") {
+			appendPoint("- Add top-level `version: " + workflowRules.SupportedVersion + "` to every workflow file")
+		}
+		if strings.Contains(strings.ToLower(line), ": id is required") {
+			appendPoint("- Add an `id` field to every step item")
+		}
+		if strings.Contains(strings.ToLower(line), "additional property id is not allowed") && strings.Contains(strings.ToLower(line), "phases.") {
+			appendPoint("- Remove `id` from phases and keep a non-empty `name`; only steps carry ids")
+		}
+		if strings.Contains(strings.ToLower(line), "additional property") && strings.Contains(strings.ToLower(line), "phases.") {
+			appendPoint("- Phase objects support `name`, `steps`, `imports`, and optional `maxParallelism` only")
+		}
+		if strings.Contains(strings.ToLower(line), "invalid map key") {
+			appendPoint("- Do not use whole-value template expressions where YAML arrays or objects are required")
+		}
+		if strings.Contains(strings.ToLower(line), "did not find expected node content") {
+			appendPoint("- Keep YAML list items and template directives in valid YAML structure")
+		}
+	}
+	if len(points) == 0 {
+		appendPoint("- Fix the validator error exactly as reported and keep the response schema-valid")
+	}
+	return strings.Join(dedupe(points), "\n")
 }

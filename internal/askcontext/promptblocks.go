@@ -18,10 +18,41 @@ func InvariantPromptBlock() PromptBlock {
 	b.WriteString("- Top-level workflow modes: ")
 	b.WriteString(strings.Join(manifest.Workflow.TopLevelModes, ", "))
 	b.WriteString("\n")
+	if len(manifest.Workflow.RequiredFields) > 0 {
+		b.WriteString("- Required workflow fields: ")
+		b.WriteString(strings.Join(manifest.Workflow.RequiredFields, ", "))
+		b.WriteString("\n")
+	}
 	for _, note := range manifest.Workflow.Notes {
 		b.WriteString("- ")
 		b.WriteString(note)
 		b.WriteString("\n")
+	}
+	for _, rule := range manifest.Workflow.PhaseRules {
+		b.WriteString("- ")
+		b.WriteString(rule)
+		b.WriteString("\n")
+	}
+	for _, rule := range manifest.Workflow.StepRules {
+		b.WriteString("- ")
+		b.WriteString(rule)
+		b.WriteString("\n")
+	}
+	if manifest.Workflow.PhaseExample != "" {
+		b.WriteString("- Minimal phase-based workflow example:\n")
+		for _, line := range strings.Split(manifest.Workflow.PhaseExample, "\n") {
+			b.WriteString("  ")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+	if manifest.Workflow.StepsExample != "" {
+		b.WriteString("- Minimal top-level steps workflow example:\n")
+		for _, line := range strings.Split(manifest.Workflow.StepsExample, "\n") {
+			b.WriteString("  ")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
 	}
 	return PromptBlock{Topic: TopicWorkflowInvariants, Title: "Workflow invariants", Content: strings.TrimSpace(b.String())}
 }

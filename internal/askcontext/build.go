@@ -56,7 +56,32 @@ func buildManifest() Manifest {
 			SupportedModes:   validate.SupportedWorkflowRoles(),
 			SupportedVersion: validate.SupportedWorkflowVersion(),
 			ImportRule:       validate.WorkflowImportRule(),
-			Notes:            append([]string(nil), validate.WorkflowInvariantNotes()...),
+			RequiredFields:   []string{"version"},
+			PhaseRules: []string{
+				"Each phase needs a non-empty name.",
+				"Each phase must define steps or imports.",
+				"Phase objects do not support an id field.",
+			},
+			StepRules: []string{
+				"Each step needs id, kind, and spec.",
+				"Step ids belong on steps, not phases.",
+			},
+			PhaseExample: strings.TrimSpace(`version: v1alpha1
+phases:
+  - name: bootstrap
+    steps:
+      - id: check-host
+        kind: CheckHost
+        spec:
+          checks: [os, arch, swap]
+          failFast: true`),
+			StepsExample: strings.TrimSpace(`version: v1alpha1
+steps:
+  - id: run-command
+    kind: Command
+    spec:
+      command: [echo, hello]`),
+			Notes: append([]string(nil), validate.WorkflowInvariantNotes()...),
 		},
 		Modes: []ModeGuidance{
 			{

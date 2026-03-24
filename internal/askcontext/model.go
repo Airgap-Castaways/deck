@@ -63,6 +63,11 @@ type WorkflowRules struct {
 	SupportedModes   []string
 	SupportedVersion string
 	ImportRule       string
+	RequiredFields   []string
+	PhaseRules       []string
+	StepRules        []string
+	PhaseExample     string
+	StepsExample     string
 	Notes            []string
 }
 

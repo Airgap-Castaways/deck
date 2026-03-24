@@ -150,9 +150,36 @@ func TestGenerateWithValidationRetryPromptIncludesRawValidatorErrorAndRepairGuid
 		t.Fatalf("expected two generate calls, got %d", len(client.prompts))
 	}
 	retryPrompt := client.prompts[1].Prompt
-	for _, want := range []string{"Raw validator error:", "CheckHost", "spec.checks", "spec.os", "Blocking and advisory feedback as JSON:"} {
+	for _, want := range []string{"Validator summary:", "Raw validator error:", "CheckHost", "spec.checks", "spec.os", "Blocking and advisory feedback as JSON:"} {
 		if !strings.Contains(retryPrompt, want) {
 			t.Fatalf("expected %q in retry prompt, got %q", want, retryPrompt)
+		}
+	}
+}
+
+func TestSummarizeValidationErrorHighlightsWorkflowSkeletonFixes(t *testing.T) {
+	summary := summarizeValidationError("E_SCHEMA_INVALID: (root): version is required; steps.0: id is required; steps.1: id is required")
+	for _, want := range []string{"Schema validation failure", "version: v1alpha1", "id` field"} {
+		if !strings.Contains(summary, want) {
+			t.Fatalf("expected %q in summary, got %q", want, summary)
+		}
+	}
+}
+
+func TestSummarizeValidationErrorRejectsPhaseIDs(t *testing.T) {
+	summary := summarizeValidationError("E_SCHEMA_INVALID: (root): version is required; phases.0: Additional property id is not allowed; phases.1: Additional property id is not allowed")
+	for _, want := range []string{"Remove `id` from phases", "Phase objects support `name`, `steps`, `imports`, and optional `maxParallelism` only", "version: v1alpha1"} {
+		if !strings.Contains(summary, want) {
+			t.Fatalf("expected %q in summary, got %q", want, summary)
+		}
+	}
+}
+
+func TestSummarizeValidationErrorHighlightsYAMLShapeFixes(t *testing.T) {
+	summary := summarizeValidationError("parse yaml: yaml: line 10: did not find expected node content")
+	for _, want := range []string{"YAML parse failure", "template", "valid YAML structure"} {
+		if !strings.Contains(summary, want) {
+			t.Fatalf("expected %q in summary, got %q", want, summary)
 		}
 	}
 }

@@ -77,6 +77,9 @@ func TestManifestWorkflowRulesMatchValidatorAndSchema(t *testing.T) {
 			t.Fatalf("schema anyOf missing top-level mode %q", mode)
 		}
 	}
+	if !contains(manifest.Workflow.RequiredFields, "version") {
+		t.Fatalf("workflow rules should require version")
+	}
 }
 
 func TestManifestCLIParity(t *testing.T) {
@@ -119,7 +122,7 @@ func TestPromptBlocksIncludeCoreAuthoringGuidance(t *testing.T) {
 		CLIHintsBlock(),
 	}
 	joined := strings.Join(blocks, "\n")
-	for _, want := range []string{"workflows/components/", "workflows/vars.yaml", "prepare", "apply", "Prefer typed steps over Command"} {
+	for _, want := range []string{"workflows/components/", "workflows/vars.yaml", "prepare", "apply", "Prefer typed steps over Command", "Required workflow fields: version", "Phase objects do not support an id field.", "Each step needs id, kind, and spec."} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("expected %q in prompt blocks, got %q", want, joined)
 		}
