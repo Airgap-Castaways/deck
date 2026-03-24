@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -230,17 +231,25 @@ func fetchReleaseRuntimeBinary(version string, target runtimeBinaryTarget) ([]by
 }
 
 func downloadArchiveDeckBinary(url string) ([]byte, error) {
-	resp, err := http.Get(url)
+	parsed, err := urlpkgParseHTTPS(url)
 	if err != nil {
-		return nil, fmt.Errorf("download release archive %s: %w", url, err)
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("download release archive %s: %w", parsed.String(), err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("download release archive %s: %w", parsed.String(), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("download release archive %s: unexpected status %d", url, resp.StatusCode)
+		return nil, fmt.Errorf("download release archive %s: unexpected status %d", parsed.String(), resp.StatusCode)
 	}
 	gzr, err := gzip.NewReader(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read release archive %s: %w", url, err)
+		return nil, fmt.Errorf("read release archive %s: %w", parsed.String(), err)
 	}
 	defer func() { _ = gzr.Close() }()
 	tr := tar.NewReader(gzr)
@@ -250,7 +259,7 @@ func downloadArchiveDeckBinary(url string) ([]byte, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("read release archive %s: %w", url, err)
+			return nil, fmt.Errorf("read release archive %s: %w", parsed.String(), err)
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			continue
@@ -260,7 +269,21 @@ func downloadArchiveDeckBinary(url string) ([]byte, error) {
 		}
 		return io.ReadAll(tr)
 	}
-	return nil, fmt.Errorf("release archive %s does not contain deck", url)
+	return nil, fmt.Errorf("release archive %s does not contain deck", parsed.String())
+}
+
+func urlpkgParseHTTPS(raw string) (*url.URL, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return nil, fmt.Errorf("parse release archive URL %s: %w", raw, err)
+	}
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return nil, fmt.Errorf("release archive URL must use http or https: %s", raw)
+	}
+	if parsed.Host == "" {
+		return nil, fmt.Errorf("release archive URL host is required: %s", raw)
+	}
+	return parsed, nil
 }
 
 func pathBase(path string) string {

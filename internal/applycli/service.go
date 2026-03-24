@@ -132,6 +132,7 @@ func writeApplyDryRun(stdoutPrintf func(format string, args ...any) error, reque
 
 	return nil
 }
+
 func combineStepEventSinks(sinks ...install.StepEventSink) install.StepEventSink {
 	filtered := make([]install.StepEventSink, 0, len(sinks))
 	for _, sink := range sinks {

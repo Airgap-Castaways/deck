@@ -353,9 +353,7 @@ func tarManifestPath() string {
 
 func isManifestTrackedPath(rel string) bool {
 	trimmed := strings.TrimSpace(rel)
-	if strings.HasPrefix(trimmed, "outputs/") {
-		trimmed = strings.TrimPrefix(trimmed, "outputs/")
-	}
+	trimmed = strings.TrimPrefix(trimmed, "outputs/")
 	return workspacepaths.IsCanonicalPreparedPath(trimmed)
 }
 
