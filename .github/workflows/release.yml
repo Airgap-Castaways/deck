@@ -56,7 +56,7 @@ jobs:
         run: |
           docker run --rm -v "$PWD/dist:/dist" ubuntu:24.04 sh -lc '
             apt-get update && \
-            apt-get install -y /dist/*.deb && \
+            apt-get install -y /dist/*_amd64.deb && \
             deck version && \
             deck --help >/dev/null
           '
@@ -64,7 +64,7 @@ jobs:
       - name: Smoke test rpm package
         run: |
           docker run --rm -v "$PWD/dist:/dist" rockylinux:9 sh -lc '
-            dnf install -y /dist/*.rpm && \
+            dnf install -y /dist/*.x86_64.rpm && \
             deck version && \
             deck --help >/dev/null
           '
