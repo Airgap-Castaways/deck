@@ -90,6 +90,75 @@
           },
           "type": "object"
         },
+        "items": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "fetch": {
+                "additionalProperties": false,
+                "properties": {
+                  "offlineOnly": {
+                    "type": "boolean"
+                  },
+                  "sources": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              },
+              "mode": {
+                "type": "string"
+              },
+              "outputPath": {
+                "type": "string"
+              },
+              "source": {
+                "additionalProperties": false,
+                "properties": {
+                  "bundle": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "root": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "type": "array"
+        },
         "mode": {
           "pattern": "^[0-7]{4}$",
           "type": "string"
@@ -97,141 +166,6 @@
         "outputPath": {
           "minLength": 1,
           "type": "string"
-        },
-        "items": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "items": {
-                "additionalProperties": false,
-                "properties": {
-                  "fetch": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "offlineOnly": {
-                        "type": "boolean"
-                      },
-                      "sources": {
-                        "items": {
-                          "additionalProperties": false,
-                          "anyOf": [
-                            {
-                              "required": [
-                                "path"
-                              ]
-                            },
-                            {
-                              "required": [
-                                "url"
-                              ]
-                            }
-                          ],
-                          "properties": {
-                            "path": {
-                              "minLength": 1,
-                              "type": "string"
-                            },
-                            "type": {
-                              "enum": [
-                                "local",
-                                "bundle",
-                                "repo",
-                                "online"
-                              ],
-                              "type": "string"
-                            },
-                            "url": {
-                              "minLength": 1,
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "type": "object"
-                        },
-                        "type": "array"
-                      }
-                    },
-                    "type": "object"
-                  },
-                  "mode": {
-                    "pattern": "^[0-7]{4}$",
-                    "type": "string"
-                  },
-                  "outputPath": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "source": {
-                    "additionalProperties": false,
-                    "anyOf": [
-                      {
-                        "required": [
-                          "url"
-                        ]
-                      },
-                      {
-                        "required": [
-                          "path"
-                        ]
-                      },
-                      {
-                        "required": [
-                          "bundle"
-                        ]
-                      }
-                    ],
-                    "properties": {
-                      "bundle": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "path": {
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "root": {
-                            "enum": [
-                              "files",
-                              "images",
-                              "packages"
-                            ],
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "root",
-                          "path"
-                        ],
-                        "type": "object"
-                      },
-                      "path": {
-                        "minLength": 1,
-                        "type": "string"
-                      },
-                      "sha256": {
-                        "pattern": "^[a-fA-F0-9]{64}$",
-                        "type": "string"
-                      },
-                      "url": {
-                        "minLength": 1,
-                        "type": "string"
-                      }
-                    },
-                    "type": "object"
-                  }
-                },
-                "required": [
-                  "source"
-                ],
-                "type": "object"
-              },
-              "minItems": 1,
-              "type": "array"
-            }
-          ]
         },
         "source": {
           "additionalProperties": false,
@@ -291,17 +225,8 @@
           "type": "object"
         }
       },
-      "anyOf": [
-        {
-          "required": [
-            "source"
-          ]
-        },
-        {
-          "required": [
-            "items"
-          ]
-        }
+      "required": [
+        "source"
       ],
       "type": "object"
     },

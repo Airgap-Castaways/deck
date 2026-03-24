@@ -430,8 +430,8 @@
                         "additionalProperties": {
                           "enum": [
                             "artifacts",
-                            "outputPaths",
-                            "outputPath"
+                            "outputPath",
+                            "outputPaths"
                           ]
                         },
                         "propertyNames": {
@@ -2415,11 +2415,11 @@
               "properties": {
                 "register": {
                   "additionalProperties": {
-                      "enum": [
-                        "artifacts",
-                        "outputPaths",
-                        "outputPath"
-                      ]
+                    "enum": [
+                      "artifacts",
+                      "outputPath",
+                      "outputPaths"
+                    ]
                   },
                   "propertyNames": {
                     "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"

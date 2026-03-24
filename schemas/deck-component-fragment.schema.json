@@ -354,12 +354,12 @@
             "then": {
               "properties": {
                 "register": {
-                    "additionalProperties": {
-                      "enum": [
-                        "artifacts",
-                        "outputPaths",
-                        "outputPath"
-                      ]
+                  "additionalProperties": {
+                    "enum": [
+                      "artifacts",
+                      "outputPath",
+                      "outputPaths"
+                    ]
                   },
                   "propertyNames": {
                     "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
