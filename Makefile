@@ -16,7 +16,7 @@ DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 DIRTY ?= $(shell if [ -n "$$(git status --short 2>/dev/null)" ]; then printf true; else printf false; fi)
 LDFLAGS ?= -X $(BUILDINFO_PKG).Version=$(VERSION) -X $(BUILDINFO_PKG).Commit=$(COMMIT) -X $(BUILDINFO_PKG).Date=$(DATE) -X $(BUILDINFO_PKG).Dirty=$(DIRTY)
 
-.PHONY: build build-ai test test-ai lint vuln vuln-ai generate print-build-meta
+.PHONY: build build-ai test test-ai lint vuln vuln-ai generate print-build-meta release-check release-snapshot
 
 build:
 	@mkdir -p $(BIN_DIR)
@@ -55,3 +55,9 @@ vuln-ai: $(GOVULNCHECK)
 
 print-build-meta:
 	@printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\nDIRTY=%s\n' "$(VERSION)" "$(COMMIT)" "$(DATE)" "$(DIRTY)"
+
+release-check:
+	goreleaser check
+
+release-snapshot:
+	goreleaser release --snapshot --clean

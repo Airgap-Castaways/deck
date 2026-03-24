@@ -52,6 +52,16 @@ deck apply
 - **Go 1.25 이상** (모든 OS에서 빌드 및 `prepare` 실행 가능)
 - **Linux 실행 환경** (RHEL, Ubuntu 계열 지원; `apply` 단계에서 필요)
 
+릴리즈 바이너리와 Linux 패키지는 GitHub Releases 페이지에 게시합니다. Homebrew는 `homebrew-core`가 아니라 Airgap Castaways tap으로 제공합니다.
+
+```bash
+# Homebrew tap
+brew tap Airgap-Castaways/tap
+brew install deck
+```
+
+릴리즈 자산은 `https://github.com/Airgap-Castaways/deck/releases`에서 내려받을 수 있습니다.
+
 ```bash
 # 소스에서 빌드 및 설치
 go install ./cmd/deck
