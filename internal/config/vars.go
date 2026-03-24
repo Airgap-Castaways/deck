@@ -7,9 +7,9 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/taedi90/deck/internal/cloneutil"
 	"gopkg.in/yaml.v3"
 
+	"github.com/taedi90/deck/internal/cloneutil"
 	"github.com/taedi90/deck/internal/fsutil"
 )
 
