@@ -12,11 +12,15 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
 	"github.com/Airgap-Castaways/deck/internal/askhooks"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
+	"github.com/Airgap-Castaways/deck/internal/askknowledge"
+	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/askreview"
+	"github.com/Airgap-Castaways/deck/internal/askscaffold"
 	"github.com/Airgap-Castaways/deck/internal/askstate"
 	"github.com/Airgap-Castaways/deck/internal/validate"
 )
@@ -96,10 +100,9 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	} else {
 		logger.logf("debug", "[ask][phase:classify:skip] reason=no-llm-credentials\n")
 	}
-	if opts.Write && !decision.AllowGeneration && heuristic.AllowGeneration {
-		logger.logf("debug", "[ask][phase:classify:override] from=%s to=%s reason=write-flag\n", decision.Route, heuristic.Route)
-		decision = heuristic
-		decision.Reason = "write flag overrides non-generation classification"
+	decision = applyWriteOverride(decision, heuristic, opts.Write, logger)
+	if decision.Route == askintent.RouteRefine && !workspace.HasWorkflowTree {
+		return fmt.Errorf("cannot refine workflow files because this workspace has no workflow tree yet; run a draft generation first")
 	}
 
 	mcpChunks, mcpEvents := mcpaugment.Gather(ctx, effective.MCP, decision.Route, requestText)
@@ -107,6 +110,8 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	externalChunks := append(append([]askretrieve.Chunk{}, mcpChunks...), lspChunks...)
 	externalChunks = append(externalChunks, projectContextChunk(resolvedRoot))
 	retrieval := askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, externalChunks)
+	requirements := askpolicy.BuildScenarioRequirements(requestText, retrieval, workspace, decision)
+	bundle := askknowledge.Current()
 	result := runResult{
 		Route:         decision.Route,
 		Target:        decision.Target,
@@ -154,7 +159,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		planned, planErr := planWithLLM(ctx, client, askconfigSettings{provider: effective.Provider, model: effective.Model, apiKey: effective.APIKey, oauthToken: effective.OAuthToken, accountID: effective.AccountID, endpoint: effective.Endpoint}, decision, retrieval, requestText, workspace, logger)
 		if planErr != nil {
 			logger.logf("debug", "[ask][phase:plan:fallback] error=%v\n", planErr)
-			planned = localPlan(requestText, decision, workspace)
+			planned = askpolicy.BuildPlanDefaults(requirements, requestText, decision, workspace)
 		}
 		plan = planned
 		result.Plan = &plan
@@ -212,6 +217,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		secondPassExternal = append(secondPassExternal, planWorkspaceChunks(plan, workspace)...)
 		decision.Target = planTarget(plan, decision.Target)
 		retrieval = askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, secondPassExternal)
+		requirements = askpolicy.MergeRequirementsWithPlan(askpolicy.BuildScenarioRequirements(requestText, retrieval, workspace, decision), plan)
 		result.Chunks = retrieval.Chunks
 		result.DroppedChunks = retrieval.Dropped
 		logger.logf("debug", "[ask][phase:retrieve:second-pass] chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
@@ -223,6 +229,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			return fmt.Errorf("route %s requires model access; configure provider credentials first", decision.Route)
 		}
 		attempts := generationAttempts(opts.MaxIterations, decision, requestText)
+		scaffold := askscaffold.Build(requirements, workspace, decision, plan, bundle)
 		generationRequest := askprovider.Request{
 			Kind:         "generate",
 			Provider:     effective.Provider,
@@ -231,7 +238,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			OAuthToken:   effective.OAuthToken,
 			AccountID:    effective.AccountID,
 			Endpoint:     effective.Endpoint,
-			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval),
+			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval, requirements, scaffold),
 			Prompt:       generationUserPrompt(workspace, state, requestText, strings.TrimSpace(opts.FromPath), decision.Route),
 			MaxRetries:   attempts,
 		}
@@ -318,6 +325,26 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 
 	return render(opts.Stdout, opts.Stderr, result)
+}
+
+func applyWriteOverride(decision askintent.Decision, heuristic askintent.Decision, write bool, logger askLogger) askintent.Decision {
+	if !write {
+		return decision
+	}
+	if (decision.Route == askintent.RouteDraft || decision.Route == askintent.RouteRefine) && !decision.AllowGeneration {
+		logger.logf("debug", "[ask][phase:classify:override] route=%s reason=write-flag-enable-generation\n", decision.Route)
+		decision.AllowGeneration = true
+		decision.AllowRetry = true
+		decision.RequiresLint = true
+		decision.Reason = "write flag enables generation for authoring route"
+		return decision
+	}
+	if !decision.AllowGeneration && heuristic.AllowGeneration {
+		logger.logf("debug", "[ask][phase:classify:override] from=%s to=%s reason=write-flag\n", decision.Route, heuristic.Route)
+		decision = heuristic
+		decision.Reason = "write flag overrides non-generation classification"
+	}
+	return decision
 }
 
 func canUseLLM(cfg askconfig.EffectiveSettings) bool {
@@ -427,27 +454,26 @@ func generationAttempts(requested int, decision askintent.Decision, prompt strin
 	if requested > 0 {
 		return requested
 	}
-	return 2
+	return 3
 }
 
 func generateWithValidation(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, attempts int, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse) (askcontract.GenerationResponse, string, askcontract.CriticResponse, int, error) {
 	var lastValidation string
 	var lastCritic askcontract.CriticResponse
+	bundle := askknowledge.Current()
 	for attempt := 1; attempt <= attempts; attempt++ {
 		currentPrompt := req.Prompt
 		if attempt > 1 && lastValidation != "" {
+			diags := askdiagnostic.FromValidationError(lastValidation, bundle)
+			diags = append(diags, askdiagnostic.FromCritic(lastCritic)...)
 			currentPrompt += "\n\nLocal validation failed. Fix the response and return full JSON again."
 			currentPrompt += "\nValidator summary:\n" + summarizeValidationError(lastValidation)
 			currentPrompt += "\nRaw validator error:\n" + strings.TrimSpace(lastValidation)
 			for _, chunk := range askretrieve.RepairChunks(req.Prompt, lastValidation) {
 				currentPrompt += "\n" + chunk.Content
 			}
-			if len(lastCritic.Blocking) > 0 || len(lastCritic.Advisory) > 0 {
-				logger.logf("debug", "\n[ask][phase:repair:critic]\n%s\n", criticJSON(lastCritic))
-				currentPrompt += "\nBlocking and advisory feedback as JSON:\n" + criticJSON(lastCritic)
-			} else {
-				currentPrompt += "\nErrors:\n" + lastValidation
-			}
+			logger.logf("debug", "\n[ask][phase:repair:diagnostics]\n%s\n", askdiagnostic.JSON(diags))
+			currentPrompt += "\n" + askdiagnostic.RepairPromptBlock(diags)
 		}
 		logger.logf("basic", "[ask][phase:generation:attempt] attempt=%d/%d\n", attempt, attempts)
 		logger.prompt("generation", req.SystemPrompt, currentPrompt)
@@ -552,6 +578,24 @@ func requiredFixesForValidation(message string) []string {
 	if strings.Contains(lower, "invalid map key") && (strings.Contains(lower, "{{") || strings.Contains(lower, ".vars.")) {
 		fixes = append(fixes, "Do not use whole-value template expressions like `{{ .vars.* }}` for typed YAML arrays or objects such as spec.packages or spec.repositories; inline concrete YAML lists or objects instead")
 	}
+	if strings.Contains(lower, "parse yaml") && strings.Contains(lower, ".vars.") {
+		fixes = append(fixes, "Keep workflows/vars.yaml as plain YAML data only. Do not place template expressions inside vars values, and quote any literal strings that contain special YAML characters")
+	}
+	if strings.Contains(lower, "imports.0") && strings.Contains(lower, "expected: object") && strings.Contains(lower, "given: string") {
+		fixes = append(fixes, "Use phase imports as objects like `imports: [{path: check-host.yaml}]` rather than bare strings")
+	}
+	if strings.Contains(lower, "additional property version is not allowed") {
+		fixes = append(fixes, "Do not add workflow-level fields like version to component fragments under workflows/components/. Component files should usually contain only a top-level steps mapping")
+	}
+	if strings.Contains(lower, "invalid type. expected: object, given: array") {
+		fixes = append(fixes, "Do not make a component file a bare YAML array. Component files should be YAML objects, usually with a top-level steps: key")
+	}
+	if strings.Contains(lower, "workflows/components/") {
+		fixes = append(fixes, "For starter drafts, avoid generating workflows/components/ unless reusable fragments are clearly required; inline the first working version into prepare/apply instead")
+	}
+	if strings.Contains(lower, "command") && strings.Contains(lower, "is not supported for role prepare") {
+		fixes = append(fixes, "Use typed prepare steps like DownloadImage or DownloadPackage instead of Command when collecting offline artifacts in prepare")
+	}
 	fixes = append(fixes, askcontext.ValidationFixesForError(message)...)
 	return dedupe(fixes)
 }
@@ -598,6 +642,12 @@ func summarizeValidationError(message string) string {
 		}
 		if strings.Contains(strings.ToLower(line), "invalid map key") {
 			appendPoint("- Do not use whole-value template expressions where YAML arrays or objects are required")
+		}
+		if strings.Contains(strings.ToLower(line), "must be one of") {
+			appendPoint("- Keep constrained enum fields as literal allowed values instead of replacing them with vars templates")
+		}
+		if strings.Contains(strings.ToLower(line), "does not match pattern") {
+			appendPoint("- Keep pattern-constrained scalar fields as literal values that satisfy the documented schema pattern instead of replacing them with vars templates")
 		}
 		if strings.Contains(strings.ToLower(line), "did not find expected node content") {
 			appendPoint("- Keep YAML list items and template directives in valid YAML structure")

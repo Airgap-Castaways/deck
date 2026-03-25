@@ -329,6 +329,21 @@ func StepGuidanceBlock(route askintent.Route, prompt string) string {
 				b.WriteString(mistake)
 				b.WriteString("\n")
 			}
+			for _, field := range item.Step.ConstrainedLiteralFields {
+				b.WriteString("  - constrained: ")
+				b.WriteString(field.Path)
+				b.WriteString(" must stay literal")
+				if len(field.AllowedValues) > 0 {
+					b.WriteString(" (allowed: ")
+					b.WriteString(strings.Join(field.AllowedValues, ", "))
+					b.WriteString(")")
+				}
+				if strings.TrimSpace(field.Guidance) != "" {
+					b.WriteString(": ")
+					b.WriteString(strings.TrimSpace(field.Guidance))
+				}
+				b.WriteString("\n")
+			}
 		}
 	}
 	return strings.TrimSpace(b.String())

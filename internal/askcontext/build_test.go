@@ -80,6 +80,9 @@ func TestManifestWorkflowRulesMatchValidatorAndSchema(t *testing.T) {
 	if !contains(manifest.Workflow.RequiredFields, "version") {
 		t.Fatalf("workflow rules should require version")
 	}
+	if !manifest.Policy.AssumeOfflineByDefault {
+		t.Fatalf("expected offline-first ask policy")
+	}
 }
 
 func TestManifestCLIParity(t *testing.T) {
@@ -122,7 +125,7 @@ func TestPromptBlocksIncludeCoreAuthoringGuidance(t *testing.T) {
 		CLIHintsBlock(),
 	}
 	joined := strings.Join(blocks, "\n")
-	for _, want := range []string{"workflows/components/", "workflows/vars.yaml", "prepare", "apply", "Prefer typed steps over Command", "Required workflow fields: version", "Phase objects do not support an id field.", "Each step needs id, kind, and spec."} {
+	for _, want := range []string{"workflows/components/", "workflows/vars.yaml", "prepare", "apply", "Prefer typed steps over Command", "Required workflow fields: version", "Phase objects do not support an id field.", "Each step needs id, kind, and spec.", "Import example:", "- path: check-host.yaml", "Component fragment example:", "must not add workflow-level fields like version or phases"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("expected %q in prompt blocks, got %q", want, joined)
 		}

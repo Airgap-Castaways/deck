@@ -140,6 +140,26 @@ func ComponentGuidanceBlock() string {
 	b.WriteString(manifest.Components.ReuseRule)
 	b.WriteString("\n- ")
 	b.WriteString(manifest.Components.LocationRule)
+	if strings.TrimSpace(manifest.Components.FragmentRule) != "" {
+		b.WriteString("\n- ")
+		b.WriteString(manifest.Components.FragmentRule)
+	}
+	if strings.TrimSpace(manifest.Components.ImportExample) != "" {
+		b.WriteString("\n- Import example:\n")
+		for _, line := range strings.Split(manifest.Components.ImportExample, "\n") {
+			b.WriteString("  ")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+	if strings.TrimSpace(manifest.Components.FragmentExample) != "" {
+		b.WriteString("- Component fragment example:\n")
+		for _, line := range strings.Split(manifest.Components.FragmentExample, "\n") {
+			b.WriteString("  ")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
 	return strings.TrimSpace(b.String())
 }
 

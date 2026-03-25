@@ -57,6 +57,23 @@ func TestRetrievePrefersTypedGuidanceOverCommandForKubeadmPrompt(t *testing.T) {
 	}
 }
 
+func TestRetrieveIncludesStructuredMCPEvidenceChunk(t *testing.T) {
+	result := Retrieve(askintent.RouteDraft, "create an air-gapped package workflow", askintent.Target{}, WorkspaceSummary{}, askstate.Context{}, []Chunk{{ID: "mcp-doc", Source: "mcp", Label: "context7:search", Topic: "mcp:context7:search", Content: "Typed MCP evidence JSON:\n{\n  \"artifactKinds\": [\"package\"],\n  \"offlineHints\": [\"Treat gathered installation artifacts as offline bundle inputs for prepare before apply.\"]\n}\n\nSource excerpt:\nDownload rpm packages before offline installation.", Score: 70, Evidence: &EvidenceSummary{ArtifactKinds: []string{"package"}, OfflineHints: []string{"Treat gathered installation artifacts as offline bundle inputs for prepare before apply."}}}})
+	var found bool
+	for _, chunk := range result.Chunks {
+		if chunk.Source == "mcp" && strings.Contains(chunk.Content, "Typed MCP evidence JSON:") {
+			if chunk.Evidence == nil || len(chunk.Evidence.ArtifactKinds) == 0 || chunk.Evidence.ArtifactKinds[0] != "package" {
+				t.Fatalf("expected typed evidence summary, got %#v", chunk)
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected structured mcp evidence chunk, got %#v", result.Chunks)
+	}
+}
+
 func findChunk(result RetrievalResult, id string) *Chunk {
 	for i := range result.Chunks {
 		if result.Chunks[i].ID == id {

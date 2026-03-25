@@ -4,6 +4,7 @@ type Manifest struct {
 	CLI        CLIContext
 	Topology   WorkspaceTopology
 	Workflow   WorkflowRules
+	Policy     AuthoringPolicy
 	Modes      []ModeGuidance
 	Components ComponentGuidance
 	Vars       VarsGuidance
@@ -71,6 +72,14 @@ type WorkflowRules struct {
 	Notes            []string
 }
 
+type AuthoringPolicy struct {
+	AssumeOfflineByDefault bool
+	PrepareArtifactKinds   []string
+	ForbiddenApplyActions  []string
+	VarsAdvisory           []string
+	ComponentAdvisory      []string
+}
+
 type ModeGuidance struct {
 	Mode        string
 	Summary     string
@@ -81,10 +90,13 @@ type ModeGuidance struct {
 }
 
 type ComponentGuidance struct {
-	Summary      string
-	ImportRule   string
-	ReuseRule    string
-	LocationRule string
+	Summary         string
+	ImportRule      string
+	ReuseRule       string
+	LocationRule    string
+	FragmentRule    string
+	ImportExample   string
+	FragmentExample string
 }
 
 type VarsGuidance struct {
@@ -96,26 +108,33 @@ type VarsGuidance struct {
 }
 
 type StepKindContext struct {
-	Kind            string
-	Category        string
-	Summary         string
-	WhenToUse       string
-	SchemaFile      string
-	AllowedRoles    []string
-	Actions         []string
-	Outputs         []string
-	MinimalShape    string
-	CuratedShape    string
-	KeyFields       []StepFieldContext
-	ActionGuides    []StepActionContext
-	PromptExamples  []StepExampleContext
-	CommonMistakes  []string
-	RepairHints     []string
-	ValidationHints []ValidationHint
-	MatchSignals    []string
-	AntiSignals     []string
-	QualityRules    []QualityRule
-	Notes           []string
+	Kind                     string
+	Category                 string
+	Summary                  string
+	WhenToUse                string
+	SchemaFile               string
+	AllowedRoles             []string
+	Actions                  []string
+	Outputs                  []string
+	MinimalShape             string
+	CuratedShape             string
+	KeyFields                []StepFieldContext
+	ActionGuides             []StepActionContext
+	PromptExamples           []StepExampleContext
+	CommonMistakes           []string
+	RepairHints              []string
+	ValidationHints          []ValidationHint
+	ConstrainedLiteralFields []ConstrainedFieldHint
+	MatchSignals             []string
+	AntiSignals              []string
+	QualityRules             []QualityRule
+	Notes                    []string
+}
+
+type ConstrainedFieldHint struct {
+	Path          string
+	AllowedValues []string
+	Guidance      string
 }
 
 type StepFieldContext struct {

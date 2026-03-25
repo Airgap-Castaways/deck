@@ -35,13 +35,23 @@ func TestParseClassification(t *testing.T) {
 }
 
 func TestParsePlan(t *testing.T) {
-	raw := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":["use v1alpha1"],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	raw := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","offlineAssumption":"offline","needsPrepare":false,"artifactKinds":[],"blockers":[],"targetOutcome":"generate files","assumptions":["use v1alpha1"],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
 	resp, err := ParsePlan(raw)
 	if err != nil {
 		t.Fatalf("parse plan: %v", err)
 	}
-	if resp.Intent != "draft" || len(resp.Files) != 1 {
+	if resp.Intent != "draft" || len(resp.Files) != 1 || resp.OfflineAssumption != "offline" {
 		t.Fatalf("unexpected plan: %#v", resp)
+	}
+}
+
+func TestParsePlanInfersOfflineAndArtifacts(t *testing.T) {
+	resp, err := ParsePlan(`{"version":1,"request":"create an air-gapped package and image workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/prepare.yaml","kind":"scenario","action":"create","purpose":"prepare"},{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`)
+	if err != nil {
+		t.Fatalf("parse plan: %v", err)
+	}
+	if resp.OfflineAssumption != "" || resp.NeedsPrepare || len(resp.ArtifactKinds) != 0 {
+		t.Fatalf("expected inferred offline prepare plan, got %#v", resp)
 	}
 }
 
