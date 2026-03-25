@@ -142,7 +142,7 @@ func TestNormalizeLogLevel(t *testing.T) {
 
 func TestClearStored(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	if err := SaveStored(Settings{Provider: "openai", Model: "gpt-5.4", APIKey: "secret", OAuthToken: "oauth-secret", Endpoint: "https://example.invalid/v1"}); err != nil {
+	if err := SaveStored(Settings{Provider: "openai", Model: "gpt-5.3-codex-spark", APIKey: "secret", OAuthToken: "oauth-secret", Endpoint: "https://example.invalid/v1"}); err != nil {
 		t.Fatalf("save stored: %v", err)
 	}
 	if err := ClearStored(); err != nil {
@@ -154,6 +154,23 @@ func TestClearStored(t *testing.T) {
 	}
 	if !reflect.DeepEqual(loaded, Settings{}) {
 		t.Fatalf("expected cleared settings, got %#v", loaded)
+	}
+}
+
+func TestResolveEffectiveRealignsOpenAIDefaultsFromGeminiConfig(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+	if err := SaveStored(Settings{Provider: "openai", Model: "gemini-3.1-flash-lite-preview", Endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/"}); err != nil {
+		t.Fatalf("save stored: %v", err)
+	}
+	effective, err := ResolveEffective(Settings{})
+	if err != nil {
+		t.Fatalf("resolve effective: %v", err)
+	}
+	if effective.Model != "gpt-5.3-codex-spark" || effective.ModelSource != "provider-default" {
+		t.Fatalf("unexpected openai model realignment: %#v", effective)
+	}
+	if effective.Endpoint != "https://api.openai.com/v1" || effective.EndpointSource != "provider-default" {
+		t.Fatalf("unexpected openai endpoint realignment: %#v", effective)
 	}
 }
 

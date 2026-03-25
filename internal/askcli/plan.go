@@ -90,6 +90,7 @@ func planWithLLM(ctx context.Context, client askprovider.Client, cfg askconfigSe
 		Model:        cfg.model,
 		APIKey:       cfg.apiKey,
 		OAuthToken:   cfg.oauthToken,
+		AccountID:    cfg.accountID,
 		Endpoint:     cfg.endpoint,
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
@@ -107,6 +108,7 @@ type askconfigSettings struct {
 	model      string
 	apiKey     string
 	oauthToken string
+	accountID  string
 	endpoint   string
 }
 

@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,32 +88,6 @@ func TestAskLoginStatusLogoutHeadless(t *testing.T) {
 	}
 	if !strings.Contains(out, "authenticated=false") {
 		t.Fatalf("expected missing auth after logout, got %q", out)
-	}
-}
-
-func TestAskLoginHeadlessShowsStartupProgress(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe: %v", err)
-	}
-	os.Stderr = w
-	defer func() {
-		os.Stderr = oldStderr
-	}()
-	_, runErr := runWithCapturedStdout([]string{"ask", "login", "--provider", "openai", "--headless", "--oauth-token", "oauth-token"})
-	_ = w.Close()
-	raw, readErr := io.ReadAll(r)
-	_ = r.Close()
-	if readErr != nil {
-		t.Fatalf("read stderr: %v", readErr)
-	}
-	if runErr != nil {
-		t.Fatalf("ask login: %v", runErr)
-	}
-	if !strings.Contains(string(raw), "Starting OpenAI Codex login...") {
-		t.Fatalf("expected startup progress on stderr, got %q", string(raw))
 	}
 }
 

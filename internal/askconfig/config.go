@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultProvider = "openai"
-	defaultModel    = "gpt-5.4"
+	defaultModel    = "gpt-5.3-codex-spark"
 
 	//nolint:gosec // Environment variable names are not credentials.
 	envAPIKey     = "DECK_ASK_API_KEY"
@@ -69,6 +69,7 @@ type EffectiveSettings struct {
 	ProviderSource   string
 	ModelSource      string
 	AuthStatus       string
+	AccountID        string
 }
 
 func ConfigPath() (string, error) {
@@ -212,11 +213,13 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 		effective.Model = value
 		effective.ModelSource = "flag"
 	}
+	applyProviderDefaults(&effective)
 	if session, ok, err := askauth.Load(effective.Provider); err == nil && ok {
 		session, source, status := resolveSession(session)
 		effective.OAuthToken = session.AccessToken
 		effective.OAuthTokenSource = source
 		effective.AuthStatus = status
+		effective.AccountID = session.AccountID
 	}
 	if value := strings.TrimSpace(cli.APIKey); value != "" {
 		effective.APIKey = value
@@ -233,6 +236,23 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 	}
 	effective.Settings = normalize(effective.Settings)
 	return effective, nil
+}
+
+func applyProviderDefaults(effective *EffectiveSettings) {
+	if effective == nil {
+		return
+	}
+	provider := normalizeProvider(effective.Provider)
+	defaultEndpoint := providerDefaultEndpoint(provider)
+	defaultModel := providerDefaultModel(provider)
+	if modelLooksMismatched(provider, effective.Model, effective.ModelSource) {
+		effective.Model = defaultModel
+		effective.ModelSource = "provider-default"
+	}
+	if endpointLooksMismatched(provider, effective.Endpoint, effective.EndpointSource) {
+		effective.Endpoint = defaultEndpoint
+		effective.EndpointSource = "provider-default"
+	}
 }
 
 func nowUTC() time.Time {
@@ -328,6 +348,57 @@ func normalizeLogLevel(level string) string {
 
 func normalizeProvider(provider string) string {
 	return strings.ToLower(strings.TrimSpace(provider))
+}
+
+func providerDefaultModel(provider string) string {
+	switch normalizeProvider(provider) {
+	case "gemini", "google", "google-openai":
+		return "gemini-2.5-flash"
+	default:
+		return defaultModel
+	}
+}
+
+func providerDefaultEndpoint(provider string) string {
+	switch normalizeProvider(provider) {
+	case "gemini", "google", "google-openai":
+		return "https://generativelanguage.googleapis.com/v1beta/openai/"
+	case "openrouter":
+		return "https://openrouter.ai/api/v1"
+	default:
+		return "https://api.openai.com/v1"
+	}
+}
+
+func modelLooksMismatched(provider string, model string, source string) bool {
+	trimmed := strings.TrimSpace(model)
+	if trimmed == "" {
+		return true
+	}
+	switch normalizeProvider(provider) {
+	case "openai":
+		return strings.HasPrefix(strings.ToLower(trimmed), "gemini")
+	case "gemini", "google", "google-openai":
+		return strings.HasPrefix(strings.ToLower(trimmed), "gpt-")
+	default:
+		return source == "default" && trimmed != providerDefaultModel(provider)
+	}
+}
+
+func endpointLooksMismatched(provider string, endpoint string, source string) bool {
+	trimmed := strings.TrimSpace(endpoint)
+	if trimmed == "" {
+		return true
+	}
+	lower := strings.ToLower(trimmed)
+	switch normalizeProvider(provider) {
+	case "openai":
+		return strings.Contains(lower, "generativelanguage.googleapis.com")
+	case "gemini", "google", "google-openai":
+		return strings.Contains(lower, "api.openai.com")
+	default:
+		return source == "default" && trimmed != providerDefaultEndpoint(provider)
+	}
 }
 
 func loadFileConfig(path string) (fileConfig, error) {

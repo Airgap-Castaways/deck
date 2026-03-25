@@ -8,6 +8,7 @@ type Request struct {
 	Model        string
 	APIKey       string
 	OAuthToken   string
+	AccountID    string
 	Endpoint     string
 	SystemPrompt string
 	Prompt       string

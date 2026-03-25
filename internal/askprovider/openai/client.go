@@ -3,25 +3,37 @@
 package openaiprovider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
+	"time"
 
 	openai "github.com/sashabaranov/go-openai"
 
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 )
 
-type Client struct{}
+const codexResponsesURL = "https://chatgpt.com/backend-api/codex/responses"
+
+type Client struct {
+	httpClient *http.Client
+}
 
 func New() *Client {
-	return &Client{}
+	return &Client{httpClient: &http.Client{Timeout: 120 * time.Second}}
 }
 
 func (c *Client) Generate(ctx context.Context, req askprovider.Request) (askprovider.Response, error) {
 	provider := strings.ToLower(strings.TrimSpace(req.Provider))
 	if provider == "" {
 		provider = "openai"
+	}
+	if shouldUseCodexOAuth(provider, req) {
+		return c.generateCodex(ctx, req)
 	}
 	authToken := requestToken(req)
 	config := openai.DefaultConfig(authToken)
@@ -31,7 +43,7 @@ func (c *Client) Generate(ctx context.Context, req askprovider.Request) (askprov
 		config.BaseURL = defaultBaseURL(provider, config.BaseURL)
 	}
 	client := openai.NewClientWithConfig(config)
-	request := buildRequest(provider, req)
+	request := buildChatRequest(provider, req)
 	resp, err := client.CreateChatCompletion(ctx, request)
 	if err != nil {
 		return askprovider.Response{}, fmt.Errorf("ask provider request failed: %w", err)
@@ -42,7 +54,7 @@ func (c *Client) Generate(ctx context.Context, req askprovider.Request) (askprov
 	return askprovider.Response{Content: strings.TrimSpace(resp.Choices[0].Message.Content)}, nil
 }
 
-func buildRequest(provider string, req askprovider.Request) openai.ChatCompletionRequest {
+func buildChatRequest(provider string, req askprovider.Request) openai.ChatCompletionRequest {
 	request := openai.ChatCompletionRequest{
 		Model: strings.TrimSpace(req.Model),
 		Messages: []openai.ChatCompletionMessage{
@@ -57,8 +69,205 @@ func buildRequest(provider string, req askprovider.Request) openai.ChatCompletio
 	return request
 }
 
+func (c *Client) generateCodex(ctx context.Context, req askprovider.Request) (askprovider.Response, error) {
+	endpoint := strings.TrimSpace(req.Endpoint)
+	if endpoint == "" || strings.Contains(strings.ToLower(endpoint), "api.openai.com") {
+		endpoint = codexResponsesURL
+	}
+	body, err := json.Marshal(buildCodexRequest(req))
+	if err != nil {
+		return askprovider.Response{}, fmt.Errorf("marshal codex request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return askprovider.Response{}, fmt.Errorf("create codex request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+strings.TrimSpace(req.OAuthToken))
+	httpReq.Header.Set("Originator", "deck")
+	httpReq.Header.Set("User-Agent", "deck/ask")
+	if accountID := strings.TrimSpace(req.AccountID); accountID != "" {
+		httpReq.Header.Set("ChatGPT-Account-Id", accountID)
+	}
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return askprovider.Response{}, fmt.Errorf("ask provider request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return askprovider.Response{}, fmt.Errorf("read codex response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return askprovider.Response{}, fmt.Errorf("ask provider request failed: %s", codexError(resp.StatusCode, raw))
+	}
+	content, err := parseCodexResponse(raw, resp.Header.Get("Content-Type"))
+	if err != nil {
+		return askprovider.Response{}, fmt.Errorf("decode codex response: %w", err)
+	}
+	if strings.TrimSpace(content) == "" {
+		return askprovider.Response{}, fmt.Errorf("ask provider returned no text output")
+	}
+	return askprovider.Response{Content: strings.TrimSpace(content)}, nil
+}
+
+func shouldUseCodexOAuth(provider string, req askprovider.Request) bool {
+	return normalizeProvider(provider) == "openai" && strings.TrimSpace(req.OAuthToken) != ""
+}
+
+func buildCodexRequest(req askprovider.Request) map[string]any {
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		model = defaultModel("openai")
+	}
+	request := map[string]any{
+		"model":  model,
+		"store":  false,
+		"stream": true,
+		"input": []map[string]any{{
+			"role": "user",
+			"content": []map[string]any{{
+				"type": "input_text",
+				"text": strings.TrimSpace(req.Prompt),
+			}},
+		}},
+		"reasoning": map[string]any{"effort": "medium"},
+		"text":      map[string]any{"verbosity": codexVerbosity(model)},
+	}
+	if instructions := strings.TrimSpace(req.SystemPrompt); instructions != "" {
+		request["instructions"] = instructions
+	}
+	return request
+}
+
+func parseCodexResponse(raw []byte, contentType string) (string, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if strings.Contains(strings.ToLower(contentType), "text/event-stream") || strings.HasPrefix(trimmed, "event:") || strings.HasPrefix(trimmed, "data:") {
+		if content := parseCodexSSE(raw); strings.TrimSpace(content) != "" {
+			return content, nil
+		}
+	}
+	type outputPart struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	type outputItem struct {
+		Type    string       `json:"type"`
+		Content []outputPart `json:"content"`
+	}
+	type response struct {
+		Output     []outputItem `json:"output"`
+		OutputText string       `json:"output_text"`
+		Response   *struct {
+			Output     []outputItem `json:"output"`
+			OutputText string       `json:"output_text"`
+		} `json:"response"`
+	}
+	var parsed response
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(parsed.OutputText) != "" {
+		return parsed.OutputText, nil
+	}
+	if parsed.Response != nil {
+		if strings.TrimSpace(parsed.Response.OutputText) != "" {
+			return parsed.Response.OutputText, nil
+		}
+		if len(parsed.Output) == 0 {
+			parsed.Output = parsed.Response.Output
+		}
+	}
+	b := &strings.Builder{}
+	for _, item := range parsed.Output {
+		if item.Type != "message" {
+			continue
+		}
+		for _, part := range item.Content {
+			if part.Type == "output_text" && strings.TrimSpace(part.Text) != "" {
+				if b.Len() > 0 {
+					b.WriteString("\n")
+				}
+				b.WriteString(strings.TrimSpace(part.Text))
+			}
+		}
+	}
+	return b.String(), nil
+}
+
+func parseCodexSSE(raw []byte) string {
+	b := &strings.Builder{}
+	for _, chunk := range strings.Split(string(raw), "\n\n") {
+		chunk = strings.TrimSpace(chunk)
+		if chunk == "" {
+			continue
+		}
+		var event string
+		var data string
+		for _, line := range strings.Split(chunk, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "event: ") {
+				event = strings.TrimSpace(strings.TrimPrefix(line, "event: "))
+			}
+			if strings.HasPrefix(line, "data: ") {
+				data = strings.TrimSpace(strings.TrimPrefix(line, "data: "))
+			}
+		}
+		if data == "" {
+			continue
+		}
+		if event == "response.output_text.delta" {
+			var payload struct {
+				Delta string `json:"delta"`
+				Text  string `json:"text"`
+			}
+			if err := json.Unmarshal([]byte(data), &payload); err == nil {
+				if payload.Delta != "" {
+					b.WriteString(payload.Delta)
+					continue
+				}
+				if payload.Text != "" {
+					b.WriteString(payload.Text)
+					continue
+				}
+			}
+		}
+		if event == "response.completed" {
+			if text, err := parseCodexResponse([]byte(data), "application/json"); err == nil && strings.TrimSpace(text) != "" {
+				if b.Len() == 0 {
+					b.WriteString(text)
+				}
+			}
+		}
+	}
+	return b.String()
+}
+
+func codexError(status int, raw []byte) string {
+	trimmed := strings.TrimSpace(string(raw))
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+			Code    any    `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &payload); err == nil && strings.TrimSpace(payload.Error.Message) != "" {
+		return fmt.Sprintf("error, status code: %d, status: %d %s, message: %s", status, status, http.StatusText(status), strings.TrimSpace(payload.Error.Message))
+	}
+	return fmt.Sprintf("error, status code: %d, status: %d %s, message: %s", status, status, http.StatusText(status), trimmed)
+}
+
+func codexVerbosity(model string) string {
+	if strings.TrimSpace(model) == "gpt-5-codex" {
+		return "medium"
+	}
+	return "low"
+}
+
 func defaultBaseURL(provider string, fallback string) string {
-	switch provider {
+	switch normalizeProvider(provider) {
 	case "openrouter":
 		return "https://openrouter.ai/api/v1"
 	case "gemini", "google", "google-openai":
@@ -69,11 +278,11 @@ func defaultBaseURL(provider string, fallback string) string {
 }
 
 func defaultModel(provider string) string {
-	switch provider {
+	switch normalizeProvider(provider) {
 	case "gemini", "google", "google-openai":
 		return "gemini-2.5-flash"
 	default:
-		return "gpt-5.4"
+		return "gpt-5.3-codex-spark"
 	}
 }
 
@@ -82,4 +291,8 @@ func requestToken(req askprovider.Request) string {
 		return token
 	}
 	return strings.TrimSpace(req.APIKey)
+}
+
+func normalizeProvider(provider string) string {
+	return strings.ToLower(strings.TrimSpace(provider))
 }

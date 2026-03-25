@@ -60,7 +60,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 	logger := newAskLogger(opts.Stderr, effective.LogLevel)
 	logger.logf("basic", "\n[ask][phase:request] routeCandidate=%s write=%t review=%t\n", heuristic.Route, opts.Write, opts.Review)
-	logger.logf("basic", "[ask][config] provider=%s model=%s endpoint=%s apiKeySource=%s oauthTokenSource=%s logLevel=%s\n", effective.Provider, effective.Model, effective.Endpoint, effective.APIKeySource, effective.OAuthTokenSource, effective.LogLevel)
+	logger.logf("basic", "[ask][config] provider=%s model=%s endpoint=%s apiKeySource=%s oauthTokenSource=%s accountID=%t logLevel=%s\n", effective.Provider, effective.Model, effective.Endpoint, effective.APIKeySource, effective.OAuthTokenSource, strings.TrimSpace(effective.AccountID) != "", effective.LogLevel)
 	logger.logf("debug", "[ask][command] %s\n", renderUserCommand(opts))
 	if requestSource != "" {
 		logger.logf("debug", "[ask][request-source] type=%s from=%s\n", requestSource, strings.TrimSpace(opts.FromPath))
@@ -139,7 +139,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			return fmt.Errorf("route %s requires model access; configure provider credentials first", decision.Route)
 		}
 		logger.logf("basic", "\n[ask][phase:plan:start] route=%s\n", decision.Route)
-		planned, planErr := planWithLLM(ctx, client, askconfigSettings{provider: effective.Provider, model: effective.Model, apiKey: effective.APIKey, oauthToken: effective.OAuthToken, endpoint: effective.Endpoint}, decision, retrieval, requestText, workspace, logger)
+		planned, planErr := planWithLLM(ctx, client, askconfigSettings{provider: effective.Provider, model: effective.Model, apiKey: effective.APIKey, oauthToken: effective.OAuthToken, accountID: effective.AccountID, endpoint: effective.Endpoint}, decision, retrieval, requestText, workspace, logger)
 		if planErr != nil {
 			logger.logf("debug", "[ask][phase:plan:fallback] error=%v\n", planErr)
 			planned = localPlan(requestText, decision, workspace)
@@ -217,6 +217,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			Model:        effective.Model,
 			APIKey:       effective.APIKey,
 			OAuthToken:   effective.OAuthToken,
+			AccountID:    effective.AccountID,
 			Endpoint:     effective.Endpoint,
 			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval),
 			Prompt:       generationUserPrompt(workspace, state, requestText, strings.TrimSpace(opts.FromPath), decision.Route),
@@ -322,6 +323,7 @@ func classifyWithLLM(ctx context.Context, client askprovider.Client, cfg askconf
 		Model:        cfg.Model,
 		APIKey:       cfg.APIKey,
 		OAuthToken:   cfg.OAuthToken,
+		AccountID:    cfg.AccountID,
 		Endpoint:     cfg.Endpoint,
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
@@ -390,6 +392,7 @@ func answerWithLLM(ctx context.Context, client askprovider.Client, cfg askconfig
 		Model:        cfg.Model,
 		APIKey:       cfg.APIKey,
 		OAuthToken:   cfg.OAuthToken,
+		AccountID:    cfg.AccountID,
 		Endpoint:     cfg.Endpoint,
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,

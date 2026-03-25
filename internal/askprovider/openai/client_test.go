@@ -3,6 +3,10 @@
 package openaiprovider
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
@@ -28,13 +32,13 @@ func TestDefaultModel(t *testing.T) {
 	if got := defaultModel("gemini"); got != "gemini-2.5-flash" {
 		t.Fatalf("unexpected gemini default model: %q", got)
 	}
-	if got := defaultModel("openai"); got != "gpt-5.4" {
+	if got := defaultModel("openai"); got != "gpt-5.3-codex-spark" {
 		t.Fatalf("unexpected openai default model: %q", got)
 	}
 }
 
 func TestBuildRequestOmitsTemperature(t *testing.T) {
-	request := buildRequest("gemini", askprovider.Request{
+	request := buildChatRequest("gemini", askprovider.Request{
 		SystemPrompt: "system",
 		Prompt:       "user",
 	})
@@ -55,5 +59,45 @@ func TestRequestTokenPrefersOAuthToken(t *testing.T) {
 	}
 	if got := requestToken(askprovider.Request{APIKey: "api-key"}); got != "api-key" {
 		t.Fatalf("expected api key fallback, got %q", got)
+	}
+}
+
+func TestGenerateCodexUsesChatGPTEndpointAndAccountHeader(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer oauth-token" {
+			t.Fatalf("unexpected authorization header: %q", got)
+		}
+		if got := r.Header.Get("ChatGPT-Account-Id"); got != "acct-123" {
+			t.Fatalf("unexpected account header: %q", got)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if body["model"] != "gpt-5.3-codex" {
+			t.Fatalf("unexpected model: %#v", body["model"])
+		}
+		_, _ = w.Write([]byte(`{"output":[{"type":"message","content":[{"type":"output_text","text":"{\"route\":\"question\"}"}]}]}`))
+	}))
+	defer server.Close()
+	client := &Client{httpClient: server.Client()}
+	resp, err := client.Generate(context.Background(), askprovider.Request{Provider: "openai", Model: "gpt-5.3-codex", OAuthToken: "oauth-token", AccountID: "acct-123", Endpoint: server.URL, Prompt: "hello"})
+	if err != nil {
+		t.Fatalf("generate codex: %v", err)
+	}
+	if resp.Content != `{"route":"question"}` {
+		t.Fatalf("unexpected codex content: %q", resp.Content)
+	}
+}
+
+func TestShouldUseCodexOAuthOnlyForOpenAIOAuth(t *testing.T) {
+	if !shouldUseCodexOAuth("openai", askprovider.Request{OAuthToken: "oauth"}) {
+		t.Fatalf("expected openai oauth to use codex endpoint")
+	}
+	if shouldUseCodexOAuth("openai", askprovider.Request{APIKey: "api"}) {
+		t.Fatalf("did not expect api key auth to use codex endpoint")
+	}
+	if shouldUseCodexOAuth("gemini", askprovider.Request{OAuthToken: "oauth"}) {
+		t.Fatalf("did not expect non-openai provider to use codex endpoint")
 	}
 }
