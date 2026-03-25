@@ -7,6 +7,7 @@ type Request struct {
 	Provider     string
 	Model        string
 	APIKey       string
+	OAuthToken   string
 	Endpoint     string
 	SystemPrompt string
 	Prompt       string

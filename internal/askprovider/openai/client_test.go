@@ -48,3 +48,12 @@ func TestBuildRequestOmitsTemperature(t *testing.T) {
 		t.Fatalf("unexpected response format: %#v", request.ResponseFormat)
 	}
 }
+
+func TestRequestTokenPrefersOAuthToken(t *testing.T) {
+	if got := requestToken(askprovider.Request{APIKey: "api-key", OAuthToken: "oauth-token"}); got != "oauth-token" {
+		t.Fatalf("expected oauth token to be preferred, got %q", got)
+	}
+	if got := requestToken(askprovider.Request{APIKey: "api-key"}); got != "api-key" {
+		t.Fatalf("expected api key fallback, got %q", got)
+	}
+}

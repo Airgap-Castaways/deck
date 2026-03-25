@@ -1,15 +1,21 @@
 package askconfig
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
+
+	"github.com/Airgap-Castaways/deck/internal/askauth"
 )
 
 func TestSaveStoredAndLoadStored(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	settings := Settings{Provider: "openrouter", Model: "anthropic/claude-3.5-sonnet", APIKey: "secret-token", Endpoint: "https://example.invalid/v1", LogLevel: "trace", MCP: MCP{Enabled: true, Servers: []MCPServer{{Name: "web-search", RunCommand: "node", Args: []string{"mcp.js"}}}}, LSP: LSP{Enabled: true, YAML: LSPEntry{RunCommand: "yaml-language-server", Args: []string{"--stdio"}}}}
+	settings := Settings{Provider: "openrouter", Model: "anthropic/claude-3.5-sonnet", APIKey: "secret-token", OAuthToken: "oauth-secret", Endpoint: "https://example.invalid/v1", LogLevel: "trace", MCP: MCP{Enabled: true, Servers: []MCPServer{{Name: "web-search", RunCommand: "node", Args: []string{"mcp.js"}}}}, LSP: LSP{Enabled: true, YAML: LSPEntry{RunCommand: "yaml-language-server", Args: []string{"--stdio"}}}}
 	if err := SaveStored(settings); err != nil {
 		t.Fatalf("save stored: %v", err)
 	}
@@ -36,12 +42,13 @@ func TestSaveStoredAndLoadStored(t *testing.T) {
 func TestResolveEffectivePrecedence(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
 	if err := SaveStored(Settings{
-		Provider: "openai",
-		Model:    "stored-model",
-		APIKey:   "stored-key",
-		Endpoint: "https://stored.invalid/v1",
-		MCP:      MCP{Enabled: true, Servers: []MCPServer{{Name: "context7", RunCommand: "context7-mcp"}}},
-		LSP:      LSP{Enabled: true, YAML: LSPEntry{RunCommand: "yaml-language-server", Args: []string{"--stdio"}}},
+		Provider:   "openai",
+		Model:      "stored-model",
+		APIKey:     "stored-key",
+		OAuthToken: "stored-oauth",
+		Endpoint:   "https://stored.invalid/v1",
+		MCP:        MCP{Enabled: true, Servers: []MCPServer{{Name: "context7", RunCommand: "context7-mcp"}}},
+		LSP:        LSP{Enabled: true, YAML: LSPEntry{RunCommand: "yaml-language-server", Args: []string{"--stdio"}}},
 	}); err != nil {
 		t.Fatalf("save stored: %v", err)
 	}
@@ -49,6 +56,7 @@ func TestResolveEffectivePrecedence(t *testing.T) {
 	t.Setenv(envProvider, "env-provider")
 	t.Setenv(envModel, "env-model")
 	t.Setenv(envAPIKey, "env-key")
+	t.Setenv(envOAuthToken, "env-oauth")
 	effective, err := ResolveEffective(Settings{Provider: "flag-provider", Model: "flag-model", Endpoint: "https://flag.invalid/v1"})
 	if err != nil {
 		t.Fatalf("resolve effective: %v", err)
@@ -61,6 +69,9 @@ func TestResolveEffectivePrecedence(t *testing.T) {
 	}
 	if effective.APIKey != "env-key" || effective.APIKeySource != "env" {
 		t.Fatalf("unexpected api key resolution: %#v", effective)
+	}
+	if effective.OAuthToken != "env-oauth" || effective.OAuthTokenSource != "env" {
+		t.Fatalf("unexpected oauth token resolution: %#v", effective)
 	}
 	if effective.Endpoint != "https://flag.invalid/v1" || effective.EndpointSource != "flag" {
 		t.Fatalf("unexpected endpoint resolution: %#v", effective)
@@ -76,6 +87,51 @@ func TestResolveEffectivePrecedence(t *testing.T) {
 	}
 }
 
+func TestResolveEffectiveUsesSavedOAuthSessionBeforeConfig(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+	if err := SaveStored(Settings{Provider: "openai", OAuthToken: "config-oauth"}); err != nil {
+		t.Fatalf("save stored: %v", err)
+	}
+	if err := askauth.Save(askauth.Session{Provider: "openai", AccessToken: "session-oauth", ExpiresAt: time.Now().UTC().Add(time.Hour)}); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+	effective, err := ResolveEffective(Settings{})
+	if err != nil {
+		t.Fatalf("resolve effective: %v", err)
+	}
+	if effective.OAuthToken != "session-oauth" || effective.OAuthTokenSource != "session" || effective.AuthStatus != "valid" {
+		t.Fatalf("unexpected effective oauth session: %#v", effective)
+	}
+}
+
+func TestResolveEffectiveRefreshesExpiredOpenAISession(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+	idToken := "header.eyJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20ifQ.sig"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("parse form: %v", err)
+		}
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"access_token":"fresh-token","refresh_token":"fresh-refresh","id_token":%q,"expires_in":3600}`, idToken)))
+	}))
+	defer server.Close()
+	t.Setenv("DECK_ASK_OPENAI_TOKEN_URL", server.URL)
+	t.Setenv("DECK_ASK_OPENAI_AUTH_URL", server.URL)
+	t.Setenv("DECK_ASK_OPENAI_DEVICE_USERCODE_URL", server.URL)
+	t.Setenv("DECK_ASK_OPENAI_DEVICE_TOKEN_URL", server.URL)
+	t.Setenv("DECK_ASK_OPENAI_DEVICE_VERIFY_URL", server.URL)
+	t.Setenv("DECK_ASK_OPENAI_DEVICE_CALLBACK_URI", server.URL)
+	if err := askauth.Save(askauth.Session{Provider: "openai", AccessToken: "stale", RefreshToken: "refresh-token", ExpiresAt: time.Now().UTC().Add(-time.Minute)}); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+	effective, err := ResolveEffective(Settings{})
+	if err != nil {
+		t.Fatalf("resolve effective: %v", err)
+	}
+	if effective.OAuthToken != "fresh-token" || effective.OAuthTokenSource != "session" || effective.AuthStatus != "valid" {
+		t.Fatalf("unexpected refreshed session: %#v", effective)
+	}
+}
+
 func TestNormalizeLogLevel(t *testing.T) {
 	for input, want := range map[string]string{"": "basic", "basic": "basic", "DEBUG": "debug", "trace": "trace", "loud": "basic"} {
 		if got := normalizeLogLevel(input); got != want {
@@ -86,7 +142,7 @@ func TestNormalizeLogLevel(t *testing.T) {
 
 func TestClearStored(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	if err := SaveStored(Settings{Provider: "openai", Model: "gpt-5.4", APIKey: "secret", Endpoint: "https://example.invalid/v1"}); err != nil {
+	if err := SaveStored(Settings{Provider: "openai", Model: "gpt-5.4", APIKey: "secret", OAuthToken: "oauth-secret", Endpoint: "https://example.invalid/v1"}); err != nil {
 		t.Fatalf("save stored: %v", err)
 	}
 	if err := ClearStored(); err != nil {

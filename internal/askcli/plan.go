@@ -89,6 +89,7 @@ func planWithLLM(ctx context.Context, client askprovider.Client, cfg askconfigSe
 		Provider:     cfg.provider,
 		Model:        cfg.model,
 		APIKey:       cfg.apiKey,
+		OAuthToken:   cfg.oauthToken,
 		Endpoint:     cfg.endpoint,
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
@@ -102,10 +103,11 @@ func planWithLLM(ctx context.Context, client askprovider.Client, cfg askconfigSe
 }
 
 type askconfigSettings struct {
-	provider string
-	model    string
-	apiKey   string
-	endpoint string
+	provider   string
+	model      string
+	apiKey     string
+	oauthToken string
+	endpoint   string
 }
 
 func localPlan(prompt string, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) askcontract.PlanResponse {

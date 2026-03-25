@@ -23,8 +23,8 @@ func (c *Client) Generate(ctx context.Context, req askprovider.Request) (askprov
 	if provider == "" {
 		provider = "openai"
 	}
-	apiKey := strings.TrimSpace(req.APIKey)
-	config := openai.DefaultConfig(apiKey)
+	authToken := requestToken(req)
+	config := openai.DefaultConfig(authToken)
 	if endpoint := strings.TrimSpace(req.Endpoint); endpoint != "" {
 		config.BaseURL = strings.TrimRight(endpoint, "/")
 	} else {
@@ -75,4 +75,11 @@ func defaultModel(provider string) string {
 	default:
 		return "gpt-5.4"
 	}
+}
+
+func requestToken(req askprovider.Request) string {
+	if token := strings.TrimSpace(req.OAuthToken); token != "" {
+		return token
+	}
+	return strings.TrimSpace(req.APIKey)
 }

@@ -1,12 +1,15 @@
 package askconfig
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/Airgap-Castaways/deck/internal/askauth"
 	"github.com/Airgap-Castaways/deck/internal/userdirs"
 )
 
@@ -15,20 +18,22 @@ const (
 	defaultModel    = "gpt-5.4"
 
 	//nolint:gosec // Environment variable names are not credentials.
-	envAPIKey   = "DECK_ASK_API_KEY"
-	envEndpoint = "DECK_ASK_ENDPOINT"
-	envProvider = "DECK_ASK_PROVIDER"
-	envModel    = "DECK_ASK_MODEL"
+	envAPIKey     = "DECK_ASK_API_KEY"
+	envOAuthToken = "DECK_ASK_OAUTH_TOKEN"
+	envEndpoint   = "DECK_ASK_ENDPOINT"
+	envProvider   = "DECK_ASK_PROVIDER"
+	envModel      = "DECK_ASK_MODEL"
 )
 
 type Settings struct {
-	Provider string `json:"provider,omitempty"`
-	Model    string `json:"model,omitempty"`
-	APIKey   string `json:"apiKey,omitempty"`
-	Endpoint string `json:"endpoint,omitempty"`
-	LogLevel string `json:"logLevel,omitempty"`
-	MCP      MCP    `json:"mcp,omitempty"`
-	LSP      LSP    `json:"lsp,omitempty"`
+	Provider   string `json:"provider,omitempty"`
+	Model      string `json:"model,omitempty"`
+	APIKey     string `json:"apiKey,omitempty"`
+	OAuthToken string `json:"oauthToken,omitempty"`
+	Endpoint   string `json:"endpoint,omitempty"`
+	LogLevel   string `json:"logLevel,omitempty"`
+	MCP        MCP    `json:"mcp,omitempty"`
+	LSP        LSP    `json:"lsp,omitempty"`
 }
 
 type MCP struct {
@@ -58,10 +63,12 @@ type fileConfig struct {
 
 type EffectiveSettings struct {
 	Settings
-	APIKeySource   string
-	EndpointSource string
-	ProviderSource string
-	ModelSource    string
+	APIKeySource     string
+	OAuthTokenSource string
+	EndpointSource   string
+	ProviderSource   string
+	ModelSource      string
+	AuthStatus       string
 }
 
 func ConfigPath() (string, error) {
@@ -138,18 +145,20 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 	}
 	effective := EffectiveSettings{
 		Settings: Settings{
-			Provider: defaultProvider,
-			Model:    defaultModel,
-			APIKey:   "",
-			Endpoint: "",
-			LogLevel: "basic",
-			MCP:      stored.MCP,
-			LSP:      stored.LSP,
+			Provider:   defaultProvider,
+			Model:      defaultModel,
+			APIKey:     "",
+			OAuthToken: "",
+			Endpoint:   "",
+			LogLevel:   "basic",
+			MCP:        stored.MCP,
+			LSP:        stored.LSP,
 		},
-		ProviderSource: "default",
-		ModelSource:    "default",
-		APIKeySource:   "unset",
-		EndpointSource: "unset",
+		ProviderSource:   "default",
+		ModelSource:      "default",
+		APIKeySource:     "unset",
+		OAuthTokenSource: "unset",
+		EndpointSource:   "unset",
 	}
 	if stored.Provider != "" {
 		effective.Provider = stored.Provider
@@ -162,6 +171,10 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 	if stored.APIKey != "" {
 		effective.APIKey = stored.APIKey
 		effective.APIKeySource = "config"
+	}
+	if stored.OAuthToken != "" {
+		effective.OAuthToken = stored.OAuthToken
+		effective.OAuthTokenSource = "config"
 	}
 	if stored.Endpoint != "" {
 		effective.Endpoint = stored.Endpoint
@@ -186,6 +199,11 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 		effective.APIKey = value
 		effective.APIKeySource = "env"
 	}
+	if value := strings.TrimSpace(os.Getenv(envOAuthToken)); value != "" {
+		effective.OAuthToken = value
+		effective.OAuthTokenSource = "env"
+		effective.AuthStatus = ""
+	}
 	if value := strings.TrimSpace(cli.Provider); value != "" {
 		effective.Provider = value
 		effective.ProviderSource = "flag"
@@ -194,9 +212,20 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 		effective.Model = value
 		effective.ModelSource = "flag"
 	}
+	if session, ok, err := askauth.Load(effective.Provider); err == nil && ok {
+		session, source, status := resolveSession(session)
+		effective.OAuthToken = session.AccessToken
+		effective.OAuthTokenSource = source
+		effective.AuthStatus = status
+	}
 	if value := strings.TrimSpace(cli.APIKey); value != "" {
 		effective.APIKey = value
 		effective.APIKeySource = "flag"
+	}
+	if value := strings.TrimSpace(cli.OAuthToken); value != "" {
+		effective.OAuthToken = value
+		effective.OAuthTokenSource = "flag"
+		effective.AuthStatus = ""
 	}
 	if value := strings.TrimSpace(cli.Endpoint); value != "" {
 		effective.Endpoint = value
@@ -204,6 +233,35 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 	}
 	effective.Settings = normalize(effective.Settings)
 	return effective, nil
+}
+
+func nowUTC() time.Time {
+	return time.Now().UTC()
+}
+
+func resolveSession(session askauth.Session) (askauth.Session, string, string) {
+	now := nowUTC()
+	if !session.ExpiresAt.IsZero() && session.ExpiresAt.Before(now) {
+		if session.Provider == "openai" && strings.TrimSpace(session.RefreshToken) != "" {
+			refreshed, err := askauth.RefreshOpenAICodex(context.Background(), askauth.OpenAICodexOptions{}, session.RefreshToken)
+			if err == nil {
+				if refreshed.AccountEmail == "" {
+					refreshed.AccountEmail = session.AccountEmail
+				}
+				if refreshed.AccountID == "" {
+					refreshed.AccountID = session.AccountID
+				}
+				if err := askauth.Save(refreshed); err == nil {
+					return refreshed, "session", "valid"
+				}
+			}
+		}
+		return session, "session-expired", "expired"
+	}
+	if !session.ExpiresAt.IsZero() && session.ExpiresAt.Sub(now) < 15*time.Minute {
+		return session, "session", "expiring-soon"
+	}
+	return session, "session", "valid"
 }
 
 func MaskAPIKey(value string) string {
@@ -230,6 +288,7 @@ func normalize(settings Settings) Settings {
 	settings.Provider = strings.TrimSpace(settings.Provider)
 	settings.Model = strings.TrimSpace(settings.Model)
 	settings.APIKey = strings.TrimSpace(settings.APIKey)
+	settings.OAuthToken = strings.TrimSpace(settings.OAuthToken)
 	settings.Endpoint = strings.TrimSpace(settings.Endpoint)
 	settings.LogLevel = normalizeLogLevel(settings.LogLevel)
 	for i := range settings.MCP.Servers {
@@ -306,6 +365,7 @@ func isEmptyConfig(cfg fileConfig) bool {
 	return cfg.Ask.Provider == "" &&
 		cfg.Ask.Model == "" &&
 		cfg.Ask.APIKey == "" &&
+		cfg.Ask.OAuthToken == "" &&
 		cfg.Ask.Endpoint == "" &&
 		!cfg.Ask.MCP.Enabled &&
 		len(cfg.Ask.MCP.Servers) == 0 &&

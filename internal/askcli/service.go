@@ -60,7 +60,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 	logger := newAskLogger(opts.Stderr, effective.LogLevel)
 	logger.logf("basic", "\n[ask][phase:request] routeCandidate=%s write=%t review=%t\n", heuristic.Route, opts.Write, opts.Review)
-	logger.logf("basic", "[ask][config] provider=%s model=%s endpoint=%s apiKeySource=%s logLevel=%s\n", effective.Provider, effective.Model, effective.Endpoint, effective.APIKeySource, effective.LogLevel)
+	logger.logf("basic", "[ask][config] provider=%s model=%s endpoint=%s apiKeySource=%s oauthTokenSource=%s logLevel=%s\n", effective.Provider, effective.Model, effective.Endpoint, effective.APIKeySource, effective.OAuthTokenSource, effective.LogLevel)
 	logger.logf("debug", "[ask][command] %s\n", renderUserCommand(opts))
 	if requestSource != "" {
 		logger.logf("debug", "[ask][request-source] type=%s from=%s\n", requestSource, strings.TrimSpace(opts.FromPath))
@@ -125,7 +125,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	logger.logf("debug", "[ask][phase:retrieve] chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
 
 	if decision.LLMPolicy == askintent.LLMRequired && !canUseLLM(effective) {
-		return fmt.Errorf("missing ask api key for provider %q; set %s or run `deck ask config set --api-key ...`", effective.Provider, "DECK_ASK_API_KEY")
+		return fmt.Errorf("missing ask credentials for provider %q; set %s, %s, or run `deck ask config set --api-key ...` / `deck ask config set --oauth-token ...`", effective.Provider, "DECK_ASK_API_KEY", "DECK_ASK_OAUTH_TOKEN")
 	}
 	if opts.PlanOnly && !isAuthoringRoute(decision.Route) {
 		return fmt.Errorf("ask plan is intended for draft/refine authoring requests; got route %s. Try `deck ask %q` instead", decision.Route, strings.TrimSpace(requestText))
@@ -139,7 +139,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			return fmt.Errorf("route %s requires model access; configure provider credentials first", decision.Route)
 		}
 		logger.logf("basic", "\n[ask][phase:plan:start] route=%s\n", decision.Route)
-		planned, planErr := planWithLLM(ctx, client, askconfigSettings{provider: effective.Provider, model: effective.Model, apiKey: effective.APIKey, endpoint: effective.Endpoint}, decision, retrieval, requestText, workspace, logger)
+		planned, planErr := planWithLLM(ctx, client, askconfigSettings{provider: effective.Provider, model: effective.Model, apiKey: effective.APIKey, oauthToken: effective.OAuthToken, endpoint: effective.Endpoint}, decision, retrieval, requestText, workspace, logger)
 		if planErr != nil {
 			logger.logf("debug", "[ask][phase:plan:fallback] error=%v\n", planErr)
 			planned = localPlan(requestText, decision, workspace)
@@ -216,6 +216,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			Provider:     effective.Provider,
 			Model:        effective.Model,
 			APIKey:       effective.APIKey,
+			OAuthToken:   effective.OAuthToken,
 			Endpoint:     effective.Endpoint,
 			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval),
 			Prompt:       generationUserPrompt(workspace, state, requestText, strings.TrimSpace(opts.FromPath), decision.Route),
@@ -307,7 +308,10 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 }
 
 func canUseLLM(cfg askconfig.EffectiveSettings) bool {
-	return !askconfig.NeedsAPIKey(cfg.Provider) || strings.TrimSpace(cfg.APIKey) != ""
+	if !askconfig.NeedsAPIKey(cfg.Provider) {
+		return true
+	}
+	return strings.TrimSpace(cfg.APIKey) != "" || strings.TrimSpace(cfg.OAuthToken) != ""
 }
 
 func classifyWithLLM(ctx context.Context, client askprovider.Client, cfg askconfig.EffectiveSettings, systemPrompt string, userPrompt string, logger askLogger) (askintent.Decision, error) {
@@ -317,6 +321,7 @@ func classifyWithLLM(ctx context.Context, client askprovider.Client, cfg askconf
 		Provider:     cfg.Provider,
 		Model:        cfg.Model,
 		APIKey:       cfg.APIKey,
+		OAuthToken:   cfg.OAuthToken,
 		Endpoint:     cfg.Endpoint,
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
@@ -384,6 +389,7 @@ func answerWithLLM(ctx context.Context, client askprovider.Client, cfg askconfig
 		Provider:     cfg.Provider,
 		Model:        cfg.Model,
 		APIKey:       cfg.APIKey,
+		OAuthToken:   cfg.OAuthToken,
 		Endpoint:     cfg.Endpoint,
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
@@ -435,6 +441,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			Provider:     req.Provider,
 			Model:        req.Model,
 			APIKey:       req.APIKey,
+			OAuthToken:   req.OAuthToken,
 			Endpoint:     req.Endpoint,
 			SystemPrompt: req.SystemPrompt,
 			Prompt:       currentPrompt,
