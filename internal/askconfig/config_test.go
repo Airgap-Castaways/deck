@@ -1,6 +1,8 @@
 package askconfig
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +17,7 @@ import (
 
 func TestSaveStoredAndLoadStored(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	settings := Settings{Provider: "openrouter", Model: "anthropic/claude-3.5-sonnet", APIKey: "secret-token", OAuthToken: "oauth-secret", Endpoint: "https://example.invalid/v1", LogLevel: "trace", MCP: MCP{Enabled: true, Servers: []MCPServer{{Name: "web-search", RunCommand: "node", Args: []string{"mcp.js"}}}}, LSP: LSP{Enabled: true, YAML: LSPEntry{RunCommand: "yaml-language-server", Args: []string{"--stdio"}}}}
+	settings := Settings{Provider: "openrouter", Model: "anthropic/claude-3.5-sonnet", APIKey: "stored-api-value", OAuthToken: "stored-session-value", Endpoint: "https://example.invalid/v1", LogLevel: "trace", MCP: MCP{Enabled: true, Servers: []MCPServer{{Name: "web-search", RunCommand: "node", Args: []string{"mcp.js"}}}}, LSP: LSP{Enabled: true, YAML: LSPEntry{RunCommand: "yaml-language-server", Args: []string{"--stdio"}}}}
 	if err := SaveStored(settings); err != nil {
 		t.Fatalf("save stored: %v", err)
 	}
@@ -44,19 +46,19 @@ func TestResolveEffectivePrecedence(t *testing.T) {
 	if err := SaveStored(Settings{
 		Provider:   "openai",
 		Model:      "stored-model",
-		APIKey:     "stored-key",
-		OAuthToken: "stored-oauth",
+		APIKey:     "stored-api-value",
+		OAuthToken: "stored-session-value",
 		Endpoint:   "https://stored.invalid/v1",
 		MCP:        MCP{Enabled: true, Servers: []MCPServer{{Name: "context7", RunCommand: "context7-mcp"}}},
 		LSP:        LSP{Enabled: true, YAML: LSPEntry{RunCommand: "yaml-language-server", Args: []string{"--stdio"}}},
 	}); err != nil {
 		t.Fatalf("save stored: %v", err)
 	}
-	t.Setenv(envEndpoint, "https://env.invalid/v1")
-	t.Setenv(envProvider, "env-provider")
-	t.Setenv(envModel, "env-model")
-	t.Setenv(envAPIKey, "env-key")
-	t.Setenv(envOAuthToken, "env-oauth")
+	t.Setenv(envServiceEndpoint, "https://env.invalid/v1")
+	t.Setenv(envProviderChoice, "env-provider")
+	t.Setenv(envModelChoice, "env-model")
+	t.Setenv(envPrimaryCredential, "env-api-value")
+	t.Setenv(envSessionValue, "env-session-value")
 	effective, err := ResolveEffective(Settings{Provider: "flag-provider", Model: "flag-model", Endpoint: "https://flag.invalid/v1"})
 	if err != nil {
 		t.Fatalf("resolve effective: %v", err)
@@ -67,10 +69,10 @@ func TestResolveEffectivePrecedence(t *testing.T) {
 	if effective.Model != "flag-model" || effective.ModelSource != "flag" {
 		t.Fatalf("unexpected model resolution: %#v", effective)
 	}
-	if effective.APIKey != "env-key" || effective.APIKeySource != "env" {
+	if effective.APIKey != "env-api-value" || effective.APIKeySource != "env" {
 		t.Fatalf("unexpected api key resolution: %#v", effective)
 	}
-	if effective.OAuthToken != "env-oauth" || effective.OAuthTokenSource != "env" {
+	if effective.OAuthToken != "env-session-value" || effective.OAuthTokenSource != "env" {
 		t.Fatalf("unexpected oauth token resolution: %#v", effective)
 	}
 	if effective.Endpoint != "https://flag.invalid/v1" || effective.EndpointSource != "flag" {
@@ -89,17 +91,18 @@ func TestResolveEffectivePrecedence(t *testing.T) {
 
 func TestResolveEffectiveUsesSavedOAuthSessionBeforeConfig(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	if err := SaveStored(Settings{Provider: "openai", OAuthToken: "config-oauth"}); err != nil {
+	configSessionValue := "config-session-value"
+	if err := SaveStored(Settings{Provider: "openai", OAuthToken: configSessionValue}); err != nil {
 		t.Fatalf("save stored: %v", err)
 	}
-	if err := askauth.Save(askauth.Session{Provider: "openai", AccessToken: "session-oauth", ExpiresAt: time.Now().UTC().Add(time.Hour)}); err != nil {
+	if err := askauth.Save(askauth.Session{Provider: "openai", AccessToken: "session-access-value", ExpiresAt: time.Now().UTC().Add(time.Hour)}); err != nil {
 		t.Fatalf("save session: %v", err)
 	}
 	effective, err := ResolveEffective(Settings{})
 	if err != nil {
 		t.Fatalf("resolve effective: %v", err)
 	}
-	if effective.OAuthToken != "session-oauth" || effective.OAuthTokenSource != "session" || effective.AuthStatus != "valid" {
+	if effective.OAuthToken != "session-access-value" || effective.OAuthTokenSource != "session" || effective.AuthStatus != "valid" {
 		t.Fatalf("unexpected effective oauth session: %#v", effective)
 	}
 }
@@ -120,12 +123,13 @@ func TestResolveEffectiveMarksExpiredOpenAISessionWithoutRefreshing(t *testing.T
 
 func TestResolveRuntimeSessionRefreshesExpiredOpenAISession(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	idToken := "header.eyJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20ifQ.sig"
+	idToken := testJWT(t, map[string]any{"email": "user@example.com"})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		if err := r.ParseForm(); err != nil {
 			t.Fatalf("parse form: %v", err)
 		}
-		_, _ = w.Write([]byte(fmt.Sprintf(`{"access_token":"fresh-token","refresh_token":"fresh-refresh","id_token":%q,"expires_in":3600}`, idToken)))
+		_, _ = fmt.Fprintf(w, `{"access_token":"fresh-access-value","refresh_token":"fresh-refresh-value","id_token":%q,"expires_in":3600}`, idToken)
 	}))
 	defer server.Close()
 	t.Setenv("DECK_ASK_OPENAI_TOKEN_URL", server.URL)
@@ -141,7 +145,7 @@ func TestResolveRuntimeSessionRefreshesExpiredOpenAISession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve runtime session: %v", err)
 	}
-	if session.AccessToken != "fresh-token" || source != "session" || status != "valid" {
+	if session.AccessToken != "fresh-access-value" || source != "session" || status != "valid" {
 		t.Fatalf("unexpected refreshed runtime session: %#v %q %q", session, source, status)
 	}
 }
@@ -156,7 +160,7 @@ func TestNormalizeLogLevel(t *testing.T) {
 
 func TestClearStored(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	if err := SaveStored(Settings{Provider: "openai", Model: "gpt-5.3-codex-spark", APIKey: "secret", OAuthToken: "oauth-secret", Endpoint: "https://example.invalid/v1"}); err != nil {
+	if err := SaveStored(Settings{Provider: "openai", Model: "gpt-5.3-codex-spark", APIKey: "clear-api-value", OAuthToken: "clear-session-value", Endpoint: "https://example.invalid/v1"}); err != nil {
 		t.Fatalf("save stored: %v", err)
 	}
 	if err := ClearStored(); err != nil {
@@ -192,4 +196,13 @@ func TestMaskAPIKey(t *testing.T) {
 	if got := MaskAPIKey("sk-1234567890"); got != "sk-1*****7890" {
 		t.Fatalf("unexpected masked value: %q", got)
 	}
+}
+
+func testJWT(t *testing.T, claims map[string]any) string {
+	t.Helper()
+	raw, err := json.Marshal(claims)
+	if err != nil {
+		t.Fatalf("marshal claims: %v", err)
+	}
+	return "header." + base64.RawURLEncoding.EncodeToString(raw) + ".sig"
 }

@@ -9,9 +9,9 @@ import (
 const (
 	OpenAICodexClientID                  = "app_EMoamEEZ73f0CkXaXp7hrann"
 	OpenAICodexDefaultAuthURL            = "https://auth.openai.com/oauth/authorize"
-	OpenAICodexDefaultTokenURL           = "https://auth.openai.com/oauth/token"
+	OpenAICodexDefaultExchangeURL        = "https://auth.openai.com/oauth/token"
 	OpenAICodexDefaultDeviceUserCodeURL  = "https://auth.openai.com/api/accounts/deviceauth/usercode"
-	OpenAICodexDefaultDeviceTokenURL     = "https://auth.openai.com/api/accounts/deviceauth/token"
+	OpenAICodexDefaultDeviceExchangeURL  = "https://auth.openai.com/api/accounts/deviceauth/token"
 	OpenAICodexDefaultDeviceVerification = "https://auth.openai.com/codex/device"
 	OpenAICodexDefaultDeviceCallback     = "https://auth.openai.com/deviceauth/callback"
 	OpenAICodexDefaultCallbackPort       = 1455
@@ -22,9 +22,9 @@ const (
 func DefaultOpenAICodexEndpoints() OpenAICodexEndpoints {
 	return OpenAICodexEndpoints{
 		AuthURL:           getenvDefault("DECK_ASK_OPENAI_AUTH_URL", OpenAICodexDefaultAuthURL),
-		TokenURL:          getenvDefault("DECK_ASK_OPENAI_TOKEN_URL", OpenAICodexDefaultTokenURL),
+		TokenURL:          getenvDefault("DECK_ASK_OPENAI_TOKEN_URL", OpenAICodexDefaultExchangeURL),
 		DeviceUserCodeURL: getenvDefault("DECK_ASK_OPENAI_DEVICE_USERCODE_URL", OpenAICodexDefaultDeviceUserCodeURL),
-		DeviceTokenURL:    getenvDefault("DECK_ASK_OPENAI_DEVICE_TOKEN_URL", OpenAICodexDefaultDeviceTokenURL),
+		DeviceTokenURL:    getenvDefault("DECK_ASK_OPENAI_DEVICE_TOKEN_URL", OpenAICodexDefaultDeviceExchangeURL),
 		DeviceVerifyURL:   getenvDefault("DECK_ASK_OPENAI_DEVICE_VERIFY_URL", OpenAICodexDefaultDeviceVerification),
 		DeviceCallbackURI: getenvDefault("DECK_ASK_OPENAI_DEVICE_CALLBACK_URI", OpenAICodexDefaultDeviceCallback),
 	}

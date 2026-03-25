@@ -45,6 +45,7 @@ func TestLoginOpenAICodexDevice(t *testing.T) {
 			}
 			_, _ = w.Write([]byte(`{"authorization_code":"auth-code","code_verifier":"verifier-123","code_challenge":"challenge-123"}`))
 		case "/oauth/token":
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 			if err := r.ParseForm(); err != nil {
 				t.Fatalf("parse form: %v", err)
 			}
@@ -54,7 +55,7 @@ func TestLoginOpenAICodexDevice(t *testing.T) {
 			if got := r.Form.Get("redirect_uri"); got != OpenAICodexDefaultDeviceCallback {
 				t.Fatalf("unexpected redirect_uri: %q", got)
 			}
-			_, _ = w.Write([]byte(fmt.Sprintf(`{"access_token":"access-token","refresh_token":"refresh-token","id_token":%q,"expires_in":3600}`, idToken)))
+			_, _ = fmt.Fprintf(w, `{"access_token":"access-token","refresh_token":"refresh-token","id_token":%q,"expires_in":3600}`, idToken)
 		default:
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -94,13 +95,14 @@ func TestRefreshOpenAICodex(t *testing.T) {
 	now := time.Date(2026, 3, 25, 12, 0, 0, 0, time.UTC)
 	idToken := testIDToken(t, map[string]any{"email": "user@example.com"})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		if err := r.ParseForm(); err != nil {
 			t.Fatalf("parse form: %v", err)
 		}
 		if got := r.Form.Get("grant_type"); got != "refresh_token" {
 			t.Fatalf("unexpected grant_type: %q", got)
 		}
-		_, _ = w.Write([]byte(fmt.Sprintf(`{"access_token":"new-access","refresh_token":"new-refresh","id_token":%q,"expires_in":7200}`, idToken)))
+		_, _ = fmt.Fprintf(w, `{"access_token":"new-access","refresh_token":"new-refresh","id_token":%q,"expires_in":7200}`, idToken)
 	}))
 	defer server.Close()
 	session, err := RefreshOpenAICodex(context.Background(), OpenAICodexOptions{Now: func() time.Time { return now }, Endpoints: OpenAICodexEndpoints{TokenURL: server.URL, AuthURL: "x", DeviceUserCodeURL: "x", DeviceTokenURL: "x", DeviceVerifyURL: "x", DeviceCallbackURI: "x"}}, "refresh-token")

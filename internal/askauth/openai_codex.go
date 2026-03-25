@@ -394,6 +394,7 @@ func randomState() (string, error) {
 type callbackServer struct {
 	port int
 	srv  *http.Server
+	ln   net.Listener
 	mu   sync.Mutex
 	res  chan callbackResult
 	err  chan error
@@ -412,21 +413,22 @@ func newCallbackServer(port int) *callbackServer {
 func (s *callbackServer) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !portAvailable(s.port) {
-		return fmt.Errorf("oauth callback port %d is already in use", s.port)
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
+	if err != nil {
+		return fmt.Errorf("oauth callback port %d is already in use or unavailable: %w", s.port, err)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/callback", s.handle)
 	mux.HandleFunc("/success", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("OpenAI login complete. You can return to the terminal."))
 	})
-	s.srv = &http.Server{Addr: fmt.Sprintf(":%d", s.port), Handler: mux, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
+	s.srv = &http.Server{Handler: mux, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second}
+	s.ln = listener
 	go func() {
-		if err := s.srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.srv.Serve(listener); err != nil && err != http.ErrServerClosed {
 			s.err <- err
 		}
 	}()
-	time.Sleep(100 * time.Millisecond)
 	return nil
 }
 
@@ -440,6 +442,7 @@ func (s *callbackServer) Stop(ctx context.Context) error {
 	defer cancel()
 	err := s.srv.Shutdown(ctx)
 	s.srv = nil
+	s.ln = nil
 	return err
 }
 
@@ -471,15 +474,6 @@ func callbackURL(port int) string {
 	return fmt.Sprintf("http://localhost:%d/auth/callback", port)
 }
 
-func portAvailable(port int) bool {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		return false
-	}
-	_ = listener.Close()
-	return true
-}
-
 func parseJWTClaims(token string) (jwtClaims, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
@@ -504,14 +498,24 @@ func parseJWTClaims(token string) (jwtClaims, error) {
 }
 
 func openBrowser(target string) error {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(target))
+	if err != nil {
+		return fmt.Errorf("invalid browser target: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("unsupported browser target scheme: %s", parsed.Scheme)
+	}
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", target)
+		cmd = exec.Command("open")
+		cmd.Args = []string{"open", parsed.String()}
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", target)
+		cmd = exec.Command("rundll32")
+		cmd.Args = []string{"rundll32", "url.dll,FileProtocolHandler", parsed.String()}
 	default:
-		cmd = exec.Command("xdg-open", target)
+		cmd = exec.Command("xdg-open")
+		cmd.Args = []string{"xdg-open", parsed.String()}
 	}
 	return cmd.Start()
 }

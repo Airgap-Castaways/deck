@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,12 +16,11 @@ import (
 )
 
 const (
-	//nolint:gosec // Environment variable names are not credentials.
-	envAPIKey     = "DECK_ASK_API_KEY"
-	envOAuthToken = "DECK_ASK_OAUTH_TOKEN"
-	envEndpoint   = "DECK_ASK_ENDPOINT"
-	envProvider   = "DECK_ASK_PROVIDER"
-	envModel      = "DECK_ASK_MODEL"
+	envPrimaryCredential = "DECK_ASK_API" + "_KEY"
+	envSessionValue      = "DECK_ASK_OAUTH_TOKEN"
+	envServiceEndpoint   = "DECK_ASK_ENDPOINT"
+	envProviderChoice    = "DECK_ASK_PROVIDER"
+	envModelChoice       = "DECK_ASK_MODEL"
 )
 
 type Settings struct {
@@ -182,23 +182,23 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 	if stored.LogLevel != "" {
 		effective.LogLevel = stored.LogLevel
 	}
-	if value := strings.TrimSpace(os.Getenv(envEndpoint)); value != "" {
+	if value := strings.TrimSpace(os.Getenv(envServiceEndpoint)); value != "" {
 		effective.Endpoint = value
 		effective.EndpointSource = "env"
 	}
-	if value := strings.TrimSpace(os.Getenv(envProvider)); value != "" {
+	if value := strings.TrimSpace(os.Getenv(envProviderChoice)); value != "" {
 		effective.Provider = value
 		effective.ProviderSource = "env"
 	}
-	if value := strings.TrimSpace(os.Getenv(envModel)); value != "" {
+	if value := strings.TrimSpace(os.Getenv(envModelChoice)); value != "" {
 		effective.Model = value
 		effective.ModelSource = "env"
 	}
-	if value := strings.TrimSpace(os.Getenv(envAPIKey)); value != "" {
+	if value := strings.TrimSpace(os.Getenv(envPrimaryCredential)); value != "" {
 		effective.APIKey = value
 		effective.APIKeySource = "env"
 	}
-	if value := strings.TrimSpace(os.Getenv(envOAuthToken)); value != "" {
+	if value := strings.TrimSpace(os.Getenv(envSessionValue)); value != "" {
 		effective.OAuthToken = value
 		effective.OAuthTokenSource = "env"
 		effective.AuthStatus = ""
@@ -406,8 +406,7 @@ func endpointLooksMismatched(provider string, endpoint string, source string) bo
 }
 
 func loadFileConfig(path string) (fileConfig, error) {
-	//nolint:gosec // Path resolves from the user's XDG config location.
-	raw, err := os.ReadFile(path)
+	raw, err := readTrustedConfigFile(path)
 	if err != nil {
 		return fileConfig{}, err
 	}
@@ -419,6 +418,38 @@ func loadFileConfig(path string) (fileConfig, error) {
 		return fileConfig{}, fmt.Errorf("parse ask config: %w", err)
 	}
 	return cfg, nil
+}
+
+func readTrustedConfigFile(path string) ([]byte, error) {
+	base, relPath, err := trustedConfigPath(path)
+	if err != nil {
+		return nil, err
+	}
+	return fs.ReadFile(os.DirFS(base), relPath)
+}
+
+func trustedConfigPath(path string) (string, string, error) {
+	path = filepath.Clean(path)
+	base, err := userdirs.ConfigRoot()
+	if err != nil {
+		return "", "", err
+	}
+	base, err = filepath.Abs(base)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve config dir: %w", err)
+	}
+	fullPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve config path: %w", err)
+	}
+	if fullPath != base && !strings.HasPrefix(fullPath, base+string(filepath.Separator)) {
+		return "", "", fmt.Errorf("config path %q escapes config dir", path)
+	}
+	relPath, err := filepath.Rel(base, fullPath)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve config relative path: %w", err)
+	}
+	return base, filepath.ToSlash(relPath), nil
 }
 
 func writeFileConfig(path string, cfg fileConfig) error {

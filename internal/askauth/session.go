@@ -3,6 +3,7 @@ package askauth
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,7 +117,7 @@ func loadAll() (fileData, error) {
 	if err != nil {
 		return fileData{}, err
 	}
-	raw, err := os.ReadFile(path)
+	raw, err := readTrustedFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fileData{Sessions: map[string]Session{}}, nil
@@ -153,6 +154,38 @@ func writeAll(data fileData) error {
 		return fmt.Errorf("write ask credentials: %w", err)
 	}
 	return nil
+}
+
+func readTrustedFile(path string) ([]byte, error) {
+	base, relPath, err := trustedConfigPath(path)
+	if err != nil {
+		return nil, err
+	}
+	return fs.ReadFile(os.DirFS(base), relPath)
+}
+
+func trustedConfigPath(path string) (string, string, error) {
+	path = filepath.Clean(path)
+	base, err := userdirs.ConfigRoot()
+	if err != nil {
+		return "", "", err
+	}
+	base, err = filepath.Abs(base)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve config dir: %w", err)
+	}
+	fullPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve config path: %w", err)
+	}
+	if fullPath != base && !strings.HasPrefix(fullPath, base+string(filepath.Separator)) {
+		return "", "", fmt.Errorf("config path %q escapes config dir", path)
+	}
+	relPath, err := filepath.Rel(base, fullPath)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve config relative path: %w", err)
+	}
+	return base, filepath.ToSlash(relPath), nil
 }
 
 func normalizeProvider(provider string) string {
