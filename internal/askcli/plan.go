@@ -28,7 +28,10 @@ func needsComplexPlanner(prompt string, workspace askretrieve.WorkspaceSummary, 
 		return false
 	}
 	lower := strings.ToLower(strings.TrimSpace(prompt))
-	tokens := []string{"air-gapped", "airgapped", "prepare", "component", "components", "vars", "orchestration"}
+	if isGenericKubeadmStarter(lower) {
+		return false
+	}
+	tokens := []string{"air-gapped", "airgapped", "prepare", "component", "components", "vars", "orchestration", "cluster"}
 	hits := 0
 	for _, token := range tokens {
 		if strings.Contains(lower, token) {
@@ -45,6 +48,16 @@ func needsComplexPlanner(prompt string, workspace askretrieve.WorkspaceSummary, 
 		return true
 	}
 	return false
+}
+
+func isGenericKubeadmStarter(prompt string) bool {
+	if !strings.Contains(prompt, "kubeadm") {
+		return false
+	}
+	if explicitClusterTopology(prompt) {
+		return false
+	}
+	return true
 }
 
 func explicitClusterTopology(prompt string) bool {
