@@ -12,9 +12,8 @@ import (
 
 func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) askcontract.PlanResponse {
 	req := BuildScenarioRequirements(prompt, retrieval, workspace, decision)
-	if strings.TrimSpace(plan.AuthoringBrief.RouteIntent) == "" {
-		plan.AuthoringBrief = BriefFromRequirements(req, decision)
-	}
+	fallbackBrief := BriefFromRequirements(req, decision)
+	plan.AuthoringBrief = normalizeAuthoringBrief(plan.AuthoringBrief, fallbackBrief)
 	if strings.TrimSpace(plan.OfflineAssumption) == "" {
 		plan.OfflineAssumption = req.Connectivity
 	}
@@ -50,6 +49,117 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 		plan.ComponentRecommendation = nil
 	}
 	return plan
+}
+
+func normalizeAuthoringBrief(brief askcontract.AuthoringBrief, fallback askcontract.AuthoringBrief) askcontract.AuthoringBrief {
+	if !isCanonicalTargetScope(brief.TargetScope) {
+		brief.TargetScope = fallback.TargetScope
+	}
+	if !isCanonicalModeIntent(brief.ModeIntent) {
+		brief.ModeIntent = fallback.ModeIntent
+	}
+	if !isCanonicalCompleteness(brief.CompletenessTarget) {
+		brief.CompletenessTarget = fallback.CompletenessTarget
+	}
+	if !isCanonicalTopology(brief.Topology) {
+		brief.Topology = fallback.Topology
+	}
+	if strings.TrimSpace(brief.RouteIntent) == "" || len(strings.Fields(brief.RouteIntent)) > 6 {
+		brief.RouteIntent = fallback.RouteIntent
+	}
+	if strings.TrimSpace(brief.Connectivity) == "" || len(strings.Fields(brief.Connectivity)) > 4 {
+		brief.Connectivity = fallback.Connectivity
+	}
+	if brief.NodeCount <= 0 && fallback.NodeCount > 0 {
+		brief.NodeCount = fallback.NodeCount
+	}
+	if len(brief.TargetPaths) == 0 {
+		brief.TargetPaths = append([]string(nil), fallback.TargetPaths...)
+	}
+	brief.TargetPaths = normalizeAllowedPaths(brief.TargetPaths, fallback.TargetPaths)
+	brief.RequiredCapabilities = normalizeCapabilities(brief.RequiredCapabilities, fallback.RequiredCapabilities)
+	if len(brief.RequiredCapabilities) == 0 {
+		brief.RequiredCapabilities = append([]string(nil), fallback.RequiredCapabilities...)
+	}
+	return brief
+}
+
+func normalizeAllowedPaths(paths []string, fallback []string) []string {
+	allowed := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if askcontractPathAllowed(path) {
+			allowed = append(allowed, path)
+		}
+	}
+	if len(allowed) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	return dedupeStrings(allowed)
+}
+
+func normalizeCapabilities(values []string, fallback []string) []string {
+	allowed := map[string]bool{
+		"prepare-artifacts":    true,
+		"package-staging":      true,
+		"image-staging":        true,
+		"repository-setup":     true,
+		"kubeadm-bootstrap":    true,
+		"kubeadm-join":         true,
+		"cluster-verification": true,
+	}
+	canonical := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		value = strings.ReplaceAll(value, "_", "-")
+		value = strings.ReplaceAll(value, " ", "-")
+		if value == "" || strings.ContainsAny(value, ":/()") || !allowed[value] {
+			continue
+		}
+		canonical = append(canonical, value)
+	}
+	canonical = append(canonical, fallback...)
+	return dedupeStrings(canonical)
+}
+
+func isCanonicalTargetScope(value string) bool {
+	switch strings.TrimSpace(value) {
+	case "workspace", "scenario", "vars", "component":
+		return true
+	default:
+		return false
+	}
+}
+
+func isCanonicalModeIntent(value string) bool {
+	switch strings.TrimSpace(value) {
+	case "prepare+apply", "prepare-only", "apply-only", "workspace":
+		return true
+	default:
+		return false
+	}
+}
+
+func isCanonicalCompleteness(value string) bool {
+	switch strings.TrimSpace(value) {
+	case "starter", "complete", "refine":
+		return true
+	default:
+		return false
+	}
+}
+
+func isCanonicalTopology(value string) bool {
+	switch strings.TrimSpace(value) {
+	case "single-node", "multi-node", "ha", "unspecified":
+		return true
+	default:
+		return false
+	}
+}
+
+func askcontractPathAllowed(path string) bool {
+	return path == "workflows/prepare.yaml" || path == "workflows/vars.yaml" || strings.HasPrefix(path, "workflows/scenarios/") || strings.HasPrefix(path, "workflows/components/")
 }
 
 func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.GenerationResponse, decision askintent.Decision) EvaluationResult {

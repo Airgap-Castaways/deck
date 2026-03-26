@@ -64,7 +64,7 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 	artifactKinds := mergedArtifactKinds(prompt, retrieval)
 	needsPrepare := len(artifactKinds) > 0 || strings.Contains(strings.ToLower(prompt), "prepare")
 	req := ScenarioRequirements{
-		AcceptanceLevel:     inferAcceptanceLevel(workspace, decision),
+		AcceptanceLevel:     inferAcceptanceLevel(prompt, workspace, decision),
 		Connectivity:        InferOfflineAssumption(prompt),
 		NeedsPrepare:        needsPrepare,
 		ArtifactKinds:       artifactKinds,
@@ -113,7 +113,7 @@ func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askinte
 		Version:                 1,
 		Request:                 strings.TrimSpace(prompt),
 		Intent:                  string(decision.Route),
-		Complexity:              "simple",
+		Complexity:              inferRequestComplexity(prompt, req),
 		AuthoringBrief:          BriefFromRequirements(req, decision),
 		OfflineAssumption:       req.Connectivity,
 		NeedsPrepare:            req.NeedsPrepare,
@@ -325,7 +325,13 @@ func inferScenarioIntent(prompt string) []string {
 	return intents
 }
 
-func inferAcceptanceLevel(workspace askretrieve.WorkspaceSummary, decision askintent.Decision) string {
+func inferAcceptanceLevel(prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) string {
+	if explicitComplexAuthoring(prompt) {
+		if decision.Route == askintent.RouteRefine && workspace.HasWorkflowTree {
+			return "refine"
+		}
+		return "complete"
+	}
 	if decision.Route == askintent.RouteRefine {
 		if !workspace.HasWorkflowTree {
 			return "starter"
@@ -336,6 +342,49 @@ func inferAcceptanceLevel(workspace askretrieve.WorkspaceSummary, decision askin
 		return "starter"
 	}
 	return "complete"
+}
+
+func inferRequestComplexity(prompt string, req ScenarioRequirements) string {
+	lower := strings.ToLower(strings.TrimSpace(prompt))
+	score := 0
+	if req.NeedsPrepare {
+		score++
+	}
+	if strings.Contains(lower, "prepare and apply") {
+		score++
+	}
+	if containsString(req.ScenarioIntent, "multi-node") || containsString(req.ScenarioIntent, "ha") {
+		score += 2
+	}
+	if containsString(req.ScenarioIntent, "kubeadm") {
+		score++
+	}
+	if containsString(req.ScenarioIntent, "join") {
+		score++
+	}
+	if len(req.ArtifactKinds) > 1 {
+		score++
+	}
+	switch {
+	case score >= 4:
+		return "complex"
+	case score >= 2:
+		return "medium"
+	default:
+		return "simple"
+	}
+}
+
+func explicitComplexAuthoring(prompt string) bool {
+	lower := strings.ToLower(strings.TrimSpace(prompt))
+	markers := []string{"prepare and apply", "multi-node", "multi node", "3-node", "ha", "high availability", "worker", "workers", "join", "cluster"}
+	hits := 0
+	for _, marker := range markers {
+		if strings.Contains(lower, marker) {
+			hits++
+		}
+	}
+	return hits >= 2
 }
 
 func inferModeIntent(req ScenarioRequirements) string {

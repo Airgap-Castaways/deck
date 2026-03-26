@@ -454,14 +454,14 @@ func filePathsFromPlan(plan askcontract.PlanResponse) []string {
 }
 
 func validateSemanticGeneration(gen askcontract.GenerationResponse, decision askintent.Decision, plan askcontract.PlanResponse) error {
-	critic := semanticCritic(gen, decision, plan, plan.AuthoringBrief)
+	critic := semanticCritic(gen, decision, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{})
 	if len(critic.Blocking) > 0 {
 		return fmt.Errorf("semantic validation failed: %s", strings.Join(critic.Blocking, "; "))
 	}
 	return nil
 }
 
-func semanticCritic(gen askcontract.GenerationResponse, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief) askcontract.CriticResponse {
+func semanticCritic(gen askcontract.GenerationResponse, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult) askcontract.CriticResponse {
 	critic := askcontract.CriticResponse{}
 	generated := map[string]askcontract.GeneratedFile{}
 	for _, file := range gen.Files {
@@ -496,7 +496,7 @@ func semanticCritic(gen askcontract.GenerationResponse, decision askintent.Decis
 			semanticFindings = append(semanticFindings, askpolicy.EvaluationFinding{Severity: "advisory", Code: "orphan_component", Message: fmt.Sprintf("generated component has no scenario import: %s", clean), Path: clean})
 		}
 	}
-	requirements := askpolicy.BuildScenarioRequirements(plan.Request, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, decision)
+	requirements := askpolicy.BuildScenarioRequirements(plan.Request, retrieval, askretrieve.WorkspaceSummary{}, decision)
 	if strings.TrimSpace(plan.OfflineAssumption) != "" {
 		requirements.Connectivity = strings.TrimSpace(plan.OfflineAssumption)
 	}

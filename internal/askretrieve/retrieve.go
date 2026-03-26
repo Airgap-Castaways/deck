@@ -112,6 +112,7 @@ func InspectWorkspace(root string) (WorkspaceSummary, error) {
 
 func Retrieve(route askintent.Route, prompt string, target askintent.Target, workspace WorkspaceSummary, state askstate.Context, external []Chunk) RetrievalResult {
 	budget, maxChunks := routeBudget(route, prompt)
+	complex := isComplexAuthoringPrompt(route, prompt)
 	lowerPrompt := strings.ToLower(strings.TrimSpace(prompt))
 	related := relatedWorkspaceTargets(workspace, target)
 	chunks := make([]Chunk, 0, 32)
@@ -207,7 +208,14 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 	selected := make([]Chunk, 0, maxChunks)
 	dropped := make([]string, 0)
 	remaining := budget
+	reservedIDs := map[string]bool{}
+	if complex {
+		selected, remaining, reservedIDs, dropped = reserveComplexAuthoringChunks(chunks, selected, remaining, maxChunks, dropped)
+	}
 	for _, chunk := range chunks {
+		if reservedIDs[chunk.ID] {
+			continue
+		}
 		if len(selected) >= maxChunks {
 			dropped = append(dropped, chunk.ID)
 			continue
@@ -222,6 +230,42 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 	}
 
 	return RetrievalResult{Chunks: selected, Dropped: dropped, MaxBytes: budget}
+}
+
+func reserveComplexAuthoringChunks(chunks []Chunk, selected []Chunk, remaining int, maxChunks int, dropped []string) ([]Chunk, int, map[string]bool, []string) {
+	reserved := map[string]bool{}
+	keptExamples := 0
+	keptTyped := false
+	for _, chunk := range chunks {
+		if len(selected) >= maxChunks {
+			break
+		}
+		want := false
+		switch {
+		case chunk.Source == "example" && keptExamples < 2:
+			want = true
+		case chunk.Source == "askcontext" && chunk.Label == "typed-steps" && !keptTyped:
+			want = true
+		}
+		if !want {
+			continue
+		}
+		size := len(chunk.Content)
+		if size > remaining {
+			dropped = append(dropped, chunk.ID)
+			continue
+		}
+		selected = append(selected, chunk)
+		remaining -= size
+		reserved[chunk.ID] = true
+		if chunk.Source == "example" {
+			keptExamples++
+		}
+		if chunk.Source == "askcontext" && chunk.Label == "typed-steps" {
+			keptTyped = true
+		}
+	}
+	return selected, remaining, reserved, dropped
 }
 
 func RepairChunks(prompt string, validationError string) []Chunk {

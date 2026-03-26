@@ -57,6 +57,7 @@ type runResult struct {
 	PlanJSON      string
 	FallbackNote  string
 	Critic        *askcontract.CriticResponse
+	Judge         *askcontract.JudgeResponse
 }
 
 type promptTrace struct {

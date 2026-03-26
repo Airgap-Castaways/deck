@@ -162,7 +162,10 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	}
 	var resp PlanResponse
 	if err := json.Unmarshal([]byte(cleaned), &resp); err != nil {
-		return PlanResponse{}, fmt.Errorf("parse plan response: %w", err)
+		repaired := repairLooseJSON(cleaned)
+		if repaired == cleaned || json.Unmarshal([]byte(repaired), &resp) != nil {
+			return PlanResponse{}, fmt.Errorf("parse plan response: %w", err)
+		}
 	}
 	if resp.Version == 0 {
 		resp.Version = 1
@@ -272,4 +275,13 @@ func clean(response string) string {
 		response = response[start : end+1]
 	}
 	return strings.TrimSpace(response)
+}
+
+func repairLooseJSON(response string) string {
+	response = strings.ReplaceAll(response, ",]", "]")
+	response = strings.ReplaceAll(response, ", }", " }")
+	response = strings.ReplaceAll(response, ",}", "}")
+	response = strings.ReplaceAll(response, ",\n]", "\n]")
+	response = strings.ReplaceAll(response, ",\n}", "\n}")
+	return response
 }

@@ -249,7 +249,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		}
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "generation", SystemPrompt: generationRequest.SystemPrompt, UserPrompt: generationRequest.Prompt})
 		logger.logf("basic", "\n[ask][phase:generation:start] route=%s attempts=%d\n", decision.Route, attempts)
-		gen, lintSummary, critic, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts, logger, decision, plan, authoringBrief)
+		gen, lintSummary, critic, judge, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts, logger, decision, plan, authoringBrief, retrieval)
 		if genErr != nil {
 			return genErr
 		}
@@ -262,6 +262,9 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		result.LintSummary = lintSummary
 		result.LocalFindings = localFindings(result.Files)
 		result.Critic = &critic
+		if judge.Summary != "" || len(judge.Blocking) > 0 || len(judge.Advisory) > 0 || len(judge.MissingCapabilities) > 0 || len(judge.SuggestedFixes) > 0 {
+			result.Judge = &judge
+		}
 		result.ReviewLines = append(result.ReviewLines, critic.Advisory...)
 		if opts.Write {
 			if err := writeFiles(resolvedRoot, result.Files); err != nil {
@@ -462,7 +465,7 @@ func generationAttempts(requested int, decision askintent.Decision, prompt strin
 	return 3
 }
 
-func generateWithValidation(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, attempts int, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief) (askcontract.GenerationResponse, string, askcontract.CriticResponse, int, error) {
+func generateWithValidation(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, attempts int, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult) (askcontract.GenerationResponse, string, askcontract.CriticResponse, askcontract.JudgeResponse, int, error) {
 	var lastValidation string
 	var lastCritic askcontract.CriticResponse
 	var lastJudge askcontract.JudgeResponse
@@ -496,7 +499,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			MaxRetries:   1,
 		})
 		if err != nil {
-			return askcontract.GenerationResponse{}, lastValidation, lastCritic, attempt - 1, err
+			return askcontract.GenerationResponse{}, lastValidation, lastCritic, lastJudge, attempt - 1, err
 		}
 		logger.response("generation", resp.Content)
 		gen, err := askcontract.ParseGeneration(resp.Content)
@@ -506,10 +509,10 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			if attempt < attempts {
 				continue
 			}
-			return askcontract.GenerationResponse{}, lastValidation, lastCritic, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
+			return askcontract.GenerationResponse{}, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
 		}
 		logger.logf("debug", "[ask][phase:semantic-validate] attempt=%d/%d\n", attempt, attempts)
-		lintSummary, critic, err := validateGeneration(ctx, root, gen, decision, plan, brief)
+		lintSummary, critic, err := validateGeneration(ctx, root, gen, decision, plan, brief, retrieval)
 		lastCritic = critic
 		if err == nil {
 			judge, judgeErr := maybeJudgeGeneration(ctx, client, req, gen, lintSummary, critic, plan, brief, logger)
@@ -525,18 +528,18 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			} else {
 				logger.logf("debug", "[ask][phase:judge:skip] error=%v\n", judgeErr)
 			}
-			return gen, lintSummary, critic, attempt - 1, nil
+			return gen, lintSummary, critic, lastJudge, attempt - 1, nil
 		}
 		lastValidation = err.Error()
 		logger.logf("debug", "[ask][phase:generation:validation-error] error=%s\n", lastValidation)
 		if !repairableValidationError(lastValidation) {
-			return askcontract.GenerationResponse{}, lastValidation, critic, attempt - 1, fmt.Errorf("ask generation stopped without repair: %s", lastValidation)
+			return askcontract.GenerationResponse{}, lastValidation, critic, lastJudge, attempt - 1, fmt.Errorf("ask generation stopped without repair: %s", lastValidation)
 		}
 	}
 	if lastValidation == "" {
 		lastValidation = "generation failed without a parseable response"
 	}
-	return askcontract.GenerationResponse{}, lastValidation, lastCritic, attempts - 1, fmt.Errorf("ask generation did not validate after %d attempts: %s", attempts, lastValidation)
+	return askcontract.GenerationResponse{}, lastValidation, lastCritic, lastJudge, attempts - 1, fmt.Errorf("ask generation did not validate after %d attempts: %s", attempts, lastValidation)
 }
 
 func maybeJudgeGeneration(ctx context.Context, client askprovider.Client, req askprovider.Request, gen askcontract.GenerationResponse, lintSummary string, critic askcontract.CriticResponse, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, logger askLogger) (askcontract.JudgeResponse, error) {
@@ -603,7 +606,7 @@ func normalizedAuthoringBrief(plan askcontract.PlanResponse, fallback askcontrac
 	return fallback
 }
 
-func validateGeneration(ctx context.Context, root string, gen askcontract.GenerationResponse, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief) (string, askcontract.CriticResponse, error) {
+func validateGeneration(ctx context.Context, root string, gen askcontract.GenerationResponse, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult) (string, askcontract.CriticResponse, error) {
 	if len(gen.Files) == 0 {
 		critic := askcontract.CriticResponse{Blocking: []string{"response did not include any files"}, MissingFiles: filePathsFromPlan(plan), RequiredFixes: []string{"Return the planned workflow files"}}
 		return "", critic, fmt.Errorf("response did not include any files")
@@ -630,7 +633,7 @@ func validateGeneration(ctx context.Context, root string, gen askcontract.Genera
 		validated = append(validated, files...)
 	}
 	validated = dedupe(validated)
-	critic := semanticCritic(gen, decision, plan, normalizedAuthoringBrief(plan, brief))
+	critic := semanticCritic(gen, decision, plan, normalizedAuthoringBrief(plan, brief), retrieval)
 	if len(critic.Blocking) > 0 {
 		return "", critic, fmt.Errorf("semantic validation failed: %s", strings.Join(critic.Blocking, "; "))
 	}

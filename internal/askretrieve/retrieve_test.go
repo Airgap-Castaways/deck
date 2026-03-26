@@ -99,6 +99,23 @@ func TestRouteBudgetExpandsForComplexAuthoringPrompt(t *testing.T) {
 	}
 }
 
+func TestRetrieveReservesExamplesAndTypedStepsForComplexAuthoringPrompt(t *testing.T) {
+	result := Retrieve(askintent.RouteDraft, "create an air-gapped rhel9 3-node kubeadm prepare and apply workflow with worker join", askintent.Target{}, WorkspaceSummary{}, askstate.Context{}, nil)
+	exampleCount := 0
+	hasTyped := false
+	for _, chunk := range result.Chunks {
+		if chunk.Source == "example" {
+			exampleCount++
+		}
+		if chunk.Source == "askcontext" && chunk.Label == "typed-steps" {
+			hasTyped = true
+		}
+	}
+	if exampleCount == 0 || !hasTyped {
+		t.Fatalf("expected reserved examples and typed steps, got %#v", result.Chunks)
+	}
+}
+
 func findChunk(result RetrievalResult, id string) *Chunk {
 	for i := range result.Chunks {
 		if result.Chunks[i].ID == id {

@@ -77,3 +77,13 @@ func TestParsePlanRejectsEntryScenarioMissingFromFiles(t *testing.T) {
 		t.Fatalf("expected entryScenario planned file mismatch")
 	}
 }
+
+func TestParsePlanRepairsTrailingCommas(t *testing.T) {
+	resp, err := ParsePlan(`{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry",}],"validationChecklist":["lint",],}`)
+	if err != nil {
+		t.Fatalf("expected trailing-comma repair, got %v", err)
+	}
+	if len(resp.Files) != 1 || resp.Files[0].Path != "workflows/scenarios/apply.yaml" {
+		t.Fatalf("unexpected repaired plan: %#v", resp)
+	}
+}
