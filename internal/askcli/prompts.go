@@ -226,6 +226,7 @@ func judgeSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanRe
 	b.WriteString("Do not re-litigate syntax or schema unless it causes an obvious intent mismatch.\n")
 	b.WriteString("JSON shape: {\"summary\":string,\"blocking\":[]string,\"advisory\":[]string,\"missingCapabilities\":[]string,\"suggestedFixes\":[]string}.\n")
 	b.WriteString("Use blocking only when the generated workflow clearly misses a required capability, execution contract, or collapses the request scope.\n")
+	b.WriteString("When possible, mention the affected workflow file and phase directly in each finding.\n")
 	b.WriteString(authoringBriefPromptBlock(brief))
 	b.WriteString("\n")
 	b.WriteString(executionModelPromptBlock(plan.ExecutionModel))
@@ -247,10 +248,11 @@ func planCriticSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.P
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask plan critic. Return strict JSON only.\n")
 	b.WriteString("Review whether the workflow plan is operationally complete enough before generation starts.\n")
-	b.WriteString("Focus on artifact producer/consumer contracts, shared-state contracts such as join files, role-aware execution, topology fidelity, and verification realism.\n")
+	b.WriteString("Focus on artifact producer/consumer contracts, shared-state contracts such as join files, role-aware execution, role cardinality, topology fidelity, join publication/consumption, artifact contract naming, and verification staging realism.\n")
 	b.WriteString("Do not restate schema rules unless the plan violates them in a way that affects execution design.\n")
 	b.WriteString("JSON shape: {\"summary\":string,\"blocking\":[]string,\"advisory\":[]string,\"missingContracts\":[]string,\"suggestedFixes\":[]string}.\n")
 	b.WriteString("Use blocking when generation should be retried with a stronger plan.\n")
+	b.WriteString("When possible, mention the affected file or execution-model section directly in each finding.\n")
 	b.WriteString(authoringBriefPromptBlock(brief))
 	b.WriteString("\n")
 	return b.String()
@@ -343,7 +345,8 @@ func postProcessCriticSystemPrompt(brief askcontract.AuthoringBrief, plan askcon
 	b.WriteString("Review a valid generated workflow set for operational upgrade opportunities after generation, lint, and design review.\n")
 	b.WriteString("Focus first on operational defects: shared-state publication, artifact handoff exactness, verification placement, and runtime prerequisite realism.\n")
 	b.WriteString("Treat vars/components cleanup as advisory only. Default to preserve-inline when extraction benefit is weak.\n")
-	b.WriteString("JSON shape: {\"summary\":string,\"blocking\":[]string,\"advisory\":[]string,\"upgradeCandidates\":[]string,\"reviseFiles\":[]string,\"preserveFiles\":[]string,\"suggestedFixes\":[]string}.\n")
+	b.WriteString("JSON shape: {\"summary\":string,\"blocking\":[]string,\"advisory\":[]string,\"upgradeCandidates\":[]string,\"reviseFiles\":[]string,\"preserveFiles\":[]string,\"requiredEdits\":[]string,\"verificationExpectations\":[]string,\"suggestedFixes\":[]string}.\n")
+	b.WriteString("Use blocking only for operational defects. Keep vars/components extraction advisory unless clearly necessary. Mention affected files and phases directly when possible.\n")
 	b.WriteString(authoringBriefPromptBlock(brief))
 	b.WriteString("\n")
 	b.WriteString(executionModelPromptBlock(plan.ExecutionModel))
@@ -402,6 +405,51 @@ func postProcessEditSystemPrompt(brief askcontract.AuthoringBrief, plan askcontr
 	return b.String()
 }
 
+func structuralCleanupEditSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanResponse) string {
+	b := &strings.Builder{}
+	b.WriteString("You are deck ask structural cleanup editor. Return strict JSON only using the generation response shape.\n")
+	b.WriteString("Apply only optional readability or reuse improvements after operational defects are already resolved.\n")
+	b.WriteString("Extract vars or components only when repeated values or repeated step groups clearly justify it. Preserve inline structure by default.\n")
+	b.WriteString(authoringBriefPromptBlock(brief))
+	b.WriteString("\n")
+	b.WriteString(executionModelPromptBlock(plan.ExecutionModel))
+	b.WriteString("\n")
+	return b.String()
+}
+
+func structuralCleanupEditUserPrompt(gen askcontract.GenerationResponse, findings askcontract.PostProcessResponse) string {
+	b := &strings.Builder{}
+	b.WriteString("Structural cleanup candidates:\n")
+	for _, item := range findings.UpgradeCandidates {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(item))
+		b.WriteString("\n")
+	}
+	b.WriteString("Advisory guidance:\n")
+	for _, item := range findings.Advisory {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(item))
+		b.WriteString("\n")
+	}
+	b.WriteString("Preserve these files unless cleanup clearly improves the result:\n")
+	for _, item := range findings.PreserveFiles {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(item))
+		b.WriteString("\n")
+	}
+	b.WriteString("Current files:\n")
+	for _, file := range gen.Files {
+		b.WriteString("- path: ")
+		b.WriteString(strings.TrimSpace(file.Path))
+		b.WriteString("\n")
+		b.WriteString(file.Content)
+		if !strings.HasSuffix(file.Content, "\n") {
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
 func postProcessEditUserPrompt(gen askcontract.GenerationResponse, findings askcontract.PostProcessResponse) string {
 	b := &strings.Builder{}
 	b.WriteString("Blocking operational findings:\n")
@@ -412,6 +460,16 @@ func postProcessEditUserPrompt(gen askcontract.GenerationResponse, findings askc
 	}
 	for _, item := range findings.SuggestedFixes {
 		b.WriteString("- fix: ")
+		b.WriteString(strings.TrimSpace(item))
+		b.WriteString("\n")
+	}
+	for _, item := range findings.RequiredEdits {
+		b.WriteString("- required edit: ")
+		b.WriteString(strings.TrimSpace(item))
+		b.WriteString("\n")
+	}
+	for _, item := range findings.VerificationExpectations {
+		b.WriteString("- verify after edit: ")
 		b.WriteString(strings.TrimSpace(item))
 		b.WriteString("\n")
 	}

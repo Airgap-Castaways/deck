@@ -122,13 +122,15 @@ type PlanCriticResponse struct {
 }
 
 type PostProcessResponse struct {
-	Summary           string   `json:"summary"`
-	Blocking          []string `json:"blocking"`
-	Advisory          []string `json:"advisory"`
-	UpgradeCandidates []string `json:"upgradeCandidates"`
-	ReviseFiles       []string `json:"reviseFiles"`
-	PreserveFiles     []string `json:"preserveFiles"`
-	SuggestedFixes    []string `json:"suggestedFixes"`
+	Summary                  string   `json:"summary"`
+	Blocking                 []string `json:"blocking"`
+	Advisory                 []string `json:"advisory"`
+	UpgradeCandidates        []string `json:"upgradeCandidates"`
+	ReviseFiles              []string `json:"reviseFiles"`
+	PreserveFiles            []string `json:"preserveFiles"`
+	RequiredEdits            []string `json:"requiredEdits"`
+	VerificationExpectations []string `json:"verificationExpectations"`
+	SuggestedFixes           []string `json:"suggestedFixes"`
 }
 
 type InfoResponse struct {
@@ -391,6 +393,12 @@ func ParsePostProcess(raw string) (PostProcessResponse, error) {
 	}
 	for i := range resp.PreserveFiles {
 		resp.PreserveFiles[i] = strings.TrimSpace(resp.PreserveFiles[i])
+	}
+	for i := range resp.RequiredEdits {
+		resp.RequiredEdits[i] = strings.TrimSpace(resp.RequiredEdits[i])
+	}
+	for i := range resp.VerificationExpectations {
+		resp.VerificationExpectations[i] = strings.TrimSpace(resp.VerificationExpectations[i])
 	}
 	for i := range resp.SuggestedFixes {
 		resp.SuggestedFixes[i] = strings.TrimSpace(resp.SuggestedFixes[i])

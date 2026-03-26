@@ -132,6 +132,9 @@ func TestBuildPlanWithReviewRetriesOnPlanCriticBlocking(t *testing.T) {
 	if len(critic.Blocking) != 0 || critic.Summary != "plan is ready" {
 		t.Fatalf("expected final non-blocking critic result, got %#v", critic)
 	}
+	if len(client.prompts) < 3 || !strings.Contains(client.prompts[2].Prompt, "join-file publication contract") {
+		t.Fatalf("expected replanning prompt to include plan critic findings, got %#v", client.prompts)
+	}
 }
 
 func TestBuildPlanWithReviewFallsBackOnPlannerFailure(t *testing.T) {
@@ -344,6 +347,42 @@ func TestMaybePostProcessGenerationSkipsStructuralCleanupOnlyAdvice(t *testing.T
 	}
 	if !strings.Contains(strings.Join(summary.Notes, "\n"), "extract-vars") {
 		t.Fatalf("expected structural advisory note, got %#v", summary.Notes)
+	}
+}
+
+func TestMaybePostProcessGenerationAppliesOptionalStructuralCleanupWhenHeuristicsAreStrong(t *testing.T) {
+	client := &stubClient{responses: []string{
+		`{"summary":"operationally sound; repeated paths suggest optional cleanup","blocking":[],"advisory":["extract-vars could reduce repeated path literals"],"upgradeCandidates":["extract-vars","preserve-inline"],"reviseFiles":[],"preserveFiles":["workflows/prepare.yaml","workflows/scenarios/apply.yaml"],"requiredEdits":[],"verificationExpectations":["lint stays green"],"suggestedFixes":[]}`,
+		`{"summary":"structurally cleaned draft","review":[],"files":[{"path":"workflows/vars.yaml","content":"artifactRoot: /srv/offline/kubernetes\n"},{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      distro:\n        family: rhel\n        release: \"9\"\n      repo:\n        type: rpm\n      outputDir: \"{{ .vars.artifactRoot }}\"\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      source:\n        type: local-repo\n        path: \"{{ .vars.artifactRoot }}\"\n"}]}`,
+		`{"summary":"structural cleanup preserved behavior","blocking":[],"advisory":["vars extraction is acceptable"],"missingCapabilities":[],"suggestedFixes":[]}`,
+	}}
+	plan := askcontract.PlanResponse{Request: "create 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", CompletenessTarget: "complete", Topology: "multi-node"}}
+	gen := askcontract.GenerationResponse{Summary: "draft", Files: []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      distro:\n        family: rhel\n        release: \"9\"\n      repo:\n        type: rpm\n      outputDir: /srv/offline/kubernetes\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      source:\n        type: local-repo\n        path: /srv/offline/kubernetes\n"}}}
+	judge := askcontract.JudgeResponse{Summary: "operationally sound", Advisory: []string{"artifact paths are consistent"}}
+	summary, err := maybePostProcessGeneration(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}, t.TempDir(), newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{}, gen, "lint ok (1 workflows)", askcontract.CriticResponse{}, judge)
+	if err != nil {
+		t.Fatalf("maybePostProcessGeneration structural cleanup: %v", err)
+	}
+	if !summary.Applied {
+		t.Fatalf("expected structural cleanup to apply")
+	}
+	if !strings.Contains(strings.Join(summary.Notes, "\n"), "optional structural cleanup") {
+		t.Fatalf("expected structural cleanup note, got %#v", summary.Notes)
+	}
+	if len(summary.Generation.Files) != 3 || !strings.Contains(summary.Generation.Files[0].Path, "vars") {
+		t.Fatalf("expected vars extraction result, got %#v", summary.Generation.Files)
+	}
+}
+
+func TestEnrichPostProcessFindingsAddsPreserveInlineAndVarCleanupAdvisory(t *testing.T) {
+	gen := askcontract.GenerationResponse{Files: []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: fetch\n    kind: DownloadPackage\n    spec:\n      outputDir: /srv/offline/kubernetes\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      source:\n        type: local-repo\n        path: /srv/offline/kubernetes\n"}}}
+	findings := enrichPostProcessFindings(askcontract.PostProcessResponse{}, gen)
+	joined := strings.Join(findings.Advisory, "\n")
+	if !strings.Contains(joined, "extract-vars") {
+		t.Fatalf("expected extract-vars advisory, got %#v", findings)
+	}
+	if !containsTrimmed(findings.UpgradeCandidates, "preserve-inline") {
+		t.Fatalf("expected preserve-inline candidate, got %#v", findings)
 	}
 }
 

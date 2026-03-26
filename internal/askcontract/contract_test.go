@@ -90,3 +90,13 @@ func TestParsePlanRepairsTrailingCommas(t *testing.T) {
 		t.Fatalf("unexpected repaired plan: %#v", resp)
 	}
 }
+
+func TestParsePostProcess(t *testing.T) {
+	resp, err := ParsePostProcess(`{"summary":"refine apply verification","blocking":[],"advisory":["extract-vars"],"upgradeCandidates":["extract-vars","preserve-inline"],"reviseFiles":["workflows/scenarios/apply.yaml"],"preserveFiles":["workflows/prepare.yaml"],"requiredEdits":["gate final verification"],"verificationExpectations":["lint stays green"],"suggestedFixes":["move shared path into vars"]}`)
+	if err != nil {
+		t.Fatalf("parse post-process: %v", err)
+	}
+	if resp.Summary == "" || len(resp.RequiredEdits) != 1 || len(resp.VerificationExpectations) != 1 {
+		t.Fatalf("unexpected post-process response: %#v", resp)
+	}
+}

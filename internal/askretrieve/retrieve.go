@@ -515,7 +515,7 @@ func exampleReferenceChunks(route askintent.Route, lowerPrompt string) []Chunk {
 func exampleChunkScore(prompt string, path string, content string) int {
 	score := 20
 	text := strings.ToLower(path + "\n" + content)
-	for _, token := range []string{"air-gapped", "airgapped", "offline", "kubeadm", "cluster", "worker", "join", "control-plane", "control plane", "containerd", "repo", "package", "image", "prepare", "apply"} {
+	for _, token := range []string{"air-gapped", "airgapped", "offline", "kubeadm", "cluster", "worker", "join", "control-plane", "control plane", "containerd", "repo", "package", "image", "prepare", "apply", "artifact", "handoff", "publish", "kubeconfig"} {
 		if strings.Contains(prompt, token) && strings.Contains(text, token) {
 			score += 12
 		}
@@ -527,6 +527,9 @@ func exampleChunkScore(prompt string, path string, content string) int {
 		score += 10
 	}
 	if strings.Contains(text, "kind: initkubeadm") || strings.Contains(text, "kind: joinkubeadm") {
+		score += 8
+	}
+	if strings.Contains(text, "outputjoinfile") || strings.Contains(text, "joinfile") {
 		score += 8
 	}
 	return score

@@ -233,6 +233,9 @@ func FromPostProcess(resp askcontract.PostProcessResponse) []Diagnostic {
 	for _, item := range resp.SuggestedFixes {
 		diags = append(diags, Diagnostic{Code: "postprocess_suggested_fix", Severity: "blocking", Message: item, SuggestedFix: item})
 	}
+	for _, item := range resp.RequiredEdits {
+		diags = append(diags, Diagnostic{Code: "postprocess_required_edit", Severity: "blocking", Message: item, SuggestedFix: item})
+	}
 	return dedupe(diags)
 }
 
