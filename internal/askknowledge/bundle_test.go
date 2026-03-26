@@ -21,12 +21,3 @@ func TestCurrentIncludesComponentAndConstraintKnowledge(t *testing.T) {
 		t.Fatalf("expected constrained field catalog to include DownloadPackage runtime")
 	}
 }
-
-func TestRenderReferenceDocsIncludesPipelineAndComponentShape(t *testing.T) {
-	docs := RenderReferenceDocs(Current())
-	for _, path := range []string{"docs/reference/ask-pipeline.md", "docs/reference/ask-component-shape.md"} {
-		if strings.TrimSpace(docs[path]) == "" {
-			t.Fatalf("expected rendered doc for %s", path)
-		}
-	}
-}

@@ -34,6 +34,8 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 
 `ask` is experimental and available only in AI-ready builds. Non-AI builds omit the `ask` command entirely.
 
+For a task-oriented guide to configuring and using `deck ask`, see `../user-guide/ask.md`.
+
 `ask` uses LLM-first intent classification and route-specific prompts. Workflow generation only runs for authoring routes (`draft`/`refine`), while explain/review/question routes return answer-oriented responses.
 
 When model access is unavailable, `ask` degrades explicitly instead of silently pretending to answer with full reasoning. `explain` falls back to a local structural summary of the target file, `review` falls back to local findings, and generation routes fail fast because local validation cannot replace model output.
