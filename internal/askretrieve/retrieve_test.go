@@ -103,6 +103,7 @@ func TestRetrieveReservesExamplesAndTypedStepsForComplexAuthoringPrompt(t *testi
 	result := Retrieve(askintent.RouteDraft, "create an air-gapped rhel9 3-node kubeadm prepare and apply workflow with worker join", askintent.Target{}, WorkspaceSummary{}, askstate.Context{}, nil)
 	exampleCount := 0
 	hasTyped := false
+	hasComposition := false
 	for _, chunk := range result.Chunks {
 		if chunk.Source == "example" {
 			exampleCount++
@@ -110,9 +111,12 @@ func TestRetrieveReservesExamplesAndTypedStepsForComplexAuthoringPrompt(t *testi
 		if chunk.Source == "askcontext" && chunk.Label == "typed-steps" {
 			hasTyped = true
 		}
+		if chunk.Source == "askcontext" && chunk.Label == "step-composition" {
+			hasComposition = true
+		}
 	}
-	if exampleCount == 0 || !hasTyped {
-		t.Fatalf("expected reserved examples and typed steps, got %#v", result.Chunks)
+	if exampleCount == 0 || !hasTyped || !hasComposition {
+		t.Fatalf("expected reserved examples, typed steps, and composition guidance, got %#v", result.Chunks)
 	}
 }
 

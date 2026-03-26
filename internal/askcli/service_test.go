@@ -310,7 +310,7 @@ func TestGenerationSystemPromptIncludesAskContextBlocks(t *testing.T) {
 			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
 		}
 	}
-	for _, want := range []string{"Normalized authoring brief:", "mode intent: prepare+apply", "connectivity: offline", "completeness target: starter", "JoinKubeadm", "supports kubeadm join capability"} {
+	for _, want := range []string{"Normalized authoring brief:", "mode intent: prepare+apply", "connectivity: offline", "completeness target: starter", "JoinKubeadm", "supports kubeadm join capability", "Step composition guidance:", "Multi-node kubeadm flow:"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
 		}

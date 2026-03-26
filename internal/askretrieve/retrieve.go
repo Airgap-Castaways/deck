@@ -150,6 +150,16 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 			Score:   typedStepsScore(route, lowerPrompt),
 		})
 	}
+	if composition := askcontext.StepCompositionGuidanceBlock(prompt, askcontext.StepGuidanceOptions{}); strings.TrimSpace(composition) != "" {
+		chunks = append(chunks, Chunk{
+			ID:      "step-composition-" + string(route),
+			Source:  "askcontext",
+			Label:   "step-composition",
+			Topic:   askcontext.TopicStepComposition,
+			Content: composition,
+			Score:   typedStepsScore(route, lowerPrompt) + 8,
+		})
+	}
 	chunks = append(chunks, exampleReferenceChunks(route, lowerPrompt)...)
 	for _, file := range workspace.Files {
 		if !workspaceFileAllowed(file.Path) {
@@ -236,6 +246,7 @@ func reserveComplexAuthoringChunks(chunks []Chunk, selected []Chunk, remaining i
 	reserved := map[string]bool{}
 	keptExamples := 0
 	keptTyped := false
+	keptComposition := false
 	for _, chunk := range chunks {
 		if len(selected) >= maxChunks {
 			break
@@ -245,6 +256,8 @@ func reserveComplexAuthoringChunks(chunks []Chunk, selected []Chunk, remaining i
 		case chunk.Source == "example" && keptExamples < 2:
 			want = true
 		case chunk.Source == "askcontext" && chunk.Label == "typed-steps" && !keptTyped:
+			want = true
+		case chunk.Source == "askcontext" && chunk.Label == "step-composition" && !keptComposition:
 			want = true
 		}
 		if !want {
@@ -263,6 +276,9 @@ func reserveComplexAuthoringChunks(chunks []Chunk, selected []Chunk, remaining i
 		}
 		if chunk.Source == "askcontext" && chunk.Label == "typed-steps" {
 			keptTyped = true
+		}
+		if chunk.Source == "askcontext" && chunk.Label == "step-composition" {
+			keptComposition = true
 		}
 	}
 	return selected, remaining, reserved, dropped

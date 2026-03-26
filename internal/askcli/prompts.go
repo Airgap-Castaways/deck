@@ -70,8 +70,13 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, retr
 	b.WriteString("\n")
 	b.WriteString(authoringBriefPromptBlock(brief))
 	b.WriteString("\n")
-	if typedSteps := askcontext.StepGuidanceBlockWithOptions(route, retrievalPromptSeed(target, requirements, brief), askcontext.StepGuidanceOptions{ModeIntent: brief.ModeIntent, Topology: brief.Topology, RequiredCapabilities: brief.RequiredCapabilities}); strings.TrimSpace(typedSteps) != "" {
+	stepOptions := askcontext.StepGuidanceOptions{ModeIntent: brief.ModeIntent, Topology: brief.Topology, RequiredCapabilities: brief.RequiredCapabilities}
+	if typedSteps := askcontext.StepGuidanceBlockWithOptions(route, retrievalPromptSeed(target, requirements, brief), stepOptions); strings.TrimSpace(typedSteps) != "" {
 		b.WriteString(typedSteps)
+		b.WriteString("\n")
+	}
+	if composition := askcontext.StepCompositionGuidanceBlock(retrievalPromptSeed(target, requirements, brief), stepOptions); strings.TrimSpace(composition) != "" {
+		b.WriteString(composition)
 		b.WriteString("\n")
 	}
 	b.WriteString(askscaffold.PromptBlock(scaffold))

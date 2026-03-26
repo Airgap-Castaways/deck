@@ -21,6 +21,7 @@ const (
 	TopicComponentsImports    Topic = "components-imports"
 	TopicVarsGuidance         Topic = "vars-guidance"
 	TopicTypedSteps           Topic = "typed-steps"
+	TopicStepComposition      Topic = "step-composition"
 	TopicStepRepair           Topic = "step-repair"
 	TopicStepQuality          Topic = "step-quality-rules"
 	TopicCLIHints             Topic = "cli-hints"

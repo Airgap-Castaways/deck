@@ -218,6 +218,15 @@ func TestRelevantStepKindsBlockWithOptionsIncludesJoinCapabilityReason(t *testin
 	}
 }
 
+func TestStepCompositionGuidanceBlockIncludesOfflineAndJoinFlows(t *testing.T) {
+	block := StepCompositionGuidanceBlock("create an air-gapped 3-node kubeadm prepare and apply workflow", StepGuidanceOptions{ModeIntent: "prepare+apply", Topology: "multi-node", RequiredCapabilities: []string{"prepare-artifacts", "package-staging", "image-staging", "kubeadm-bootstrap", "kubeadm-join", "cluster-verification"}})
+	for _, want := range []string{"Offline package flow", "Offline image flow", "Kubeadm bootstrap flow", "Multi-node kubeadm flow", "Prepare/apply split"} {
+		if !strings.Contains(block, want) {
+			t.Fatalf("expected %q in composition guidance, got %q", want, block)
+		}
+	}
+}
+
 func TestDocBlocksExposeAskContext(t *testing.T) {
 	if got := AuthoringDocBlock(); !strings.Contains(got, "workflows/components/") || !strings.Contains(got, "workflows/vars.yaml") {
 		t.Fatalf("unexpected authoring doc block: %q", got)
