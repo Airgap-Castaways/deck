@@ -44,7 +44,7 @@ func classifierUserPrompt(prompt string, reviewFlag bool, workspace askretrieve.
 	return b.String()
 }
 
-func generationSystemPrompt(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult, requirements askpolicy.ScenarioRequirements, brief askcontract.AuthoringBrief, scaffold askscaffold.Scaffold) string {
+func generationSystemPrompt(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult, requirements askpolicy.ScenarioRequirements, brief askcontract.AuthoringBrief, executionModel askcontract.ExecutionModel, scaffold askscaffold.Scaffold) string {
 	bundle := askknowledge.Current()
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask, a workflow authoring assistant.\n")
@@ -70,6 +70,8 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, retr
 	b.WriteString("\n")
 	b.WriteString(authoringBriefPromptBlock(brief))
 	b.WriteString("\n")
+	b.WriteString(executionModelPromptBlock(executionModel))
+	b.WriteString("\n")
 	stepOptions := askcontext.StepGuidanceOptions{ModeIntent: brief.ModeIntent, Topology: brief.Topology, RequiredCapabilities: brief.RequiredCapabilities}
 	if typedSteps := askcontext.StepGuidanceBlockWithOptions(route, retrievalPromptSeed(target, requirements, brief), stepOptions); strings.TrimSpace(typedSteps) != "" {
 		b.WriteString(typedSteps)
@@ -93,6 +95,80 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, retr
 	b.WriteString("Retrieved context follows.\n")
 	b.WriteString(askretrieve.BuildChunkTextWithoutTopics(retrieval, askcontext.TopicWorkflowInvariants, askcontext.TopicPolicy))
 	return b.String()
+}
+
+func executionModelPromptBlock(model askcontract.ExecutionModel) string {
+	b := &strings.Builder{}
+	b.WriteString("Normalized execution model:\n")
+	if len(model.ArtifactContracts) == 0 && len(model.SharedStateContracts) == 0 && strings.TrimSpace(model.RoleExecution.RoleSelector) == "" && len(model.ApplyAssumptions) == 0 && model.Verification.ExpectedNodeCount == 0 {
+		b.WriteString("- none\n")
+		return strings.TrimSpace(b.String())
+	}
+	for _, item := range model.ArtifactContracts {
+		b.WriteString("- artifact ")
+		b.WriteString(strings.TrimSpace(item.Kind))
+		b.WriteString(": ")
+		b.WriteString(strings.TrimSpace(item.ProducerPath))
+		b.WriteString(" -> ")
+		b.WriteString(strings.TrimSpace(item.ConsumerPath))
+		if strings.TrimSpace(item.Description) != "" {
+			b.WriteString(" (")
+			b.WriteString(strings.TrimSpace(item.Description))
+			b.WriteString(")")
+		}
+		b.WriteString("\n")
+	}
+	for _, item := range model.SharedStateContracts {
+		b.WriteString("- shared state ")
+		b.WriteString(strings.TrimSpace(item.Name))
+		b.WriteString(": ")
+		b.WriteString(strings.TrimSpace(item.ProducerPath))
+		if len(item.ConsumerPaths) > 0 {
+			b.WriteString(" -> ")
+			b.WriteString(strings.Join(item.ConsumerPaths, ", "))
+		}
+		if strings.TrimSpace(item.AvailabilityModel) != "" {
+			b.WriteString(" [")
+			b.WriteString(strings.TrimSpace(item.AvailabilityModel))
+			b.WriteString("]")
+		}
+		b.WriteString("\n")
+	}
+	if strings.TrimSpace(model.RoleExecution.RoleSelector) != "" {
+		b.WriteString("- role selector: ")
+		b.WriteString(strings.TrimSpace(model.RoleExecution.RoleSelector))
+		b.WriteString("\n")
+	}
+	if strings.TrimSpace(model.RoleExecution.ControlPlaneFlow) != "" {
+		b.WriteString("- control-plane flow: ")
+		b.WriteString(strings.TrimSpace(model.RoleExecution.ControlPlaneFlow))
+		b.WriteString("\n")
+	}
+	if strings.TrimSpace(model.RoleExecution.WorkerFlow) != "" {
+		b.WriteString("- worker flow: ")
+		b.WriteString(strings.TrimSpace(model.RoleExecution.WorkerFlow))
+		b.WriteString("\n")
+	}
+	if model.Verification.ExpectedNodeCount > 0 {
+		b.WriteString("- verification expected nodes: ")
+		b.WriteString(fmt.Sprintf("%d", model.Verification.ExpectedNodeCount))
+		b.WriteString("\n")
+	}
+	if model.Verification.ExpectedControlPlaneReady > 0 {
+		b.WriteString("- verification control-plane ready: ")
+		b.WriteString(fmt.Sprintf("%d", model.Verification.ExpectedControlPlaneReady))
+		b.WriteString("\n")
+	}
+	for _, item := range model.ApplyAssumptions {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		b.WriteString("- apply assumption: ")
+		b.WriteString(item)
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func retrievalPromptSeed(target askintent.Target, requirements askpolicy.ScenarioRequirements, brief askcontract.AuthoringBrief) string {
@@ -145,11 +221,14 @@ func authoringBriefPromptBlock(brief askcontract.AuthoringBrief) string {
 func judgeSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanResponse) string {
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask semantic judge. Return strict JSON only.\n")
-	b.WriteString("Judge whether generated workflow files satisfy the requested outcome after local lint/schema validation already passed.\n")
+	b.WriteString("Judge whether generated workflow files satisfy the requested outcome and execution model after local lint/schema validation already passed.\n")
+	b.WriteString("Focus on operational workflow design quality: artifact producer/consumer contracts, shared-state availability such as join files, role-aware execution, and topology-aware verification.\n")
 	b.WriteString("Do not re-litigate syntax or schema unless it causes an obvious intent mismatch.\n")
 	b.WriteString("JSON shape: {\"summary\":string,\"blocking\":[]string,\"advisory\":[]string,\"missingCapabilities\":[]string,\"suggestedFixes\":[]string}.\n")
-	b.WriteString("Use blocking only when the generated workflow clearly misses a required capability or collapses the request scope.\n")
+	b.WriteString("Use blocking only when the generated workflow clearly misses a required capability, execution contract, or collapses the request scope.\n")
 	b.WriteString(authoringBriefPromptBlock(brief))
+	b.WriteString("\n")
+	b.WriteString(executionModelPromptBlock(plan.ExecutionModel))
 	b.WriteString("\n")
 	if strings.TrimSpace(plan.Request) != "" {
 		b.WriteString("Planned request: ")
@@ -162,6 +241,100 @@ func judgeSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanRe
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func planCriticSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanResponse) string {
+	b := &strings.Builder{}
+	b.WriteString("You are deck ask plan critic. Return strict JSON only.\n")
+	b.WriteString("Review whether the workflow plan is operationally complete enough before generation starts.\n")
+	b.WriteString("Focus on artifact producer/consumer contracts, shared-state contracts such as join files, role-aware execution, topology fidelity, and verification realism.\n")
+	b.WriteString("Do not restate schema rules unless the plan violates them in a way that affects execution design.\n")
+	b.WriteString("JSON shape: {\"summary\":string,\"blocking\":[]string,\"advisory\":[]string,\"missingContracts\":[]string,\"suggestedFixes\":[]string}.\n")
+	b.WriteString("Use blocking when generation should be retried with a stronger plan.\n")
+	b.WriteString(authoringBriefPromptBlock(brief))
+	b.WriteString("\n")
+	return b.String()
+}
+
+func planCriticUserPrompt(plan askcontract.PlanResponse) string {
+	b := &strings.Builder{}
+	b.WriteString("Planned request: ")
+	b.WriteString(strings.TrimSpace(plan.Request))
+	b.WriteString("\n")
+	b.WriteString("Target outcome: ")
+	b.WriteString(strings.TrimSpace(plan.TargetOutcome))
+	b.WriteString("\n")
+	b.WriteString("Entry scenario: ")
+	b.WriteString(strings.TrimSpace(plan.EntryScenario))
+	b.WriteString("\n")
+	b.WriteString("Planned files:\n")
+	for _, file := range plan.Files {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(file.Path))
+		if strings.TrimSpace(file.Purpose) != "" {
+			b.WriteString(": ")
+			b.WriteString(strings.TrimSpace(file.Purpose))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("Execution model:\n")
+	for _, item := range plan.ExecutionModel.ArtifactContracts {
+		b.WriteString("- artifact ")
+		b.WriteString(item.Kind)
+		b.WriteString(": ")
+		b.WriteString(item.ProducerPath)
+		b.WriteString(" -> ")
+		b.WriteString(item.ConsumerPath)
+		if strings.TrimSpace(item.Description) != "" {
+			b.WriteString(" (")
+			b.WriteString(strings.TrimSpace(item.Description))
+			b.WriteString(")")
+		}
+		b.WriteString("\n")
+	}
+	for _, item := range plan.ExecutionModel.SharedStateContracts {
+		b.WriteString("- shared state ")
+		b.WriteString(item.Name)
+		b.WriteString(": ")
+		b.WriteString(item.ProducerPath)
+		if len(item.ConsumerPaths) > 0 {
+			b.WriteString(" -> ")
+			b.WriteString(strings.Join(item.ConsumerPaths, ", "))
+		}
+		if strings.TrimSpace(item.AvailabilityModel) != "" {
+			b.WriteString(" [")
+			b.WriteString(strings.TrimSpace(item.AvailabilityModel))
+			b.WriteString("]")
+		}
+		b.WriteString("\n")
+	}
+	if strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) != "" {
+		b.WriteString("- role selector: ")
+		b.WriteString(strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector))
+		b.WriteString("\n")
+	}
+	if strings.TrimSpace(plan.ExecutionModel.RoleExecution.ControlPlaneFlow) != "" {
+		b.WriteString("- control-plane flow: ")
+		b.WriteString(strings.TrimSpace(plan.ExecutionModel.RoleExecution.ControlPlaneFlow))
+		b.WriteString("\n")
+	}
+	if strings.TrimSpace(plan.ExecutionModel.RoleExecution.WorkerFlow) != "" {
+		b.WriteString("- worker flow: ")
+		b.WriteString(strings.TrimSpace(plan.ExecutionModel.RoleExecution.WorkerFlow))
+		b.WriteString("\n")
+	}
+	for _, item := range plan.ExecutionModel.ApplyAssumptions {
+		b.WriteString("- apply assumption: ")
+		b.WriteString(strings.TrimSpace(item))
+		b.WriteString("\n")
+	}
+	b.WriteString("Validation checklist:\n")
+	for _, item := range plan.ValidationChecklist {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(item))
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func judgeUserPrompt(gen askcontract.GenerationResponse, lintSummary string, critic askcontract.CriticResponse) string {

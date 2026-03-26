@@ -35,13 +35,16 @@ func TestParseClassification(t *testing.T) {
 }
 
 func TestParsePlan(t *testing.T) {
-	raw := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","offlineAssumption":"offline","needsPrepare":false,"artifactKinds":[],"blockers":[],"targetOutcome":"generate files","assumptions":["use v1alpha1"],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	raw := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","authoringBrief":{"modeIntent":"apply-only"},"executionModel":{"artifactContracts":[{"kind":"package","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"offline package flow"}],"roleExecution":{"roleSelector":"vars.role","controlPlaneFlow":"bootstrap","workerFlow":"join","perNodeInvocation":true},"verification":{"bootstrapPhase":"bootstrap-control-plane","finalPhase":"verify-cluster","expectedNodeCount":3,"expectedControlPlaneReady":1},"applyAssumptions":["apply consumes local artifacts"]},"offlineAssumption":"offline","needsPrepare":false,"artifactKinds":[],"blockers":[],"targetOutcome":"generate files","assumptions":["use v1alpha1"],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
 	resp, err := ParsePlan(raw)
 	if err != nil {
 		t.Fatalf("parse plan: %v", err)
 	}
 	if resp.Intent != "draft" || len(resp.Files) != 1 || resp.OfflineAssumption != "offline" {
 		t.Fatalf("unexpected plan: %#v", resp)
+	}
+	if len(resp.ExecutionModel.ArtifactContracts) != 1 || resp.ExecutionModel.RoleExecution.RoleSelector != "vars.role" || resp.ExecutionModel.Verification.ExpectedNodeCount != 3 {
+		t.Fatalf("expected execution model to parse, got %#v", resp.ExecutionModel)
 	}
 }
 

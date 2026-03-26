@@ -205,6 +205,23 @@ func FromJudge(judge askcontract.JudgeResponse) []Diagnostic {
 	return dedupe(diags)
 }
 
+func FromPlanCritic(critic askcontract.PlanCriticResponse) []Diagnostic {
+	diags := []Diagnostic{}
+	for _, item := range critic.Blocking {
+		diags = append(diags, Diagnostic{Code: "plan_critic_blocking", Severity: "blocking", Message: item})
+	}
+	for _, item := range critic.Advisory {
+		diags = append(diags, Diagnostic{Code: "plan_critic_advisory", Severity: "advisory", Message: item})
+	}
+	for _, item := range critic.MissingContracts {
+		diags = append(diags, Diagnostic{Code: "plan_critic_missing_contract", Severity: "blocking", Message: item, SuggestedFix: item})
+	}
+	for _, item := range critic.SuggestedFixes {
+		diags = append(diags, Diagnostic{Code: "plan_critic_suggested_fix", Severity: "blocking", Message: item, SuggestedFix: item})
+	}
+	return dedupe(diags)
+}
+
 func JSON(diags []Diagnostic) string {
 	raw, err := json.MarshalIndent(diags, "", "  ")
 	if err != nil {

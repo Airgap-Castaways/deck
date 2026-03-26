@@ -33,3 +33,26 @@ func TestRenderIncludesJudgeFindings(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderIncludesPlanCriticSummary(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := render(stdout, stderr, runResult{
+		Route:        askintent.RouteDraft,
+		Confidence:   0.9,
+		Summary:      "generated plan artifact",
+		PlanMarkdown: ".deck/plan/latest.md",
+		PlanJSON:     ".deck/plan/latest.json",
+		PlanCritic: &askcontract.PlanCriticResponse{
+			Summary:          "plan needs stronger join publication detail",
+			MissingContracts: []string{"join-file publication contract"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "plan-review: plan needs stronger join publication detail") {
+		t.Fatalf("expected plan review summary in output, got %q", output)
+	}
+}

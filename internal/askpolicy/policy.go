@@ -48,6 +48,27 @@ func BriefFromRequirements(req ScenarioRequirements, decision askintent.Decision
 	return brief
 }
 
+func ExecutionModelFromRequirements(req ScenarioRequirements) askcontract.ExecutionModel {
+	model := askcontract.ExecutionModel{
+		ArtifactContracts:    artifactContractsFromRequirements(req),
+		SharedStateContracts: sharedStateContractsFromRequirements(req),
+		RoleExecution: askcontract.RoleExecutionModel{
+			RoleSelector:      roleSelectorFromRequirements(req),
+			ControlPlaneFlow:  controlPlaneFlowFromRequirements(req),
+			WorkerFlow:        workerFlowFromRequirements(req),
+			PerNodeInvocation: perNodeInvocationFromRequirements(req),
+		},
+		Verification: askcontract.VerificationStrategy{
+			BootstrapPhase:            bootstrapPhaseFromRequirements(req),
+			FinalPhase:                finalPhaseFromRequirements(req),
+			ExpectedNodeCount:         expectedNodeCountFromRequirements(req),
+			ExpectedControlPlaneReady: expectedControlPlaneReadyFromRequirements(req),
+		},
+		ApplyAssumptions: applyAssumptionsFromRequirements(req),
+	}
+	return model
+}
+
 type EvaluationFinding struct {
 	Severity string
 	Code     string
@@ -115,6 +136,7 @@ func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askinte
 		Intent:                  string(decision.Route),
 		Complexity:              inferRequestComplexity(prompt, req),
 		AuthoringBrief:          BriefFromRequirements(req, decision),
+		ExecutionModel:          ExecutionModelFromRequirements(req),
 		OfflineAssumption:       req.Connectivity,
 		NeedsPrepare:            req.NeedsPrepare,
 		ArtifactKinds:           append([]string(nil), req.ArtifactKinds...),
@@ -126,6 +148,116 @@ func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askinte
 		Files:                   files,
 		ValidationChecklist:     defaultValidationChecklist(req),
 	}
+}
+
+func artifactContractsFromRequirements(req ScenarioRequirements) []askcontract.ArtifactContract {
+	contracts := make([]askcontract.ArtifactContract, 0, len(req.ArtifactKinds))
+	for _, kind := range req.ArtifactKinds {
+		switch strings.ToLower(strings.TrimSpace(kind)) {
+		case "package":
+			contracts = append(contracts, askcontract.ArtifactContract{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml", Description: "prepare downloads package content and apply installs it from a local repository path"})
+		case "image":
+			contracts = append(contracts, askcontract.ArtifactContract{Kind: "image", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml", Description: "prepare downloads container images and apply loads them from a local image bundle path"})
+		case "repository-mirror":
+			contracts = append(contracts, askcontract.ArtifactContract{Kind: "repository-setup", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml", Description: "prepare stages repository content and apply configures the node to consume it locally"})
+		}
+	}
+	return dedupeArtifactContracts(contracts)
+}
+
+func sharedStateContractsFromRequirements(req ScenarioRequirements) []askcontract.SharedStateContract {
+	contracts := []askcontract.SharedStateContract{}
+	if containsString(req.ScenarioIntent, "join") || containsString(req.ScenarioIntent, "multi-node") || containsString(req.ScenarioIntent, "ha") {
+		contracts = append(contracts, askcontract.SharedStateContract{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "published-for-worker-consumption", Description: "control-plane publish step must make join data available before worker JoinKubeadm steps run"})
+	}
+	return contracts
+}
+
+func roleSelectorFromRequirements(req ScenarioRequirements) string {
+	if containsString(req.ScenarioIntent, "join") || containsString(req.ScenarioIntent, "multi-node") || containsString(req.ScenarioIntent, "ha") {
+		return "vars.role"
+	}
+	return ""
+}
+
+func controlPlaneFlowFromRequirements(req ScenarioRequirements) string {
+	if containsString(req.ScenarioIntent, "kubeadm") {
+		return "preflight -> runtime setup -> InitKubeadm -> bootstrap verification"
+	}
+	return ""
+}
+
+func workerFlowFromRequirements(req ScenarioRequirements) string {
+	if containsString(req.ScenarioIntent, "join") || containsString(req.ScenarioIntent, "multi-node") || containsString(req.ScenarioIntent, "ha") {
+		return "preflight -> runtime setup -> JoinKubeadm -> final cluster verification"
+	}
+	return ""
+}
+
+func perNodeInvocationFromRequirements(req ScenarioRequirements) bool {
+	return containsString(req.ScenarioIntent, "join") || containsString(req.ScenarioIntent, "multi-node") || containsString(req.ScenarioIntent, "ha")
+}
+
+func bootstrapPhaseFromRequirements(req ScenarioRequirements) string {
+	if containsString(req.ScenarioIntent, "kubeadm") {
+		return "bootstrap-control-plane"
+	}
+	return ""
+}
+
+func finalPhaseFromRequirements(req ScenarioRequirements) string {
+	if containsString(req.ScenarioIntent, "kubeadm") {
+		return "verify-cluster"
+	}
+	return ""
+}
+
+func expectedNodeCountFromRequirements(req ScenarioRequirements) int {
+	if n := inferNodeCount(req); n > 0 {
+		return n
+	}
+	return 0
+}
+
+func expectedControlPlaneReadyFromRequirements(req ScenarioRequirements) int {
+	if containsString(req.ScenarioIntent, "ha") {
+		if n := inferNodeCount(req); n >= 3 {
+			return 3
+		}
+		return 1
+	}
+	if containsString(req.ScenarioIntent, "kubeadm") {
+		return 1
+	}
+	return 0
+}
+
+func applyAssumptionsFromRequirements(req ScenarioRequirements) []string {
+	assumptions := []string{}
+	if req.Connectivity == "offline" {
+		assumptions = append(assumptions, "apply consumes only local staged artifacts and must not perform remote downloads")
+	}
+	if req.NeedsPrepare {
+		assumptions = append(assumptions, "prepare runs before apply and stages artifacts at paths apply can consume")
+	}
+	if perNodeInvocationFromRequirements(req) {
+		assumptions = append(assumptions, "apply runs per node with a role selector that distinguishes control-plane and worker execution")
+	}
+	return dedupeStrings(assumptions)
+}
+
+func dedupeArtifactContracts(contracts []askcontract.ArtifactContract) []askcontract.ArtifactContract {
+	seen := map[string]bool{}
+	out := make([]askcontract.ArtifactContract, 0, len(contracts))
+	for _, item := range contracts {
+		key := item.Kind + "|" + item.ProducerPath + "|" + item.ConsumerPath
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, item)
+	}
+	return out
 }
 
 func MergeRequirementsWithPlan(req ScenarioRequirements, plan askcontract.PlanResponse) ScenarioRequirements {
@@ -160,6 +292,7 @@ func MergeRequirementsWithPlan(req ScenarioRequirements, plan askcontract.PlanRe
 func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse, gen askcontract.GenerationResponse) EvaluationResult {
 	findings := make([]EvaluationFinding, 0)
 	brief := plan.AuthoringBrief
+	executionModel := plan.ExecutionModel
 	if strings.TrimSpace(brief.ModeIntent) == "prepare+apply" {
 		if len(preparePathsFromGeneration(gen.Files)) == 0 {
 			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_prepare_missing", Message: "request expects both prepare and apply workflows but generated output is missing workflows/prepare.yaml", Fix: "Return both a prepare workflow and at least one apply scenario when the request asks for prepare and apply", Path: "workflows/prepare.yaml"})
@@ -174,6 +307,33 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 			if _, ok := generatedPaths[path]; !ok {
 				findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_target_missing", Message: fmt.Sprintf("generated output is missing expected target from authoring brief: %s", path), Fix: "Return the expected workflow files for the full workspace-scoped request", Path: path})
 			}
+		}
+	}
+	generatedPaths := generatedMap(gen.Files)
+	for _, contract := range executionModel.ArtifactContracts {
+		producer := filepath.ToSlash(strings.TrimSpace(contract.ProducerPath))
+		consumer := filepath.ToSlash(strings.TrimSpace(contract.ConsumerPath))
+		if producer != "" {
+			if _, ok := generatedPaths[producer]; !ok {
+				findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "execution_model_producer_missing", Message: fmt.Sprintf("generated output is missing artifact producer required by execution model: %s", producer), Fix: "Generate the workflow file that produces staged artifacts before apply consumes them", Path: producer})
+			}
+		}
+		if consumer != "" {
+			if _, ok := generatedPaths[consumer]; !ok {
+				findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "execution_model_consumer_missing", Message: fmt.Sprintf("generated output is missing artifact consumer required by execution model: %s", consumer), Fix: "Generate the workflow file that consumes the staged artifacts described by the execution model", Path: consumer})
+			}
+		}
+	}
+	for _, contract := range executionModel.SharedStateContracts {
+		if strings.EqualFold(strings.TrimSpace(contract.Name), "join-file") {
+			if !generationAppearsToHandleJoinState(gen.Files) {
+				findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "execution_model_join_state_missing", Message: "execution model expects join-file handling but generated output does not clearly model join state publication or consumption", Fix: "Add explicit join-file production and worker consumption steps or clearly model the shared availability contract", Path: "workflows/scenarios/apply.yaml"})
+			}
+		}
+	}
+	if executionModel.RoleExecution.PerNodeInvocation && strings.TrimSpace(executionModel.RoleExecution.RoleSelector) != "" {
+		if !generationAppearsRoleAware(gen.Files, executionModel.RoleExecution.RoleSelector) {
+			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "execution_model_role_selector_missing", Message: fmt.Sprintf("execution model expects role-aware per-node invocation via %s but generated workflows do not appear to branch on it", executionModel.RoleExecution.RoleSelector), Fix: "Add role-aware conditions or separate role-specific phases that use the execution model role selector", Path: "workflows/scenarios/apply.yaml"})
 		}
 	}
 	if req.TypedPreference && countCommands(gen.Files) > 0 {
@@ -239,6 +399,32 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 		}
 	}
 	return EvaluationResult{Findings: findings}
+}
+
+func generationAppearsToHandleJoinState(files []askcontract.GeneratedFile) bool {
+	for _, file := range files {
+		content := strings.ToLower(file.Content)
+		if strings.Contains(content, "outputjoinfile") && strings.Contains(content, "joinfile") {
+			return true
+		}
+		if strings.Contains(content, "joinfilepath") || strings.Contains(content, "publish") && strings.Contains(content, "join") {
+			return true
+		}
+	}
+	return false
+}
+
+func generationAppearsRoleAware(files []askcontract.GeneratedFile, roleSelector string) bool {
+	selector := strings.ToLower(strings.TrimSpace(roleSelector))
+	if selector == "" {
+		return true
+	}
+	for _, file := range files {
+		if strings.Contains(strings.ToLower(file.Content), selector) {
+			return true
+		}
+	}
+	return false
 }
 
 func defaultValidationChecklist(req ScenarioRequirements) []string {

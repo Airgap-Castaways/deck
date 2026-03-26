@@ -32,6 +32,7 @@ type PlanResponse struct {
 	Intent                  string         `json:"intent"`
 	Complexity              string         `json:"complexity"`
 	AuthoringBrief          AuthoringBrief `json:"authoringBrief,omitempty"`
+	ExecutionModel          ExecutionModel `json:"executionModel,omitempty"`
 	OfflineAssumption       string         `json:"offlineAssumption,omitempty"`
 	NeedsPrepare            bool           `json:"needsPrepare,omitempty"`
 	ArtifactKinds           []string       `json:"artifactKinds,omitempty"`
@@ -58,6 +59,43 @@ type AuthoringBrief struct {
 	RequiredCapabilities []string `json:"requiredCapabilities,omitempty"`
 }
 
+type ExecutionModel struct {
+	ArtifactContracts    []ArtifactContract    `json:"artifactContracts,omitempty"`
+	SharedStateContracts []SharedStateContract `json:"sharedStateContracts,omitempty"`
+	RoleExecution        RoleExecutionModel    `json:"roleExecution,omitempty"`
+	Verification         VerificationStrategy  `json:"verification,omitempty"`
+	ApplyAssumptions     []string              `json:"applyAssumptions,omitempty"`
+}
+
+type ArtifactContract struct {
+	Kind         string `json:"kind,omitempty"`
+	ProducerPath string `json:"producerPath,omitempty"`
+	ConsumerPath string `json:"consumerPath,omitempty"`
+	Description  string `json:"description,omitempty"`
+}
+
+type SharedStateContract struct {
+	Name              string   `json:"name,omitempty"`
+	ProducerPath      string   `json:"producerPath,omitempty"`
+	ConsumerPaths     []string `json:"consumerPaths,omitempty"`
+	AvailabilityModel string   `json:"availabilityModel,omitempty"`
+	Description       string   `json:"description,omitempty"`
+}
+
+type RoleExecutionModel struct {
+	RoleSelector      string `json:"roleSelector,omitempty"`
+	ControlPlaneFlow  string `json:"controlPlaneFlow,omitempty"`
+	WorkerFlow        string `json:"workerFlow,omitempty"`
+	PerNodeInvocation bool   `json:"perNodeInvocation,omitempty"`
+}
+
+type VerificationStrategy struct {
+	BootstrapPhase            string `json:"bootstrapPhase,omitempty"`
+	FinalPhase                string `json:"finalPhase,omitempty"`
+	ExpectedNodeCount         int    `json:"expectedNodeCount,omitempty"`
+	ExpectedControlPlaneReady int    `json:"expectedControlPlaneReady,omitempty"`
+}
+
 type CriticResponse struct {
 	Blocking       []string `json:"blocking"`
 	Advisory       []string `json:"advisory"`
@@ -73,6 +111,14 @@ type JudgeResponse struct {
 	Advisory            []string `json:"advisory"`
 	MissingCapabilities []string `json:"missingCapabilities"`
 	SuggestedFixes      []string `json:"suggestedFixes"`
+}
+
+type PlanCriticResponse struct {
+	Summary          string   `json:"summary"`
+	Blocking         []string `json:"blocking"`
+	Advisory         []string `json:"advisory"`
+	MissingContracts []string `json:"missingContracts"`
+	SuggestedFixes   []string `json:"suggestedFixes"`
 }
 
 type InfoResponse struct {
@@ -179,6 +225,11 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	resp.AuthoringBrief.Connectivity = strings.TrimSpace(resp.AuthoringBrief.Connectivity)
 	resp.AuthoringBrief.CompletenessTarget = strings.TrimSpace(resp.AuthoringBrief.CompletenessTarget)
 	resp.AuthoringBrief.Topology = strings.TrimSpace(resp.AuthoringBrief.Topology)
+	resp.ExecutionModel.RoleExecution.RoleSelector = strings.TrimSpace(resp.ExecutionModel.RoleExecution.RoleSelector)
+	resp.ExecutionModel.RoleExecution.ControlPlaneFlow = strings.TrimSpace(resp.ExecutionModel.RoleExecution.ControlPlaneFlow)
+	resp.ExecutionModel.RoleExecution.WorkerFlow = strings.TrimSpace(resp.ExecutionModel.RoleExecution.WorkerFlow)
+	resp.ExecutionModel.Verification.BootstrapPhase = strings.TrimSpace(resp.ExecutionModel.Verification.BootstrapPhase)
+	resp.ExecutionModel.Verification.FinalPhase = strings.TrimSpace(resp.ExecutionModel.Verification.FinalPhase)
 	resp.OfflineAssumption = strings.TrimSpace(resp.OfflineAssumption)
 	resp.TargetOutcome = strings.TrimSpace(resp.TargetOutcome)
 	resp.EntryScenario = strings.TrimSpace(resp.EntryScenario)
@@ -187,6 +238,24 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	}
 	for i := range resp.AuthoringBrief.RequiredCapabilities {
 		resp.AuthoringBrief.RequiredCapabilities[i] = strings.TrimSpace(resp.AuthoringBrief.RequiredCapabilities[i])
+	}
+	for i := range resp.ExecutionModel.ArtifactContracts {
+		resp.ExecutionModel.ArtifactContracts[i].Kind = strings.TrimSpace(resp.ExecutionModel.ArtifactContracts[i].Kind)
+		resp.ExecutionModel.ArtifactContracts[i].ProducerPath = strings.TrimSpace(resp.ExecutionModel.ArtifactContracts[i].ProducerPath)
+		resp.ExecutionModel.ArtifactContracts[i].ConsumerPath = strings.TrimSpace(resp.ExecutionModel.ArtifactContracts[i].ConsumerPath)
+		resp.ExecutionModel.ArtifactContracts[i].Description = strings.TrimSpace(resp.ExecutionModel.ArtifactContracts[i].Description)
+	}
+	for i := range resp.ExecutionModel.SharedStateContracts {
+		resp.ExecutionModel.SharedStateContracts[i].Name = strings.TrimSpace(resp.ExecutionModel.SharedStateContracts[i].Name)
+		resp.ExecutionModel.SharedStateContracts[i].ProducerPath = strings.TrimSpace(resp.ExecutionModel.SharedStateContracts[i].ProducerPath)
+		resp.ExecutionModel.SharedStateContracts[i].AvailabilityModel = strings.TrimSpace(resp.ExecutionModel.SharedStateContracts[i].AvailabilityModel)
+		resp.ExecutionModel.SharedStateContracts[i].Description = strings.TrimSpace(resp.ExecutionModel.SharedStateContracts[i].Description)
+		for j := range resp.ExecutionModel.SharedStateContracts[i].ConsumerPaths {
+			resp.ExecutionModel.SharedStateContracts[i].ConsumerPaths[j] = strings.TrimSpace(resp.ExecutionModel.SharedStateContracts[i].ConsumerPaths[j])
+		}
+	}
+	for i := range resp.ExecutionModel.ApplyAssumptions {
+		resp.ExecutionModel.ApplyAssumptions[i] = strings.TrimSpace(resp.ExecutionModel.ApplyAssumptions[i])
 	}
 	if resp.Request == "" {
 		return PlanResponse{}, fmt.Errorf("plan response is missing request")
@@ -256,6 +325,31 @@ func ParseJudge(raw string) (JudgeResponse, error) {
 	}
 	for i := range resp.MissingCapabilities {
 		resp.MissingCapabilities[i] = strings.TrimSpace(resp.MissingCapabilities[i])
+	}
+	for i := range resp.SuggestedFixes {
+		resp.SuggestedFixes[i] = strings.TrimSpace(resp.SuggestedFixes[i])
+	}
+	return resp, nil
+}
+
+func ParsePlanCritic(raw string) (PlanCriticResponse, error) {
+	cleaned := clean(raw)
+	if cleaned == "" {
+		return PlanCriticResponse{}, fmt.Errorf("plan critic response is empty")
+	}
+	var resp PlanCriticResponse
+	if err := json.Unmarshal([]byte(cleaned), &resp); err != nil {
+		return PlanCriticResponse{}, fmt.Errorf("parse plan critic response: %w", err)
+	}
+	resp.Summary = strings.TrimSpace(resp.Summary)
+	for i := range resp.Blocking {
+		resp.Blocking[i] = strings.TrimSpace(resp.Blocking[i])
+	}
+	for i := range resp.Advisory {
+		resp.Advisory[i] = strings.TrimSpace(resp.Advisory[i])
+	}
+	for i := range resp.MissingContracts {
+		resp.MissingContracts[i] = strings.TrimSpace(resp.MissingContracts[i])
 	}
 	for i := range resp.SuggestedFixes {
 		resp.SuggestedFixes[i] = strings.TrimSpace(resp.SuggestedFixes[i])

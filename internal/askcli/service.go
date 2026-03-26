@@ -152,18 +152,26 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	planRequested := opts.PlanOnly
 	planNeeded := isAuthoringRoute(decision.Route) && (planRequested || needsComplexPlanner(requestText, workspace, decision))
 	var plan askcontract.PlanResponse
+	var planCritic askcontract.PlanCriticResponse
 	if planNeeded {
 		if !canUseLLM(effective) {
 			return fmt.Errorf("route %s requires model access; configure provider credentials first", decision.Route)
 		}
 		logger.logf("basic", "\n[ask][phase:plan:start] route=%s\n", decision.Route)
-		planned, planErr := planWithLLM(ctx, client, askconfigSettings{provider: effective.Provider, model: effective.Model, apiKey: effective.APIKey, oauthToken: effective.OAuthToken, accountID: effective.AccountID, endpoint: effective.Endpoint}, decision, retrieval, requestText, workspace, logger)
+		cfg := askconfigSettings{provider: effective.Provider, model: effective.Model, apiKey: effective.APIKey, oauthToken: effective.OAuthToken, accountID: effective.AccountID, endpoint: effective.Endpoint}
+		planned, reviewedCritic, usedFallback, planErr := buildPlanWithReview(ctx, client, cfg, decision, retrieval, requestText, workspace, requirements, logger)
+		planCritic = reviewedCritic
 		if planErr != nil {
-			logger.logf("debug", "[ask][phase:plan:fallback] error=%v\n", planErr)
-			planned = askpolicy.BuildPlanDefaults(requirements, requestText, decision, workspace)
+			return planErr
+		}
+		if usedFallback {
+			logger.logf("debug", "[ask][phase:plan:fallback] using defaults after planner failure\n")
 		}
 		plan = planned
 		result.Plan = &plan
+		if planCritic.Summary != "" || len(planCritic.Blocking) > 0 || len(planCritic.Advisory) > 0 || len(planCritic.MissingContracts) > 0 || len(planCritic.SuggestedFixes) > 0 {
+			result.PlanCritic = &planCritic
+		}
 		logger.logf("basic", "[ask][phase:plan:done] files=%d blockers=%d\n", len(plan.Files), len(plan.Blockers))
 		planMD := renderPlanMarkdown(plan, ".deck/plan/latest.md")
 		planMDPath, planJSONPath, saveErr := savePlanArtifact(resolvedRoot, opts, plan, planMD)
@@ -182,6 +190,26 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			result.Termination = "plan-only-requested"
 			result.FallbackNote = "plan requested"
 			result.ReviewLines = append(result.ReviewLines, renderPlanNotes(plan)...)
+			result.ReviewLines = append(result.ReviewLines, renderPlanCriticNotes(planCritic)...)
+			if err := askstate.Save(resolvedRoot, askstate.Context{
+				LastMode:          "plan",
+				LastRoute:         string(result.Route),
+				LastPrompt:        strings.TrimSpace(requestText),
+				LastFiles:         filePathsFromPlan(plan),
+				LastLLMUsed:       true,
+				LastClassifierLLM: result.ClassifierLLM,
+				LastTermination:   result.Termination,
+			}, requestText, resultToMarkdown(result)); err != nil {
+				return err
+			}
+			return render(opts.Stdout, opts.Stderr, result)
+		}
+		if len(planCritic.Blocking) > 0 || len(planCritic.MissingContracts) > 0 {
+			result.Summary = "plan generated with review blockers"
+			result.Termination = "plan-only-review-blocked"
+			result.FallbackNote = "generation stopped because plan review found blocking issues"
+			result.ReviewLines = append(result.ReviewLines, renderPlanNotes(plan)...)
+			result.ReviewLines = append(result.ReviewLines, renderPlanCriticNotes(planCritic)...)
 			if err := askstate.Save(resolvedRoot, askstate.Context{
 				LastMode:          "plan",
 				LastRoute:         string(result.Route),
@@ -200,6 +228,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			result.Termination = "plan-only-blocked"
 			result.FallbackNote = "generation stopped because plan has blockers"
 			result.ReviewLines = append(result.ReviewLines, renderPlanNotes(plan)...)
+			result.ReviewLines = append(result.ReviewLines, renderPlanCriticNotes(planCritic)...)
 			if err := askstate.Save(resolvedRoot, askstate.Context{
 				LastMode:          "plan",
 				LastRoute:         string(result.Route),
@@ -243,13 +272,13 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			OAuthToken:   effective.OAuthToken,
 			AccountID:    effective.AccountID,
 			Endpoint:     effective.Endpoint,
-			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval, requirements, authoringBrief, scaffold),
+			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval, requirements, authoringBrief, plan.ExecutionModel, scaffold),
 			Prompt:       generationUserPrompt(workspace, state, requestText, strings.TrimSpace(opts.FromPath), decision.Route),
 			MaxRetries:   attempts,
 		}
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "generation", SystemPrompt: generationRequest.SystemPrompt, UserPrompt: generationRequest.Prompt})
 		logger.logf("basic", "\n[ask][phase:generation:start] route=%s attempts=%d\n", decision.Route, attempts)
-		gen, lintSummary, critic, judge, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts, logger, decision, plan, authoringBrief, retrieval)
+		gen, lintSummary, critic, judge, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts, logger, decision, plan, authoringBrief, retrieval, planCritic)
 		if genErr != nil {
 			return genErr
 		}
@@ -259,6 +288,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		result.Files = gen.Files
 		result.Summary = gen.Summary
 		result.ReviewLines = append(result.ReviewLines, gen.Review...)
+		result.ReviewLines = append(result.ReviewLines, renderPlanCriticNotes(planCritic)...)
 		result.LintSummary = lintSummary
 		result.LocalFindings = localFindings(result.Files)
 		result.Critic = &critic
@@ -333,6 +363,33 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 
 	return render(opts.Stdout, opts.Stderr, result)
+}
+
+func buildPlanWithReview(ctx context.Context, client askprovider.Client, cfg askconfigSettings, decision askintent.Decision, retrieval askretrieve.RetrievalResult, requestText string, workspace askretrieve.WorkspaceSummary, requirements askpolicy.ScenarioRequirements, logger askLogger) (askcontract.PlanResponse, askcontract.PlanCriticResponse, bool, error) {
+	var planned askcontract.PlanResponse
+	var critic askcontract.PlanCriticResponse
+	for attempt := 1; attempt <= 2; attempt++ {
+		current, planErr := planWithLLM(ctx, client, cfg, decision, retrieval, requestText, workspace, logger)
+		if planErr != nil {
+			planned = askpolicy.BuildPlanDefaults(requirements, requestText, decision, workspace)
+			return planned, askcontract.PlanCriticResponse{}, true, nil
+		}
+		planned = current
+		criticResp, criticErr := critiquePlanWithLLM(ctx, client, cfg, planned, logger)
+		if criticErr != nil {
+			logger.logf("debug", "[ask][phase:plan-critic:skip] error=%v\n", criticErr)
+			return planned, askcontract.PlanCriticResponse{}, false, nil
+		}
+		critic = criticResp
+		if len(critic.Blocking) == 0 && len(critic.MissingContracts) == 0 {
+			return planned, critic, false, nil
+		}
+		logger.logf("debug", "[ask][phase:plan-critic:retry] attempt=%d blocking=%d missing=%d\n", attempt, len(critic.Blocking), len(critic.MissingContracts))
+		if attempt == 2 {
+			return planned, critic, false, nil
+		}
+	}
+	return planned, critic, false, nil
 }
 
 func applyWriteOverride(decision askintent.Decision, heuristic askintent.Decision, write bool, logger askLogger) askintent.Decision {
@@ -465,18 +522,20 @@ func generationAttempts(requested int, decision askintent.Decision, prompt strin
 	return 3
 }
 
-func generateWithValidation(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, attempts int, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult) (askcontract.GenerationResponse, string, askcontract.CriticResponse, askcontract.JudgeResponse, int, error) {
+func generateWithValidation(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, attempts int, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult, planCritic askcontract.PlanCriticResponse) (askcontract.GenerationResponse, string, askcontract.CriticResponse, askcontract.JudgeResponse, int, error) {
 	var lastValidation string
 	var lastCritic askcontract.CriticResponse
 	var lastJudge askcontract.JudgeResponse
+	var lastGeneration askcontract.GenerationResponse
 	bundle := askknowledge.Current()
 	for attempt := 1; attempt <= attempts; attempt++ {
 		currentPrompt := req.Prompt
 		if attempt > 1 && lastValidation != "" {
 			diags := askdiagnostic.FromValidationError(lastValidation, bundle)
+			diags = append(diags, askdiagnostic.FromPlanCritic(planCritic)...)
 			diags = append(diags, askdiagnostic.FromCritic(lastCritic)...)
 			diags = append(diags, askdiagnostic.FromJudge(lastJudge)...)
-			currentPrompt += "\n\nLocal validation failed. Fix the response and return full JSON again."
+			currentPrompt += "\n\nLocal validation failed. Enter targeted repair mode and return full JSON again."
 			currentPrompt += "\nValidator summary:\n" + summarizeValidationError(lastValidation)
 			currentPrompt += "\nRaw validator error:\n" + strings.TrimSpace(lastValidation)
 			for _, chunk := range askretrieve.RepairChunks(req.Prompt, lastValidation) {
@@ -484,6 +543,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			}
 			logger.logf("debug", "\n[ask][phase:repair:diagnostics]\n%s\n", askdiagnostic.JSON(diags))
 			currentPrompt += "\n" + askdiagnostic.RepairPromptBlock(diags)
+			currentPrompt += "\n" + targetedRepairPromptBlock(lastGeneration, diags)
 		}
 		logger.logf("basic", "[ask][phase:generation:attempt] attempt=%d/%d\n", attempt, attempts)
 		logger.prompt("generation", req.SystemPrompt, currentPrompt)
@@ -512,6 +572,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			return askcontract.GenerationResponse{}, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
 		}
 		logger.logf("debug", "[ask][phase:semantic-validate] attempt=%d/%d\n", attempt, attempts)
+		lastGeneration = gen
 		lintSummary, critic, err := validateGeneration(ctx, root, gen, decision, plan, brief, retrieval)
 		lastCritic = critic
 		if err == nil {
@@ -566,6 +627,60 @@ func maybeJudgeGeneration(ctx context.Context, client askprovider.Client, req as
 	}
 	logger.response("judge", resp.Content)
 	return askcontract.ParseJudge(resp.Content)
+}
+
+func targetedRepairPromptBlock(prev askcontract.GenerationResponse, diags []askdiagnostic.Diagnostic) string {
+	if len(prev.Files) == 0 {
+		return ""
+	}
+	affected := map[string]bool{}
+	for _, diag := range diags {
+		path := strings.TrimSpace(diag.Path)
+		if path == "" {
+			path = strings.TrimSpace(diag.File)
+		}
+		if path != "" {
+			affected[path] = true
+		}
+	}
+	if len(affected) == 0 {
+		for _, file := range prev.Files {
+			affected[strings.TrimSpace(file.Path)] = true
+		}
+	}
+	b := &strings.Builder{}
+	b.WriteString("Targeted repair mode:\n")
+	b.WriteString("- Preserve unchanged files when they are already valid.\n")
+	b.WriteString("- Prefer editing only the files implicated by diagnostics or execution/design review findings.\n")
+	b.WriteString("- Return the full JSON response with all files that should remain in the final result.\n")
+	if len(affected) > 0 {
+		b.WriteString("Affected files to revise first:\n")
+		for _, file := range prev.Files {
+			if affected[strings.TrimSpace(file.Path)] {
+				b.WriteString("- ")
+				b.WriteString(strings.TrimSpace(file.Path))
+				b.WriteString("\n")
+			}
+		}
+	}
+	b.WriteString("Previously generated files:\n")
+	for _, file := range prev.Files {
+		path := strings.TrimSpace(file.Path)
+		status := "preserve-if-valid"
+		if affected[path] {
+			status = "revise"
+		}
+		b.WriteString("- path: ")
+		b.WriteString(path)
+		b.WriteString(" [")
+		b.WriteString(status)
+		b.WriteString("]\n")
+		b.WriteString(file.Content)
+		if !strings.HasSuffix(file.Content, "\n") {
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func mergeJudgeIntoCritic(critic askcontract.CriticResponse, judge askcontract.JudgeResponse, finalAttempt bool) askcontract.CriticResponse {

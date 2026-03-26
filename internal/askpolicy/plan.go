@@ -13,7 +13,9 @@ import (
 func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) askcontract.PlanResponse {
 	req := BuildScenarioRequirements(prompt, retrieval, workspace, decision)
 	fallbackBrief := BriefFromRequirements(req, decision)
+	fallbackExecutionModel := ExecutionModelFromRequirements(req)
 	plan.AuthoringBrief = normalizeAuthoringBrief(plan.AuthoringBrief, fallbackBrief)
+	plan.ExecutionModel = normalizeExecutionModel(plan.ExecutionModel, fallbackExecutionModel)
 	if strings.TrimSpace(plan.OfflineAssumption) == "" {
 		plan.OfflineAssumption = req.Connectivity
 	}
@@ -49,6 +51,113 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 		plan.ComponentRecommendation = nil
 	}
 	return plan
+}
+
+func normalizeExecutionModel(model askcontract.ExecutionModel, fallback askcontract.ExecutionModel) askcontract.ExecutionModel {
+	model.ArtifactContracts = normalizeArtifactContracts(model.ArtifactContracts, fallback.ArtifactContracts)
+	model.SharedStateContracts = normalizeSharedStateContracts(model.SharedStateContracts, fallback.SharedStateContracts)
+	if strings.TrimSpace(model.RoleExecution.RoleSelector) == "" {
+		model.RoleExecution.RoleSelector = fallback.RoleExecution.RoleSelector
+	}
+	if strings.TrimSpace(model.RoleExecution.ControlPlaneFlow) == "" {
+		model.RoleExecution.ControlPlaneFlow = fallback.RoleExecution.ControlPlaneFlow
+	}
+	if strings.TrimSpace(model.RoleExecution.WorkerFlow) == "" {
+		model.RoleExecution.WorkerFlow = fallback.RoleExecution.WorkerFlow
+	}
+	if !model.RoleExecution.PerNodeInvocation {
+		model.RoleExecution.PerNodeInvocation = fallback.RoleExecution.PerNodeInvocation
+	}
+	if strings.TrimSpace(model.Verification.BootstrapPhase) == "" {
+		model.Verification.BootstrapPhase = fallback.Verification.BootstrapPhase
+	}
+	if strings.TrimSpace(model.Verification.FinalPhase) == "" {
+		model.Verification.FinalPhase = fallback.Verification.FinalPhase
+	}
+	if model.Verification.ExpectedNodeCount <= 0 {
+		model.Verification.ExpectedNodeCount = fallback.Verification.ExpectedNodeCount
+	}
+	if model.Verification.ExpectedControlPlaneReady <= 0 {
+		model.Verification.ExpectedControlPlaneReady = fallback.Verification.ExpectedControlPlaneReady
+	}
+	if len(model.ApplyAssumptions) == 0 {
+		model.ApplyAssumptions = append([]string(nil), fallback.ApplyAssumptions...)
+	} else {
+		model.ApplyAssumptions = dedupeStrings(append(normalizeStringList(model.ApplyAssumptions), fallback.ApplyAssumptions...))
+	}
+	return model
+}
+
+func normalizeArtifactContracts(contracts []askcontract.ArtifactContract, fallback []askcontract.ArtifactContract) []askcontract.ArtifactContract {
+	allowedKinds := map[string]bool{"package": true, "image": true, "repository-setup": true}
+	out := make([]askcontract.ArtifactContract, 0, len(contracts)+len(fallback))
+	for _, item := range contracts {
+		kind := strings.ToLower(strings.TrimSpace(item.Kind))
+		if !allowedKinds[kind] {
+			continue
+		}
+		item.Kind = kind
+		item.ProducerPath = filepath.ToSlash(strings.TrimSpace(item.ProducerPath))
+		item.ConsumerPath = filepath.ToSlash(strings.TrimSpace(item.ConsumerPath))
+		item.Description = strings.TrimSpace(item.Description)
+		if !askcontractPathAllowed(item.ProducerPath) || !askcontractPathAllowed(item.ConsumerPath) {
+			continue
+		}
+		out = append(out, item)
+	}
+	if len(out) == 0 {
+		out = append(out, fallback...)
+	} else {
+		out = append(out, fallback...)
+	}
+	return dedupeArtifactContracts(out)
+}
+
+func normalizeSharedStateContracts(contracts []askcontract.SharedStateContract, fallback []askcontract.SharedStateContract) []askcontract.SharedStateContract {
+	allowedAvailability := map[string]bool{"published-for-worker-consumption": true, "local-only": true}
+	out := make([]askcontract.SharedStateContract, 0, len(contracts)+len(fallback))
+	for _, item := range contracts {
+		item.Name = strings.TrimSpace(item.Name)
+		item.ProducerPath = strings.TrimSpace(item.ProducerPath)
+		item.AvailabilityModel = strings.TrimSpace(item.AvailabilityModel)
+		item.Description = strings.TrimSpace(item.Description)
+		if item.Name == "" || item.ProducerPath == "" || !allowedAvailability[item.AvailabilityModel] {
+			continue
+		}
+		item.ConsumerPaths = normalizeStringList(item.ConsumerPaths)
+		out = append(out, item)
+	}
+	if len(out) == 0 {
+		out = append(out, fallback...)
+	} else {
+		out = append(out, fallback...)
+	}
+	return dedupeSharedStateContracts(out)
+}
+
+func normalizeStringList(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func dedupeSharedStateContracts(contracts []askcontract.SharedStateContract) []askcontract.SharedStateContract {
+	seen := map[string]bool{}
+	out := make([]askcontract.SharedStateContract, 0, len(contracts))
+	for _, item := range contracts {
+		key := item.Name + "|" + item.ProducerPath + "|" + item.AvailabilityModel
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, item)
+	}
+	return out
 }
 
 func normalizeAuthoringBrief(brief askcontract.AuthoringBrief, fallback askcontract.AuthoringBrief) askcontract.AuthoringBrief {
@@ -213,6 +322,17 @@ func ValidatePlanStructure(plan askcontract.PlanResponse) error {
 		}
 		if entry := strings.TrimSpace(plan.EntryScenario); entry == "" || !containsPlannedPath(plan.Files, entry) {
 			return fmt.Errorf("plan response authoring brief requires prepare+apply with a scenario entrypoint")
+		}
+		if len(plan.ExecutionModel.ArtifactContracts) == 0 {
+			return fmt.Errorf("plan response authoring brief requires prepare+apply with executionModel.artifactContracts")
+		}
+	}
+	if strings.TrimSpace(plan.AuthoringBrief.Topology) == "multi-node" || strings.TrimSpace(plan.AuthoringBrief.Topology) == "ha" {
+		if strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) == "" {
+			return fmt.Errorf("plan response multi-node topology requires executionModel.roleExecution.roleSelector")
+		}
+		if plan.ExecutionModel.Verification.ExpectedNodeCount <= 0 {
+			return fmt.Errorf("plan response multi-node topology requires executionModel.verification.expectedNodeCount")
 		}
 	}
 	return nil

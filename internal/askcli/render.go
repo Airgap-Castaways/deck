@@ -29,6 +29,11 @@ func resultToMarkdown(result runResult) string {
 		b.WriteString(strings.TrimSpace(result.Judge.Summary))
 		b.WriteString("\n")
 	}
+	if result.PlanCritic != nil && strings.TrimSpace(result.PlanCritic.Summary) != "" {
+		b.WriteString("- plan-review: ")
+		b.WriteString(strings.TrimSpace(result.PlanCritic.Summary))
+		b.WriteString("\n")
+	}
 	b.WriteString("\n")
 	b.WriteString(result.Answer)
 	b.WriteString("\n")
@@ -70,6 +75,11 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 	}
 	if result.PlanJSON != "" {
 		if _, err := fmt.Fprintf(stdout, "plan-json: %s\n", result.PlanJSON); err != nil {
+			return err
+		}
+	}
+	if result.PlanCritic != nil && strings.TrimSpace(result.PlanCritic.Summary) != "" {
+		if _, err := fmt.Fprintf(stdout, "plan-review: %s\n", result.PlanCritic.Summary); err != nil {
 			return err
 		}
 	}
