@@ -245,6 +245,8 @@ func StepCompositionGuidanceBlock(prompt string, options StepGuidanceOptions) st
 	}
 	if capabilities["kubeadm-join"] || chosen["JoinKubeadm"] || strings.Contains(lower, "join") || strings.Contains(lower, "worker") || strings.Contains(lower, "multi-node") || strings.Contains(lower, "3-node") {
 		b.WriteString("- Multi-node kubeadm flow: keep control-plane bootstrap and worker join as separate phases; use `JoinKubeadm` explicitly and follow it with cluster-wide `CheckCluster` expectations.\n")
+		b.WriteString("- Join handoff: when workers depend on join data from the control-plane, model an explicit publication step such as `EnsureDirectory` plus `CopyFile`, or make the shared join artifact path contract unambiguous before `JoinKubeadm`.\n")
+		b.WriteString("- Final verification placement: prefer the final `CheckCluster` on the control-plane role after worker joins complete; worker roles should not be the only place that verifies final cluster-wide readiness.\n")
 	}
 	if strings.TrimSpace(options.Topology) == "ha" || strings.Contains(lower, "ha") || strings.Contains(lower, "high availability") {
 		b.WriteString("- HA topology: model control-plane readiness separately from total node readiness so verification reflects the intended control-plane count.\n")

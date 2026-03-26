@@ -50,7 +50,7 @@ func TestBuildPlanDefaultsPreservesComplexityForComplexAsk(t *testing.T) {
 	if plan.AuthoringBrief.ModeIntent != "prepare+apply" {
 		t.Fatalf("expected prepare+apply brief, got %#v", plan.AuthoringBrief)
 	}
-	if len(plan.ExecutionModel.ArtifactContracts) == 0 || plan.ExecutionModel.RoleExecution.RoleSelector != "vars.role" || plan.ExecutionModel.Verification.ExpectedNodeCount != 3 {
+	if len(plan.ExecutionModel.ArtifactContracts) == 0 || plan.ExecutionModel.RoleExecution.RoleSelector != "vars.role" || plan.ExecutionModel.Verification.ExpectedNodeCount != 3 || plan.ExecutionModel.Verification.FinalVerificationRole != "control-plane" {
 		t.Fatalf("expected execution model defaults for complex ask, got %#v", plan.ExecutionModel)
 	}
 }
@@ -121,7 +121,7 @@ func TestNormalizePlanCanonicalizesExecutionModel(t *testing.T) {
 	if len(plan.ExecutionModel.SharedStateContracts) == 0 || len(plan.ExecutionModel.SharedStateContracts[0].ConsumerPaths) != 1 {
 		t.Fatalf("expected canonical shared-state contract, got %#v", plan.ExecutionModel.SharedStateContracts)
 	}
-	if plan.ExecutionModel.RoleExecution.RoleSelector != "vars.role" || plan.ExecutionModel.Verification.ExpectedNodeCount != 3 {
+	if plan.ExecutionModel.RoleExecution.RoleSelector != "vars.role" || plan.ExecutionModel.Verification.ExpectedNodeCount != 3 || plan.ExecutionModel.Verification.FinalVerificationRole != "control-plane" {
 		t.Fatalf("expected fallback execution details, got %#v", plan.ExecutionModel)
 	}
 }

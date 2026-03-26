@@ -394,6 +394,7 @@ func buildPlanWithReview(ctx context.Context, client askprovider.Client, cfg ask
 			return planned, askcontract.PlanCriticResponse{}, false, nil
 		}
 		critic = criticResp
+		critic = normalizePlanCritic(planned, critic)
 		if len(critic.Blocking) == 0 && len(critic.MissingContracts) == 0 {
 			return planned, critic, false, nil
 		}
@@ -431,7 +432,67 @@ func appendPlanCriticRetryPrompt(base string, critic askcontract.PlanCriticRespo
 			b.WriteString("\n")
 		}
 	}
+	b.WriteString("Required plan updates before generation:\n")
+	b.WriteString("- Ensure executionModel.artifactContracts explicitly cover every staged package/image handoff used by apply.\n")
+	b.WriteString("- Ensure exactly one authoritative join handoff contract is present when workers join a cluster.\n")
+	b.WriteString("- Ensure executionModel.roleExecution and executionModel.verification match the requested topology and role behavior.\n")
+	b.WriteString("- Prefer recoverable omissions to be fixed in the plan rather than adding new blockers or open questions.\n")
 	return strings.TrimSpace(b.String())
+}
+
+func normalizePlanCritic(plan askcontract.PlanResponse, critic askcontract.PlanCriticResponse) askcontract.PlanCriticResponse {
+	blocking := make([]string, 0, len(critic.Blocking))
+	advisory := append([]string(nil), critic.Advisory...)
+	missing := make([]string, 0, len(critic.MissingContracts))
+	for _, item := range critic.Blocking {
+		text := strings.TrimSpace(item)
+		if text == "" {
+			continue
+		}
+		if isRecoverablePlanCriticIssue(plan, text) {
+			advisory = append(advisory, text)
+			continue
+		}
+		blocking = append(blocking, text)
+	}
+	for _, item := range critic.MissingContracts {
+		text := strings.TrimSpace(item)
+		if text == "" {
+			continue
+		}
+		if isRecoverablePlanCriticIssue(plan, text) {
+			advisory = append(advisory, text)
+			continue
+		}
+		missing = append(missing, text)
+	}
+	critic.Blocking = dedupe(blocking)
+	critic.MissingContracts = dedupe(missing)
+	critic.Advisory = dedupe(advisory)
+	return critic
+}
+
+func isRecoverablePlanCriticIssue(plan askcontract.PlanResponse, text string) bool {
+	lower := strings.ToLower(text)
+	if strings.Contains(lower, "role cardinality") || strings.Contains(lower, "worker-ready") || strings.Contains(lower, "readyworkers") {
+		return true
+	}
+	if strings.Contains(lower, "checksum") {
+		return true
+	}
+	if strings.Contains(lower, "single source path") || strings.Contains(lower, "single, canonical") || strings.Contains(lower, "join handoff location") {
+		return true
+	}
+	if strings.Contains(lower, "artifact contract") && len(plan.ExecutionModel.ArtifactContracts) > 0 {
+		return true
+	}
+	if strings.Contains(lower, "join-file") && len(plan.ExecutionModel.SharedStateContracts) > 0 {
+		return true
+	}
+	if strings.Contains(lower, "checkcluster") && strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) != "" {
+		return true
+	}
+	return false
 }
 
 type postProcessSummary struct {

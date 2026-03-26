@@ -92,6 +92,7 @@ type RoleExecutionModel struct {
 type VerificationStrategy struct {
 	BootstrapPhase            string `json:"bootstrapPhase,omitempty"`
 	FinalPhase                string `json:"finalPhase,omitempty"`
+	FinalVerificationRole     string `json:"finalVerificationRole,omitempty"`
 	ExpectedNodeCount         int    `json:"expectedNodeCount,omitempty"`
 	ExpectedControlPlaneReady int    `json:"expectedControlPlaneReady,omitempty"`
 }
@@ -242,6 +243,7 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	resp.ExecutionModel.RoleExecution.WorkerFlow = strings.TrimSpace(resp.ExecutionModel.RoleExecution.WorkerFlow)
 	resp.ExecutionModel.Verification.BootstrapPhase = strings.TrimSpace(resp.ExecutionModel.Verification.BootstrapPhase)
 	resp.ExecutionModel.Verification.FinalPhase = strings.TrimSpace(resp.ExecutionModel.Verification.FinalPhase)
+	resp.ExecutionModel.Verification.FinalVerificationRole = strings.TrimSpace(resp.ExecutionModel.Verification.FinalVerificationRole)
 	resp.OfflineAssumption = strings.TrimSpace(resp.OfflineAssumption)
 	resp.TargetOutcome = strings.TrimSpace(resp.TargetOutcome)
 	resp.EntryScenario = strings.TrimSpace(resp.EntryScenario)

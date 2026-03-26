@@ -154,6 +154,11 @@ func executionModelPromptBlock(model askcontract.ExecutionModel) string {
 		b.WriteString(fmt.Sprintf("%d", model.Verification.ExpectedNodeCount))
 		b.WriteString("\n")
 	}
+	if strings.TrimSpace(model.Verification.FinalVerificationRole) != "" {
+		b.WriteString("- verification final role: ")
+		b.WriteString(strings.TrimSpace(model.Verification.FinalVerificationRole))
+		b.WriteString("\n")
+	}
 	if model.Verification.ExpectedControlPlaneReady > 0 {
 		b.WriteString("- verification control-plane ready: ")
 		b.WriteString(fmt.Sprintf("%d", model.Verification.ExpectedControlPlaneReady))

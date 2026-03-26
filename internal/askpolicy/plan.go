@@ -74,6 +74,9 @@ func normalizeExecutionModel(model askcontract.ExecutionModel, fallback askcontr
 	if strings.TrimSpace(model.Verification.FinalPhase) == "" {
 		model.Verification.FinalPhase = fallback.Verification.FinalPhase
 	}
+	if !isCanonicalVerificationRole(model.Verification.FinalVerificationRole) {
+		model.Verification.FinalVerificationRole = fallback.Verification.FinalVerificationRole
+	}
 	if model.Verification.ExpectedNodeCount <= 0 {
 		model.Verification.ExpectedNodeCount = fallback.Verification.ExpectedNodeCount
 	}
@@ -88,9 +91,19 @@ func normalizeExecutionModel(model askcontract.ExecutionModel, fallback askcontr
 	return model
 }
 
+func isCanonicalVerificationRole(value string) bool {
+	switch strings.TrimSpace(value) {
+	case "control-plane", "worker", "local", "any":
+		return true
+	default:
+		return false
+	}
+}
+
 func normalizeArtifactContracts(contracts []askcontract.ArtifactContract, fallback []askcontract.ArtifactContract) []askcontract.ArtifactContract {
 	allowedKinds := map[string]bool{"package": true, "image": true, "repository-setup": true}
 	out := make([]askcontract.ArtifactContract, 0, len(contracts)+len(fallback))
+	presentKinds := map[string]bool{}
 	for _, item := range contracts {
 		kind := strings.ToLower(strings.TrimSpace(item.Kind))
 		if !allowedKinds[kind] {
@@ -104,11 +117,16 @@ func normalizeArtifactContracts(contracts []askcontract.ArtifactContract, fallba
 			continue
 		}
 		out = append(out, item)
+		presentKinds[kind] = true
 	}
 	if len(out) == 0 {
 		out = append(out, fallback...)
 	} else {
-		out = append(out, fallback...)
+		for _, item := range fallback {
+			if !presentKinds[item.Kind] {
+				out = append(out, item)
+			}
+		}
 	}
 	return dedupeArtifactContracts(out)
 }
@@ -116,8 +134,9 @@ func normalizeArtifactContracts(contracts []askcontract.ArtifactContract, fallba
 func normalizeSharedStateContracts(contracts []askcontract.SharedStateContract, fallback []askcontract.SharedStateContract) []askcontract.SharedStateContract {
 	allowedAvailability := map[string]bool{"published-for-worker-consumption": true, "local-only": true}
 	out := make([]askcontract.SharedStateContract, 0, len(contracts)+len(fallback))
+	presentNames := map[string]bool{}
 	for _, item := range contracts {
-		item.Name = strings.TrimSpace(item.Name)
+		item.Name = canonicalSharedStateName(strings.TrimSpace(item.Name))
 		item.ProducerPath = strings.TrimSpace(item.ProducerPath)
 		item.AvailabilityModel = strings.TrimSpace(item.AvailabilityModel)
 		item.Description = strings.TrimSpace(item.Description)
@@ -126,13 +145,26 @@ func normalizeSharedStateContracts(contracts []askcontract.SharedStateContract, 
 		}
 		item.ConsumerPaths = normalizeStringList(item.ConsumerPaths)
 		out = append(out, item)
+		presentNames[item.Name] = true
 	}
 	if len(out) == 0 {
 		out = append(out, fallback...)
 	} else {
-		out = append(out, fallback...)
+		for _, item := range fallback {
+			if !presentNames[canonicalSharedStateName(item.Name)] {
+				out = append(out, item)
+			}
+		}
 	}
 	return dedupeSharedStateContracts(out)
+}
+
+func canonicalSharedStateName(name string) string {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if strings.Contains(lower, "join") {
+		return "join-file"
+	}
+	return strings.TrimSpace(name)
 }
 
 func normalizeStringList(values []string) []string {
