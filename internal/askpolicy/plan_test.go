@@ -125,3 +125,24 @@ func TestNormalizePlanCanonicalizesExecutionModel(t *testing.T) {
 		t.Fatalf("expected fallback execution details, got %#v", plan.ExecutionModel)
 	}
 }
+
+func TestValidatePlanStructureAllowsRecoverableExecutionDetailGaps(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Topology: "multi-node", NodeCount: 3},
+		EntryScenario:  "workflows/scenarios/apply.yaml",
+		Files:          []askcontract.PlanFile{{Path: "workflows/prepare.yaml"}, {Path: "workflows/scenarios/apply.yaml"}},
+	}
+	if err := ValidatePlanStructure(plan); err != nil {
+		t.Fatalf("expected recoverable execution detail gaps to pass viability check, got %v", err)
+	}
+}
+
+func TestValidatePlanStructureRejectsMissingViableEntryScenario(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Topology: "multi-node", NodeCount: 3},
+		Files:          []askcontract.PlanFile{{Path: "workflows/prepare.yaml"}},
+	}
+	if err := ValidatePlanStructure(plan); err == nil {
+		t.Fatalf("expected missing entry scenario to fail viability check")
+	}
+}

@@ -344,6 +344,9 @@ func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.Gene
 	return EvaluationResult{Findings: findings}
 }
 
+// ValidatePlanStructure enforces only pre-generation viability.
+// Recoverable execution-detail weaknesses are carried forward into generation,
+// judge, repair, and post-processing instead of stopping planning.
 func ValidatePlanStructure(plan askcontract.PlanResponse) error {
 	if plan.NeedsPrepare && !containsPlannedPath(plan.Files, "workflows/prepare.yaml") {
 		return fmt.Errorf("plan response requires prepare but does not include workflows/prepare.yaml")
@@ -355,15 +358,12 @@ func ValidatePlanStructure(plan askcontract.PlanResponse) error {
 		if entry := strings.TrimSpace(plan.EntryScenario); entry == "" || !containsPlannedPath(plan.Files, entry) {
 			return fmt.Errorf("plan response authoring brief requires prepare+apply with a scenario entrypoint")
 		}
-		if len(plan.ExecutionModel.ArtifactContracts) == 0 {
-			return fmt.Errorf("plan response authoring brief requires prepare+apply with executionModel.artifactContracts")
-		}
 	}
 	if strings.TrimSpace(plan.AuthoringBrief.Topology) == "multi-node" || strings.TrimSpace(plan.AuthoringBrief.Topology) == "ha" {
-		if strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) == "" {
+		if strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) == "" && strings.TrimSpace(plan.AuthoringBrief.ModeIntent) != "prepare+apply" {
 			return fmt.Errorf("plan response multi-node topology requires executionModel.roleExecution.roleSelector")
 		}
-		if plan.ExecutionModel.Verification.ExpectedNodeCount <= 0 {
+		if plan.ExecutionModel.Verification.ExpectedNodeCount <= 0 && plan.AuthoringBrief.NodeCount <= 0 {
 			return fmt.Errorf("plan response multi-node topology requires executionModel.verification.expectedNodeCount")
 		}
 	}

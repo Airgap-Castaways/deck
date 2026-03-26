@@ -177,21 +177,6 @@ type askconfigSettings struct {
 	endpoint   string
 }
 
-func hasBlockingPlanItems(plan askcontract.PlanResponse) bool {
-	for _, blocker := range plan.Blockers {
-		if strings.TrimSpace(blocker) != "" {
-			return true
-		}
-	}
-	for _, q := range plan.OpenQuestions {
-		lower := strings.ToLower(strings.TrimSpace(q))
-		if strings.HasPrefix(lower, "blocking:") {
-			return true
-		}
-	}
-	return false
-}
-
 func renderPlanMarkdown(plan askcontract.PlanResponse, mdPath string) string {
 	b := &strings.Builder{}
 	b.WriteString("# deck ask plan\n\n")

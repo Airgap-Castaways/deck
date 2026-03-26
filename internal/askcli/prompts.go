@@ -97,6 +97,65 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, retr
 	return b.String()
 }
 
+func appendPlanAdvisoryPrompt(base string, plan askcontract.PlanResponse, critic askcontract.PlanCriticResponse) string {
+	block := planAdvisoryPromptBlock(plan, critic)
+	if strings.TrimSpace(block) == "" {
+		return base
+	}
+	if strings.TrimSpace(base) == "" {
+		return block
+	}
+	return strings.TrimSpace(base) + "\n\n" + block
+}
+
+func planAdvisoryPromptBlock(plan askcontract.PlanResponse, critic askcontract.PlanCriticResponse) string {
+	items := []string{}
+	for _, item := range plan.Blockers {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			items = append(items, "planner carry-forward: "+item)
+		}
+	}
+	for _, item := range plan.OpenQuestions {
+		item = strings.TrimSpace(item)
+		if item != "" && !strings.HasPrefix(strings.ToLower(item), "blocking:") {
+			items = append(items, "planner carry-forward: "+item)
+		}
+	}
+	for _, item := range critic.Advisory {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			items = append(items, "plan advisory: "+item)
+		}
+	}
+	for _, item := range critic.MissingContracts {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			items = append(items, "recoverable missing contract: "+item)
+		}
+	}
+	for _, item := range critic.SuggestedFixes {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			items = append(items, "plan suggested fix: "+item)
+		}
+	}
+	items = dedupe(items)
+	if len(items) == 0 {
+		return ""
+	}
+	b := &strings.Builder{}
+	b.WriteString("Plan review carry-forward:\n")
+	b.WriteString("- These are recoverable quality targets. Do not stop at planning; generate the best viable draft and address as many items as possible now.\n")
+	b.WriteString("- Keep the requested file set intact even if some details still need repair or post-processing.\n")
+	for _, item := range items {
+		b.WriteString("- ")
+		b.WriteString(item)
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
 func executionModelPromptBlock(model askcontract.ExecutionModel) string {
 	b := &strings.Builder{}
 	b.WriteString("Normalized execution model:\n")
@@ -150,9 +209,7 @@ func executionModelPromptBlock(model askcontract.ExecutionModel) string {
 		b.WriteString("\n")
 	}
 	if model.Verification.ExpectedNodeCount > 0 {
-		b.WriteString("- verification expected nodes: ")
-		b.WriteString(fmt.Sprintf("%d", model.Verification.ExpectedNodeCount))
-		b.WriteString("\n")
+		_, _ = fmt.Fprintf(b, "- verification expected nodes: %d\n", model.Verification.ExpectedNodeCount)
 	}
 	if strings.TrimSpace(model.Verification.FinalVerificationRole) != "" {
 		b.WriteString("- verification final role: ")
@@ -160,9 +217,7 @@ func executionModelPromptBlock(model askcontract.ExecutionModel) string {
 		b.WriteString("\n")
 	}
 	if model.Verification.ExpectedControlPlaneReady > 0 {
-		b.WriteString("- verification control-plane ready: ")
-		b.WriteString(fmt.Sprintf("%d", model.Verification.ExpectedControlPlaneReady))
-		b.WriteString("\n")
+		_, _ = fmt.Fprintf(b, "- verification control-plane ready: %d\n", model.Verification.ExpectedControlPlaneReady)
 	}
 	for _, item := range model.ApplyAssumptions {
 		item = strings.TrimSpace(item)
@@ -359,11 +414,15 @@ func postProcessCriticSystemPrompt(brief askcontract.AuthoringBrief, plan askcon
 	return b.String()
 }
 
-func postProcessCriticUserPrompt(plan askcontract.PlanResponse, gen askcontract.GenerationResponse, judge askcontract.JudgeResponse, critic askcontract.CriticResponse) string {
+func postProcessCriticUserPrompt(plan askcontract.PlanResponse, gen askcontract.GenerationResponse, judge askcontract.JudgeResponse, critic askcontract.CriticResponse, planCritic askcontract.PlanCriticResponse) string {
 	b := &strings.Builder{}
 	b.WriteString("Planned request: ")
 	b.WriteString(strings.TrimSpace(plan.Request))
 	b.WriteString("\n")
+	if advisory := planAdvisoryPromptBlock(plan, planCritic); strings.TrimSpace(advisory) != "" {
+		b.WriteString(advisory)
+		b.WriteString("\n")
+	}
 	if strings.TrimSpace(judge.Summary) != "" {
 		b.WriteString("Design review summary: ")
 		b.WriteString(strings.TrimSpace(judge.Summary))
@@ -455,8 +514,12 @@ func structuralCleanupEditUserPrompt(gen askcontract.GenerationResponse, finding
 	return strings.TrimSpace(b.String())
 }
 
-func postProcessEditUserPrompt(gen askcontract.GenerationResponse, findings askcontract.PostProcessResponse) string {
+func postProcessEditUserPrompt(gen askcontract.GenerationResponse, findings askcontract.PostProcessResponse, planCritic askcontract.PlanCriticResponse) string {
 	b := &strings.Builder{}
+	if advisory := planAdvisoryPromptBlock(askcontract.PlanResponse{}, planCritic); strings.TrimSpace(advisory) != "" {
+		b.WriteString(advisory)
+		b.WriteString("\n")
+	}
 	b.WriteString("Blocking operational findings:\n")
 	for _, item := range findings.Blocking {
 		b.WriteString("- ")

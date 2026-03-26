@@ -337,22 +337,22 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 	}
 	for _, contract := range executionModel.SharedStateContracts {
 		if !generationAppearsToHandleSharedState(gen.Files, contract) {
-			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "execution_model_shared_state_missing", Message: fmt.Sprintf("execution model expects shared-state handling for %s but generated output does not clearly model production and consumption", strings.TrimSpace(contract.Name)), Fix: "Add explicit production and consumption steps or clearly model the shared availability contract in the affected workflow", Path: "workflows/scenarios/apply.yaml"})
+			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_shared_state_missing", Message: fmt.Sprintf("execution model expects shared-state handling for %s but generated output does not clearly model production and consumption", strings.TrimSpace(contract.Name)), Fix: "Add explicit production and consumption steps or clearly model the shared availability contract in the affected workflow", Path: "workflows/scenarios/apply.yaml"})
 		}
 		if strings.EqualFold(strings.TrimSpace(contract.AvailabilityModel), "published-for-worker-consumption") && !generationAppearsToPublishSharedState(gen.Files, contract) {
-			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "execution_model_shared_state_publish_missing", Message: fmt.Sprintf("execution model expects published shared-state availability for %s but generated output does not show an explicit publication or unambiguous handoff", strings.TrimSpace(contract.Name)), Fix: "Publish the shared-state artifact explicitly with a typed file or directory step before consumer steps run", Path: "workflows/scenarios/apply.yaml"})
+			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_shared_state_publish_missing", Message: fmt.Sprintf("execution model expects published shared-state availability for %s but generated output does not show an explicit publication or unambiguous handoff", strings.TrimSpace(contract.Name)), Fix: "Publish the shared-state artifact explicitly with a typed file or directory step before consumer steps run", Path: "workflows/scenarios/apply.yaml"})
 		}
 	}
 	if executionModel.RoleExecution.PerNodeInvocation && strings.TrimSpace(executionModel.RoleExecution.RoleSelector) != "" {
 		if !generationAppearsRoleAware(gen.Files, executionModel.RoleExecution.RoleSelector) {
-			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "execution_model_role_selector_missing", Message: fmt.Sprintf("execution model expects role-aware per-node invocation via %s but generated workflows do not appear to branch on it", executionModel.RoleExecution.RoleSelector), Fix: "Add role-aware conditions or separate role-specific phases that use the execution model role selector", Path: "workflows/scenarios/apply.yaml"})
+			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_role_selector_missing", Message: fmt.Sprintf("execution model expects role-aware per-node invocation via %s but generated workflows do not appear to branch on it", executionModel.RoleExecution.RoleSelector), Fix: "Add role-aware conditions or separate role-specific phases that use the execution model role selector", Path: "workflows/scenarios/apply.yaml"})
 		}
 		if generationViolatesFinalVerificationRole(gen.Files, executionModel.Verification.FinalVerificationRole) {
-			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "execution_model_final_verify_role_mismatch", Message: fmt.Sprintf("final cluster verification does not appear to run on the expected %s role", executionModel.Verification.FinalVerificationRole), Fix: "Move final CheckCluster verification to the role required by the execution model or make the role gate explicit", Path: "workflows/scenarios/apply.yaml"})
+			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_final_verify_role_mismatch", Message: fmt.Sprintf("final cluster verification does not appear to run on the expected %s role", executionModel.Verification.FinalVerificationRole), Fix: "Move final CheckCluster verification to the role required by the execution model or make the role gate explicit", Path: "workflows/scenarios/apply.yaml"})
 		}
 	}
 	if generationViolatesVerificationExpectations(gen.Files, executionModel.Verification) {
-		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "execution_model_verification_mismatch", Message: fmt.Sprintf("generated CheckCluster expectations do not match the execution model verification contract (expected nodes=%d controlPlaneReady=%d)", executionModel.Verification.ExpectedNodeCount, executionModel.Verification.ExpectedControlPlaneReady), Fix: "Align final CheckCluster node expectations with the execution model topology contract", Path: "workflows/scenarios/apply.yaml"})
+		findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_verification_mismatch", Message: fmt.Sprintf("generated CheckCluster expectations do not match the execution model verification contract (expected nodes=%d controlPlaneReady=%d)", executionModel.Verification.ExpectedNodeCount, executionModel.Verification.ExpectedControlPlaneReady), Fix: "Align final CheckCluster node expectations with the execution model topology contract", Path: "workflows/scenarios/apply.yaml"})
 	}
 	if req.TypedPreference && countCommands(gen.Files) > 0 {
 		alternatives := askcontext.StrongTypedAlternativesWithOptions(plan.Request, askcontext.StepGuidanceOptions{ModeIntent: plan.AuthoringBrief.ModeIntent, Topology: plan.AuthoringBrief.Topology, RequiredCapabilities: plan.AuthoringBrief.RequiredCapabilities})
@@ -479,25 +479,6 @@ func generationAppearsToPublishSharedState(files []askcontract.GeneratedFile, co
 			return true
 		}
 		if strings.Contains(content, "kind: writefile") && ((name != "" && strings.Contains(content, name)) || (producerPath != "" && strings.Contains(content, producerPath))) {
-			return true
-		}
-	}
-	return false
-}
-
-func generationPlacesFinalClusterVerificationOnWorkers(files []askcontract.GeneratedFile) bool {
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		idx := strings.LastIndex(content, "kind: checkcluster")
-		if idx == -1 {
-			continue
-		}
-		windowStart := strings.LastIndex(content[:idx], "- id:")
-		if windowStart == -1 {
-			windowStart = 0
-		}
-		window := content[windowStart : idx+len("kind: checkcluster")]
-		if strings.Contains(window, `when: .vars.role == "worker"`) || strings.Contains(window, `when: .vars.role == 'worker'`) {
 			return true
 		}
 	}

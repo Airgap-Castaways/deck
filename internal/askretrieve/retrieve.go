@@ -469,7 +469,10 @@ func exampleReferenceChunks(route askintent.Route, lowerPrompt string) []Chunk {
 	out := make([]Chunk, 0, 8)
 	for _, dir := range candidates {
 		_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
 				return nil
 			}
 			lowerName := strings.ToLower(d.Name())
@@ -478,7 +481,7 @@ func exampleReferenceChunks(route askintent.Route, lowerPrompt string) []Chunk {
 			}
 			content, readErr := os.ReadFile(path) //nolint:gosec // repository-owned examples only.
 			if readErr != nil {
-				return nil
+				return readErr
 			}
 			rel, relErr := filepath.Rel(root, path)
 			if relErr != nil {

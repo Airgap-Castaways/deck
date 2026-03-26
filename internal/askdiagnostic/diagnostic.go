@@ -214,10 +214,10 @@ func FromPlanCritic(critic askcontract.PlanCriticResponse) []Diagnostic {
 		diags = append(diags, Diagnostic{Code: "plan_critic_advisory", Severity: "advisory", Message: item})
 	}
 	for _, item := range critic.MissingContracts {
-		diags = append(diags, Diagnostic{Code: "plan_critic_missing_contract", Severity: "blocking", Message: item, SuggestedFix: item})
+		diags = append(diags, Diagnostic{Code: "plan_critic_missing_contract", Severity: "advisory", Message: item, SuggestedFix: item})
 	}
 	for _, item := range critic.SuggestedFixes {
-		diags = append(diags, Diagnostic{Code: "plan_critic_suggested_fix", Severity: "blocking", Message: item, SuggestedFix: item})
+		diags = append(diags, Diagnostic{Code: "plan_critic_suggested_fix", Severity: "advisory", Message: item, SuggestedFix: item})
 	}
 	return dedupe(diags)
 }

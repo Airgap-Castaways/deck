@@ -204,29 +204,10 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			}
 			return render(opts.Stdout, opts.Stderr, result)
 		}
-		if len(planCritic.Blocking) > 0 || len(planCritic.MissingContracts) > 0 {
+		if hasFatalPlanReviewIssues(plan, planCritic) {
 			result.Summary = "plan generated with review blockers"
 			result.Termination = "plan-only-review-blocked"
 			result.FallbackNote = "generation stopped because plan review found blocking issues"
-			result.ReviewLines = append(result.ReviewLines, renderPlanNotes(plan)...)
-			result.ReviewLines = append(result.ReviewLines, renderPlanCriticNotes(planCritic)...)
-			if err := askstate.Save(resolvedRoot, askstate.Context{
-				LastMode:          "plan",
-				LastRoute:         string(result.Route),
-				LastPrompt:        strings.TrimSpace(requestText),
-				LastFiles:         filePathsFromPlan(plan),
-				LastLLMUsed:       true,
-				LastClassifierLLM: result.ClassifierLLM,
-				LastTermination:   result.Termination,
-			}, requestText, resultToMarkdown(result)); err != nil {
-				return err
-			}
-			return render(opts.Stdout, opts.Stderr, result)
-		}
-		if hasBlockingPlanItems(plan) {
-			result.Summary = "plan generated with blockers"
-			result.Termination = "plan-only-blocked"
-			result.FallbackNote = "generation stopped because plan has blockers"
 			result.ReviewLines = append(result.ReviewLines, renderPlanNotes(plan)...)
 			result.ReviewLines = append(result.ReviewLines, renderPlanCriticNotes(planCritic)...)
 			if err := askstate.Save(resolvedRoot, askstate.Context{
@@ -264,6 +245,8 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		}
 		attempts := generationAttempts(opts.MaxIterations, decision, requestText)
 		scaffold := askscaffold.Build(requirements, workspace, decision, plan, bundle)
+		generationPrompt := generationUserPrompt(workspace, state, requestText, strings.TrimSpace(opts.FromPath), decision.Route)
+		generationPrompt = appendPlanAdvisoryPrompt(generationPrompt, plan, planCritic)
 		generationRequest := askprovider.Request{
 			Kind:         "generate",
 			Provider:     effective.Provider,
@@ -273,7 +256,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			AccountID:    effective.AccountID,
 			Endpoint:     effective.Endpoint,
 			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval, requirements, authoringBrief, plan.ExecutionModel, scaffold),
-			Prompt:       generationUserPrompt(workspace, state, requestText, strings.TrimSpace(opts.FromPath), decision.Route),
+			Prompt:       generationPrompt,
 			MaxRetries:   attempts,
 		}
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "generation", SystemPrompt: generationRequest.SystemPrompt, UserPrompt: generationRequest.Prompt})
@@ -282,16 +265,17 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		if genErr != nil {
 			return genErr
 		}
-		postSummary, postErr := maybePostProcessGeneration(ctx, client, generationRequest, resolvedRoot, logger, decision, plan, authoringBrief, retrieval, gen, lintSummary, critic, judge)
-		if postErr != nil {
+		postSummary, postErr := maybePostProcessGeneration(ctx, client, generationRequest, resolvedRoot, logger, decision, plan, authoringBrief, retrieval, gen, lintSummary, critic, judge, planCritic)
+		switch {
+		case postErr != nil:
 			logger.logf("debug", "[ask][phase:postprocess:skip] error=%v\n", postErr)
-		} else if postSummary.Applied {
+		case postSummary.Applied:
 			gen = postSummary.Generation
 			lintSummary = postSummary.LintSummary
 			critic = postSummary.Critic
 			judge = postSummary.Judge
 			result.ReviewLines = append(result.ReviewLines, postSummary.Notes...)
-		} else if len(postSummary.Notes) > 0 {
+		case len(postSummary.Notes) > 0:
 			result.ReviewLines = append(result.ReviewLines, postSummary.Notes...)
 		}
 		logger.logf("basic", "[ask][phase:generation:done] files=%d lint=%s\n", len(gen.Files), lintSummary)
@@ -384,6 +368,7 @@ func buildPlanWithReview(ctx context.Context, client askprovider.Client, cfg ask
 	for attempt := 1; attempt <= 2; attempt++ {
 		current, planErr := planWithLLM(ctx, client, cfg, decision, retrieval, currentPrompt, workspace, logger)
 		if planErr != nil {
+			logger.logf("debug", "[ask][phase:plan:fallback] error=%v\n", planErr)
 			planned = askpolicy.BuildPlanDefaults(requirements, requestText, decision, workspace)
 			return planned, askcontract.PlanCriticResponse{}, true, nil
 		}
@@ -464,12 +449,135 @@ func normalizePlanCritic(plan askcontract.PlanResponse, critic askcontract.PlanC
 			advisory = append(advisory, text)
 			continue
 		}
-		missing = append(missing, text)
+		advisory = append(advisory, text)
 	}
 	critic.Blocking = dedupe(blocking)
 	critic.MissingContracts = dedupe(missing)
 	critic.Advisory = dedupe(advisory)
 	return critic
+}
+
+func hasFatalPlanReviewIssues(plan askcontract.PlanResponse, critic askcontract.PlanCriticResponse) bool {
+	return len(fatalPlanReviewReasons(plan, critic)) > 0
+}
+
+func fatalPlanReviewReasons(plan askcontract.PlanResponse, critic askcontract.PlanCriticResponse) []string {
+	reasons := []string{}
+	for _, item := range critic.Blocking {
+		text := strings.TrimSpace(item)
+		if text != "" {
+			reasons = append(reasons, text)
+		}
+	}
+	for _, item := range fatalPlanBlockers(plan) {
+		if strings.TrimSpace(item) != "" {
+			reasons = append(reasons, item)
+		}
+	}
+	if strings.TrimSpace(plan.EntryScenario) == "" {
+		reasons = append(reasons, "no viable entry scenario can be determined")
+	}
+	if strings.TrimSpace(plan.AuthoringBrief.ModeIntent) == "prepare+apply" && !hasPlannedPath(plan.Files, "workflows/prepare.yaml") {
+		reasons = append(reasons, "required prepare/apply file structure is absent and cannot be defaulted")
+	}
+	if strings.TrimSpace(plan.AuthoringBrief.ModeIntent) == "prepare+apply" && !hasPlannedPath(plan.Files, filepath.ToSlash(strings.TrimSpace(plan.EntryScenario))) {
+		reasons = append(reasons, "required prepare/apply entry scenario is absent and cannot be defaulted")
+	}
+	if isMultiRoleTopology(plan.AuthoringBrief.Topology) && strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) == "" && !authoringBriefSuggestsRoleSelector(plan.AuthoringBrief) {
+		reasons = append(reasons, "multi-role request has no viable role selector or branching model")
+	}
+	if needsArtifactPreparation(plan) && len(plan.ExecutionModel.ArtifactContracts) == 0 && !planHasArtifactConsumerPath(plan) {
+		reasons = append(reasons, "artifact-dependent request has no viable consumer path")
+	}
+	return dedupe(reasons)
+}
+
+func fatalPlanBlockers(plan askcontract.PlanResponse) []string {
+	fatal := []string{}
+	for _, item := range append(append([]string{}, plan.Blockers...), plan.OpenQuestions...) {
+		text := strings.TrimSpace(item)
+		if text == "" {
+			continue
+		}
+		if isFatalPlanBlockerText(text) {
+			fatal = append(fatal, text)
+		}
+	}
+	return dedupe(fatal)
+}
+
+func isFatalPlanBlockerText(text string) bool {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	if lower == "" {
+		return false
+	}
+	fatalTokens := []string{
+		"no viable entry scenario",
+		"cannot determine entry scenario",
+		"missing entry scenario",
+		"required prepare/apply structure is absent",
+		"cannot default prepare",
+		"cannot default apply",
+		"no artifact consumer",
+		"no viable consumer",
+		"no role selector",
+		"no viable role selector",
+		"no branching model",
+		"structurally unusable",
+		"cannot safely continue",
+	}
+	for _, token := range fatalTokens {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return strings.HasPrefix(lower, "blocking:") && (strings.Contains(lower, "entry scenario") || strings.Contains(lower, "artifact consumer") || strings.Contains(lower, "role selector") || strings.Contains(lower, "structurally unusable"))
+}
+
+func hasPlannedPath(files []askcontract.PlanFile, want string) bool {
+	want = strings.TrimSpace(want)
+	for _, file := range files {
+		if filepath.ToSlash(strings.TrimSpace(file.Path)) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func isMultiRoleTopology(topology string) bool {
+	switch strings.TrimSpace(topology) {
+	case "multi-node", "ha":
+		return true
+	default:
+		return false
+	}
+}
+
+func needsArtifactPreparation(plan askcontract.PlanResponse) bool {
+	return plan.NeedsPrepare || len(plan.ArtifactKinds) > 0 || strings.TrimSpace(plan.AuthoringBrief.ModeIntent) == "prepare+apply"
+}
+
+func authoringBriefSuggestsRoleSelector(brief askcontract.AuthoringBrief) bool {
+	if strings.TrimSpace(brief.ModeIntent) != "prepare+apply" {
+		return false
+	}
+	for _, capability := range brief.RequiredCapabilities {
+		capability = strings.TrimSpace(capability)
+		if capability == "kubeadm-join" || capability == "cluster-verification" {
+			return true
+		}
+	}
+	return isMultiRoleTopology(brief.Topology)
+}
+
+func planHasArtifactConsumerPath(plan askcontract.PlanResponse) bool {
+	for _, file := range plan.Files {
+		path := filepath.ToSlash(strings.TrimSpace(file.Path))
+		if strings.HasPrefix(path, "workflows/scenarios/") {
+			return true
+		}
+	}
+	return false
 }
 
 func isRecoverablePlanCriticIssue(plan askcontract.PlanResponse, text string) bool {
@@ -504,11 +612,11 @@ type postProcessSummary struct {
 	Notes       []string
 }
 
-func maybePostProcessGeneration(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult, gen askcontract.GenerationResponse, lintSummary string, critic askcontract.CriticResponse, judge askcontract.JudgeResponse) (postProcessSummary, error) {
+func maybePostProcessGeneration(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult, gen askcontract.GenerationResponse, lintSummary string, critic askcontract.CriticResponse, judge askcontract.JudgeResponse, planCritic askcontract.PlanCriticResponse) (postProcessSummary, error) {
 	if !shouldAutoPostProcess(brief, judge, gen) {
 		return postProcessSummary{}, fmt.Errorf("post-process not needed")
 	}
-	findings, err := critiquePostProcess(ctx, client, req, plan, brief, gen, judge, critic, logger)
+	findings, err := critiquePostProcess(ctx, client, req, plan, brief, gen, judge, critic, planCritic, logger)
 	if err != nil {
 		return postProcessSummary{}, err
 	}
@@ -532,7 +640,7 @@ func maybePostProcessGeneration(ctx context.Context, client askprovider.Client, 
 		}
 		return postProcessSummary{Applied: false, Notes: notes}, nil
 	}
-	edited, err := applyPostProcessEdit(ctx, client, req, plan, brief, findings, gen, logger)
+	edited, err := applyPostProcessEdit(ctx, client, req, plan, brief, findings, gen, planCritic, logger)
 	if err != nil {
 		return postProcessSummary{}, err
 	}
@@ -571,9 +679,9 @@ func shouldAutoPostProcess(brief askcontract.AuthoringBrief, judge askcontract.J
 	return false
 }
 
-func critiquePostProcess(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, gen askcontract.GenerationResponse, judge askcontract.JudgeResponse, critic askcontract.CriticResponse, logger askLogger) (askcontract.PostProcessResponse, error) {
+func critiquePostProcess(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, gen askcontract.GenerationResponse, judge askcontract.JudgeResponse, critic askcontract.CriticResponse, planCritic askcontract.PlanCriticResponse, logger askLogger) (askcontract.PostProcessResponse, error) {
 	systemPrompt := postProcessCriticSystemPrompt(brief, plan)
-	userPrompt := postProcessCriticUserPrompt(plan, gen, judge, critic)
+	userPrompt := postProcessCriticUserPrompt(plan, gen, judge, critic, planCritic)
 	logger.prompt("postprocess-critic", systemPrompt, userPrompt)
 	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-critic", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1})
 	if err != nil {
@@ -587,9 +695,9 @@ func critiquePostProcess(ctx context.Context, client askprovider.Client, req ask
 	return enrichPostProcessFindings(parsed, gen), nil
 }
 
-func applyPostProcessEdit(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, findings askcontract.PostProcessResponse, gen askcontract.GenerationResponse, logger askLogger) (askcontract.GenerationResponse, error) {
+func applyPostProcessEdit(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, findings askcontract.PostProcessResponse, gen askcontract.GenerationResponse, planCritic askcontract.PlanCriticResponse, logger askLogger) (askcontract.GenerationResponse, error) {
 	systemPrompt := postProcessEditSystemPrompt(brief, plan)
-	userPrompt := postProcessEditUserPrompt(gen, findings)
+	userPrompt := postProcessEditUserPrompt(gen, findings, planCritic)
 	logger.prompt("postprocess-edit", systemPrompt, userPrompt)
 	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-edit", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1})
 	if err != nil {
@@ -694,7 +802,8 @@ func repeatedPathOrVersionLiterals(gen askcontract.GenerationResponse) bool {
 			if parts := strings.SplitN(trimmed, ":", 2); len(parts) == 2 {
 				value = strings.TrimSpace(parts[1])
 			}
-			if !(strings.Contains(value, "/") || strings.Contains(strings.ToLower(value), "registry") || strings.Contains(strings.ToLower(value), "v1.")) {
+			lowerValue := strings.ToLower(value)
+			if !strings.Contains(value, "/") && !strings.Contains(lowerValue, "registry") && !strings.Contains(lowerValue, "v1.") {
 				continue
 			}
 			if strings.Contains(value, "{{") {
