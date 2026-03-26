@@ -136,7 +136,7 @@ Clear saved settings:
 deck ask config unset
 ```
 
-Supported OpenAI-compatible providers currently include:
+Supported providers currently include:
 
 - `openai`
 - `openrouter`
