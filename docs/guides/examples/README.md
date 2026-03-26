@@ -1,12 +1,33 @@
 # Examples
 
-Use this section to find workflow starting points and nearby walkthroughs you can adapt.
+The files in this directory are starting points for real procedures. They show how typed steps express operational intent and how phases keep larger workflows scannable.
 
-Current guide entry points:
+## How to use these examples
 
-- [Quick Start](../quick-start.md): Small end-to-end workspace flow.
-- [Offline Kubernetes Tutorial](../offline-kubernetes.md): A larger scenario-oriented walkthrough.
-- [Workflow Model](../../reference/workflow-model.md): Reference for workflow structure once you start adapting examples.
-- [Schema & Tools](../../reference/schema/README.md): Field-level lookup while turning an example into a real workflow.
+- Start from them when you want a concrete workflow to adapt.
+- Keep the overall structure clear before adding more details.
+- Replace repetitive shell with typed steps when a step kind already fits.
+- Validate the result before packaging or transport.
 
-As curated example sets are expanded, index them from this page so users can find them from one predictable location.
+## Files
+
+- `offline-k8s-control-plane.yaml`: kubeadm-based control-plane bootstrap example
+- `offline-k8s-worker.yaml`: kubeadm worker join example
+- `offline-pull-control-plane.yaml`: pull-based control-plane bootstrap example
+- `offline-pull-worker.yaml`: pull-based worker join example
+- `offline-repo-preinstall.yaml`: prepare package repository configuration on the target host
+- `offline-containerd-mirror.yaml`: point containerd at an internal registry or mirror path
+- `offline-verify-images.yaml`: verify required images exist in the local runtime
+- `vagrant-smoke-install.yaml`: Vagrant-oriented smoke workflow
+
+For walkthrough-oriented context, start with [Quick Start](../quick-start.md) and [Offline Kubernetes Tutorial](../offline-kubernetes.md).
+
+## Validation
+
+Use `deck lint` for schema-level checks:
+
+```bash
+deck lint --file docs/guides/examples/offline-k8s-control-plane.yaml
+```
+
+`cases.tsv` is the lightweight example index used by repository maintainers and CI.

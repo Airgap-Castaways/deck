@@ -70,7 +70,7 @@ jobs:
       - name: Run core test set
         run: |
           make test
-          ./bin/deck lint --file docs/user-guide/examples/vagrant-smoke-install.yaml
+          ./bin/deck lint --file docs/guides/examples/vagrant-smoke-install.yaml
           ./bin/deck lint --file test/workflows/scenarios/control-plane-bootstrap.yaml
           ./bin/deck lint --file test/workflows/scenarios/worker-join.yaml
           ./bin/deck lint --file test/workflows/scenarios/node-reset.yaml
@@ -89,7 +89,7 @@ jobs:
               continue
             fi
 
-            example_path="docs/user-guide/examples/${file}"
+            example_path="docs/guides/examples/${file}"
             if [ ! -f "${example_path}" ]; then
               echo "missing example case: ${example_path}"
               exit 1
@@ -97,7 +97,7 @@ jobs:
 
             echo "linting ${example_path}"
             ./bin/deck lint --file "${example_path}"
-          done < docs/user-guide/examples/cases.tsv
+          done < docs/guides/examples/cases.tsv
 
   security:
     runs-on: ubuntu-latest
