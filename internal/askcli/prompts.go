@@ -2,10 +2,12 @@ package askcli
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
@@ -47,6 +49,7 @@ func classifierUserPrompt(prompt string, reviewFlag bool, workspace askretrieve.
 func generationSystemPrompt(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult, requirements askpolicy.ScenarioRequirements, brief askcontract.AuthoringBrief, executionModel askcontract.ExecutionModel, scaffold askscaffold.Scaffold) string {
 	bundle := askknowledge.Current()
 	b := &strings.Builder{}
+	stepOptions := askcontext.StepGuidanceOptions{ModeIntent: brief.ModeIntent, Topology: brief.Topology, RequiredCapabilities: brief.RequiredCapabilities}
 	b.WriteString("You are deck ask, a workflow authoring assistant.\n")
 	b.WriteString("Route: ")
 	b.WriteString(string(route))
@@ -62,9 +65,14 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, retr
 	b.WriteString("Rules:\n")
 	b.WriteString("- Produce only strict JSON.\n")
 	b.WriteString("- JSON shape: {\"summary\":string,\"review\":[]string,\"files\":[{\"path\":string,\"content\":string}]}.\n")
-	b.WriteString(bundle.WorkflowPromptBlock())
+	b.WriteString("- Start from the closest repository examples and workspace files first, then adapt them to the request.\n")
+	b.WriteString("- Keep existing repo-native workflow structure and YAML indentation patterns whenever possible.\n")
+	b.WriteString("- Every returned YAML file must be valid standalone YAML: top-level keys at column 1, list items indented under their parent key, and nested mapping fields indented by two spaces per level.\n")
+	b.WriteString("- Do not emit flattened one-space indentation like `phases:\n - name` or `steps:\n - id`; keep canonical YAML indentation.\n")
+	b.WriteString("Primary repository context follows. Prefer these examples and workspace snippets over abstract rewrites.\n")
+	b.WriteString(generationRetrievalPromptBlock(retrieval))
 	b.WriteString("\n")
-	b.WriteString(bundle.PolicyPromptBlock())
+	b.WriteString(bundle.WorkflowPromptBlock())
 	b.WriteString("\n")
 	b.WriteString(askpolicy.RequirementsPromptBlock(requirements))
 	b.WriteString("\n")
@@ -72,7 +80,6 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, retr
 	b.WriteString("\n")
 	b.WriteString(executionModelPromptBlock(executionModel))
 	b.WriteString("\n")
-	stepOptions := askcontext.StepGuidanceOptions{ModeIntent: brief.ModeIntent, Topology: brief.Topology, RequiredCapabilities: brief.RequiredCapabilities}
 	if typedSteps := askcontext.StepGuidanceBlockWithOptions(route, retrievalPromptSeed(target, requirements, brief), stepOptions); strings.TrimSpace(typedSteps) != "" {
 		b.WriteString(typedSteps)
 		b.WriteString("\n")
@@ -87,14 +94,111 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, retr
 		b.WriteString(constraints)
 		b.WriteString("\n")
 	}
+	b.WriteString(bundle.PolicyPromptBlock())
+	b.WriteString("\n")
 	b.WriteString("- Never place summary, description, or review fields inside workflow YAML content.\n")
 	b.WriteString("- When a scaffold file is present, return that file path and keep its structural shape valid.\n")
 	b.WriteString("- Use retrieved deck knowledge for topology, component/import shape, vars semantics, and typed-step choices.\n")
 	b.WriteString("- Do not use Kubernetes-style fields such as apiVersion, kind, metadata, or spec wrappers at the workflow top level.\n")
 	b.WriteString("- Do not invent unsupported fields.\n")
-	b.WriteString("Retrieved context follows.\n")
-	b.WriteString(askretrieve.BuildChunkTextWithoutTopics(retrieval, askcontext.TopicWorkflowInvariants, askcontext.TopicPolicy))
 	return b.String()
+}
+
+func generationRetrievalPromptBlock(retrieval askretrieve.RetrievalResult) string {
+	priority := map[string]int{
+		"example":        0,
+		"plan-workspace": 1,
+		"workspace":      2,
+		"repo-map":       3,
+		"plan":           4,
+		"mcp":            5,
+		"lsp":            6,
+		"state":          7,
+		"project":        8,
+	}
+	excludedTopics := map[askcontext.Topic]bool{
+		askcontext.TopicWorkflowInvariants:   true,
+		askcontext.TopicPolicy:               true,
+		askcontext.TopicWorkspaceTopology:    true,
+		askcontext.TopicPrepareApplyGuidance: true,
+		askcontext.TopicComponentsImports:    true,
+		askcontext.TopicVarsGuidance:         true,
+		askcontext.TopicTypedSteps:           true,
+		askcontext.TopicStepComposition:      true,
+		askcontext.TopicCLIHints:             true,
+	}
+	chunks := make([]askretrieve.Chunk, 0, len(retrieval.Chunks))
+	exampleCount := 0
+	for _, chunk := range retrieval.Chunks {
+		if excludedTopics[chunk.Topic] {
+			continue
+		}
+		if chunk.Source == "project" {
+			continue
+		}
+		if chunk.Source == "workspace" {
+			continue
+		}
+		if strings.Contains(chunk.Content, "\n...\n") || strings.HasSuffix(strings.TrimSpace(chunk.Content), "...") {
+			continue
+		}
+		if chunk.Source == "example" {
+			if exampleCount >= 2 {
+				continue
+			}
+			exampleCount++
+		}
+		chunks = append(chunks, chunk)
+	}
+	sort.SliceStable(chunks, func(i, j int) bool {
+		pi, okI := priority[chunks[i].Source]
+		pj, okJ := priority[chunks[j].Source]
+		if !okI {
+			pi = 50
+		}
+		if !okJ {
+			pj = 50
+		}
+		if pi == pj {
+			if chunks[i].Score == chunks[j].Score {
+				return chunks[i].ID < chunks[j].ID
+			}
+			return chunks[i].Score > chunks[j].Score
+		}
+		return pi < pj
+	})
+	return askretrieve.BuildChunkText(askretrieve.RetrievalResult{Chunks: chunks})
+}
+
+func yamlRepairSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanResponse) string {
+	b := &strings.Builder{}
+	b.WriteString("You are deck ask YAML repair assistant. Return strict JSON only using the generation response shape.\n")
+	b.WriteString("Repair YAML structure and indentation with the smallest possible edits. Do not redesign the workflow unless a validator message explicitly requires it.\n")
+	b.WriteString("Keep preserve-if-valid files byte-for-byte identical. Revise only files implicated by the parse or schema error when possible.\n")
+	b.WriteString("You may return only the revised files in the files array; unchanged files will be preserved by the caller.\n")
+	b.WriteString("Every workflow YAML file must stay standalone-valid: top-level keys at column 1, list items indented under their parent key, and nested mapping fields indented by two spaces per level.\n")
+	b.WriteString("Do not collapse YAML indentation, do not inline list markers onto the wrong column, and do not replace valid files with newly generated variants.\n")
+	b.WriteString(authoringBriefPromptBlock(brief))
+	b.WriteString("\n")
+	b.WriteString(executionModelPromptBlock(plan.ExecutionModel))
+	b.WriteString("\n")
+	return b.String()
+}
+
+func yamlRepairUserPrompt(prev askcontract.GenerationResponse, validation string, diags []askdiagnostic.Diagnostic) string {
+	b := &strings.Builder{}
+	b.WriteString("Repair these generated files without redesigning them. Return only the revised files if possible.\n")
+	b.WriteString("Validator summary:\n")
+	b.WriteString(summarizeValidationError(validation))
+	b.WriteString("\nRaw validator error:\n")
+	b.WriteString(strings.TrimSpace(validation))
+	b.WriteString("\n")
+	b.WriteString(askdiagnostic.RepairPromptBlock(diags))
+	b.WriteString("\n")
+	b.WriteString(yamlStructureRepairPromptBlock(prev, validation, diags))
+	b.WriteString("\n")
+	b.WriteString(targetedRepairPromptBlock(prev, diags))
+	return strings.TrimSpace(b.String())
 }
 
 func appendPlanAdvisoryPrompt(base string, plan askcontract.PlanResponse, critic askcontract.PlanCriticResponse) string {
@@ -141,6 +245,9 @@ func planAdvisoryPromptBlock(plan askcontract.PlanResponse, critic askcontract.P
 		}
 	}
 	items = dedupe(items)
+	if len(items) > 10 {
+		items = items[:10]
+	}
 	if len(items) == 0 {
 		return ""
 	}
@@ -307,11 +414,12 @@ func judgeSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanRe
 func planCriticSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanResponse) string {
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask plan critic. Return strict JSON only.\n")
-	b.WriteString("Review whether the workflow plan is operationally complete enough before generation starts.\n")
+	b.WriteString("Review whether the workflow plan is viable enough to proceed into generation-first workflow authoring.\n")
 	b.WriteString("Focus on artifact producer/consumer contracts, shared-state contracts such as join files, role-aware execution, role cardinality, topology fidelity, join publication/consumption, artifact contract naming, and verification staging realism.\n")
 	b.WriteString("Do not restate schema rules unless the plan violates them in a way that affects execution design.\n")
 	b.WriteString("JSON shape: {\"summary\":string,\"blocking\":[]string,\"advisory\":[]string,\"missingContracts\":[]string,\"suggestedFixes\":[]string}.\n")
-	b.WriteString("Use blocking when generation should be retried with a stronger plan.\n")
+	b.WriteString("Use blocking only for true pre-generation non-viability: no viable entry scenario, no viable role selector/branching model, no viable artifact consumer path, or structurally unusable planning.\n")
+	b.WriteString("Treat ambiguous join contracts, artifact detail gaps, role cardinality detail, worker synchronization detail, and verification staging weakness as advisory or missingContracts unless generation would be impossible.\n")
 	b.WriteString("When possible, mention the affected file or execution-model section directly in each finding.\n")
 	b.WriteString(authoringBriefPromptBlock(brief))
 	b.WriteString("\n")

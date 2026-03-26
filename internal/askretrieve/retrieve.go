@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
@@ -186,7 +187,7 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 			Source:  "workspace",
 			Label:   file.Path,
 			Topic:   askcontext.Topic("workspace:" + filepath.ToSlash(file.Path)),
-			Content: file.Content,
+			Content: compressChunkContent(lowerPrompt, file.Path, file.Content, 3200),
 			Score:   score,
 		})
 	}
@@ -230,11 +231,17 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 			dropped = append(dropped, chunk.ID)
 			continue
 		}
-		size := len(chunk.Content)
+		content := chunk.Content
+		size := len(content)
+		if size > remaining && shouldCompressChunk(chunk.Label, chunk.Content) {
+			content = compressChunkContent(lowerPrompt, chunk.Label, chunk.Content, remaining)
+			size = len(content)
+		}
 		if size > remaining {
 			dropped = append(dropped, chunk.ID)
 			continue
 		}
+		chunk.Content = content
 		selected = append(selected, chunk)
 		remaining -= size
 	}
@@ -264,6 +271,10 @@ func reserveComplexAuthoringChunks(chunks []Chunk, selected []Chunk, remaining i
 			continue
 		}
 		size := len(chunk.Content)
+		if size > remaining && shouldCompressChunk(chunk.Label, chunk.Content) {
+			chunk.Content = compressChunkContent("", chunk.Label, chunk.Content, remaining)
+			size = len(chunk.Content)
+		}
 		if size > remaining {
 			dropped = append(dropped, chunk.ID)
 			continue
@@ -488,6 +499,9 @@ func exampleReferenceChunks(route askintent.Route, lowerPrompt string) []Chunk {
 				rel = path
 			}
 			cleanRel := filepath.ToSlash(rel)
+			if !exampleChunkAllowed(cleanRel, string(content)) {
+				return nil
+			}
 			score := exampleChunkScore(lowerPrompt, cleanRel, string(content))
 			if score < 55 {
 				return nil
@@ -497,7 +511,7 @@ func exampleReferenceChunks(route askintent.Route, lowerPrompt string) []Chunk {
 				Source:  "example",
 				Label:   cleanRel,
 				Topic:   askcontext.Topic("example:" + cleanRel),
-				Content: exampleChunkContent(cleanRel, string(content)),
+				Content: exampleChunkContent(cleanRel, compressChunkContent(lowerPrompt, cleanRel, string(content), 3600)),
 				Score:   score,
 			})
 			return nil
@@ -524,10 +538,34 @@ func exampleChunkScore(prompt string, path string, content string) int {
 		}
 	}
 	if strings.Contains(path, "docs/user-guide/examples/") {
-		score += 8
+		score += 4
 	}
 	if strings.Contains(path, "test/workflows/") {
+		score += 18
+	}
+	if strings.Contains(path, "scenarios/") {
+		score += 8
+	}
+	if strings.Contains(path, "upgrade") && !strings.Contains(prompt, "upgrade") {
+		score -= 20
+	}
+	if strings.Contains(path, "worker-join") && (strings.Contains(prompt, "worker") || strings.Contains(prompt, "join")) {
+		score += 12
+	}
+	if strings.Contains(path, "bootstrap") && (strings.Contains(prompt, "control-plane") || strings.Contains(prompt, "bootstrap") || strings.Contains(prompt, "kubeadm")) {
 		score += 10
+	}
+	if strings.Contains(path, "kubeadm") && strings.Contains(prompt, "kubeadm") {
+		score += 10
+	}
+	if strings.Contains(text, "apiVersion: deck/") {
+		score -= 18
+	}
+	if strings.Contains(text, "kind: swap") || strings.Contains(text, "kind: sysctl") {
+		score -= 6
+	}
+	if strings.Contains(text, "version: v1alpha1") {
+		score += 6
 	}
 	if strings.Contains(text, "kind: initkubeadm") || strings.Contains(text, "kind: joinkubeadm") {
 		score += 8
@@ -536,6 +574,14 @@ func exampleChunkScore(prompt string, path string, content string) int {
 		score += 8
 	}
 	return score
+}
+
+func exampleChunkAllowed(path string, content string) bool {
+	text := strings.ToLower(path + "\n" + content)
+	if strings.Contains(path, "docs/user-guide/examples/") && strings.Contains(text, "apiversion: deck/") {
+		return false
+	}
+	return true
 }
 
 func exampleChunkContent(path string, content string) string {
@@ -549,6 +595,172 @@ func exampleChunkContent(path string, content string) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func compressChunkContent(prompt string, label string, content string, maxBytes int) string {
+	content = strings.TrimSpace(content)
+	if content == "" || maxBytes <= 0 {
+		return content
+	}
+	if !shouldCompressChunk(label, content) {
+		return content
+	}
+	if len(content) <= maxBytes {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	keywords := requestKeywords(prompt, label)
+	selected := selectRelevantLineWindows(lines, keywords, 2)
+	compressed := renderSelectedLines(lines, selected)
+	compressed = strings.TrimSpace(compressed)
+	if compressed == "" {
+		compressed = strings.Join(lines[:min(80, len(lines))], "\n")
+	}
+	if len(compressed) <= maxBytes {
+		return compressed
+	}
+	if maxBytes > 64 {
+		trimmed := compressed[:maxBytes-16]
+		trimmed = strings.TrimRightFunc(trimmed, func(r rune) bool { return unicode.IsSpace(r) })
+		return trimmed + "\n...\n"
+	}
+	return compressed[:maxBytes]
+}
+
+func shouldCompressChunk(label string, content string) bool {
+	lowerLabel := strings.ToLower(strings.TrimSpace(label))
+	if strings.HasSuffix(lowerLabel, ".yaml") || strings.HasSuffix(lowerLabel, ".yml") {
+		return false
+	}
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return true
+	}
+	if looksLikeStructuredYAML(trimmed) {
+		return false
+	}
+	return true
+}
+
+func looksLikeStructuredYAML(content string) bool {
+	if strings.Contains(content, "version: v1alpha1") {
+		return true
+	}
+	for _, token := range []string{"\nphases:\n", "\nsteps:\n", "\nvars:\n", "\nimports:\n", "\n  - name:", "\n  - id:", "\nkind: ", "\nspec:\n"} {
+		if strings.Contains(content, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func requestKeywords(prompt string, label string) []string {
+	parts := strings.Fields(strings.ToLower(prompt + " " + label))
+	keywords := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.Trim(part, "`\"'.,:;()[]{}")
+		if len(part) < 4 {
+			continue
+		}
+		switch part {
+		case "with", "from", "that", "this", "workflow", "create", "using", "where", "possible", "offline", "cluster":
+			continue
+		}
+		keywords = append(keywords, part)
+	}
+	for _, item := range []string{"kubeadm", "join", "worker", "control-plane", "prepare", "apply", "artifact", "image", "package", "handoff", "checkcluster", "initkubeadm", "joinkubeadm"} {
+		if strings.Contains(strings.ToLower(prompt), item) || strings.Contains(strings.ToLower(label), item) {
+			keywords = append(keywords, item)
+		}
+	}
+	return dedupeStrings(keywords)
+}
+
+func selectRelevantLineWindows(lines []string, keywords []string, radius int) []int {
+	selected := make([]int, 0, len(lines))
+	seen := map[int]bool{}
+	matchCount := 0
+	for i, line := range lines {
+		lower := strings.ToLower(line)
+		matched := false
+		for _, keyword := range keywords {
+			if strings.Contains(lower, keyword) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		matchCount++
+		start := max(0, i-radius)
+		end := min(len(lines)-1, i+radius)
+		for idx := start; idx <= end; idx++ {
+			if !seen[idx] {
+				seen[idx] = true
+				selected = append(selected, idx)
+			}
+		}
+		if matchCount >= 24 {
+			break
+		}
+	}
+	if len(selected) == 0 {
+		limit := min(80, len(lines))
+		for i := 0; i < limit; i++ {
+			selected = append(selected, i)
+		}
+	}
+	sort.Ints(selected)
+	return selected
+}
+
+func renderSelectedLines(lines []string, selected []int) string {
+	if len(selected) == 0 {
+		return ""
+	}
+	b := &strings.Builder{}
+	prev := -2
+	for _, idx := range selected {
+		if idx < 0 || idx >= len(lines) {
+			continue
+		}
+		if prev >= 0 && idx > prev+1 {
+			b.WriteString("...\n")
+		}
+		b.WriteString(lines[idx])
+		b.WriteString("\n")
+		prev = idx
+	}
+	return b.String()
+}
+
+func min(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func dedupeStrings(items []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" || seen[item] {
+			continue
+		}
+		seen[item] = true
+		out = append(out, item)
+	}
+	return out
 }
 
 func repoRootFallback() string {
