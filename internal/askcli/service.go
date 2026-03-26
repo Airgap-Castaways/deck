@@ -282,6 +282,18 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		if genErr != nil {
 			return genErr
 		}
+		postSummary, postErr := maybePostProcessGeneration(ctx, client, generationRequest, resolvedRoot, logger, decision, plan, authoringBrief, retrieval, gen, lintSummary, critic, judge)
+		if postErr != nil {
+			logger.logf("debug", "[ask][phase:postprocess:skip] error=%v\n", postErr)
+		} else if postSummary.Applied {
+			gen = postSummary.Generation
+			lintSummary = postSummary.LintSummary
+			critic = postSummary.Critic
+			judge = postSummary.Judge
+			result.ReviewLines = append(result.ReviewLines, postSummary.Notes...)
+		} else if len(postSummary.Notes) > 0 {
+			result.ReviewLines = append(result.ReviewLines, postSummary.Notes...)
+		}
 		logger.logf("basic", "[ask][phase:generation:done] files=%d lint=%s\n", len(gen.Files), lintSummary)
 		result.LLMUsed = true
 		result.RetriesUsed = retriesUsed
@@ -390,6 +402,108 @@ func buildPlanWithReview(ctx context.Context, client askprovider.Client, cfg ask
 		}
 	}
 	return planned, critic, false, nil
+}
+
+type postProcessSummary struct {
+	Applied     bool
+	Generation  askcontract.GenerationResponse
+	LintSummary string
+	Critic      askcontract.CriticResponse
+	Judge       askcontract.JudgeResponse
+	Notes       []string
+}
+
+func maybePostProcessGeneration(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult, gen askcontract.GenerationResponse, lintSummary string, critic askcontract.CriticResponse, judge askcontract.JudgeResponse) (postProcessSummary, error) {
+	if !shouldAutoPostProcess(brief, judge, gen) {
+		return postProcessSummary{}, fmt.Errorf("post-process not needed")
+	}
+	findings, err := critiquePostProcess(ctx, client, req, plan, brief, gen, judge, critic, logger)
+	if err != nil {
+		return postProcessSummary{}, err
+	}
+	notes := renderPostProcessNotes(findings)
+	if len(findings.Blocking) == 0 {
+		return postProcessSummary{Applied: false, Notes: notes}, nil
+	}
+	edited, err := applyPostProcessEdit(ctx, client, req, plan, brief, findings, gen, logger)
+	if err != nil {
+		return postProcessSummary{}, err
+	}
+	newLint, newCritic, err := validateGeneration(ctx, root, edited, decision, plan, brief, retrieval)
+	if err != nil {
+		return postProcessSummary{}, err
+	}
+	newJudge, err := maybeJudgeGeneration(ctx, client, req, edited, newLint, newCritic, plan, brief, logger)
+	if err != nil {
+		logger.logf("debug", "[ask][phase:postprocess:judge-skip] error=%v\n", err)
+		newJudge = judge
+	}
+	return postProcessSummary{Applied: true, Generation: edited, LintSummary: newLint, Critic: newCritic, Judge: newJudge, Notes: append([]string{"post-process: applied targeted operational refinement"}, notes...)}, nil
+}
+
+func shouldAutoPostProcess(brief askcontract.AuthoringBrief, judge askcontract.JudgeResponse, gen askcontract.GenerationResponse) bool {
+	if len(gen.Files) < 2 {
+		return false
+	}
+	if strings.TrimSpace(brief.CompletenessTarget) != "complete" {
+		return false
+	}
+	if strings.TrimSpace(brief.ModeIntent) != "prepare+apply" {
+		return false
+	}
+	topology := strings.TrimSpace(brief.Topology)
+	if topology != "multi-node" && topology != "ha" {
+		return false
+	}
+	text := strings.ToLower(strings.Join(append(append([]string{}, judge.Advisory...), judge.Blocking...), " "))
+	for _, token := range []string{"worker", "verification", "join", "artifact", "handoff", "kubeconfig", "runtime", "publish"} {
+		if strings.Contains(text, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func critiquePostProcess(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, gen askcontract.GenerationResponse, judge askcontract.JudgeResponse, critic askcontract.CriticResponse, logger askLogger) (askcontract.PostProcessResponse, error) {
+	systemPrompt := postProcessCriticSystemPrompt(brief, plan)
+	userPrompt := postProcessCriticUserPrompt(plan, gen, judge, critic)
+	logger.prompt("postprocess-critic", systemPrompt, userPrompt)
+	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-critic", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1})
+	if err != nil {
+		return askcontract.PostProcessResponse{}, err
+	}
+	logger.response("postprocess-critic", resp.Content)
+	return askcontract.ParsePostProcess(resp.Content)
+}
+
+func applyPostProcessEdit(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, findings askcontract.PostProcessResponse, gen askcontract.GenerationResponse, logger askLogger) (askcontract.GenerationResponse, error) {
+	systemPrompt := postProcessEditSystemPrompt(brief, plan)
+	userPrompt := postProcessEditUserPrompt(gen, findings)
+	logger.prompt("postprocess-edit", systemPrompt, userPrompt)
+	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-edit", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1})
+	if err != nil {
+		return askcontract.GenerationResponse{}, err
+	}
+	logger.response("postprocess-edit", resp.Content)
+	return askcontract.ParseGeneration(resp.Content)
+}
+
+func renderPostProcessNotes(findings askcontract.PostProcessResponse) []string {
+	lines := []string{}
+	if strings.TrimSpace(findings.Summary) != "" {
+		lines = append(lines, "post-process review: "+strings.TrimSpace(findings.Summary))
+	}
+	for _, item := range findings.Advisory {
+		if strings.TrimSpace(item) != "" {
+			lines = append(lines, "post-process advisory: "+strings.TrimSpace(item))
+		}
+	}
+	for _, item := range findings.UpgradeCandidates {
+		if strings.TrimSpace(item) != "" {
+			lines = append(lines, "post-process candidate: "+strings.TrimSpace(item))
+		}
+	}
+	return lines
 }
 
 func applyWriteOverride(decision askintent.Decision, heuristic askintent.Decision, write bool, logger askLogger) askintent.Decision {

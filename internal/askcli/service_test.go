@@ -303,6 +303,50 @@ func TestSemanticCriticUsesExecutionModelForRoleAndJoinContracts(t *testing.T) {
 	}
 }
 
+func TestMaybePostProcessGenerationAppliesOperationalRepairOnly(t *testing.T) {
+	client := &stubClient{responses: []string{
+		`{"summary":"final verification should be gated to control-plane and inline structure is acceptable","blocking":["final cluster verification should run only on the control-plane role for this draft"],"advisory":["preserve inline structure for now"],"upgradeCandidates":["preserve-inline"],"reviseFiles":["workflows/scenarios/apply.yaml"],"preserveFiles":["workflows/prepare.yaml","workflows/vars.yaml"],"suggestedFixes":["Gate the final CheckCluster step with .vars.role == \"control-plane\""]}`,
+		`{"summary":"post-processed draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: packages\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: \"9\"\n          repo:\n            type: rpm\n          outputDir: packages/kubernetes\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        when: .vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/deck/join.txt\n      - id: join\n        when: .vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: /tmp/deck/join.txt\n      - id: verify\n        when: .vars.role == \"control-plane\"\n        kind: CheckCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 3\n            ready: 3\n            controlPlaneReady: 1\n"},{"path":"workflows/vars.yaml","content":"role: control-plane\n"}]}`,
+		`{"summary":"post-processed workflow now has control-plane scoped final verification","blocking":[],"advisory":["inline structure is fine for now"],"missingCapabilities":[],"suggestedFixes":[]}`,
+	}}
+	plan := askcontract.PlanResponse{Request: "create 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", CompletenessTarget: "complete", Topology: "multi-node"}, ExecutionModel: askcontract.ExecutionModel{ArtifactContracts: []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}}, SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "published-for-worker-consumption"}}, RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role", PerNodeInvocation: true}, Verification: askcontract.VerificationStrategy{ExpectedNodeCount: 3, ExpectedControlPlaneReady: 1}}}
+	brief := plan.AuthoringBrief
+	gen := askcontract.GenerationResponse{Summary: "draft", Files: []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: packages\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: \"9\"\n          repo:\n            type: rpm\n          outputDir: packages/kubernetes\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        when: .vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/deck/join.txt\n      - id: join\n        when: .vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: /tmp/deck/join.txt\n      - id: verify\n        kind: CheckCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 3\n            ready: 3\n            controlPlaneReady: 1\n"}, {Path: "workflows/vars.yaml", Content: "role: control-plane\n"}}}
+	judge := askcontract.JudgeResponse{Summary: "usable but final verification should not run on workers", Advisory: []string{"final verification placement should be control-plane only"}}
+	summary, err := maybePostProcessGeneration(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}, t.TempDir(), newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, brief, askretrieve.RetrievalResult{}, gen, "lint ok (1 workflows)", askcontract.CriticResponse{}, judge)
+	if err != nil {
+		t.Fatalf("maybePostProcessGeneration: %v", err)
+	}
+	if !summary.Applied {
+		t.Fatalf("expected post-processing edit to apply")
+	}
+	if !strings.Contains(strings.Join(summary.Notes, "\n"), "preserve-inline") {
+		t.Fatalf("expected preserve-inline advisory in notes, got %#v", summary.Notes)
+	}
+	if !strings.Contains(summary.Generation.Files[1].Content, "when: .vars.role == \"control-plane\"") {
+		t.Fatalf("expected final verification to be gated after post-process, got %q", summary.Generation.Files[1].Content)
+	}
+}
+
+func TestMaybePostProcessGenerationSkipsStructuralCleanupOnlyAdvice(t *testing.T) {
+	client := &stubClient{responses: []string{
+		`{"summary":"draft is operationally sound; only optional cleanup remains","blocking":[],"advisory":["extract-vars"],"upgradeCandidates":["extract-vars","preserve-inline"],"reviseFiles":[],"preserveFiles":["workflows/prepare.yaml","workflows/scenarios/apply.yaml","workflows/vars.yaml"],"suggestedFixes":[]}`,
+	}}
+	plan := askcontract.PlanResponse{Request: "create 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", CompletenessTarget: "complete", Topology: "multi-node"}}
+	gen := askcontract.GenerationResponse{Summary: "draft", Files: []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      distro:\n        family: rhel\n        release: \"9\"\n      repo:\n        type: rpm\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: verify\n    when: .vars.role == \"control-plane\"\n    kind: CheckCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 3\n        ready: 3\n        controlPlaneReady: 1\n"}}}
+	judge := askcontract.JudgeResponse{Summary: "mostly good", Advisory: []string{"worker join and verification are acceptable"}}
+	summary, err := maybePostProcessGeneration(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}, t.TempDir(), newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{}, gen, "lint ok (1 workflows)", askcontract.CriticResponse{}, judge)
+	if err != nil {
+		t.Fatalf("maybePostProcessGeneration skip structural: %v", err)
+	}
+	if summary.Applied {
+		t.Fatalf("expected no post-process edit for structural-only advice")
+	}
+	if !strings.Contains(strings.Join(summary.Notes, "\n"), "extract-vars") {
+		t.Fatalf("expected structural advisory note, got %#v", summary.Notes)
+	}
+}
+
 func TestSummarizeValidationErrorHighlightsWorkflowSkeletonFixes(t *testing.T) {
 	summary := summarizeValidationError("E_SCHEMA_INVALID: (root): version is required; steps.0: id is required; steps.1: id is required")
 	for _, want := range []string{"Schema validation failure", "version: v1alpha1", "id` field"} {

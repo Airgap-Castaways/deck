@@ -121,6 +121,16 @@ type PlanCriticResponse struct {
 	SuggestedFixes   []string `json:"suggestedFixes"`
 }
 
+type PostProcessResponse struct {
+	Summary           string   `json:"summary"`
+	Blocking          []string `json:"blocking"`
+	Advisory          []string `json:"advisory"`
+	UpgradeCandidates []string `json:"upgradeCandidates"`
+	ReviseFiles       []string `json:"reviseFiles"`
+	PreserveFiles     []string `json:"preserveFiles"`
+	SuggestedFixes    []string `json:"suggestedFixes"`
+}
+
 type InfoResponse struct {
 	Summary         string   `json:"summary"`
 	Answer          string   `json:"answer"`
@@ -350,6 +360,37 @@ func ParsePlanCritic(raw string) (PlanCriticResponse, error) {
 	}
 	for i := range resp.MissingContracts {
 		resp.MissingContracts[i] = strings.TrimSpace(resp.MissingContracts[i])
+	}
+	for i := range resp.SuggestedFixes {
+		resp.SuggestedFixes[i] = strings.TrimSpace(resp.SuggestedFixes[i])
+	}
+	return resp, nil
+}
+
+func ParsePostProcess(raw string) (PostProcessResponse, error) {
+	cleaned := clean(raw)
+	if cleaned == "" {
+		return PostProcessResponse{}, fmt.Errorf("post-process response is empty")
+	}
+	var resp PostProcessResponse
+	if err := json.Unmarshal([]byte(cleaned), &resp); err != nil {
+		return PostProcessResponse{}, fmt.Errorf("parse post-process response: %w", err)
+	}
+	resp.Summary = strings.TrimSpace(resp.Summary)
+	for i := range resp.Blocking {
+		resp.Blocking[i] = strings.TrimSpace(resp.Blocking[i])
+	}
+	for i := range resp.Advisory {
+		resp.Advisory[i] = strings.TrimSpace(resp.Advisory[i])
+	}
+	for i := range resp.UpgradeCandidates {
+		resp.UpgradeCandidates[i] = strings.TrimSpace(resp.UpgradeCandidates[i])
+	}
+	for i := range resp.ReviseFiles {
+		resp.ReviseFiles[i] = strings.TrimSpace(resp.ReviseFiles[i])
+	}
+	for i := range resp.PreserveFiles {
+		resp.PreserveFiles[i] = strings.TrimSpace(resp.PreserveFiles[i])
 	}
 	for i := range resp.SuggestedFixes {
 		resp.SuggestedFixes[i] = strings.TrimSpace(resp.SuggestedFixes[i])

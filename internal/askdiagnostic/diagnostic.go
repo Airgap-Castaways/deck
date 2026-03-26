@@ -222,6 +222,20 @@ func FromPlanCritic(critic askcontract.PlanCriticResponse) []Diagnostic {
 	return dedupe(diags)
 }
 
+func FromPostProcess(resp askcontract.PostProcessResponse) []Diagnostic {
+	diags := []Diagnostic{}
+	for _, item := range resp.Blocking {
+		diags = append(diags, Diagnostic{Code: "postprocess_blocking", Severity: "blocking", Message: item})
+	}
+	for _, item := range resp.Advisory {
+		diags = append(diags, Diagnostic{Code: "postprocess_advisory", Severity: "advisory", Message: item})
+	}
+	for _, item := range resp.SuggestedFixes {
+		diags = append(diags, Diagnostic{Code: "postprocess_suggested_fix", Severity: "blocking", Message: item, SuggestedFix: item})
+	}
+	return dedupe(diags)
+}
+
 func JSON(diags []Diagnostic) string {
 	raw, err := json.MarshalIndent(diags, "", "  ")
 	if err != nil {

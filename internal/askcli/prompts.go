@@ -337,6 +337,109 @@ func planCriticUserPrompt(plan askcontract.PlanResponse) string {
 	return strings.TrimSpace(b.String())
 }
 
+func postProcessCriticSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanResponse) string {
+	b := &strings.Builder{}
+	b.WriteString("You are deck ask post-processing critic. Return strict JSON only.\n")
+	b.WriteString("Review a valid generated workflow set for operational upgrade opportunities after generation, lint, and design review.\n")
+	b.WriteString("Focus first on operational defects: shared-state publication, artifact handoff exactness, verification placement, and runtime prerequisite realism.\n")
+	b.WriteString("Treat vars/components cleanup as advisory only. Default to preserve-inline when extraction benefit is weak.\n")
+	b.WriteString("JSON shape: {\"summary\":string,\"blocking\":[]string,\"advisory\":[]string,\"upgradeCandidates\":[]string,\"reviseFiles\":[]string,\"preserveFiles\":[]string,\"suggestedFixes\":[]string}.\n")
+	b.WriteString(authoringBriefPromptBlock(brief))
+	b.WriteString("\n")
+	b.WriteString(executionModelPromptBlock(plan.ExecutionModel))
+	b.WriteString("\n")
+	return b.String()
+}
+
+func postProcessCriticUserPrompt(plan askcontract.PlanResponse, gen askcontract.GenerationResponse, judge askcontract.JudgeResponse, critic askcontract.CriticResponse) string {
+	b := &strings.Builder{}
+	b.WriteString("Planned request: ")
+	b.WriteString(strings.TrimSpace(plan.Request))
+	b.WriteString("\n")
+	if strings.TrimSpace(judge.Summary) != "" {
+		b.WriteString("Design review summary: ")
+		b.WriteString(strings.TrimSpace(judge.Summary))
+		b.WriteString("\n")
+	}
+	if len(judge.Advisory) > 0 {
+		b.WriteString("Design review advisory:\n")
+		for _, item := range judge.Advisory {
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(item))
+			b.WriteString("\n")
+		}
+	}
+	if len(critic.Advisory) > 0 {
+		b.WriteString("Local semantic advisory:\n")
+		for _, item := range critic.Advisory {
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(item))
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("Generated files:\n")
+	for _, file := range gen.Files {
+		b.WriteString("- path: ")
+		b.WriteString(strings.TrimSpace(file.Path))
+		b.WriteString("\n")
+		b.WriteString(file.Content)
+		if !strings.HasSuffix(file.Content, "\n") {
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func postProcessEditSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanResponse) string {
+	b := &strings.Builder{}
+	b.WriteString("You are deck ask post-processing editor. Return strict JSON only using the generation response shape.\n")
+	b.WriteString("Edit only the files required to address blocking operational defects. Preserve valid files when possible.\n")
+	b.WriteString("Do not extract vars or components unless explicitly required by the findings and clearly beneficial. Preserve inline structure by default.\n")
+	b.WriteString(authoringBriefPromptBlock(brief))
+	b.WriteString("\n")
+	b.WriteString(executionModelPromptBlock(plan.ExecutionModel))
+	b.WriteString("\n")
+	return b.String()
+}
+
+func postProcessEditUserPrompt(gen askcontract.GenerationResponse, findings askcontract.PostProcessResponse) string {
+	b := &strings.Builder{}
+	b.WriteString("Blocking operational findings:\n")
+	for _, item := range findings.Blocking {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(item))
+		b.WriteString("\n")
+	}
+	for _, item := range findings.SuggestedFixes {
+		b.WriteString("- fix: ")
+		b.WriteString(strings.TrimSpace(item))
+		b.WriteString("\n")
+	}
+	b.WriteString("Revise these files first:\n")
+	for _, item := range findings.ReviseFiles {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(item))
+		b.WriteString("\n")
+	}
+	b.WriteString("Preserve these files if they are already valid:\n")
+	for _, item := range findings.PreserveFiles {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(item))
+		b.WriteString("\n")
+	}
+	b.WriteString("Current files:\n")
+	for _, file := range gen.Files {
+		b.WriteString("- path: ")
+		b.WriteString(strings.TrimSpace(file.Path))
+		b.WriteString("\n")
+		b.WriteString(file.Content)
+		if !strings.HasSuffix(file.Content, "\n") {
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
 func judgeUserPrompt(gen askcontract.GenerationResponse, lintSummary string, critic askcontract.CriticResponse) string {
 	b := &strings.Builder{}
 	b.WriteString("Local validation summary: ")
