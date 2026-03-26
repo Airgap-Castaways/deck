@@ -28,18 +28,44 @@ func needsComplexPlanner(prompt string, workspace askretrieve.WorkspaceSummary, 
 		return false
 	}
 	lower := strings.ToLower(strings.TrimSpace(prompt))
-	tokens := []string{"air-gapped", "airgapped", "multi-node", "3-node", "prepare", "component", "components", "vars", "orchestration", "cluster"}
+	if isGenericKubeadmStarter(lower) {
+		return false
+	}
+	tokens := []string{"air-gapped", "airgapped", "prepare", "component", "components", "vars", "orchestration", "cluster"}
 	hits := 0
 	for _, token := range tokens {
 		if strings.Contains(lower, token) {
 			hits++
 		}
 	}
+	if explicitClusterTopology(lower) {
+		hits++
+	}
 	if hits >= 2 {
 		return true
 	}
 	if workspace.HasWorkflowTree && strings.Contains(lower, "refine") {
 		return true
+	}
+	return false
+}
+
+func isGenericKubeadmStarter(prompt string) bool {
+	if !strings.Contains(prompt, "kubeadm") {
+		return false
+	}
+	if explicitClusterTopology(prompt) {
+		return false
+	}
+	return true
+}
+
+func explicitClusterTopology(prompt string) bool {
+	tokens := []string{"multi-node", "3-node", "ha", "high-availability", "high availability", "worker", "workers", "join", "control-plane", "control plane"}
+	for _, token := range tokens {
+		if strings.Contains(prompt, token) {
+			return true
+		}
 	}
 	return false
 }

@@ -42,13 +42,11 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.content` | `string` | no | `` | `` | Inline unit file content written verbatim to `path`. | `[Unit]
-Description=kubelet` |
+| `spec.content` | `string` | no | `` | `` | Inline unit file content written verbatim to `path`. | `[Unit]<br>Description=kubelet` |
 | `spec.daemonReload` | `boolean` | no | `` | `` | Run `systemctl daemon-reload` after writing the unit file so systemd picks up the change. | `true` |
 | `spec.mode` | `string` | no | `` | `` | File permissions applied to the unit file in octal notation. | `0644` |
 | `spec.path` | `string` | yes | `` | `` | Destination path for the unit file on the node. | `/etc/systemd/system/kubelet.service` |
-| `spec.template` | `string` | no | `` | `` | Inline multi-line unit content rendered with the current vars before writing. Prefer this for parameterized unit files. | `[Service]
-Environment=NODE_IP={{ .vars.nodeIP }}` |
+| `spec.template` | `string` | no | `` | `` | Inline multi-line unit content rendered with the current vars before writing. Prefer this for parameterized unit files. | `[Service]<br>Environment=NODE_IP={{ .vars.nodeIP }}` |
 
 ### Notes
 

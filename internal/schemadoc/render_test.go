@@ -67,6 +67,15 @@ func TestRenderWorkflowPageUsesConcreteKindExample(t *testing.T) {
 	}
 }
 
+func TestRenderToolPageEscapesMultilineTableExamples(t *testing.T) {
+	page := testFamilyPageInput(t, "systemd-unit")
+	rendered := string(RenderToolPage(page))
+
+	if !strings.Contains(rendered, "[Service]<br>Environment=NODE_IP={{ .vars.nodeIP }}") {
+		t.Fatalf("expected multiline example to stay inside table cell:\n%s", rendered)
+	}
+}
+
 func testFamilyPageInput(t *testing.T, family string) PageInput {
 	t.Helper()
 	defs := workflowcontract.StepDefinitions()

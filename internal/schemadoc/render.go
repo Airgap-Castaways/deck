@@ -525,7 +525,7 @@ func renderFieldTable(fields []Field) string {
 		} else {
 			buf.WriteString("no")
 		}
-		buf.WriteString(" | `" + escapePipe(field.Default) + "` | `" + escapePipe(field.Enum) + "` | " + escapePipe(field.Description) + " | `" + escapePipe(field.Example) + "` |\n")
+		buf.WriteString(" | `" + escapePipe(field.Default) + "` | `" + escapePipe(field.Enum) + "` | " + escapeMarkdownTableCell(field.Description) + " | `" + escapeMarkdownTableCell(field.Example) + "` |\n")
 	}
 	return buf.String()
 }
@@ -795,3 +795,7 @@ func dedupeStrings(items []string) []string {
 func toAnySliceFromUnknown(v any) []any { items, _ := v.([]any); return items }
 
 func escapePipe(s string) string { return strings.ReplaceAll(s, "|", "\\|") }
+
+func escapeMarkdownTableCell(s string) string {
+	return strings.ReplaceAll(escapePipe(s), "\n", "<br>")
+}

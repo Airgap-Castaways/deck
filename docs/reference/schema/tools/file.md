@@ -137,12 +137,10 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.content` | `string` | no | `` | `` | Inline file content written verbatim to `path`. Used with `write`. | `[offline-base]
-baseurl=http://repo.local` |
+| `spec.content` | `string` | no | `` | `` | Inline file content written verbatim to `path`. Used with `write`. | `[offline-base]<br>baseurl=http://repo.local` |
 | `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after `write`, `copy`, `edit`, or `extractArchive` completes. | `0644` |
 | `spec.path` | `string` | yes | `` | `` | Destination path on the node. Used by `write`, `copy`, `edit`, and `extractArchive`. | `/etc/containerd/config.toml` |
-| `spec.template` | `string` | no | `` | `` | Inline multi-line content rendered with the current vars before writing. Use this instead of `content` when the body includes template expressions such as `{{ .vars.* }}`. | `[Service]
-Environment=ROLE={{ .vars.role }}` |
+| `spec.template` | `string` | no | `` | `` | Inline multi-line content rendered with the current vars before writing. Use this instead of `content` when the body includes template expressions such as `{{ .vars.* }}`. | `[Service]<br>Environment=ROLE={{ .vars.role }}` |
 
 ### Validation Rules
 
