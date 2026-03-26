@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
+	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askknowledge"
@@ -113,7 +114,7 @@ func TestApplyWriteOverrideFallsBackToHeuristicForNonGenerationRoute(t *testing.
 func TestBuildPlanWithReviewRetriesOnPlanCriticBlocking(t *testing.T) {
 	client := &stubClient{responses: []string{
 		`{"version":1,"request":"create 3-node kubeadm workflow","intent":"draft","complexity":"complex","authoringBrief":{"routeIntent":"draft","targetScope":"workspace","targetPaths":["workflows/prepare.yaml","workflows/scenarios/apply.yaml"],"modeIntent":"prepare+apply","connectivity":"offline","completenessTarget":"complete","topology":"multi-node","nodeCount":3,"requiredCapabilities":["prepare-artifacts","kubeadm-bootstrap","kubeadm-join"]},"executionModel":{"artifactContracts":[{"kind":"package","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"offline package flow"}],"roleExecution":{"roleSelector":"vars.role","controlPlaneFlow":"bootstrap","workerFlow":"join","perNodeInvocation":true},"verification":{"bootstrapPhase":"bootstrap-control-plane","finalPhase":"verify-cluster","expectedNodeCount":3,"expectedControlPlaneReady":1},"applyAssumptions":["apply consumes local artifacts"]},"offlineAssumption":"offline","needsPrepare":true,"artifactKinds":["package"],"blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"create","purpose":"prepare"},{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"apply"}],"validationChecklist":["lint"]}`,
-		`{"summary":"plan misses join shared-state contract","blocking":["worker join flow lacks a shared-state contract for join data"],"advisory":[],"missingContracts":["join-file publication contract"],"suggestedFixes":["Add executionModel.sharedStateContracts entry for join file publication"]}`,
+		`{"summary":"plan is not viable yet","blocking":["multi-role request has no viable role selector or branching model"],"advisory":[],"missingContracts":[],"suggestedFixes":["Add executionModel.roleExecution.roleSelector for control-plane and worker branching"]}`,
 		`{"version":1,"request":"create 3-node kubeadm workflow","intent":"draft","complexity":"complex","authoringBrief":{"routeIntent":"draft","targetScope":"workspace","targetPaths":["workflows/prepare.yaml","workflows/scenarios/apply.yaml"],"modeIntent":"prepare+apply","connectivity":"offline","completenessTarget":"complete","topology":"multi-node","nodeCount":3,"requiredCapabilities":["prepare-artifacts","kubeadm-bootstrap","kubeadm-join"]},"executionModel":{"artifactContracts":[{"kind":"package","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"offline package flow"}],"sharedStateContracts":[{"name":"join-file","producerPath":"/tmp/deck/join.txt","consumerPaths":["/tmp/deck/join.txt"],"availabilityModel":"published-for-worker-consumption","description":"publish join file for workers"}],"roleExecution":{"roleSelector":"vars.role","controlPlaneFlow":"bootstrap","workerFlow":"join","perNodeInvocation":true},"verification":{"bootstrapPhase":"bootstrap-control-plane","finalPhase":"verify-cluster","expectedNodeCount":3,"expectedControlPlaneReady":1},"applyAssumptions":["apply consumes local artifacts"]},"offlineAssumption":"offline","needsPrepare":true,"artifactKinds":["package"],"blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"create","purpose":"prepare"},{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"apply"}],"validationChecklist":["lint"]}`,
 		`{"summary":"plan is ready","blocking":[],"advisory":["role-aware execution is explicit"],"missingContracts":[],"suggestedFixes":[]}`,
 	}}
@@ -133,7 +134,7 @@ func TestBuildPlanWithReviewRetriesOnPlanCriticBlocking(t *testing.T) {
 	if len(critic.Blocking) != 0 || critic.Summary != "plan is ready" {
 		t.Fatalf("expected final non-blocking critic result, got %#v", critic)
 	}
-	if len(client.prompts) < 3 || (!strings.Contains(client.prompts[2].Prompt, "shared-state contract for join data") && !strings.Contains(client.prompts[2].Prompt, "Required plan updates before generation")) {
+	if len(client.prompts) < 3 || (!strings.Contains(client.prompts[2].Prompt, "role selector") && !strings.Contains(client.prompts[2].Prompt, "Required plan updates before generation")) {
 		t.Fatalf("expected replanning prompt to include plan critic findings, got %#v", client.prompts)
 	}
 }
@@ -179,6 +180,35 @@ func TestNormalizePlanCriticDowngradesRecoverableChecksumAndCardinalityRequests(
 	}
 	joined := strings.Join(critic.Advisory, "\n")
 	for _, want := range []string{"single, canonical worker-consumed join contract", "checksum contract object", "role cardinality contract"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected %q in advisory, got %#v", want, critic)
+		}
+	}
+}
+
+func TestNormalizePlanCriticDowngradesGpt54OperationalCompletenessLanguage(t *testing.T) {
+	plan := askcontract.PlanResponse{ExecutionModel: askcontract.ExecutionModel{
+		ArtifactContracts:    []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}, {Kind: "image", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}},
+		SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "workflows/scenarios/apply.yaml", ConsumerPaths: []string{"workflows/scenarios/apply.yaml"}, AvailabilityModel: "published-for-worker-consumption"}},
+		RoleExecution:        askcontract.RoleExecutionModel{RoleSelector: "vars.role"},
+		Verification:         askcontract.VerificationStrategy{FinalVerificationRole: "control-plane", ExpectedNodeCount: 3, ExpectedControlPlaneReady: 1},
+	}}
+	critic := normalizePlanCritic(plan, askcontract.PlanCriticResponse{
+		Blocking: []string{
+			"workflows/scenarios/apply.yaml: The join handoff is not executable as written. reachable through the prepared local file-serving path or equivalent offline shared path is too vague for a shared-state contract",
+			"Execution model / workflows/scenarios/apply.yaml: Final CheckCluster on the control-plane can race worker joins because apply is described as per-node role-based execution with no barrier or wait contract",
+			"workflows/prepare.yaml -> workflows/scenarios/apply.yaml: The offline image artifact contract is underspecified. The plan does not define the produced image format/bundle layout or the exact path apply LoadImage consumes",
+		},
+		MissingContracts: []string{
+			"Execution model: Synchronization contract between worker joins and the final control-plane CheckCluster step.",
+			"Execution model / topology: Role cardinality contract for 3 nodes = 1 control-plane + 2 workers",
+		},
+	})
+	if len(critic.Blocking) != 0 || len(critic.MissingContracts) != 0 {
+		t.Fatalf("expected operational-completeness gaps to downgrade, got %#v", critic)
+	}
+	joined := strings.Join(critic.Advisory, "\n")
+	for _, want := range []string{"join handoff is not executable as written", "can race worker joins", "image artifact contract is underspecified", "Synchronization contract", "Role cardinality contract"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("expected %q in advisory, got %#v", want, critic)
 		}
@@ -242,6 +272,29 @@ func TestHasFatalPlanReviewIssuesStopsOnFatalPlannerBlocker(t *testing.T) {
 	}
 	if !hasFatalPlanReviewIssues(plan, askcontract.PlanCriticResponse{}) {
 		t.Fatalf("expected fatal planner blocker to stop generation")
+	}
+}
+
+func TestHasFatalPlanReviewIssuesIgnoresRecoverableGpt54PlanCriticBlockers(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Topology: "multi-node", RequiredCapabilities: []string{"kubeadm-join", "cluster-verification"}},
+		EntryScenario:  "workflows/scenarios/apply.yaml",
+		Files:          []askcontract.PlanFile{{Path: "workflows/prepare.yaml"}, {Path: "workflows/scenarios/apply.yaml"}, {Path: "workflows/vars.yaml"}},
+		ExecutionModel: askcontract.ExecutionModel{
+			ArtifactContracts:    []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}, {Kind: "image", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}},
+			SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "workflows/scenarios/apply.yaml", ConsumerPaths: []string{"workflows/scenarios/apply.yaml"}, AvailabilityModel: "published-for-worker-consumption"}},
+			RoleExecution:        askcontract.RoleExecutionModel{RoleSelector: "vars.role"},
+			Verification:         askcontract.VerificationStrategy{FinalVerificationRole: "control-plane", ExpectedNodeCount: 3, ExpectedControlPlaneReady: 1},
+		},
+		NeedsPrepare: true,
+	}
+	critic := normalizePlanCritic(plan, askcontract.PlanCriticResponse{Blocking: []string{
+		"workflows/scenarios/apply.yaml join handoff: the join artifact path is named, but the contract does not specify whether the published file contains a full reusable kubeadm join command",
+		"workflows/vars.yaml + apply role logic: the plan says role selector is vars.topology.nodeRole, but it does not define how each running node resolves to one topology entry",
+		"Execution model / workflows/scenarios/apply.yaml: Final CheckCluster on the control-plane can race worker joins because apply is described as per-node role-based execution with no barrier or wait contract",
+	}})
+	if hasFatalPlanReviewIssues(plan, critic) {
+		t.Fatalf("expected recoverable gpt-5.4 blocker language to proceed to generation")
 	}
 }
 
@@ -341,6 +394,63 @@ func TestGenerateWithValidationRetryPromptIncludesRawValidatorErrorAndRepairGuid
 		if !strings.Contains(retryPrompt, want) {
 			t.Fatalf("expected %q in retry prompt, got %q", want, retryPrompt)
 		}
+	}
+	for _, avoid := range []string{"Previously generated files:", "kind: CheckHost\n    spec:\n      os:", "version: v1alpha1\nsteps:"} {
+		if strings.Contains(retryPrompt, avoid) {
+			t.Fatalf("expected retry prompt to avoid raw previous file exemplar %q, got %q", avoid, retryPrompt)
+		}
+	}
+}
+
+func TestGenerateWithValidationRetryPromptIncludesYamlStructureRepairGuidance(t *testing.T) {
+	client := &stubClient{responses: []string{
+		`{"summary":"broken yaml","review":[],"files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n - name: broken\n steps:\n - id: run\n kind: Command\n spec:\n command: [\"true\"]\n"},{"path":"workflows/vars.yaml","content":"role: control-plane\n"}]}`,
+		`{"summary":"repaired yaml","review":[],"files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: broken\n    steps:\n      - id: run\n        kind: Command\n        spec:\n          command: [\"true\"]\n"},{"path":"workflows/vars.yaml","content":"role: control-plane\n"}]}`,
+	}}
+	plan := askcontract.PlanResponse{Request: "repair yaml structure", Files: []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}, {Path: "workflows/vars.yaml", Action: "create"}}}
+	_, _, _, _, _, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: plan.Request}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
+	if err != nil {
+		t.Fatalf("expected yaml repair success: %v", err)
+	}
+	if len(client.prompts) != 2 {
+		t.Fatalf("expected two generate calls, got %d", len(client.prompts))
+	}
+	retryPrompt := client.prompts[1].Prompt
+	retrySystem := client.prompts[1].SystemPrompt
+	for _, want := range []string{"workflows/scenarios/apply.yaml:", "YAML structure repair requirements:", "Parse-error files to fix first:", "workflows/scenarios/apply.yaml", "keep content byte-for-byte", "top-level `version: v1alpha1` at column 1"} {
+		if !strings.Contains(retryPrompt, want) {
+			t.Fatalf("expected %q in retry prompt, got %q", want, retryPrompt)
+		}
+	}
+	if !strings.Contains(retrySystem, "YAML repair assistant") {
+		t.Fatalf("expected parse-yaml retry to switch system prompt, got %q", retrySystem)
+	}
+	if !strings.Contains(retrySystem, "only the revised files") {
+		t.Fatalf("expected yaml repair system prompt to allow partial file returns, got %q", retrySystem)
+	}
+	if !strings.Contains(retryPrompt, "workflows/vars.yaml [preserve-if-valid]") {
+		t.Fatalf("expected valid vars file to remain preserve-if-valid, got %q", retryPrompt)
+	}
+	if strings.Contains(retryPrompt, "Previously generated files:") {
+		t.Fatalf("expected yaml repair retry prompt to avoid raw previous files, got %q", retryPrompt)
+	}
+}
+
+func TestGenerateWithValidationMergesPartialYamlRepairResponse(t *testing.T) {
+	client := &stubClient{responses: []string{
+		`{"summary":"broken yaml","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nphases:\n - name: collect\n steps:\n - id: collect\n kind: DownloadPackage\n spec:\n packages:\n - kubeadm\n"},{"path":"workflows/vars.yaml","content":"role: control-plane\n"}]}`,
+		`{"summary":"patched prepare","review":["repaired prepare indentation"],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: collect\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: rhel9\n          repo:\n            type: rpm\n"}]}`,
+	}}
+	plan := askcontract.PlanResponse{Request: "repair yaml structure", Files: []askcontract.PlanFile{{Path: "workflows/prepare.yaml", Action: "create"}, {Path: "workflows/vars.yaml", Action: "create"}}}
+	gen, _, _, _, retries, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: plan.Request}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
+	if err != nil {
+		t.Fatalf("expected merged yaml repair success: %v", err)
+	}
+	if retries != 1 || len(gen.Files) != 2 {
+		t.Fatalf("expected merged result with preserved vars file, got retries=%d files=%d", retries, len(gen.Files))
+	}
+	if !strings.Contains(gen.Files[0].Content+gen.Files[1].Content, "role: control-plane") {
+		t.Fatalf("expected preserve-if-valid vars file to survive partial repair merge, got %#v", gen.Files)
 	}
 }
 
@@ -578,21 +688,55 @@ func TestAskLoggerDebugAndTrace(t *testing.T) {
 func TestGenerationSystemPromptIncludesAskContextBlocks(t *testing.T) {
 	req := askpolicy.ScenarioRequirements{Connectivity: "offline", RequiredFiles: []string{"workflows/scenarios/apply.yaml"}}
 	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askknowledge.Current())
-	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "workspace"}, askretrieve.RetrievalResult{}, req, askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Connectivity: "offline", CompletenessTarget: "starter", Topology: "multi-node", RequiredCapabilities: []string{"kubeadm-join", "cluster-verification"}}, askcontract.ExecutionModel{ArtifactContracts: []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml", Description: "offline package flow"}}, SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "published-for-worker-consumption"}}, RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role", ControlPlaneFlow: "bootstrap", WorkerFlow: "join", PerNodeInvocation: true}, Verification: askcontract.VerificationStrategy{FinalVerificationRole: "control-plane", ExpectedNodeCount: 3, ExpectedControlPlaneReady: 1}, ApplyAssumptions: []string{"apply consumes local artifacts"}}, scaffold)
+	retrieval := askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "example-1", Source: "example", Label: "test/workflows/scenarios/kubeadm.yaml", Content: "Reference example:\n- path: test/workflows/scenarios/kubeadm.yaml\nversion: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n", Score: 90}, {ID: "workspace-apply", Source: "workspace", Label: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: join\n    kind: JoinKubeadm\n", Score: 80}, {ID: "typed-steps-draft", Source: "askcontext", Topic: askcontext.TopicTypedSteps, Label: "typed-steps", Content: "typed guidance", Score: 70}}}
+	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "workspace"}, retrieval, req, askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Connectivity: "offline", CompletenessTarget: "starter", Topology: "multi-node", RequiredCapabilities: []string{"kubeadm-join", "cluster-verification"}}, askcontract.ExecutionModel{ArtifactContracts: []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml", Description: "offline package flow"}}, SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "published-for-worker-consumption"}}, RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role", ControlPlaneFlow: "bootstrap", WorkerFlow: "join", PerNodeInvocation: true}, Verification: askcontract.VerificationStrategy{FinalVerificationRole: "control-plane", ExpectedNodeCount: 3, ExpectedControlPlaneReady: 1}, ApplyAssumptions: []string{"apply consumes local artifacts"}}, scaffold)
 	for _, want := range []string{"Workflow source-of-truth:", "Authoring policy from deck metadata:", "Validated scaffold:", "Use retrieved deck knowledge for topology, component/import shape, vars semantics, and typed-step choices."} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
 		}
+	}
+	if !strings.Contains(prompt, "Primary repository context follows.") || !strings.Contains(prompt, "Reference example:") || !strings.Contains(prompt, "JoinKubeadm") {
+		t.Fatalf("expected repository context to appear in generation prompt, got %q", prompt)
+	}
+	if strings.Index(prompt, "Primary repository context follows.") > strings.Index(prompt, "Workflow source-of-truth:") {
+		t.Fatalf("expected repository context before abstract policy blocks, got %q", prompt)
 	}
 	for _, want := range []string{"Normalized authoring brief:", "mode intent: prepare+apply", "connectivity: offline", "completeness target: starter", "Normalized execution model:", "artifact package: workflows/prepare.yaml -> workflows/scenarios/apply.yaml", "shared state join-file:", "role selector: vars.role", "verification expected nodes: 3", "verification final role: control-plane", "JoinKubeadm", "supports kubeadm join capability", "Step composition guidance:", "Multi-node kubeadm flow:"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
 		}
 	}
-	for _, avoid := range []string{"Workspace topology:", "Prepare/apply guidance:", "Components and imports:", "Variables guidance:", "Relevant CLI usage:"} {
+	for _, avoid := range []string{"Workspace topology:", "Prepare/apply guidance:", "Components and imports:", "Variables guidance:", "Relevant CLI usage:", "typed guidance"} {
 		if strings.Contains(prompt, avoid) {
 			t.Fatalf("expected generation prompt to avoid duplicated context block %q, got %q", avoid, prompt)
 		}
+	}
+}
+
+func TestAskRequestTimeoutScalesGenerationByIterationsAndPromptSize(t *testing.T) {
+	small := askRequestTimeout("generate", 1, "sys", "user")
+	large := askRequestTimeout("generate", 5, strings.Repeat("s", 12000), strings.Repeat("u", 12000))
+	if large <= small {
+		t.Fatalf("expected larger generation timeout for more iterations and prompt bytes, got small=%s large=%s", small, large)
+	}
+	if askRequestTimeout("classify", 1, "sys", "user") >= small {
+		t.Fatalf("expected classify timeout to stay below generation timeout")
+	}
+}
+
+func TestGenerationRetrievalPromptBlockSkipsProjectContextAndCapsExamples(t *testing.T) {
+	retrieval := askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{
+		{ID: "example-1", Source: "example", Label: "a", Content: "Reference example:\n- path: a\n", Score: 100},
+		{ID: "example-2", Source: "example", Label: "b", Content: "Reference example:\n- path: b\n", Score: 99},
+		{ID: "example-3", Source: "example", Label: "c", Content: "Reference example:\n- path: c\n", Score: 98},
+		{ID: "project", Source: "project", Label: "project-context", Content: "Project context:\nvery long", Score: 97},
+	}}
+	block := generationRetrievalPromptBlock(retrieval)
+	if strings.Contains(block, "Project context:") {
+		t.Fatalf("expected project context to be skipped, got %q", block)
+	}
+	if strings.Count(block, "Reference example:") != 2 {
+		t.Fatalf("expected exactly two examples in generation retrieval block, got %q", block)
 	}
 }
 

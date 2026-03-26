@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	openai "github.com/sashabaranov/go-openai"
 
@@ -81,10 +80,15 @@ type Client struct {
 }
 
 func New() *Client {
-	return &Client{httpClient: &http.Client{Timeout: 120 * time.Second}}
+	return &Client{httpClient: &http.Client{}}
 }
 
 func (c *Client) Generate(ctx context.Context, req askprovider.Request) (askprovider.Response, error) {
+	if req.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, req.Timeout)
+		defer cancel()
+	}
 	provider := strings.ToLower(strings.TrimSpace(req.Provider))
 	if provider == "" {
 		provider = askprovider.DefaultProvider

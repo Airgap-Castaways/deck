@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	lspaugment "github.com/Airgap-Castaways/deck/internal/askaugment/lsp"
 	mcpaugment "github.com/Airgap-Castaways/deck/internal/askaugment/mcp"
@@ -258,6 +259,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval, requirements, authoringBrief, plan.ExecutionModel, scaffold),
 			Prompt:       generationPrompt,
 			MaxRetries:   attempts,
+			Timeout:      askRequestTimeout("generate", attempts, generationPrompt, generationPrompt),
 		}
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "generation", SystemPrompt: generationRequest.SystemPrompt, UserPrompt: generationRequest.Prompt})
 		logger.logf("basic", "\n[ask][phase:generation:start] route=%s attempts=%d\n", decision.Route, attempts)
@@ -434,7 +436,7 @@ func normalizePlanCritic(plan askcontract.PlanResponse, critic askcontract.PlanC
 		if text == "" {
 			continue
 		}
-		if isRecoverablePlanCriticIssue(plan, text) {
+		if !isFatalPlanCriticIssue(plan, text) || isRecoverablePlanCriticIssue(plan, text) {
 			advisory = append(advisory, text)
 			continue
 		}
@@ -582,6 +584,36 @@ func planHasArtifactConsumerPath(plan askcontract.PlanResponse) bool {
 
 func isRecoverablePlanCriticIssue(plan askcontract.PlanResponse, text string) bool {
 	lower := strings.ToLower(text)
+	recoverableTokens := []string{
+		"join handoff",
+		"join artifact",
+		"join publication",
+		"join-file",
+		"shared-state",
+		"worker completion",
+		"synchronization contract",
+		"final checkcluster",
+		"can race worker joins",
+		"verification staging",
+		"role cardinality",
+		"topology fidelity",
+		"per-node identity mapping",
+		"artifact contract",
+		"offline package artifact contract",
+		"offline image artifact contract",
+		"repodata",
+		"bundle layout",
+		"loadimage consumes",
+		"producer/consumer",
+		"published file contains",
+		"workspace-to-node artifact distribution",
+		"node-local",
+	}
+	for _, token := range recoverableTokens {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
 	if strings.Contains(lower, "role cardinality") || strings.Contains(lower, "worker-ready") || strings.Contains(lower, "readyworkers") {
 		return true
 	}
@@ -600,6 +632,47 @@ func isRecoverablePlanCriticIssue(plan askcontract.PlanResponse, text string) bo
 	if strings.Contains(lower, "checkcluster") && strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) != "" {
 		return true
 	}
+	return false
+}
+
+func isFatalPlanCriticIssue(plan askcontract.PlanResponse, text string) bool {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	if lower == "" {
+		return false
+	}
+	fatalTokens := []string{
+		"no viable entry scenario",
+		"cannot determine entry scenario",
+		"missing entry scenario",
+		"required prepare/apply structure is absent",
+		"cannot default prepare",
+		"cannot default apply",
+		"no artifact consumer",
+		"no viable consumer",
+		"no role selector",
+		"no viable role selector",
+		"no branching model",
+		"structurally unusable",
+		"cannot safely continue",
+	}
+	for _, token := range fatalTokens {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	if strings.Contains(lower, "entry scenario") && strings.Contains(lower, "cannot") {
+		return true
+	}
+	if strings.Contains(lower, "artifact consumer") && (strings.Contains(lower, "no ") || strings.Contains(lower, "missing")) {
+		return true
+	}
+	if strings.Contains(lower, "role selector") && (strings.Contains(lower, "no ") || strings.Contains(lower, "missing") || strings.Contains(lower, "cannot")) {
+		return true
+	}
+	if strings.Contains(lower, "branching model") && (strings.Contains(lower, "no ") || strings.Contains(lower, "missing")) {
+		return true
+	}
+	_ = plan
 	return false
 }
 
@@ -683,7 +756,7 @@ func critiquePostProcess(ctx context.Context, client askprovider.Client, req ask
 	systemPrompt := postProcessCriticSystemPrompt(brief, plan)
 	userPrompt := postProcessCriticUserPrompt(plan, gen, judge, critic, planCritic)
 	logger.prompt("postprocess-critic", systemPrompt, userPrompt)
-	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-critic", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1})
+	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-critic", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1, Timeout: askRequestTimeout("postprocess-critic", 1, systemPrompt, userPrompt)})
 	if err != nil {
 		return askcontract.PostProcessResponse{}, err
 	}
@@ -699,7 +772,7 @@ func applyPostProcessEdit(ctx context.Context, client askprovider.Client, req as
 	systemPrompt := postProcessEditSystemPrompt(brief, plan)
 	userPrompt := postProcessEditUserPrompt(gen, findings, planCritic)
 	logger.prompt("postprocess-edit", systemPrompt, userPrompt)
-	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-edit", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1})
+	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-edit", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1, Timeout: askRequestTimeout("postprocess-edit", 1, systemPrompt, userPrompt)})
 	if err != nil {
 		return askcontract.GenerationResponse{}, err
 	}
@@ -843,7 +916,7 @@ func applyStructuralCleanupEdit(ctx context.Context, client askprovider.Client, 
 	systemPrompt := structuralCleanupEditSystemPrompt(brief, plan)
 	userPrompt := structuralCleanupEditUserPrompt(gen, findings)
 	logger.prompt("postprocess-structural", systemPrompt, userPrompt)
-	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-structural", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1})
+	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-structural", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1, Timeout: askRequestTimeout("postprocess-structural", 1, systemPrompt, userPrompt)})
 	if err != nil {
 		return askcontract.GenerationResponse{}, err
 	}
@@ -912,6 +985,7 @@ func classifyWithLLM(ctx context.Context, client askprovider.Client, cfg askconf
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
 		MaxRetries:   1,
+		Timeout:      askRequestTimeout("classify", 1, systemPrompt, userPrompt),
 	}
 	var parsed askcontract.ClassificationResponse
 	for attempt := 0; attempt < 2; attempt++ {
@@ -981,6 +1055,7 @@ func answerWithLLM(ctx context.Context, client askprovider.Client, cfg askconfig
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
 		MaxRetries:   1,
+		Timeout:      askRequestTimeout(string(decision.Route), 1, systemPrompt, userPrompt),
 	})
 	if err != nil {
 		return askcontract.InfoResponse{}, err
@@ -1002,6 +1077,44 @@ func generationAttempts(requested int, decision askintent.Decision, prompt strin
 	return 3
 }
 
+func askRequestTimeout(kind string, maxIterations int, systemPrompt string, prompt string) time.Duration {
+	base := 45 * time.Second
+	switch strings.TrimSpace(kind) {
+	case "classify":
+		base = 45 * time.Second
+	case "plan", "plan-critic":
+		base = 90 * time.Second
+	case "generate":
+		base = 180 * time.Second
+	case "judge":
+		base = 90 * time.Second
+	case "postprocess-critic", "postprocess-edit", "postprocess-structural":
+		base = 120 * time.Second
+	default:
+		base = 90 * time.Second
+	}
+	if maxIterations > 1 {
+		base += time.Duration(minInt(maxIterations-1, 4)) * 30 * time.Second
+	}
+	promptBytes := len(systemPrompt) + len(prompt)
+	base += time.Duration(minInt(promptBytes/4000, 8)) * 10 * time.Second
+	return minDuration(base, 10*time.Minute)
+}
+
+func minInt(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func minDuration(a time.Duration, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func generateWithValidation(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, attempts int, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult, planCritic askcontract.PlanCriticResponse) (askcontract.GenerationResponse, string, askcontract.CriticResponse, askcontract.JudgeResponse, int, error) {
 	var lastValidation string
 	var lastCritic askcontract.CriticResponse
@@ -1010,23 +1123,30 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 	bundle := askknowledge.Current()
 	for attempt := 1; attempt <= attempts; attempt++ {
 		currentPrompt := req.Prompt
+		currentSystemPrompt := req.SystemPrompt
 		if attempt > 1 && lastValidation != "" {
 			diags := askdiagnostic.FromValidationError(lastValidation, bundle)
 			diags = append(diags, askdiagnostic.FromPlanCritic(planCritic)...)
 			diags = append(diags, askdiagnostic.FromCritic(lastCritic)...)
 			diags = append(diags, askdiagnostic.FromJudge(lastJudge)...)
-			currentPrompt += "\n\nLocal validation failed. Enter targeted repair mode and return full JSON again."
-			currentPrompt += "\nValidator summary:\n" + summarizeValidationError(lastValidation)
-			currentPrompt += "\nRaw validator error:\n" + strings.TrimSpace(lastValidation)
-			for _, chunk := range askretrieve.RepairChunks(req.Prompt, lastValidation) {
-				currentPrompt += "\n" + chunk.Content
-			}
 			logger.logf("debug", "\n[ask][phase:repair:diagnostics]\n%s\n", askdiagnostic.JSON(diags))
-			currentPrompt += "\n" + askdiagnostic.RepairPromptBlock(diags)
-			currentPrompt += "\n" + targetedRepairPromptBlock(lastGeneration, diags)
+			if isYAMLParseFailure(lastValidation) {
+				currentSystemPrompt = yamlRepairSystemPrompt(normalizedAuthoringBrief(plan, brief), plan)
+				currentPrompt = yamlRepairUserPrompt(lastGeneration, lastValidation, diags)
+			} else {
+				currentPrompt += "\n\nLocal validation failed. Enter targeted repair mode and return full JSON again."
+				currentPrompt += "\nValidator summary:\n" + summarizeValidationError(lastValidation)
+				currentPrompt += "\nRaw validator error:\n" + strings.TrimSpace(lastValidation)
+				for _, chunk := range askretrieve.RepairChunks(req.Prompt, lastValidation) {
+					currentPrompt += "\n" + chunk.Content
+				}
+				currentPrompt += "\n" + askdiagnostic.RepairPromptBlock(diags)
+				currentPrompt += "\n" + yamlStructureRepairPromptBlock(lastGeneration, lastValidation, diags)
+				currentPrompt += "\n" + targetedRepairPromptBlock(lastGeneration, diags)
+			}
 		}
 		logger.logf("basic", "[ask][phase:generation:attempt] attempt=%d/%d\n", attempt, attempts)
-		logger.prompt("generation", req.SystemPrompt, currentPrompt)
+		logger.prompt("generation", currentSystemPrompt, currentPrompt)
 		resp, err := client.Generate(ctx, askprovider.Request{
 			Kind:         req.Kind,
 			Provider:     req.Provider,
@@ -1034,9 +1154,10 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			APIKey:       req.APIKey,
 			OAuthToken:   req.OAuthToken,
 			Endpoint:     req.Endpoint,
-			SystemPrompt: req.SystemPrompt,
+			SystemPrompt: currentSystemPrompt,
 			Prompt:       currentPrompt,
 			MaxRetries:   1,
+			Timeout:      askRequestTimeout(req.Kind, attempts, currentSystemPrompt, currentPrompt),
 		})
 		if err != nil {
 			return askcontract.GenerationResponse{}, lastValidation, lastCritic, lastJudge, attempt - 1, err
@@ -1051,6 +1172,10 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			}
 			return askcontract.GenerationResponse{}, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
 		}
+		if attempt > 1 && isYAMLParseFailure(lastValidation) {
+			gen = mergeGeneratedFiles(lastGeneration, gen)
+		}
+		gen = normalizeGeneratedFiles(gen)
 		logger.logf("debug", "[ask][phase:semantic-validate] attempt=%d/%d\n", attempt, attempts)
 		lastGeneration = gen
 		lintSummary, critic, err := validateGeneration(ctx, root, gen, decision, plan, brief, retrieval)
@@ -1083,6 +1208,11 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 	return askcontract.GenerationResponse{}, lastValidation, lastCritic, lastJudge, attempts - 1, fmt.Errorf("ask generation did not validate after %d attempts: %s", attempts, lastValidation)
 }
 
+func isYAMLParseFailure(message string) bool {
+	lower := strings.ToLower(strings.TrimSpace(message))
+	return strings.Contains(lower, "parse yaml") || strings.Contains(lower, "parse vars yaml") || strings.Contains(lower, "yaml:")
+}
+
 func maybeJudgeGeneration(ctx context.Context, client askprovider.Client, req askprovider.Request, gen askcontract.GenerationResponse, lintSummary string, critic askcontract.CriticResponse, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, logger askLogger) (askcontract.JudgeResponse, error) {
 	if strings.TrimSpace(brief.RouteIntent) == "" {
 		return askcontract.JudgeResponse{}, fmt.Errorf("judge skipped without authoring brief")
@@ -1101,6 +1231,7 @@ func maybeJudgeGeneration(ctx context.Context, client askprovider.Client, req as
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
 		MaxRetries:   1,
+		Timeout:      askRequestTimeout("judge", 1, systemPrompt, userPrompt),
 	})
 	if err != nil {
 		return askcontract.JudgeResponse{}, err
@@ -1119,6 +1250,9 @@ func targetedRepairPromptBlock(prev askcontract.GenerationResponse, diags []askd
 		if path == "" {
 			path = strings.TrimSpace(diag.File)
 		}
+		if path == "" {
+			path = diagnosticMessageFile(diag.Message)
+		}
 		if path != "" {
 			affected[path] = true
 		}
@@ -1131,7 +1265,10 @@ func targetedRepairPromptBlock(prev askcontract.GenerationResponse, diags []askd
 	b := &strings.Builder{}
 	b.WriteString("Targeted repair mode:\n")
 	b.WriteString("- Preserve unchanged files when they are already valid.\n")
+	b.WriteString("- For files marked preserve-if-valid, keep content byte-for-byte unless a diagnostic explicitly requires a change.\n")
 	b.WriteString("- Prefer editing only the files implicated by diagnostics or execution/design review findings.\n")
+	b.WriteString("- When revising YAML, keep `version: v1alpha1` and top-level keys at column 1, indent mapping children by two spaces, and indent list items under their parent key.\n")
+	b.WriteString("- Do not collapse YAML indentation, remove required list markers, or rewrite every file from scratch when only one file is broken.\n")
 	b.WriteString("- Return the full JSON response with all files that should remain in the final result.\n")
 	if len(affected) > 0 {
 		b.WriteString("Affected files to revise first:\n")
@@ -1143,7 +1280,7 @@ func targetedRepairPromptBlock(prev askcontract.GenerationResponse, diags []askd
 			}
 		}
 	}
-	b.WriteString("Previously generated files:\n")
+	b.WriteString("File status from previous attempt:\n")
 	for _, file := range prev.Files {
 		path := strings.TrimSpace(file.Path)
 		status := "preserve-if-valid"
@@ -1155,12 +1292,123 @@ func targetedRepairPromptBlock(prev askcontract.GenerationResponse, diags []askd
 		b.WriteString(" [")
 		b.WriteString(status)
 		b.WriteString("]\n")
-		b.WriteString(file.Content)
-		if !strings.HasSuffix(file.Content, "\n") {
+		for _, detail := range diagnosticDetailsForFile(path, diags) {
+			b.WriteString("  - ")
+			b.WriteString(detail)
 			b.WriteString("\n")
 		}
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func diagnosticDetailsForFile(path string, diags []askdiagnostic.Diagnostic) []string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	items := []string{}
+	for _, diag := range diags {
+		diagPath := strings.TrimSpace(diag.Path)
+		if diagPath == "" {
+			diagPath = strings.TrimSpace(diag.File)
+		}
+		if diagPath == "" {
+			diagPath = diagnosticMessageFile(diag.Message)
+		}
+		if diagPath != path {
+			continue
+		}
+		msg := strings.TrimSpace(diag.Message)
+		if msg != "" {
+			items = append(items, msg)
+		}
+		fix := strings.TrimSpace(diag.SuggestedFix)
+		if fix != "" {
+			items = append(items, "suggested fix: "+fix)
+		}
+	}
+	return dedupe(items)
+}
+
+func yamlStructureRepairPromptBlock(prev askcontract.GenerationResponse, validation string, diags []askdiagnostic.Diagnostic) string {
+	lower := strings.ToLower(strings.TrimSpace(validation))
+	if !strings.Contains(lower, "parse yaml") && !strings.Contains(lower, "yaml:") {
+		return ""
+	}
+	affected := affectedFilesFromDiagnostics(prev, diags)
+	b := &strings.Builder{}
+	b.WriteString("YAML structure repair requirements:\n")
+	b.WriteString("- Fix YAML structure before changing workflow design. Prioritize indentation, list markers, and key nesting.\n")
+	b.WriteString("- Keep every revised file as plain YAML text with stable indentation; do not compress nested objects onto the wrong column.\n")
+	b.WriteString("- Preserve already-valid files exactly; only revise files implicated by the parse error when possible.\n")
+	b.WriteString("- For workflow files, keep top-level `version: v1alpha1` at column 1, then `phases:` or `steps:` at column 1.\n")
+	b.WriteString("- Under `phases:` or `steps:`, each list item must start with `  -` and nested keys must be indented consistently beneath it.\n")
+	if len(affected) > 0 {
+		b.WriteString("- Parse-error files to fix first:\n")
+		for _, path := range affected {
+			b.WriteString("  - ")
+			b.WriteString(path)
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func affectedFilesFromDiagnostics(prev askcontract.GenerationResponse, diags []askdiagnostic.Diagnostic) []string {
+	affected := map[string]bool{}
+	for _, diag := range diags {
+		path := strings.TrimSpace(diag.Path)
+		if path == "" {
+			path = strings.TrimSpace(diag.File)
+		}
+		if path != "" {
+			affected[path] = true
+		}
+	}
+	if len(affected) == 0 {
+		for _, file := range prev.Files {
+			affected[strings.TrimSpace(file.Path)] = true
+		}
+	}
+	out := make([]string, 0, len(affected))
+	for _, file := range prev.Files {
+		path := strings.TrimSpace(file.Path)
+		if affected[path] {
+			out = append(out, path)
+		}
+	}
+	for path := range affected {
+		if !stringSliceContains(out, path) {
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+func stringSliceContains(items []string, want string) bool {
+	want = strings.TrimSpace(want)
+	for _, item := range items {
+		if strings.TrimSpace(item) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func diagnosticMessageFile(message string) string {
+	message = strings.TrimSpace(message)
+	if !strings.HasPrefix(message, "workflows/") {
+		return ""
+	}
+	idx := strings.Index(message, ":")
+	if idx <= 0 {
+		return ""
+	}
+	path := strings.TrimSpace(message[:idx])
+	if !strings.HasPrefix(path, "workflows/") {
+		return ""
+	}
+	return path
 }
 
 func mergeJudgeIntoCritic(critic askcontract.CriticResponse, judge askcontract.JudgeResponse, finalAttempt bool) askcontract.CriticResponse {

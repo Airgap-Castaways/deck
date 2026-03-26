@@ -129,6 +129,7 @@ func planWithLLM(ctx context.Context, client askprovider.Client, cfg askconfigSe
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
 		MaxRetries:   1,
+		Timeout:      askRequestTimeout("plan", 1, systemPrompt, userPrompt),
 	})
 	if err != nil {
 		return askcontract.PlanResponse{}, err
@@ -160,6 +161,7 @@ func critiquePlanWithLLM(ctx context.Context, client askprovider.Client, cfg ask
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
 		MaxRetries:   1,
+		Timeout:      askRequestTimeout("plan-critic", 1, systemPrompt, userPrompt),
 	})
 	if err != nil {
 		return askcontract.PlanCriticResponse{}, err

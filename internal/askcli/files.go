@@ -54,7 +54,7 @@ func validateGeneratedFile(root string, file askcontract.GeneratedFile) error {
 			return nil
 		}
 		if err := validate.Bytes(target, []byte(file.Content)); err != nil {
-			return err
+			return fmt.Errorf("%s: %w", file.Path, err)
 		}
 	}
 	return nil
@@ -80,6 +80,193 @@ func writeFiles(root string, files []askcontract.GeneratedFile) error {
 		}
 	}
 	return nil
+}
+
+func normalizeGeneratedFiles(gen askcontract.GenerationResponse) askcontract.GenerationResponse {
+	gen.Files = append([]askcontract.GeneratedFile(nil), gen.Files...)
+	for i := range gen.Files {
+		gen.Files[i].Content = normalizeGeneratedContent(gen.Files[i].Path, gen.Files[i].Content)
+	}
+	return gen
+}
+
+func mergeGeneratedFiles(base askcontract.GenerationResponse, patch askcontract.GenerationResponse) askcontract.GenerationResponse {
+	if len(base.Files) == 0 {
+		return patch
+	}
+	merged := askcontract.GenerationResponse{
+		Summary: strings.TrimSpace(patch.Summary),
+		Review:  append([]string(nil), patch.Review...),
+		Files:   append([]askcontract.GeneratedFile(nil), base.Files...),
+	}
+	if merged.Summary == "" {
+		merged.Summary = base.Summary
+	}
+	if len(merged.Review) == 0 {
+		merged.Review = append([]string(nil), base.Review...)
+	}
+	index := map[string]int{}
+	for i, file := range merged.Files {
+		index[strings.TrimSpace(file.Path)] = i
+	}
+	for _, file := range patch.Files {
+		path := strings.TrimSpace(file.Path)
+		if idx, ok := index[path]; ok {
+			merged.Files[idx] = file
+			continue
+		}
+		merged.Files = append(merged.Files, file)
+	}
+	return merged
+}
+
+func normalizeGeneratedContent(path string, content string) string {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return content
+	}
+	if isVarsPath(path) {
+		if looksLikeFlattenedYAML(trimmed) {
+			return normalizeVarsYAML(trimmed)
+		}
+		return content
+	}
+	if !looksLikeFlattenedYAML(trimmed) {
+		return content
+	}
+	return normalizeWorkflowYAML(trimmed)
+}
+
+func looksLikeFlattenedYAML(content string) bool {
+	return strings.Contains(content, "\n - name:") || strings.Contains(content, "\n - id:") || strings.Contains(content, "\n steps:\n - id:") || strings.Contains(content, "\n spec:\n ")
+}
+
+func normalizeVarsYAML(content string) string {
+	lines := strings.Split(content, "\n")
+	topLevel := map[string]bool{
+		"role": true, "rolevalues": true, "topology": true, "serverurl": true, "clustername": true,
+		"offlinepath": true, "offlinerepopath": true, "offlineimagepath": true, "joinlocalpath": true,
+		"joinartifactdir": true, "joinartifactpath": true, "artifactpackagerepopath": true, "artifactimagedir": true,
+		"handoff": true, "k8s": true, "paths": true,
+	}
+	out := make([]string, 0, len(lines))
+	indentNested := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") {
+			out = append(out, "  "+trimmed)
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(strings.SplitN(trimmed, ":", 2)[0], ":")))
+		indent := ""
+		if !topLevel[key] && indentNested {
+			indent = "  "
+		}
+		out = append(out, indent+trimmed)
+		indentNested = strings.HasSuffix(trimmed, ":")
+	}
+	return strings.Join(out, "\n") + "\n"
+}
+
+func normalizeWorkflowYAML(content string) string {
+	lines := strings.Split(content, "\n")
+	out := make([]string, 0, len(lines))
+	topMode := ""
+	phaseSub := ""
+	importItem := false
+	inStep := false
+	inSpec := false
+	specParent := ""
+	stepBaseIndent := 0
+	stepPropIndent := 0
+	specIndent := 0
+	nestedIndent := 0
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		lower := strings.ToLower(trimmed)
+		switch {
+		case strings.HasPrefix(lower, "version:"), strings.HasPrefix(lower, "vars:"), trimmed == "phases:", trimmed == "steps:":
+			out = append(out, trimmed)
+			importItem = false
+			inStep = false
+			inSpec = false
+			specParent = ""
+			phaseSub = ""
+			if trimmed == "phases:" {
+				topMode = "phases"
+			} else if trimmed == "steps:" {
+				topMode = "steps"
+				stepBaseIndent = 2
+				stepPropIndent = 4
+				specIndent = 6
+				nestedIndent = 8
+			}
+		case topMode == "phases" && strings.HasPrefix(trimmed, "- name:"):
+			out = append(out, "  "+trimmed)
+			phaseSub = ""
+			importItem = false
+			inStep = false
+			inSpec = false
+			specParent = ""
+			stepBaseIndent = 6
+			stepPropIndent = 8
+			specIndent = 10
+			nestedIndent = 12
+		case topMode == "phases" && (trimmed == "steps:" || trimmed == "imports:" || strings.HasPrefix(trimmed, "when:") || strings.HasPrefix(trimmed, "maxParallelism:")):
+			out = append(out, "    "+trimmed)
+			phaseSub = strings.TrimSuffix(strings.SplitN(trimmed, ":", 2)[0], ":")
+			importItem = false
+			inStep = false
+			inSpec = false
+			specParent = ""
+		case phaseSub == "imports" && strings.HasPrefix(trimmed, "- path:"):
+			out = append(out, strings.Repeat(" ", 6)+trimmed)
+			importItem = true
+		case phaseSub == "imports" && importItem && strings.HasPrefix(trimmed, "when:"):
+			out = append(out, strings.Repeat(" ", 8)+trimmed)
+		case strings.HasPrefix(trimmed, "- id:"):
+			out = append(out, strings.Repeat(" ", stepBaseIndent)+trimmed)
+			inStep = true
+			inSpec = false
+			specParent = ""
+			importItem = false
+		case inStep && (strings.HasPrefix(trimmed, "kind:") || strings.HasPrefix(trimmed, "when:") || strings.HasPrefix(trimmed, "timeout:") || trimmed == "spec:"):
+			out = append(out, strings.Repeat(" ", stepPropIndent)+trimmed)
+			if trimmed == "spec:" {
+				inSpec = true
+				specParent = ""
+			}
+		case inSpec && strings.HasPrefix(trimmed, "- "):
+			indent := specIndent + 2
+			if specParent != "" {
+				indent = nestedIndent
+			}
+			out = append(out, strings.Repeat(" ", indent)+trimmed)
+		case inSpec && strings.HasSuffix(trimmed, ":"):
+			out = append(out, strings.Repeat(" ", specIndent)+trimmed)
+			specParent = strings.TrimSuffix(trimmed, ":")
+		case inSpec:
+			indent := specIndent
+			if specParent != "" {
+				indent = nestedIndent
+			}
+			out = append(out, strings.Repeat(" ", indent)+trimmed)
+		case topMode == "steps" && strings.HasPrefix(trimmed, "- id:"):
+			out = append(out, strings.Repeat(" ", stepBaseIndent)+trimmed)
+			inStep = true
+		case topMode == "steps" && inStep:
+			out = append(out, strings.Repeat(" ", stepPropIndent)+trimmed)
+		default:
+			out = append(out, trimmed)
+		}
+	}
+	return strings.Join(out, "\n") + "\n"
 }
 
 func stageWorkspace(root string, files []askcontract.GeneratedFile) (string, error) {
