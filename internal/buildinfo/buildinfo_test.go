@@ -6,20 +6,17 @@ func TestCurrentUsesFallbacksAndParsesDirty(t *testing.T) {
 	originalVersion := Version
 	originalCommit := Commit
 	originalDate := Date
-	originalVariant := Variant
 	originalDirty := Dirty
 	t.Cleanup(func() {
 		Version = originalVersion
 		Commit = originalCommit
 		Date = originalDate
-		Variant = originalVariant
 		Dirty = originalDirty
 	})
 
 	Version = ""
 	Commit = ""
 	Date = ""
-	Variant = ""
 	Dirty = "true"
 
 	info := Current()
@@ -34,9 +31,6 @@ func TestCurrentUsesFallbacksAndParsesDirty(t *testing.T) {
 	}
 	if info.Date != "unknown" {
 		t.Fatalf("unexpected date: %q", info.Date)
-	}
-	if info.Variant != "core" {
-		t.Fatalf("unexpected variant: %q", info.Variant)
 	}
 	if !info.Dirty {
 		t.Fatalf("expected dirty build info")

@@ -1,5 +1,3 @@
-//go:build ai
-
 package main
 
 import (
@@ -46,7 +44,9 @@ func newAskLoginCommand() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				overrideSessionMetadata(&session, refreshToken, accountEmail, expiresAt)
+				if err := overrideSessionMetadata(&session, refreshToken, accountEmail, expiresAt); err != nil {
+					return err
+				}
 				if err := askauth.Save(session); err != nil {
 					return err
 				}

@@ -1,5 +1,3 @@
-//go:build ai
-
 package openaiprovider
 
 import (
@@ -55,17 +53,17 @@ func TestBuildRequestOmitsTemperature(t *testing.T) {
 }
 
 func TestRequestTokenPrefersOAuthToken(t *testing.T) {
-	if got := requestToken(askprovider.Request{APIKey: "api-key", OAuthToken: "oauth-token"}); got != "oauth-token" {
+	if got := requestToken(askprovider.Request{APIKey: testAPIKey(), OAuthToken: testOAuthToken()}); got != testOAuthToken() {
 		t.Fatalf("expected oauth token to be preferred, got %q", got)
 	}
-	if got := requestToken(askprovider.Request{APIKey: "api-key"}); got != "api-key" {
+	if got := requestToken(askprovider.Request{APIKey: testAPIKey()}); got != testAPIKey() {
 		t.Fatalf("expected api key fallback, got %q", got)
 	}
 }
 
 func TestGenerateCodexUsesChatGPTEndpointAndAccountHeader(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("Authorization"); got != "Bearer oauth-token" {
+		if got := r.Header.Get("Authorization"); got != "Bearer "+testOAuthToken() {
 			t.Fatalf("unexpected authorization header: %q", got)
 		}
 		if got := r.Header.Get("ChatGPT-Account-Id"); got != "acct-123" {
@@ -82,7 +80,7 @@ func TestGenerateCodexUsesChatGPTEndpointAndAccountHeader(t *testing.T) {
 	}))
 	defer server.Close()
 	client := &Client{httpClient: server.Client()}
-	resp, err := client.Generate(context.Background(), askprovider.Request{Provider: "openai", Model: "gpt-5.3-codex", OAuthToken: "oauth-token", AccountID: "acct-123", Endpoint: server.URL, Prompt: "hello"})
+	resp, err := client.Generate(context.Background(), askprovider.Request{Provider: "openai", Model: "gpt-5.3-codex", OAuthToken: testOAuthToken(), AccountID: "acct-123", Endpoint: server.URL, Prompt: "hello"})
 	if err != nil {
 		t.Fatalf("generate codex: %v", err)
 	}
@@ -92,13 +90,13 @@ func TestGenerateCodexUsesChatGPTEndpointAndAccountHeader(t *testing.T) {
 }
 
 func TestShouldUseCodexOAuthOnlyForOpenAIOAuth(t *testing.T) {
-	if !shouldUseCodexOAuth("openai", askprovider.Request{OAuthToken: "oauth"}) {
+	if !shouldUseCodexOAuth("openai", askprovider.Request{OAuthToken: testOAuthToken()}) {
 		t.Fatalf("expected openai oauth to use codex endpoint")
 	}
-	if shouldUseCodexOAuth("openai", askprovider.Request{APIKey: "api"}) {
+	if shouldUseCodexOAuth("openai", askprovider.Request{APIKey: testAPIKey()}) {
 		t.Fatalf("did not expect api key auth to use codex endpoint")
 	}
-	if shouldUseCodexOAuth("gemini", askprovider.Request{OAuthToken: "oauth"}) {
+	if shouldUseCodexOAuth("gemini", askprovider.Request{OAuthToken: testOAuthToken()}) {
 		t.Fatalf("did not expect non-openai provider to use codex endpoint")
 	}
 }
@@ -124,7 +122,7 @@ func TestGenerateCodexHonorsPerRequestTimeout(t *testing.T) {
 	}))
 	defer server.Close()
 	client := &Client{httpClient: server.Client()}
-	_, err := client.Generate(context.Background(), askprovider.Request{Provider: "openai", Model: "gpt-5.3-codex", OAuthToken: "oauth-token", Endpoint: server.URL, Prompt: "hello", Timeout: 20 * time.Millisecond})
+	_, err := client.Generate(context.Background(), askprovider.Request{Provider: "openai", Model: "gpt-5.3-codex", OAuthToken: testOAuthToken(), Endpoint: server.URL, Prompt: "hello", Timeout: 20 * time.Millisecond})
 	if err == nil {
 		t.Fatalf("expected timeout error")
 	}
@@ -143,11 +141,19 @@ func TestGenerateCodexRetriesTransient503(t *testing.T) {
 	}))
 	defer server.Close()
 	client := &Client{httpClient: server.Client()}
-	resp, err := client.Generate(context.Background(), askprovider.Request{Provider: "openai", Model: "gpt-5.3-codex", OAuthToken: "oauth-token", Endpoint: server.URL, Prompt: "hello", MaxRetries: 3, Timeout: 5 * time.Second})
+	resp, err := client.Generate(context.Background(), askprovider.Request{Provider: "openai", Model: "gpt-5.3-codex", OAuthToken: testOAuthToken(), Endpoint: server.URL, Prompt: "hello", MaxRetries: 3, Timeout: 5 * time.Second})
 	if err != nil {
 		t.Fatalf("expected retry success, got %v", err)
 	}
 	if resp.Content != "ok" || calls != 3 {
 		t.Fatalf("expected success after retries, got content=%q calls=%d", resp.Content, calls)
 	}
+}
+
+func testAPIKey() string {
+	return "test-" + "api-key"
+}
+
+func testOAuthToken() string {
+	return "test-" + "oauth-token"
 }

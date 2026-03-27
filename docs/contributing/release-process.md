@@ -32,7 +32,6 @@ Run these commands before cutting a tag:
 ```bash
 make test
 make lint
-make test-ai
 make release-check
 make release-snapshot
 ```

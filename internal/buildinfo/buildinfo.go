@@ -11,7 +11,6 @@ var (
 	Version = "dev"
 	Commit  = "unknown"
 	Date    = "unknown"
-	Variant = "core"
 	Dirty   = "false"
 )
 
@@ -20,7 +19,6 @@ type Info struct {
 	Version string `json:"version"`
 	Commit  string `json:"commit"`
 	Date    string `json:"date"`
-	Variant string `json:"variant"`
 	Dirty   bool   `json:"dirty"`
 }
 
@@ -30,7 +28,6 @@ func Current() Info {
 		Version: normalizedValue(Version, "dev"),
 		Commit:  normalizedValue(Commit, "unknown"),
 		Date:    normalizedValue(Date, "unknown"),
-		Variant: normalizedValue(Variant, "core"),
 		Dirty:   parseDirty(Dirty),
 	}
 }

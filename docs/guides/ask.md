@@ -2,7 +2,7 @@
 
 `deck ask` is an experimental authoring helper for working with deck workflows from the current workspace. It can answer questions about an existing workflow, explain or review files, propose changes, and draft workflow YAML when the request is clearly an authoring task.
 
-`ask` is only available in AI-ready builds. Non-AI builds omit the command entirely.
+`ask` ships as part of the standard `deck` binary.
 
 For kubeadm authoring, the most reliable starter prompt today is explicit about topology, for example `single-node`. Generic `cluster` wording is more likely to trigger plan-time ambiguity checks.
 

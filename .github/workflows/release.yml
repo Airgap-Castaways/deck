@@ -29,7 +29,6 @@ jobs:
         run: |
           make test
           make lint
-          make test-ai
 
       - name: Setup GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -49,6 +48,7 @@ jobs:
           tar -xzf dist/deck_*_linux_amd64.tar.gz -C .tmp/smoke/linux-amd64
           ./.tmp/smoke/linux-amd64/deck version
           ./.tmp/smoke/linux-amd64/deck --help >/dev/null
+          ./.tmp/smoke/linux-amd64/deck ask --help >/dev/null
           tar -xzf dist/deck_*_darwin_arm64.tar.gz -C .tmp/smoke/darwin-arm64
           test -f .tmp/smoke/darwin-arm64/deck
 
@@ -58,7 +58,8 @@ jobs:
             apt-get update && \
             apt-get install -y /dist/*_amd64.deb && \
             deck version && \
-            deck --help >/dev/null
+            deck --help >/dev/null && \
+            deck ask --help >/dev/null
           '
 
       - name: Smoke test rpm package
@@ -66,7 +67,8 @@ jobs:
           docker run --rm -v "$PWD/dist:/dist" rockylinux:9 sh -lc '
             dnf install -y /dist/*.x86_64.rpm && \
             deck version && \
-            deck --help >/dev/null
+            deck --help >/dev/null && \
+            deck ask --help >/dev/null
           '
 
       - name: Verify Homebrew formula output
@@ -94,7 +96,6 @@ jobs:
         run: |
           make test
           make lint
-          make test-ai
 
       - name: Setup GoReleaser
         uses: goreleaser/goreleaser-action@v6

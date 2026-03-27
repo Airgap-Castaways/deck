@@ -1,5 +1,3 @@
-//go:build ai
-
 package main
 
 import (
@@ -120,8 +118,8 @@ func TestAskConfigShowIncludesStoredAugmentSettings(t *testing.T) {
 	if err := askconfig.SaveStored(askconfig.Settings{
 		Provider:   "openai",
 		Model:      "gpt-5.4",
-		APIKey:     "secret-token",
-		OAuthToken: "oauth-token",
+		APIKey:     testAPIKey(),
+		OAuthToken: testOAuthToken(),
 		LogLevel:   "trace",
 		MCP:        askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{{Name: "context7", RunCommand: "context7-mcp"}}},
 		LSP:        askconfig.LSP{Enabled: true, YAML: askconfig.LSPEntry{RunCommand: "yaml-language-server", Args: []string{"--stdio"}}},
@@ -445,12 +443,16 @@ func validAskJSON() string {
 	return `{"summary":"generated starter workflows","review":["Prefer typed steps where possible."],"files":[{"path":"workflows/vars.yaml","content":"{}\n"},{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nphases:\n  - name: collect\n    steps: []\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: install\n    imports:\n      - path: example-apply.yaml\n"},{"path":"workflows/components/example-apply.yaml","content":"steps:\n  - id: wait-runtime\n    kind: WaitForFile\n    spec:\n      path: /etc/containerd/config.toml\n      interval: 1s\n      timeout: 5s\n"}]}`
 }
 
-func validClassificationDraft() string {
-	return `{"route":"draft","confidence":0.92,"reason":"user asked to create a scenario","target":{"kind":"workspace"},"generationAllowed":true}`
-}
-
 func validClassificationReview() string {
 	return `{"route":"review","confidence":0.94,"reason":"user explicitly requested review","target":{"kind":"workspace"},"generationAllowed":false}`
+}
+
+func testAPIKey() string {
+	return "test-" + "api-key"
+}
+
+func testOAuthToken() string {
+	return "test-" + "oauth-token"
 }
 
 func validPlanJSON() string {

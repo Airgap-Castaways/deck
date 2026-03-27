@@ -1,5 +1,3 @@
-//go:build ai
-
 package openaiprovider
 
 import (
@@ -175,7 +173,7 @@ func retryableProviderError(err error) bool {
 	}
 	var netErr net.Error
 	if errors.As(err, &netErr) {
-		return netErr.Timeout() || netErr.Temporary()
+		return netErr.Timeout()
 	}
 	var apiErr *openai.APIError
 	if errors.As(err, &apiErr) {

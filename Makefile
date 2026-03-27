@@ -1,7 +1,6 @@
 GO ?= go
 BIN_DIR ?= bin
 BIN ?= $(BIN_DIR)/deck
-AI_BIN ?= $(BIN_DIR)/deck-ai
 GOLANGCI_LINT ?= $(BIN_DIR)/golangci-lint
 GOLANGCI_LINT_PKG ?= github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 GOLANGCI_LINT_VERSION ?= latest
@@ -16,21 +15,14 @@ DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 DIRTY ?= $(shell if [ -n "$$(git status --short 2>/dev/null)" ]; then printf true; else printf false; fi)
 LDFLAGS ?= -X $(BUILDINFO_PKG).Version=$(VERSION) -X $(BUILDINFO_PKG).Commit=$(COMMIT) -X $(BUILDINFO_PKG).Date=$(DATE) -X $(BUILDINFO_PKG).Dirty=$(DIRTY)
 
-.PHONY: build build-ai test test-ai lint vuln vuln-ai generate print-build-meta release-check release-snapshot
+.PHONY: build test lint vuln generate print-build-meta release-check release-snapshot
 
 build:
 	@mkdir -p $(BIN_DIR)
-	$(GO) build -ldflags "$(LDFLAGS) -X $(BUILDINFO_PKG).Variant=core" -o $(BIN) ./cmd/deck
-
-build-ai:
-	@mkdir -p $(BIN_DIR)
-	$(GO) build -tags ai -ldflags "$(LDFLAGS) -X $(BUILDINFO_PKG).Variant=ai" -o $(AI_BIN) ./cmd/deck
+	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/deck
 
 test:
 	$(GO) test ./...
-
-test-ai:
-	$(GO) test -tags ai ./...
 
 generate:
 	$(GO) run ./cmd/schema-gen
@@ -49,9 +41,6 @@ $(GOVULNCHECK):
 
 vuln: $(GOVULNCHECK)
 	$(GOVULNCHECK) ./...
-
-vuln-ai: $(GOVULNCHECK)
-	$(GOVULNCHECK) -tags ai ./...
 
 print-build-meta:
 	@printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\nDIRTY=%s\n' "$(VERSION)" "$(COMMIT)" "$(DATE)" "$(DIRTY)"

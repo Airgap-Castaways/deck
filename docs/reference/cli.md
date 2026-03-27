@@ -25,14 +25,14 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 - `version`: show the current `deck` build version and metadata (`-o text|json`)
 - `completion`: generate shell completion for bash, zsh, fish, and PowerShell
 
-## Optional AI-ready authoring helper
+## Authoring helper
 
 - `ask`: experimental helper to draft, refine, or review workflows from the current workspace using an LLM-backed authoring assistant
 - `ask config set`: save `ask.provider`, `ask.model`, `ask.endpoint`, and `ask.apiKey` in XDG config
 - `ask config show`: show the effective ask config with a masked api key
 - `ask config unset`: clear saved ask config
 
-`ask` is experimental and available only in AI-ready builds. Non-AI builds omit the `ask` command entirely.
+`ask` is experimental and ships as part of the standard `deck` binary.
 
 For a task-oriented guide to configuring and using `deck ask`, see `../guides/ask.md`.
 

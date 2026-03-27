@@ -14,20 +14,17 @@ func TestVersionCommand(t *testing.T) {
 	originalVersion := buildinfo.Version
 	originalCommit := buildinfo.Commit
 	originalDate := buildinfo.Date
-	originalVariant := buildinfo.Variant
 	originalDirty := buildinfo.Dirty
 	t.Cleanup(func() {
 		buildinfo.Version = originalVersion
 		buildinfo.Commit = originalCommit
 		buildinfo.Date = originalDate
-		buildinfo.Variant = originalVariant
 		buildinfo.Dirty = originalDirty
 	})
 
 	buildinfo.Version = "v0.1.0"
 	buildinfo.Commit = "abc1234"
 	buildinfo.Date = "2026-03-17T10:00:00Z"
-	buildinfo.Variant = "core"
 	buildinfo.Dirty = "true"
 
 	out, err := runWithCapturedStdout([]string{"version"})
@@ -43,20 +40,17 @@ func TestVersionCommandJSON(t *testing.T) {
 	originalVersion := buildinfo.Version
 	originalCommit := buildinfo.Commit
 	originalDate := buildinfo.Date
-	originalVariant := buildinfo.Variant
 	originalDirty := buildinfo.Dirty
 	t.Cleanup(func() {
 		buildinfo.Version = originalVersion
 		buildinfo.Commit = originalCommit
 		buildinfo.Date = originalDate
-		buildinfo.Variant = originalVariant
 		buildinfo.Dirty = originalDirty
 	})
 
 	buildinfo.Version = "dev"
 	buildinfo.Commit = "abc1234"
 	buildinfo.Date = "2026-03-17T10:00:00Z"
-	buildinfo.Variant = "ai"
 	buildinfo.Dirty = "false"
 
 	out, err := runWithCapturedStdout([]string{"version", "-o", "json"})
@@ -79,9 +73,6 @@ func TestVersionCommandJSON(t *testing.T) {
 	}
 	if payload["date"] != "2026-03-17T10:00:00Z" {
 		t.Fatalf("unexpected date: %#v", payload["date"])
-	}
-	if payload["variant"] != "ai" {
-		t.Fatalf("unexpected variant: %#v", payload["variant"])
 	}
 	dirty, ok := payload["dirty"].(bool)
 	if !ok || dirty {
