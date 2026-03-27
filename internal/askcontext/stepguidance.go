@@ -327,6 +327,7 @@ func StepGuidanceBlockWithOptions(route askintent.Route, prompt string, options 
 		}
 	default:
 		b.WriteString("Relevant typed steps:\n")
+		b.WriteString("- Key fields below are high-signal schema fields. `required` fields must always be present, `optional` fields can be omitted, and `conditional` fields are only needed when that branch of the schema is used.\n")
 		for _, item := range selected {
 			b.WriteString("- ")
 			b.WriteString(item.Step.Kind)
@@ -344,6 +345,13 @@ func StepGuidanceBlockWithOptions(route askintent.Route, prompt string, options 
 			for _, field := range item.Step.KeyFields {
 				b.WriteString("  - ")
 				b.WriteString(field.Path)
+				requirement := strings.TrimSpace(field.Requirement)
+				if requirement == "" {
+					requirement = "optional"
+				}
+				b.WriteString(" [")
+				b.WriteString(requirement)
+				b.WriteString("]")
 				b.WriteString(": ")
 				b.WriteString(field.Description)
 				if field.Example != "" {

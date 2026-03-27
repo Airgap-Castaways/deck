@@ -142,6 +142,7 @@ type StepFieldContext struct {
 	Path        string
 	Description string
 	Example     string
+	Requirement string
 }
 
 type StepActionContext struct {

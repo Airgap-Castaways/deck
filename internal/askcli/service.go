@@ -88,7 +88,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	classifierLLM := false
 	classifierSystem := classifierSystemPrompt()
 	classifierUser := classifierUserPrompt(requestText, opts.Review, workspace)
-	if canUseLLM(effective) {
+	if canUseLLM(effective) && (!isAuthoringRoute(heuristic.Route) || askFeatureEnabled("DECK_ASK_ENABLE_LLM_CLASSIFIER")) {
 		logger.logf("debug", "\n[ask][phase:classify:start] provider=%s model=%s\n", effective.Provider, effective.Model)
 		classified, classifyErr := classifyWithLLM(ctx, client, effective, classifierSystem, classifierUser, logger)
 		if classifyErr == nil {
@@ -98,6 +98,8 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		} else {
 			logger.logf("debug", "[ask][phase:classify:fallback] error=%v\n", classifyErr)
 		}
+	} else if canUseLLM(effective) {
+		logger.logf("debug", "[ask][phase:classify:skip] reason=heuristic-authoring-default\n")
 	} else {
 		logger.logf("debug", "[ask][phase:classify:skip] reason=no-llm-credentials\n")
 	}
@@ -106,8 +108,14 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		return fmt.Errorf("cannot refine workflow files because this workspace has no workflow tree yet; run a draft generation first")
 	}
 
-	mcpChunks, mcpEvents := mcpaugment.Gather(ctx, effective.MCP, decision.Route, requestText)
-	lspChunks, lspEvents := lspaugment.Gather(ctx, effective.LSP, decision.Target, workspace)
+	mcpChunks := []askretrieve.Chunk{}
+	mcpEvents := []string{"mcp: disabled for default local pipeline"}
+	lspChunks := []askretrieve.Chunk{}
+	lspEvents := []string{"lsp: disabled for default local pipeline"}
+	if !isAuthoringRoute(decision.Route) || askFeatureEnabled("DECK_ASK_ENABLE_AUGMENT") {
+		mcpChunks, mcpEvents = mcpaugment.Gather(ctx, effective.MCP, decision.Route, requestText)
+		lspChunks, lspEvents = lspaugment.Gather(ctx, effective.LSP, decision.Target, workspace)
+	}
 	externalChunks := append(append([]askretrieve.Chunk{}, mcpChunks...), lspChunks...)
 	externalChunks = append(externalChunks, projectContextChunk(resolvedRoot))
 	retrieval := askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, externalChunks)
@@ -151,7 +159,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 
 	planRequested := opts.PlanOnly
-	planNeeded := isAuthoringRoute(decision.Route) && (planRequested || needsComplexPlanner(requestText, workspace, decision))
+	planNeeded := isAuthoringRoute(decision.Route) && planRequested
 	var plan askcontract.PlanResponse
 	var planCritic askcontract.PlanCriticResponse
 	if planNeeded {
@@ -246,19 +254,27 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		}
 		attempts := generationAttempts(opts.MaxIterations, decision, requestText)
 		scaffold := askscaffold.Build(requirements, workspace, decision, plan, bundle)
+		executionModel := plan.ExecutionModel
+		if len(executionModel.ArtifactContracts) == 0 && len(executionModel.SharedStateContracts) == 0 && strings.TrimSpace(executionModel.RoleExecution.RoleSelector) == "" && len(executionModel.ApplyAssumptions) == 0 {
+			executionModel = askpolicy.ExecutionModelFromRequirements(requirements)
+		}
 		generationPrompt := generationUserPrompt(workspace, state, requestText, strings.TrimSpace(opts.FromPath), decision.Route)
 		generationPrompt = appendPlanAdvisoryPrompt(generationPrompt, plan, planCritic)
+		generationKind := "generate-fast"
+		if askFeatureEnabled("DECK_ASK_ENABLE_JUDGE") {
+			generationKind = "generate"
+		}
 		generationRequest := askprovider.Request{
-			Kind:         "generate",
+			Kind:         generationKind,
 			Provider:     effective.Provider,
 			Model:        effective.Model,
 			APIKey:       effective.APIKey,
 			OAuthToken:   effective.OAuthToken,
 			AccountID:    effective.AccountID,
 			Endpoint:     effective.Endpoint,
-			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, retrieval, requirements, authoringBrief, plan.ExecutionModel, scaffold),
+			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, requestText, retrieval, requirements, authoringBrief, executionModel, scaffold),
 			Prompt:       generationPrompt,
-			MaxRetries:   attempts,
+			MaxRetries:   providerRetryCount("generate"),
 			Timeout:      askRequestTimeout("generate", attempts, generationPrompt, generationPrompt),
 		}
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "generation", SystemPrompt: generationRequest.SystemPrompt, UserPrompt: generationRequest.Prompt})
@@ -267,18 +283,20 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		if genErr != nil {
 			return genErr
 		}
-		postSummary, postErr := maybePostProcessGeneration(ctx, client, generationRequest, resolvedRoot, logger, decision, plan, authoringBrief, retrieval, gen, lintSummary, critic, judge, planCritic)
-		switch {
-		case postErr != nil:
-			logger.logf("debug", "[ask][phase:postprocess:skip] error=%v\n", postErr)
-		case postSummary.Applied:
-			gen = postSummary.Generation
-			lintSummary = postSummary.LintSummary
-			critic = postSummary.Critic
-			judge = postSummary.Judge
-			result.ReviewLines = append(result.ReviewLines, postSummary.Notes...)
-		case len(postSummary.Notes) > 0:
-			result.ReviewLines = append(result.ReviewLines, postSummary.Notes...)
+		if askFeatureEnabled("DECK_ASK_ENABLE_POSTPROCESS") {
+			postSummary, postErr := maybePostProcessGeneration(ctx, client, generationRequest, resolvedRoot, logger, decision, plan, authoringBrief, retrieval, gen, lintSummary, critic, judge, planCritic)
+			switch {
+			case postErr != nil:
+				logger.logf("debug", "[ask][phase:postprocess:skip] error=%v\n", postErr)
+			case postSummary.Applied:
+				gen = postSummary.Generation
+				lintSummary = postSummary.LintSummary
+				critic = postSummary.Critic
+				judge = postSummary.Judge
+				result.ReviewLines = append(result.ReviewLines, postSummary.Notes...)
+			case len(postSummary.Notes) > 0:
+				result.ReviewLines = append(result.ReviewLines, postSummary.Notes...)
+			}
 		}
 		logger.logf("basic", "[ask][phase:generation:done] files=%d lint=%s\n", len(gen.Files), lintSummary)
 		result.LLMUsed = true
@@ -756,7 +774,7 @@ func critiquePostProcess(ctx context.Context, client askprovider.Client, req ask
 	systemPrompt := postProcessCriticSystemPrompt(brief, plan)
 	userPrompt := postProcessCriticUserPrompt(plan, gen, judge, critic, planCritic)
 	logger.prompt("postprocess-critic", systemPrompt, userPrompt)
-	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-critic", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1, Timeout: askRequestTimeout("postprocess-critic", 1, systemPrompt, userPrompt)})
+	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-critic", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: providerRetryCount("postprocess-critic"), Timeout: askRequestTimeout("postprocess-critic", 1, systemPrompt, userPrompt)})
 	if err != nil {
 		return askcontract.PostProcessResponse{}, err
 	}
@@ -772,7 +790,7 @@ func applyPostProcessEdit(ctx context.Context, client askprovider.Client, req as
 	systemPrompt := postProcessEditSystemPrompt(brief, plan)
 	userPrompt := postProcessEditUserPrompt(gen, findings, planCritic)
 	logger.prompt("postprocess-edit", systemPrompt, userPrompt)
-	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-edit", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1, Timeout: askRequestTimeout("postprocess-edit", 1, systemPrompt, userPrompt)})
+	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-edit", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: providerRetryCount("postprocess-edit"), Timeout: askRequestTimeout("postprocess-edit", 1, systemPrompt, userPrompt)})
 	if err != nil {
 		return askcontract.GenerationResponse{}, err
 	}
@@ -916,7 +934,7 @@ func applyStructuralCleanupEdit(ctx context.Context, client askprovider.Client, 
 	systemPrompt := structuralCleanupEditSystemPrompt(brief, plan)
 	userPrompt := structuralCleanupEditUserPrompt(gen, findings)
 	logger.prompt("postprocess-structural", systemPrompt, userPrompt)
-	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-structural", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: 1, Timeout: askRequestTimeout("postprocess-structural", 1, systemPrompt, userPrompt)})
+	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-structural", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: providerRetryCount("postprocess-structural"), Timeout: askRequestTimeout("postprocess-structural", 1, systemPrompt, userPrompt)})
 	if err != nil {
 		return askcontract.GenerationResponse{}, err
 	}
@@ -984,7 +1002,7 @@ func classifyWithLLM(ctx context.Context, client askprovider.Client, cfg askconf
 		Endpoint:     cfg.Endpoint,
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
-		MaxRetries:   1,
+		MaxRetries:   providerRetryCount("classify"),
 		Timeout:      askRequestTimeout("classify", 1, systemPrompt, userPrompt),
 	}
 	var parsed askcontract.ClassificationResponse
@@ -1054,7 +1072,7 @@ func answerWithLLM(ctx context.Context, client askprovider.Client, cfg askconfig
 		Endpoint:     cfg.Endpoint,
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
-		MaxRetries:   1,
+		MaxRetries:   providerRetryCount(string(decision.Route)),
 		Timeout:      askRequestTimeout(string(decision.Route), 1, systemPrompt, userPrompt),
 	})
 	if err != nil {
@@ -1074,7 +1092,7 @@ func generationAttempts(requested int, decision askintent.Decision, prompt strin
 	if requested > 0 {
 		return requested
 	}
-	return 3
+	return 2
 }
 
 func askRequestTimeout(kind string, maxIterations int, systemPrompt string, prompt string) time.Duration {
@@ -1084,7 +1102,7 @@ func askRequestTimeout(kind string, maxIterations int, systemPrompt string, prom
 		base = 45 * time.Second
 	case "plan", "plan-critic":
 		base = 90 * time.Second
-	case "generate":
+	case "generate", "generate-fast":
 		base = 180 * time.Second
 	case "judge":
 		base = 90 * time.Second
@@ -1101,6 +1119,15 @@ func askRequestTimeout(kind string, maxIterations int, systemPrompt string, prom
 	return minDuration(base, 10*time.Minute)
 }
 
+func providerRetryCount(kind string) int {
+	switch strings.TrimSpace(kind) {
+	case "generate", "generate-fast", "plan", "plan-critic", "judge", "postprocess-critic", "postprocess-edit", "postprocess-structural", "classify":
+		return 2
+	default:
+		return 1
+	}
+}
+
 func minInt(a int, b int) int {
 	if a < b {
 		return a
@@ -1115,24 +1142,40 @@ func minDuration(a time.Duration, b time.Duration) time.Duration {
 	return b
 }
 
+func askFeatureEnabled(name string) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	switch value {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 func generateWithValidation(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, attempts int, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult, planCritic askcontract.PlanCriticResponse) (askcontract.GenerationResponse, string, askcontract.CriticResponse, askcontract.JudgeResponse, int, error) {
+	_ = planCritic
 	var lastValidation string
 	var lastCritic askcontract.CriticResponse
 	var lastJudge askcontract.JudgeResponse
 	var lastGeneration askcontract.GenerationResponse
+	taintedFiles := map[string]bool{}
 	bundle := askknowledge.Current()
 	for attempt := 1; attempt <= attempts; attempt++ {
 		currentPrompt := req.Prompt
 		currentSystemPrompt := req.SystemPrompt
 		if attempt > 1 && lastValidation != "" {
-			diags := askdiagnostic.FromValidationError(lastValidation, bundle)
-			diags = append(diags, askdiagnostic.FromPlanCritic(planCritic)...)
-			diags = append(diags, askdiagnostic.FromCritic(lastCritic)...)
-			diags = append(diags, askdiagnostic.FromJudge(lastJudge)...)
+			validationDiags := askdiagnostic.FromValidationError(lastValidation, bundle)
+			markTaintedFiles(taintedFiles, validationDiags)
+			repairPaths := repairTargetFiles(lastGeneration, validationDiags, taintedFiles)
+			diags := append([]askdiagnostic.Diagnostic{}, validationDiags...)
+			if !isYAMLParseFailure(lastValidation) {
+				diags = append(diags, askdiagnostic.FromPlanCritic(planCritic)...)
+				diags = append(diags, askdiagnostic.FromCritic(lastCritic)...)
+			}
 			logger.logf("debug", "\n[ask][phase:repair:diagnostics]\n%s\n", askdiagnostic.JSON(diags))
 			if isYAMLParseFailure(lastValidation) {
 				currentSystemPrompt = yamlRepairSystemPrompt(normalizedAuthoringBrief(plan, brief), plan)
-				currentPrompt = yamlRepairUserPrompt(lastGeneration, lastValidation, diags)
+				currentPrompt = yamlRepairUserPrompt(lastGeneration, lastValidation, validationDiags, repairPaths)
 			} else {
 				currentPrompt += "\n\nLocal validation failed. Enter targeted repair mode and return full JSON again."
 				currentPrompt += "\nValidator summary:\n" + summarizeValidationError(lastValidation)
@@ -1141,8 +1184,8 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 					currentPrompt += "\n" + chunk.Content
 				}
 				currentPrompt += "\n" + askdiagnostic.RepairPromptBlock(diags)
-				currentPrompt += "\n" + yamlStructureRepairPromptBlock(lastGeneration, lastValidation, diags)
-				currentPrompt += "\n" + targetedRepairPromptBlock(lastGeneration, diags)
+				currentPrompt += "\n" + yamlStructureRepairPromptBlock(lastGeneration, lastValidation, repairPaths)
+				currentPrompt += "\n" + targetedRepairPromptBlock(lastGeneration, diags, repairPaths)
 			}
 		}
 		logger.logf("basic", "[ask][phase:generation:attempt] attempt=%d/%d\n", attempt, attempts)
@@ -1156,7 +1199,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			Endpoint:     req.Endpoint,
 			SystemPrompt: currentSystemPrompt,
 			Prompt:       currentPrompt,
-			MaxRetries:   1,
+			MaxRetries:   providerRetryCount(req.Kind),
 			Timeout:      askRequestTimeout(req.Kind, attempts, currentSystemPrompt, currentPrompt),
 		})
 		if err != nil {
@@ -1172,8 +1215,8 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			}
 			return askcontract.GenerationResponse{}, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
 		}
-		if attempt > 1 && isYAMLParseFailure(lastValidation) {
-			gen = mergeGeneratedFiles(lastGeneration, gen)
+		if attempt > 1 && len(lastGeneration.Files) > 0 {
+			gen = mergeGeneratedFiles(dropGeneratedFiles(lastGeneration, mapKeys(taintedFiles)), gen)
 		}
 		gen = normalizeGeneratedFiles(gen)
 		logger.logf("debug", "[ask][phase:semantic-validate] attempt=%d/%d\n", attempt, attempts)
@@ -1210,10 +1253,13 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 
 func isYAMLParseFailure(message string) bool {
 	lower := strings.ToLower(strings.TrimSpace(message))
-	return strings.Contains(lower, "parse yaml") || strings.Contains(lower, "parse vars yaml") || strings.Contains(lower, "yaml:")
+	return strings.Contains(lower, "parse yaml") || strings.Contains(lower, "parse vars yaml") || strings.Contains(lower, "yaml: line ") || strings.Contains(lower, "yaml: did not") || strings.Contains(lower, "yaml: could not")
 }
 
 func maybeJudgeGeneration(ctx context.Context, client askprovider.Client, req askprovider.Request, gen askcontract.GenerationResponse, lintSummary string, critic askcontract.CriticResponse, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, logger askLogger) (askcontract.JudgeResponse, error) {
+	if strings.TrimSpace(req.Kind) != "generate" {
+		return askcontract.JudgeResponse{}, fmt.Errorf("judge disabled for default generation path")
+	}
 	if strings.TrimSpace(brief.RouteIntent) == "" {
 		return askcontract.JudgeResponse{}, fmt.Errorf("judge skipped without authoring brief")
 	}
@@ -1230,7 +1276,7 @@ func maybeJudgeGeneration(ctx context.Context, client askprovider.Client, req as
 		Endpoint:     req.Endpoint,
 		SystemPrompt: systemPrompt,
 		Prompt:       userPrompt,
-		MaxRetries:   1,
+		MaxRetries:   providerRetryCount("judge"),
 		Timeout:      askRequestTimeout("judge", 1, systemPrompt, userPrompt),
 	})
 	if err != nil {
@@ -1240,21 +1286,14 @@ func maybeJudgeGeneration(ctx context.Context, client askprovider.Client, req as
 	return askcontract.ParseJudge(resp.Content)
 }
 
-func targetedRepairPromptBlock(prev askcontract.GenerationResponse, diags []askdiagnostic.Diagnostic) string {
+func targetedRepairPromptBlock(prev askcontract.GenerationResponse, diags []askdiagnostic.Diagnostic, repairPaths []string) string {
 	if len(prev.Files) == 0 {
 		return ""
 	}
 	affected := map[string]bool{}
-	for _, diag := range diags {
-		path := strings.TrimSpace(diag.Path)
-		if path == "" {
-			path = strings.TrimSpace(diag.File)
-		}
-		if path == "" {
-			path = diagnosticMessageFile(diag.Message)
-		}
-		if path != "" {
-			affected[path] = true
+	for _, path := range repairPaths {
+		if strings.TrimSpace(path) != "" {
+			affected[strings.TrimSpace(path)] = true
 		}
 	}
 	if len(affected) == 0 {
@@ -1330,12 +1369,15 @@ func diagnosticDetailsForFile(path string, diags []askdiagnostic.Diagnostic) []s
 	return dedupe(items)
 }
 
-func yamlStructureRepairPromptBlock(prev askcontract.GenerationResponse, validation string, diags []askdiagnostic.Diagnostic) string {
+func yamlStructureRepairPromptBlock(prev askcontract.GenerationResponse, validation string, repairPaths []string) string {
 	lower := strings.ToLower(strings.TrimSpace(validation))
 	if !strings.Contains(lower, "parse yaml") && !strings.Contains(lower, "yaml:") {
 		return ""
 	}
-	affected := affectedFilesFromDiagnostics(prev, diags)
+	affected := repairPaths
+	if len(affected) == 0 {
+		affected = affectedFilesFromDiagnostics(prev, nil)
+	}
 	b := &strings.Builder{}
 	b.WriteString("YAML structure repair requirements:\n")
 	b.WriteString("- Fix YAML structure before changing workflow design. Prioritize indentation, list markers, and key nesting.\n")
@@ -1352,6 +1394,50 @@ func yamlStructureRepairPromptBlock(prev askcontract.GenerationResponse, validat
 		}
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func repairTargetFiles(prev askcontract.GenerationResponse, diags []askdiagnostic.Diagnostic, tainted map[string]bool) []string {
+	targets := diagnosticFiles(diags)
+	if len(targets) == 0 {
+		targets = affectedFilesFromDiagnostics(prev, diags)
+	}
+	for path := range tainted {
+		if !stringSliceContains(targets, path) {
+			targets = append(targets, path)
+		}
+	}
+	return targets
+}
+
+func markTaintedFiles(tainted map[string]bool, diags []askdiagnostic.Diagnostic) {
+	for _, path := range diagnosticFiles(diags) {
+		tainted[path] = true
+	}
+}
+
+func diagnosticFiles(diags []askdiagnostic.Diagnostic) []string {
+	paths := []string{}
+	for _, diag := range diags {
+		path := strings.TrimSpace(diag.Path)
+		if path == "" {
+			path = strings.TrimSpace(diag.File)
+		}
+		if path == "" {
+			path = diagnosticMessageFile(diag.Message)
+		}
+		if path != "" && !stringSliceContains(paths, path) {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+func mapKeys(items map[string]bool) []string {
+	out := make([]string, 0, len(items))
+	for key := range items {
+		out = append(out, key)
+	}
+	return out
 }
 
 func affectedFilesFromDiagnostics(prev askcontract.GenerationResponse, diags []askdiagnostic.Diagnostic) []string {
@@ -1460,11 +1546,15 @@ func validateGeneration(ctx context.Context, root string, gen askcontract.Genera
 	}
 	defer func() { _ = os.RemoveAll(staged) }()
 	paths := make([]string, 0, len(gen.Files))
+	directValidated := 0
 	for _, file := range gen.Files {
 		if err := validateGeneratedFile(staged, file); err != nil {
 			return "", askcontract.CriticResponse{Blocking: []string{err.Error()}, RequiredFixes: requiredFixesForValidation(err.Error())}, err
 		}
 		paths = append(paths, file.Path)
+		if strings.HasSuffix(strings.ToLower(strings.TrimSpace(file.Path)), ".yaml") || strings.HasSuffix(strings.ToLower(strings.TrimSpace(file.Path)), ".yml") {
+			directValidated++
+		}
 	}
 	entrypoints := scenarioPaths(staged, paths)
 	validated := make([]string, 0, len(entrypoints))
@@ -1480,7 +1570,7 @@ func validateGeneration(ctx context.Context, root string, gen askcontract.Genera
 	if len(critic.Blocking) > 0 {
 		return "", critic, fmt.Errorf("semantic validation failed: %s", strings.Join(critic.Blocking, "; "))
 	}
-	return fmt.Sprintf("lint ok (%d workflows)", len(validated)), critic, nil
+	return fmt.Sprintf("lint ok (%d yaml files, %d scenario entrypoints)", directValidated, len(validated)), critic, nil
 }
 
 func requiredFixesForValidation(message string) []string {

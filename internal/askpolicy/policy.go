@@ -83,6 +83,7 @@ type EvaluationResult struct {
 }
 
 func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) ScenarioRequirements {
+	requestedMode := requestedWorkflowMode(prompt)
 	artifactKinds := mergedArtifactKinds(prompt, retrieval)
 	needsPrepare := len(artifactKinds) > 0 || strings.Contains(strings.ToLower(prompt), "prepare")
 	req := ScenarioRequirements{
@@ -90,8 +91,8 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 		Connectivity:        InferOfflineAssumption(prompt),
 		NeedsPrepare:        needsPrepare,
 		ArtifactKinds:       artifactKinds,
-		RequiredFiles:       []string{"workflows/scenarios/apply.yaml"},
-		EntryScenario:       "workflows/scenarios/apply.yaml",
+		RequiredFiles:       nil,
+		EntryScenario:       "",
 		TypedPreference:     typedPreferenceRequested(prompt),
 		VarsAdvisories:      inferVarsRecommendation(prompt),
 		ComponentAdvisories: inferComponentRecommendation(prompt),
@@ -100,7 +101,11 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 	if req.AcceptanceLevel == "starter" {
 		req.ComponentAdvisories = nil
 	}
-	if needsPrepare {
+	if requestedMode != "prepare-only" {
+		req.RequiredFiles = append(req.RequiredFiles, "workflows/scenarios/apply.yaml")
+		req.EntryScenario = "workflows/scenarios/apply.yaml"
+	}
+	if needsPrepare || requestedMode == "prepare-only" {
 		req.RequiredFiles = append(req.RequiredFiles, "workflows/prepare.yaml")
 	}
 	if strings.Contains(strings.ToLower(prompt), "vars") || len(req.VarsAdvisories) > 0 {
@@ -114,6 +119,20 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 	}
 	req.RequiredFiles = dedupeStrings(req.RequiredFiles)
 	return req
+}
+
+func requestedWorkflowMode(prompt string) string {
+	lower := strings.ToLower(strings.TrimSpace(prompt))
+	mentionsPrepare := strings.Contains(lower, "prepare workflow") || strings.Contains(lower, "prepare-only") || strings.Contains(lower, "prepare only")
+	mentionsApply := strings.Contains(lower, "apply workflow") || strings.Contains(lower, "apply-only") || strings.Contains(lower, "apply only") || strings.Contains(lower, "scenario workflow")
+	switch {
+	case mentionsPrepare && !mentionsApply:
+		return "prepare-only"
+	case mentionsApply && !mentionsPrepare:
+		return "apply-only"
+	default:
+		return "workspace"
+	}
 }
 
 func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) askcontract.PlanResponse {
@@ -578,7 +597,7 @@ func mergedArtifactKinds(prompt string, retrieval askretrieve.RetrievalResult) [
 
 func inferVarsRecommendation(prompt string) []string {
 	lower := strings.ToLower(strings.TrimSpace(prompt))
-	if strings.Contains(lower, "package") || strings.Contains(lower, "packages") || strings.Contains(lower, "image") || strings.Contains(lower, "images") {
+	if strings.Contains(lower, "vars") || strings.Contains(lower, "variable") || strings.Contains(lower, "variables") || strings.Contains(lower, "repeated") || strings.Contains(lower, "parameter") {
 		return []string{"Use workflows/vars.yaml for repeated package, image, path, or version values."}
 	}
 	return nil
@@ -586,7 +605,7 @@ func inferVarsRecommendation(prompt string) []string {
 
 func inferComponentRecommendation(prompt string) []string {
 	lower := strings.ToLower(strings.TrimSpace(prompt))
-	if strings.Contains(lower, "prepare and apply") || strings.Contains(lower, "multi-step") || strings.Contains(lower, "reusable") {
+	if strings.Contains(lower, "component") || strings.Contains(lower, "components") || strings.Contains(lower, "reusable") || strings.Contains(lower, "shared fragment") {
 		return []string{"Consider workflows/components/ for reusable repeated logic across phases or scenarios."}
 	}
 	return nil
@@ -625,6 +644,13 @@ func inferScenarioIntent(prompt string) []string {
 }
 
 func inferAcceptanceLevel(prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) string {
+	req := ScenarioRequirements{ScenarioIntent: inferScenarioIntent(prompt), NeedsPrepare: strings.Contains(strings.ToLower(strings.TrimSpace(prompt)), "prepare")}
+	if containsString(req.ScenarioIntent, "multi-node") || containsString(req.ScenarioIntent, "ha") || inferNodeCount(req) > 1 {
+		if decision.Route == askintent.RouteRefine && workspace.HasWorkflowTree {
+			return "refine"
+		}
+		return "complete"
+	}
 	if explicitComplexAuthoring(prompt) {
 		if decision.Route == askintent.RouteRefine && workspace.HasWorkflowTree {
 			return "refine"
@@ -676,14 +702,14 @@ func inferRequestComplexity(prompt string, req ScenarioRequirements) string {
 
 func explicitComplexAuthoring(prompt string) bool {
 	lower := strings.ToLower(strings.TrimSpace(prompt))
-	markers := []string{"prepare and apply", "multi-node", "multi node", "3-node", "ha", "high availability", "worker", "workers", "join", "cluster"}
+	markers := []string{"prepare and apply", "multi-node", "multi node", "3-node", "ha", "high availability", "worker", "workers", "join"}
 	hits := 0
 	for _, marker := range markers {
 		if strings.Contains(lower, marker) {
 			hits++
 		}
 	}
-	return hits >= 2
+	return hits >= 3
 }
 
 func inferModeIntent(req ScenarioRequirements) string {

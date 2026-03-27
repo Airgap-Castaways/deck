@@ -120,21 +120,39 @@ func mergeGeneratedFiles(base askcontract.GenerationResponse, patch askcontract.
 	return merged
 }
 
+func dropGeneratedFiles(gen askcontract.GenerationResponse, paths []string) askcontract.GenerationResponse {
+	if len(paths) == 0 || len(gen.Files) == 0 {
+		return gen
+	}
+	drop := map[string]bool{}
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path != "" {
+			drop[path] = true
+		}
+	}
+	filtered := askcontract.GenerationResponse{
+		Summary: gen.Summary,
+		Review:  append([]string(nil), gen.Review...),
+		Files:   make([]askcontract.GeneratedFile, 0, len(gen.Files)),
+	}
+	for _, file := range gen.Files {
+		if !drop[strings.TrimSpace(file.Path)] {
+			filtered.Files = append(filtered.Files, file)
+		}
+	}
+	return filtered
+}
+
 func normalizeGeneratedContent(path string, content string) string {
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {
 		return content
 	}
-	if isVarsPath(path) {
-		if looksLikeFlattenedYAML(trimmed) {
-			return normalizeVarsYAML(trimmed)
-		}
+	if !isVarsPath(path) || !looksLikeFlattenedYAML(trimmed) {
 		return content
 	}
-	if !looksLikeFlattenedYAML(trimmed) {
-		return content
-	}
-	return normalizeWorkflowYAML(trimmed)
+	return normalizeVarsYAML(trimmed)
 }
 
 func looksLikeFlattenedYAML(content string) bool {

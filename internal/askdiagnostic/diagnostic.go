@@ -150,7 +150,13 @@ func renderKeyFieldList(step askknowledge.StepKnowledge) string {
 	paths := make([]string, 0, len(step.KeyFields))
 	for _, field := range step.KeyFields {
 		if strings.TrimSpace(field.Path) != "" {
-			paths = append(paths, strings.TrimSpace(field.Path))
+			label := strings.TrimSpace(field.Path)
+			requirement := strings.TrimSpace(field.Requirement)
+			if requirement == "" {
+				requirement = "optional"
+			}
+			label += " (" + requirement + ")"
+			paths = append(paths, label)
 		}
 	}
 	if len(paths) == 0 {

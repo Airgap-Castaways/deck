@@ -153,6 +153,7 @@ func TestRelevantStepKindsMatchesDockerRequest(t *testing.T) {
 func TestRelevantStepKindsBlockIncludesTypedShapeGuidance(t *testing.T) {
 	block := RelevantStepKindsBlock("install docker packages on rocky9 using repository")
 	for _, want := range []string{
+		"`required` fields must always be present",
 		"spec.packages",
 		"real YAML array",
 		"{{ .vars.* }}",
@@ -162,6 +163,40 @@ func TestRelevantStepKindsBlockIncludesTypedShapeGuidance(t *testing.T) {
 		"InstallPackage",
 		"ConfigureRepository",
 	} {
+		if !strings.Contains(block, want) {
+			t.Fatalf("expected %q in typed step guidance block, got %q", want, block)
+		}
+	}
+}
+
+func TestDownloadFileKeyFieldsPreserveRequiredOptionalDistinction(t *testing.T) {
+	manifest := Current()
+	var download StepKindContext
+	found := false
+	for _, step := range manifest.StepKinds {
+		if step.Kind == "DownloadFile" {
+			download = step
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected DownloadFile step guidance")
+	}
+	fields := map[string]StepFieldContext{}
+	for _, field := range download.KeyFields {
+		fields[field.Path] = field
+	}
+	if fields["spec.source"].Requirement != "conditional" {
+		t.Fatalf("expected spec.source to stay conditional, got %#v", fields["spec.source"])
+	}
+	for _, path := range []string{"spec.fetch", "spec.mode"} {
+		if fields[path].Requirement != "optional" {
+			t.Fatalf("expected %s to stay optional, got %#v", path, fields[path])
+		}
+	}
+	block := StepGuidanceBlockWithOptions(askintent.RouteDraft, "prepare should download a file into bundle storage", StepGuidanceOptions{})
+	for _, want := range []string{"spec.source [conditional]", "spec.fetch [optional]", "spec.mode [optional]"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("expected %q in typed step guidance block, got %q", want, block)
 		}

@@ -41,6 +41,19 @@ func TestBuildScenarioRequirementsPromotesComplexAskToComplete(t *testing.T) {
 	}
 }
 
+func TestBuildScenarioRequirementsSupportsExplicitPrepareOnlyRequest(t *testing.T) {
+	req := BuildScenarioRequirements("create a prepare workflow that downloads the runc binary into bundle storage", askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}})
+	if req.EntryScenario != "" {
+		t.Fatalf("expected no apply entry scenario for prepare-only request, got %#v", req)
+	}
+	if containsString(req.RequiredFiles, "workflows/scenarios/apply.yaml") {
+		t.Fatalf("did not expect apply scenario requirement for prepare-only request, got %#v", req.RequiredFiles)
+	}
+	if !containsString(req.RequiredFiles, "workflows/prepare.yaml") {
+		t.Fatalf("expected prepare workflow requirement for prepare-only request, got %#v", req.RequiredFiles)
+	}
+}
+
 func TestBuildPlanDefaultsPreservesComplexityForComplexAsk(t *testing.T) {
 	req := ScenarioRequirements{NeedsPrepare: true, ArtifactKinds: []string{"package", "image"}, ScenarioIntent: []string{"kubeadm", "multi-node", "join", "node-count:3"}, Connectivity: "offline", RequiredFiles: []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml", "workflows/vars.yaml"}}
 	plan := BuildPlanDefaults(req, "create an air-gapped rhel9 3-node kubeadm workflow with prepare and apply", askintent.Decision{Route: askintent.RouteDraft}, askretrieve.WorkspaceSummary{})
@@ -76,7 +89,7 @@ func TestNormalizePlanCanonicalizesPlannerAuthoringBrief(t *testing.T) {
 	if brief.TargetScope != "workspace" || brief.ModeIntent != "prepare+apply" || brief.Topology != "multi-node" || brief.CompletenessTarget != "complete" {
 		t.Fatalf("expected canonical brief fields, got %#v", brief)
 	}
-	if len(brief.TargetPaths) != 3 {
+	if len(brief.TargetPaths) != 2 {
 		t.Fatalf("expected fallback target paths, got %#v", brief)
 	}
 	for _, want := range []string{"kubeadm-bootstrap", "kubeadm-join", "prepare-artifacts"} {
