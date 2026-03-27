@@ -234,7 +234,7 @@ func renderPlanMarkdown(plan askcontract.PlanResponse, mdPath string) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n## Execution model\n")
-	if len(plan.ExecutionModel.ArtifactContracts) == 0 && len(plan.ExecutionModel.SharedStateContracts) == 0 && strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) == "" && len(plan.ExecutionModel.ApplyAssumptions) == 0 {
+	if isExecutionModelEmpty(plan.ExecutionModel) {
 		b.WriteString("- None\n")
 	} else {
 		for _, item := range plan.ExecutionModel.ArtifactContracts {
@@ -302,6 +302,13 @@ func renderPlanMarkdown(plan askcontract.PlanResponse, mdPath string) string {
 	b.WriteString(mdPath)
 	b.WriteString(" \"implement this plan\"\n")
 	return b.String()
+}
+
+func isExecutionModelEmpty(model askcontract.ExecutionModel) bool {
+	return len(model.ArtifactContracts) == 0 &&
+		len(model.SharedStateContracts) == 0 &&
+		strings.TrimSpace(model.RoleExecution.RoleSelector) == "" &&
+		len(model.ApplyAssumptions) == 0
 }
 
 func planChunk(plan askcontract.PlanResponse) askretrieve.Chunk {

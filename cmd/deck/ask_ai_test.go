@@ -380,7 +380,7 @@ func TestAskFromPlanPrefersJSONArtifact(t *testing.T) {
 	}
 }
 
-func TestAskOneShotFallsBackToPlanOnlyWhenPlannerBlocks(t *testing.T) {
+func TestAskPlanShowsBlockers(t *testing.T) {
 	t.Setenv("DECK_ASK_API_KEY", "env-key")
 	root := t.TempDir()
 	oldWD, err := os.Getwd()
