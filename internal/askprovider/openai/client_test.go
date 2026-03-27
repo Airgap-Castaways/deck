@@ -3,6 +3,7 @@ package openaiprovider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -150,10 +151,33 @@ func TestGenerateCodexRetriesTransient503(t *testing.T) {
 	}
 }
 
+func TestRetryableProviderErrorRecognizesTemporaryErrors(t *testing.T) {
+	err := tempOnlyError{err: errors.New("temporary dns failure")}
+	if !retryableProviderError(err) {
+		t.Fatalf("expected temporary error to be retryable")
+	}
+}
+
 func testAPIKey() string {
 	return "test-" + "api-key"
 }
 
 func testOAuthToken() string {
 	return "test-" + "oauth-token"
+}
+
+type tempOnlyError struct {
+	err error
+}
+
+func (e tempOnlyError) Error() string {
+	return e.err.Error()
+}
+
+func (e tempOnlyError) Unwrap() error {
+	return e.err
+}
+
+func (e tempOnlyError) Temporary() bool {
+	return true
 }
