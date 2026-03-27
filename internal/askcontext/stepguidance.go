@@ -360,6 +360,14 @@ func StepGuidanceBlockWithOptions(route askintent.Route, prompt string, options 
 				}
 				b.WriteString("\n")
 			}
+			for _, rule := range item.Step.SchemaRuleSummaries {
+				if strings.TrimSpace(rule) == "" {
+					continue
+				}
+				b.WriteString("  - rule: ")
+				b.WriteString(strings.TrimSpace(rule))
+				b.WriteString("\n")
+			}
 			for _, example := range item.Step.PromptExamples {
 				if strings.TrimSpace(example.YAML) == "" {
 					continue

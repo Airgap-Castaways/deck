@@ -205,6 +205,13 @@ func compactStepGuidancePromptBlock(route askintent.Route, prompt string, brief 
 				b.WriteString(strings.TrimSpace(field.Description))
 			}
 		}
+		for _, rule := range item.Step.SchemaRuleSummaries {
+			if strings.TrimSpace(rule) == "" {
+				continue
+			}
+			b.WriteString("\n  - rule: ")
+			b.WriteString(strings.TrimSpace(rule))
+		}
 		if len(item.Step.PromptExamples) > 0 && strings.Contains(strings.ToLower(prompt), strings.ToLower(item.Step.Kind)) {
 			example := strings.TrimSpace(item.Step.PromptExamples[0].YAML)
 			if example != "" {
@@ -791,22 +798,6 @@ func judgeUserPrompt(gen askcontract.GenerationResponse, lintSummary string, cri
 		}
 	}
 	return strings.TrimSpace(b.String())
-}
-
-func stepKindsFromRetrieval(retrieval askretrieve.RetrievalResult) []string {
-	kinds := make([]string, 0)
-	for _, chunk := range retrieval.Chunks {
-		for _, line := range strings.Split(chunk.Content, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "- ") && strings.Contains(trimmed, ":") {
-				kind := strings.TrimSpace(strings.TrimPrefix(strings.SplitN(trimmed, ":", 2)[0], "- "))
-				if kind != "" && strings.IndexFunc(kind, func(r rune) bool { return r == ' ' || r == '`' }) == -1 {
-					kinds = append(kinds, kind)
-				}
-			}
-		}
-	}
-	return kinds
 }
 
 func infoPrompts(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult, prompt string) (string, string) {

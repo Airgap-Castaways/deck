@@ -59,15 +59,19 @@ func FromValidationError(message string, bundle askknowledge.Bundle) []Diagnosti
 	if stepKind, specMessage, ok := extractStepSpecFailure(message); ok {
 		if step, found := findStep(bundle, stepKind); found {
 			if prop, ok := extractAdditionalProperty(specMessage); ok {
+				expected := renderKeyFieldList(step)
+				if rules := renderRuleSummaryList(step); rules != "" {
+					expected += "; rules: " + rules
+				}
 				appendDiag(Diagnostic{
 					Code:         "unknown_step_field",
 					Severity:     "blocking",
 					Path:         fmt.Sprintf("%s.spec.%s", stepKind, prop),
 					Message:      fmt.Sprintf("%s does not support spec.%s", stepKind, prop),
-					Expected:     renderKeyFieldList(step),
+					Expected:     expected,
 					Actual:       "spec." + prop,
 					SourceRef:    step.SchemaFile,
-					SuggestedFix: fmt.Sprintf("Use documented %s fields such as %s.", stepKind, renderKeyFieldList(step)),
+					SuggestedFix: fmt.Sprintf("Use documented %s fields such as %s.", stepKind, expected),
 				})
 			}
 			if field, ok := extractRequiredField(specMessage); ok {
@@ -77,6 +81,9 @@ func FromValidationError(message string, bundle askknowledge.Bundle) []Diagnosti
 						suggested = fmt.Sprintf("Add required field spec.%s to %s. %s", field, stepKind, strings.TrimSpace(key.Description))
 						break
 					}
+				}
+				if rules := renderRuleSummaryList(step); rules != "" {
+					suggested += " Rules: " + rules
 				}
 				appendDiag(Diagnostic{
 					Code:         "missing_step_field",
@@ -163,6 +170,23 @@ func renderKeyFieldList(step askknowledge.StepKnowledge) string {
 		return "documented step fields"
 	}
 	return strings.Join(paths, ", ")
+}
+
+func renderRuleSummaryList(step askknowledge.StepKnowledge) string {
+	rules := make([]string, 0, len(step.SchemaRuleSummaries))
+	for _, rule := range step.SchemaRuleSummaries {
+		rule = strings.TrimSpace(rule)
+		if rule != "" {
+			rules = append(rules, rule)
+		}
+	}
+	if len(rules) == 0 {
+		return ""
+	}
+	if len(rules) > 2 {
+		rules = rules[:2]
+	}
+	return strings.Join(rules, " ")
 }
 
 func FromEvaluation(findings []askpolicy.EvaluationFinding) []Diagnostic {

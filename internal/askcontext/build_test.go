@@ -201,6 +201,16 @@ func TestDownloadFileKeyFieldsPreserveRequiredOptionalDistinction(t *testing.T) 
 			t.Fatalf("expected %q in typed step guidance block, got %q", want, block)
 		}
 	}
+	foundRule := false
+	for _, rule := range download.SchemaRuleSummaries {
+		if strings.Contains(rule, "At least one of `spec.source` or `spec.items`") {
+			foundRule = true
+			break
+		}
+	}
+	if !foundRule {
+		t.Fatalf("expected schema-derived download rule summary, got %#v", download.SchemaRuleSummaries)
+	}
 }
 
 func TestRelevantStepKindsBlockIncludesCheckHostShapeAndMistakes(t *testing.T) {

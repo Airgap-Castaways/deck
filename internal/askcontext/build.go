@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/Airgap-Castaways/deck/internal/schemadoc"
+	"github.com/Airgap-Castaways/deck/internal/schemafacts"
 	"github.com/Airgap-Castaways/deck/internal/validate"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
@@ -58,7 +59,7 @@ func buildManifest() Manifest {
 			SupportedModes:   validate.SupportedWorkflowRoles(),
 			SupportedVersion: validate.SupportedWorkflowVersion(),
 			ImportRule:       validate.WorkflowImportRule(),
-			RequiredFields:   []string{"version"},
+			RequiredFields:   workflowRequiredFields(),
 			PhaseRules: []string{
 				"Each phase needs a non-empty name.",
 				"Each phase must define steps or imports.",
@@ -153,6 +154,30 @@ steps:
 	return manifest
 }
 
+func workflowRequiredFields() []string {
+	raw, err := deckschemas.WorkflowSchema()
+	if err != nil {
+		return []string{"version"}
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		return []string{"version"}
+	}
+	facts := schemafacts.Analyze(schema)
+	fields := schemafacts.FilterDirectChildFields(facts.Fields, "")
+	out := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if field.Requirement == schemafacts.RequirementRequired {
+			out = append(out, field.Path)
+		}
+	}
+	sort.Strings(out)
+	if len(out) == 0 {
+		return []string{"version"}
+	}
+	return out
+}
+
 func AllowedGeneratedPathPatterns() []string {
 	return []string{"workflows/prepare.yaml", "workflows/scenarios/*.yaml", "workflows/components/*.yaml", "workflows/vars.yaml"}
 }
@@ -170,18 +195,20 @@ func buildStepKinds() []StepKindContext {
 	out := make([]StepKindContext, 0, len(defs))
 	for _, def := range defs {
 		meta := def.Docs
+		facts := schemaFactsForKind(def.Step.Kind)
 		ctx := StepKindContext{
-			Kind:         def.Step.Kind,
-			Category:     def.Step.Category,
-			Summary:      meta.Summary,
-			WhenToUse:    meta.WhenToUse,
-			SchemaFile:   def.Step.SchemaFile,
-			AllowedRoles: append([]string(nil), def.Step.Roles...),
-			Outputs:      append([]string(nil), def.Step.Outputs...),
-			MinimalShape: strings.TrimSpace(meta.Example),
-			CuratedShape: strings.TrimSpace(meta.Example),
-			KeyFields:    buildStepKeyFields(def.Step.Kind, meta),
-			Notes:        append([]string(nil), meta.Notes...),
+			Kind:                def.Step.Kind,
+			Category:            def.Step.Category,
+			Summary:             meta.Summary,
+			WhenToUse:           meta.WhenToUse,
+			SchemaFile:          def.Step.SchemaFile,
+			AllowedRoles:        append([]string(nil), def.Step.Roles...),
+			Outputs:             append([]string(nil), def.Step.Outputs...),
+			MinimalShape:        strings.TrimSpace(meta.Example),
+			CuratedShape:        strings.TrimSpace(meta.Example),
+			KeyFields:           buildStepKeyFields(def.Step.Kind, meta, facts),
+			SchemaRuleSummaries: append([]string(nil), facts.RuleSummaries...),
+			Notes:               append([]string(nil), meta.Notes...),
 		}
 		applyCuratedStepMetadata(&ctx)
 		ctx.Outputs = dedupe(ctx.Outputs)
@@ -371,8 +398,13 @@ func defaultConstrainedLiteralFields(kind string) []ConstrainedFieldHint {
 	}
 }
 
-func buildStepKeyFields(kind string, meta workflowexec.ToolMetadata) []StepFieldContext {
-	fieldRequirements := fieldRequirementsForSchema(kind)
+func buildStepKeyFields(kind string, meta workflowexec.ToolMetadata, facts schemafacts.DocumentFacts) []StepFieldContext {
+	fieldRequirements := map[string]string{}
+	for _, field := range facts.Fields {
+		if strings.HasPrefix(field.Path, "spec") {
+			fieldRequirements[field.Path] = string(field.Requirement)
+		}
+	}
 	preferred := map[string][]string{
 		"InitKubeadm":         {"spec.outputJoinFile", "spec.configFile", "spec.kubernetesVersion", "spec.advertiseAddress", "spec.podNetworkCIDR"},
 		"JoinKubeadm":         {"spec.joinFile", "spec.configFile", "spec.asControlPlane", "spec.extraArgs"},
@@ -406,7 +438,7 @@ func buildStepKeyFields(kind string, meta workflowexec.ToolMetadata) []StepField
 	return out
 }
 
-func fieldRequirementsForSchema(kind string) map[string]string {
+func schemaFactsForKind(kind string) schemafacts.DocumentFacts {
 	var schemaFile string
 	for _, def := range workflowexec.StepDefinitions() {
 		if def.Kind == strings.TrimSpace(kind) {
@@ -415,165 +447,23 @@ func fieldRequirementsForSchema(kind string) map[string]string {
 		}
 	}
 	if schemaFile == "" {
-		return nil
+		return schemafacts.DocumentFacts{}
 	}
 	raw, err := deckschemas.ToolSchema(schemaFile)
 	if err != nil {
-		return nil
+		return schemafacts.DocumentFacts{}
 	}
 	var schema map[string]any
 	if err := json.Unmarshal(raw, &schema); err != nil {
-		return nil
+		return schemafacts.DocumentFacts{}
 	}
-	spec, _ := schema["properties"].(map[string]any)["spec"].(map[string]any)
-	if len(spec) == 0 {
-		return nil
-	}
-	requirements := map[string]string{}
-	collectFieldRequirements(spec, spec, "spec", requirements)
-	return requirements
-}
-
-func collectFieldRequirements(root map[string]any, node map[string]any, prefix string, requirements map[string]string) {
-	node = resolveSchemaNodeLocal(root, node)
-	props, _ := node["properties"].(map[string]any)
-	if len(props) == 0 {
-		return
-	}
-	direct := requiredSetLocal(node["required"])
-	conditional := conditionalRequiredSet(node)
-	keys := make([]string, 0, len(props))
-	for key := range props {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		child, _ := props[key].(map[string]any)
-		if len(child) == 0 {
-			continue
-		}
-		path := fieldPathJoin(prefix, key)
-		requirement := "optional"
-		if direct[key] {
-			requirement = "required"
-		} else if conditional[key] {
-			requirement = "conditional"
-		}
-		requirements[path] = requirement
-		child = resolveSchemaNodeLocal(root, child)
-		if fieldTypeLocal(root, child) == "object" {
-			collectFieldRequirements(root, child, path, requirements)
-		}
-		items, _ := child["items"].(map[string]any)
-		items = resolveSchemaNodeLocal(root, items)
-		if fieldTypeLocal(root, child) == "array<object>" && len(items) > 0 {
-			collectFieldRequirements(root, items, path+"[]", requirements)
+	facts := schemafacts.Analyze(schema)
+	if props, _ := schema["properties"].(map[string]any); len(props) > 0 {
+		if spec, _ := props["spec"].(map[string]any); len(spec) > 0 {
+			facts.RuleSummaries = schemafacts.ExtractRules(spec, "spec")
 		}
 	}
-}
-
-func fieldPathJoin(prefix string, key string) string {
-	if strings.TrimSpace(prefix) == "" {
-		return strings.TrimSpace(key)
-	}
-	if strings.TrimSpace(key) == "" {
-		return strings.TrimSpace(prefix)
-	}
-	return strings.TrimSpace(prefix) + "." + strings.TrimSpace(key)
-}
-
-func conditionalRequiredSet(node map[string]any) map[string]bool {
-	out := map[string]bool{}
-	for _, groupKey := range []string{"anyOf", "oneOf"} {
-		for _, raw := range toAnySliceLocal(node[groupKey]) {
-			entry, _ := raw.(map[string]any)
-			for _, field := range toStringsLocal(entry["required"]) {
-				out[field] = true
-			}
-		}
-	}
-	if allOf, ok := node["allOf"].([]any); ok {
-		for _, raw := range allOf {
-			entry, _ := raw.(map[string]any)
-			thenNode, _ := entry["then"].(map[string]any)
-			for _, field := range toStringsLocal(thenNode["required"]) {
-				out[field] = true
-			}
-			for _, anyRaw := range toAnySliceLocal(thenNode["anyOf"]) {
-				choice, _ := anyRaw.(map[string]any)
-				for _, field := range toStringsLocal(choice["required"]) {
-					out[field] = true
-				}
-			}
-		}
-	}
-	return out
-}
-
-func requiredSetLocal(value any) map[string]bool {
-	out := map[string]bool{}
-	for _, item := range toStringsLocal(value) {
-		out[item] = true
-	}
-	return out
-}
-
-func toStringsLocal(value any) []string {
-	slice, ok := value.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(slice))
-	for _, item := range slice {
-		if text, ok := item.(string); ok {
-			out = append(out, text)
-		}
-	}
-	return out
-}
-
-func toAnySliceLocal(value any) []any {
-	slice, _ := value.([]any)
-	return slice
-}
-
-func resolveSchemaNodeLocal(root map[string]any, node map[string]any) map[string]any {
-	if len(node) == 0 {
-		return nil
-	}
-	if ref, _ := node["$ref"].(string); strings.HasPrefix(ref, "#/") {
-		current := any(root)
-		for _, part := range strings.Split(strings.TrimPrefix(ref, "#/"), "/") {
-			obj, ok := current.(map[string]any)
-			if !ok {
-				return node
-			}
-			current = obj[part]
-		}
-		resolved, ok := current.(map[string]any)
-		if ok {
-			return resolved
-		}
-	}
-	return node
-}
-
-func fieldTypeLocal(root map[string]any, node map[string]any) string {
-	node = resolveSchemaNodeLocal(root, node)
-	if node == nil {
-		return ""
-	}
-	if typeName, _ := node["type"].(string); typeName != "" {
-		if typeName == "array" {
-			items, _ := node["items"].(map[string]any)
-			items = resolveSchemaNodeLocal(root, items)
-			if itemType, _ := items["type"].(string); itemType == "object" {
-				return "array<object>"
-			}
-		}
-		return typeName
-	}
-	return ""
+	return facts
 }
 
 func dedupe(values []string) []string {

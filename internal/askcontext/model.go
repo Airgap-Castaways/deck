@@ -120,6 +120,7 @@ type StepKindContext struct {
 	MinimalShape             string
 	CuratedShape             string
 	KeyFields                []StepFieldContext
+	SchemaRuleSummaries      []string
 	ActionGuides             []StepActionContext
 	PromptExamples           []StepExampleContext
 	CommonMistakes           []string

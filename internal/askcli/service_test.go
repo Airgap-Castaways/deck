@@ -3,6 +3,7 @@ package askcli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,6 +20,9 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/askscaffold"
 	"github.com/Airgap-Castaways/deck/internal/askstate"
+	"github.com/Airgap-Castaways/deck/internal/schemadoc"
+	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
+	"github.com/Airgap-Castaways/deck/schemas"
 )
 
 type stubClient struct {
@@ -779,11 +783,67 @@ func TestGenerationSystemPromptCarriesExplicitStepFieldRequirements(t *testing.T
 	req := askpolicy.ScenarioRequirements{Connectivity: "unspecified", RequiredFiles: []string{"workflows/prepare.yaml"}, NeedsPrepare: true}
 	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}}, askcontract.PlanResponse{}, askknowledge.Current())
 	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}, "create a prepare workflow using DownloadFile and default output location", askretrieve.RetrievalResult{}, req, askcontract.AuthoringBrief{ModeIntent: "prepare-only", CompletenessTarget: "complete"}, askcontract.ExecutionModel{}, scaffold)
-	for _, want := range []string{"DownloadFile", "spec.source [conditional]", "spec.fetch [optional]", "spec.mode [optional]", "compact shape:"} {
+	for _, want := range []string{"DownloadFile", "spec.source [conditional]", "spec.fetch [optional]", "spec.mode [optional]", "rule: At least one of `spec.source` or `spec.items` must be set.", "compact shape:"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
 		}
 	}
+}
+
+func TestPromptAndDocsShareDownloadFileRuleSummary(t *testing.T) {
+	page := testSchemaDocFamilyPageInput(t, "file")
+	rendered := string(schemadoc.RenderToolPage(page))
+	req := askpolicy.ScenarioRequirements{Connectivity: "unspecified", RequiredFiles: []string{"workflows/prepare.yaml"}, NeedsPrepare: true}
+	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}}, askcontract.PlanResponse{}, askknowledge.Current())
+	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}, "create a prepare workflow using DownloadFile", askretrieve.RetrievalResult{}, req, askcontract.AuthoringBrief{ModeIntent: "prepare-only", CompletenessTarget: "complete"}, askcontract.ExecutionModel{}, scaffold)
+	rule := "At least one of `spec.source` or `spec.items` must be set."
+	if !strings.Contains(rendered, rule) {
+		t.Fatalf("expected docs to include %q, got %q", rule, rendered)
+	}
+	if !strings.Contains(prompt, rule) {
+		t.Fatalf("expected prompt to include %q, got %q", rule, prompt)
+	}
+}
+
+func testSchemaDocFamilyPageInput(t *testing.T, family string) schemadoc.PageInput {
+	t.Helper()
+	defs := workflowcontract.StepDefinitions()
+	page := schemadoc.PageInput{Family: family}
+	for _, def := range defs {
+		if def.Family != family || def.Visibility != "public" {
+			continue
+		}
+		raw, err := schemas.ToolSchema(def.SchemaFile)
+		if err != nil {
+			t.Fatalf("ToolSchema(%q): %v", def.SchemaFile, err)
+		}
+		var schema map[string]any
+		if err := json.Unmarshal(raw, &schema); err != nil {
+			t.Fatalf("unmarshal tool schema %q: %v", def.SchemaFile, err)
+		}
+		properties, _ := schema["properties"].(map[string]any)
+		spec, _ := properties["spec"].(map[string]any)
+		if page.PageSlug == "" {
+			page.PageSlug = def.DocsPage
+			page.Title = def.FamilyTitle
+			page.Summary = "Reference for the `" + def.FamilyTitle + "` family of typed workflow steps."
+		}
+		page.Variants = append(page.Variants, schemadoc.VariantInput{
+			Kind:        def.Kind,
+			Title:       def.FamilyTitle,
+			Description: def.Summary,
+			SchemaPath:  filepath.ToSlash(filepath.Join("schemas", "tools", def.SchemaFile)),
+			Schema:      schema,
+			Meta:        schemadoc.ToolMetaForDefinition(def),
+			Spec:        spec,
+			Outputs:     append([]string(nil), def.Outputs...),
+			DocsOrder:   def.DocsOrder,
+		})
+	}
+	if page.PageSlug == "" {
+		t.Fatalf("missing test page for family %s", family)
+	}
+	return page
 }
 
 func TestAppendPlanAdvisoryPromptCarriesRecoverableReviewIntoGeneration(t *testing.T) {
