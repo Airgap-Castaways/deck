@@ -406,6 +406,27 @@ func TestGenerateWithValidationRetryPromptIncludesRawValidatorErrorAndRepairGuid
 	}
 }
 
+func TestGenerateWithValidationRetryPromptIncludesDuplicateStepIDRepairGuidance(t *testing.T) {
+	client := &stubClient{responses: []string{
+		`{"summary":"duplicate ids","review":[],"files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: control-plane\n    steps:\n      - id: preflight-host\n        kind: CheckHost\n        spec:\n          checks: [os, arch, swap]\n  - name: worker\n    steps:\n      - id: preflight-host\n        kind: CheckHost\n        spec:\n          checks: [os, arch, swap]\n"}]}`,
+		`{"summary":"repaired ids","review":[],"files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: control-plane\n    steps:\n      - id: control-plane-preflight-host\n        kind: CheckHost\n        spec:\n          checks: [os, arch, swap]\n  - name: worker\n    steps:\n      - id: worker-preflight-host\n        kind: CheckHost\n        spec:\n          checks: [os, arch, swap]\n"}]}`,
+	}}
+	plan := askcontract.PlanResponse{Request: "create a multi-phase workflow", Files: []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}}}
+	_, _, _, _, _, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate-fast", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: plan.Request}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
+	if err != nil {
+		t.Fatalf("expected duplicate-id repair success: %v", err)
+	}
+	if len(client.prompts) != 2 {
+		t.Fatalf("expected two generate calls, got %d", len(client.prompts))
+	}
+	retryPrompt := client.prompts[1].Prompt
+	for _, want := range []string{"duplicate_step_id", "Duplicate step id repair", "control-plane-preflight-host", "worker-preflight-host", "Return the full JSON response with all files"} {
+		if !strings.Contains(retryPrompt, want) {
+			t.Fatalf("expected %q in duplicate-id retry prompt, got %q", want, retryPrompt)
+		}
+	}
+}
+
 func TestGenerateWithValidationRetryPromptIncludesYamlStructureRepairGuidance(t *testing.T) {
 	client := &stubClient{responses: []string{
 		`{"summary":"broken yaml","review":[],"files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: broken\n    steps:\n      - id: run\n        kind: Command\n        spec:\n          command: [\"true\"\n"},{"path":"workflows/vars.yaml","content":"role: control-plane\n"}]}`,
@@ -784,6 +805,17 @@ func TestGenerationSystemPromptCarriesExplicitStepFieldRequirements(t *testing.T
 	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}}, askcontract.PlanResponse{}, askknowledge.Current())
 	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}, "create a prepare workflow using DownloadFile and default output location", askretrieve.RetrievalResult{}, req, askcontract.AuthoringBrief{ModeIntent: "prepare-only", CompletenessTarget: "complete"}, askcontract.ExecutionModel{}, scaffold)
 	for _, want := range []string{"DownloadFile", "spec.source [conditional]", "spec.fetch [optional]", "spec.mode [optional]", "rule: At least one of `spec.source` or `spec.items` must be set.", "compact shape:"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
+		}
+	}
+}
+
+func TestGenerationSystemPromptCarriesWorkflowStepIDUniquenessRule(t *testing.T) {
+	req := askpolicy.ScenarioRequirements{Connectivity: "offline", RequiredFiles: []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml"}, NeedsPrepare: true}
+	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askknowledge.Current())
+	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "workspace"}, "create a 3-node workflow", askretrieve.RetrievalResult{}, req, askcontract.AuthoringBrief{ModeIntent: "prepare+apply", CompletenessTarget: "complete"}, askcontract.ExecutionModel{}, scaffold)
+	for _, want := range []string{"Every step id must be unique across the workflow.", "Every step id must be unique across the workflow, including steps nested under different phases."} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
 		}

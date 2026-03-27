@@ -56,6 +56,19 @@ func FromValidationError(message string, bundle askknowledge.Bundle) []Diagnosti
 	if strings.Contains(lower, "is not supported for role prepare") {
 		appendDiag(Diagnostic{Code: "role_support", Severity: "blocking", Message: "step kind is not supported for prepare", Expected: "prepare-supported typed step", Actual: "unsupported step kind for prepare", SourceRef: "workflow step role declarations", SuggestedFix: "Use a typed prepare step such as DownloadImage or DownloadPackage for artifact collection."})
 	}
+	if stepID, ok := extractDuplicateStepID(message); ok {
+		appendDiag(Diagnostic{
+			Code:         "duplicate_step_id",
+			Severity:     "blocking",
+			File:         diagnosticMessageFile(message),
+			Path:         "steps[].id",
+			Message:      fmt.Sprintf("workflow reuses step id %q", stepID),
+			Expected:     "globally unique step ids across the workflow",
+			Actual:       stepID,
+			SourceRef:    "workflow semantic rules",
+			SuggestedFix: fmt.Sprintf("Rename duplicated step id %q so every step id is unique across the workflow. Prefer role- or phase-specific ids such as control-plane-%s or worker-%s.", stepID, stepID, stepID),
+		})
+	}
 	if stepKind, specMessage, ok := extractStepSpecFailure(message); ok {
 		if step, found := findStep(bundle, stepKind); found {
 			if prop, ok := extractAdditionalProperty(specMessage); ok {
@@ -106,6 +119,35 @@ func FromValidationError(message string, bundle askknowledge.Bundle) []Diagnosti
 		}
 	}
 	return dedupe(diags)
+}
+
+func extractDuplicateStepID(message string) (string, bool) {
+	const prefix = "E_DUPLICATE_STEP_ID:"
+	idx := strings.Index(strings.TrimSpace(message), prefix)
+	if idx < 0 {
+		return "", false
+	}
+	stepID := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(message[idx:]), prefix))
+	if stepID == "" {
+		return "", false
+	}
+	return stepID, true
+}
+
+func diagnosticMessageFile(message string) string {
+	message = strings.TrimSpace(message)
+	if !strings.HasPrefix(message, "workflows/") {
+		return ""
+	}
+	idx := strings.Index(message, ":")
+	if idx <= 0 {
+		return ""
+	}
+	path := strings.TrimSpace(message[:idx])
+	if !strings.HasPrefix(path, "workflows/") {
+		return ""
+	}
+	return path
 }
 
 func extractStepSpecFailure(message string) (string, string, bool) {

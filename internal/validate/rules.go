@@ -31,6 +31,7 @@ func WorkflowInvariantNotes() []string {
 	return []string{
 		"A workflow must define at least one of phases or steps.",
 		"A workflow cannot define both top-level phases and top-level steps at the same time.",
+		"Every step id must be unique across the workflow, including steps nested under different phases.",
 		workflowImportRule,
 		"Workflow mode is determined by command context or file location, not by an in-file role field.",
 		"Each step still validates against its own kind-specific schema after the top-level workflow schema passes.",

@@ -88,7 +88,8 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	classifierLLM := false
 	classifierSystem := classifierSystemPrompt()
 	classifierUser := classifierUserPrompt(requestText, opts.Review, workspace)
-	if canUseLLM(effective) && (!isAuthoringRoute(heuristic.Route) || askFeatureEnabled("DECK_ASK_ENABLE_LLM_CLASSIFIER")) {
+	switch {
+	case canUseLLM(effective) && (!isAuthoringRoute(heuristic.Route) || askFeatureEnabled("DECK_ASK_ENABLE_LLM_CLASSIFIER")):
 		logger.logf("debug", "\n[ask][phase:classify:start] provider=%s model=%s\n", effective.Provider, effective.Model)
 		classified, classifyErr := classifyWithLLM(ctx, client, effective, classifierSystem, classifierUser, logger)
 		if classifyErr == nil {
@@ -98,9 +99,9 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		} else {
 			logger.logf("debug", "[ask][phase:classify:fallback] error=%v\n", classifyErr)
 		}
-	} else if canUseLLM(effective) {
+	case canUseLLM(effective):
 		logger.logf("debug", "[ask][phase:classify:skip] reason=heuristic-authoring-default\n")
-	} else {
+	default:
 		logger.logf("debug", "[ask][phase:classify:skip] reason=no-llm-credentials\n")
 	}
 	decision = applyWriteOverride(decision, heuristic, opts.Write, logger)
@@ -1096,7 +1097,7 @@ func generationAttempts(requested int, decision askintent.Decision, prompt strin
 }
 
 func askRequestTimeout(kind string, maxIterations int, systemPrompt string, prompt string) time.Duration {
-	base := 45 * time.Second
+	base := 90 * time.Second
 	switch strings.TrimSpace(kind) {
 	case "classify":
 		base = 45 * time.Second
@@ -1108,8 +1109,6 @@ func askRequestTimeout(kind string, maxIterations int, systemPrompt string, prom
 		base = 90 * time.Second
 	case "postprocess-critic", "postprocess-edit", "postprocess-structural":
 		base = 120 * time.Second
-	default:
-		base = 90 * time.Second
 	}
 	if maxIterations > 1 {
 		base += time.Duration(minInt(maxIterations-1, 4)) * 30 * time.Second
@@ -1306,6 +1305,10 @@ func targetedRepairPromptBlock(prev askcontract.GenerationResponse, diags []askd
 	b.WriteString("- Preserve unchanged files when they are already valid.\n")
 	b.WriteString("- For files marked preserve-if-valid, keep content byte-for-byte unless a diagnostic explicitly requires a change.\n")
 	b.WriteString("- Prefer editing only the files implicated by diagnostics or execution/design review findings.\n")
+	if hasDiagnosticCode(diags, "duplicate_step_id") {
+		b.WriteString("- Duplicate step id repair: rename only the conflicting ids; do not duplicate or rewrite unaffected steps.\n")
+		b.WriteString("- Use role- or phase-specific step ids when similar logic appears in multiple phases, for example `control-plane-preflight-host` and `worker-preflight-host`.\n")
+	}
 	b.WriteString("- When revising YAML, keep `version: v1alpha1` and top-level keys at column 1, indent mapping children by two spaces, and indent list items under their parent key.\n")
 	b.WriteString("- Do not collapse YAML indentation, remove required list markers, or rewrite every file from scratch when only one file is broken.\n")
 	b.WriteString("- Return the full JSON response with all files that should remain in the final result.\n")
@@ -1338,6 +1341,16 @@ func targetedRepairPromptBlock(prev askcontract.GenerationResponse, diags []askd
 		}
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func hasDiagnosticCode(diags []askdiagnostic.Diagnostic, code string) bool {
+	code = strings.TrimSpace(code)
+	for _, diag := range diags {
+		if strings.TrimSpace(diag.Code) == code {
+			return true
+		}
+	}
+	return false
 }
 
 func diagnosticDetailsForFile(path string, diags []askdiagnostic.Diagnostic) []string {

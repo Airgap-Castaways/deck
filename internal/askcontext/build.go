@@ -68,6 +68,7 @@ func buildManifest() Manifest {
 			StepRules: []string{
 				"Each step needs id, kind, and spec.",
 				"Step ids belong on steps, not phases.",
+				"Step ids must be unique across all phases and top-level steps in the workflow.",
 			},
 			PhaseExample: strings.TrimSpace(`version: v1alpha1
 phases:

@@ -68,6 +68,7 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, requ
 	b.WriteString("- Keep existing repo-native workflow structure and YAML indentation patterns whenever possible.\n")
 	b.WriteString("- Every returned YAML file must be valid standalone YAML: top-level keys at column 1, list items indented under their parent key, and nested mapping fields indented by two spaces per level.\n")
 	b.WriteString("- Do not emit flattened one-space indentation like `phases:\n - name` or `steps:\n - id`; keep canonical YAML indentation.\n")
+	b.WriteString("- Every step id must be unique across the workflow. When similar logic appears in multiple phases or roles, rename ids with role- or phase-specific prefixes instead of reusing the same id.\n")
 	b.WriteString("Primary repository context follows. Prefer workspace snippets first, then the closest repository examples.\n")
 	b.WriteString(generationRetrievalPromptBlock(retrieval))
 	b.WriteString("\n")
