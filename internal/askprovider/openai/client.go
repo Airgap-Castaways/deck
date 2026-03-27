@@ -1,5 +1,3 @@
-//go:build ai
-
 package openaiprovider
 
 import (
@@ -76,6 +74,10 @@ type codexSSEDelta struct {
 type codexSSEEvent struct {
 	Name string
 	Data string
+}
+
+type temporaryError interface {
+	Temporary() bool
 }
 
 type Client struct {
@@ -175,7 +177,11 @@ func retryableProviderError(err error) bool {
 	}
 	var netErr net.Error
 	if errors.As(err, &netErr) {
-		return netErr.Timeout() || netErr.Temporary()
+		return netErr.Timeout()
+	}
+	var tempErr temporaryError
+	if errors.As(err, &tempErr) {
+		return tempErr.Temporary()
 	}
 	var apiErr *openai.APIError
 	if errors.As(err, &apiErr) {

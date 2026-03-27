@@ -23,9 +23,6 @@ jobs:
       - name: Build deck CLI
         run: make build
 
-      - name: Build deck-ai CLI
-        run: make build-ai
-
       - name: Run golangci-lint
         run: make lint
 
@@ -48,6 +45,7 @@ jobs:
           test -s /tmp/deck.ps1
           ./bin/deck version
           ./bin/deck version -o json
+          ./bin/deck ask --help
 
       - name: Validate JSON schema files are parseable
         run: |
@@ -67,7 +65,7 @@ jobs:
               print(f'OK: {f}')
           PY
 
-      - name: Run core test set
+      - name: Run test set
         run: |
           make test
           ./bin/deck lint --file docs/guides/examples/vagrant-smoke-install.yaml
@@ -75,9 +73,6 @@ jobs:
           ./bin/deck lint --file test/workflows/scenarios/worker-join.yaml
           ./bin/deck lint --file test/workflows/scenarios/node-reset.yaml
           ./bin/deck lint --file test/workflows/scenarios/upgrade.yaml
-
-      - name: Run AI test set
-        run: make test-ai
 
       - name: Validate docs examples (mode=validate)
         run: |
@@ -112,8 +107,5 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Run govulncheck (core)
+      - name: Run govulncheck
         run: make vuln
-
-      - name: Run govulncheck (ai)
-        run: make vuln-ai

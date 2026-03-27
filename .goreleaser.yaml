@@ -20,7 +20,6 @@ builds:
         -X github.com/Airgap-Castaways/deck/internal/buildinfo.Version={{ .Version }}
         -X github.com/Airgap-Castaways/deck/internal/buildinfo.Commit={{ .ShortCommit }}
         -X github.com/Airgap-Castaways/deck/internal/buildinfo.Date={{ .Date }}
-        -X github.com/Airgap-Castaways/deck/internal/buildinfo.Variant=core
         -X github.com/Airgap-Castaways/deck/internal/buildinfo.Dirty={{ .IsGitDirty }}
 
 archives:

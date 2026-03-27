@@ -19,7 +19,6 @@ Current fields:
 - `version`: release semver such as `v0.1.0`, or `dev` for local non-release builds
 - `commit`: short Git commit SHA
 - `date`: UTC build timestamp
-- `variant`: `core` or `ai`
 - `dirty`: whether the working tree had local modifications at build time
 
 This keeps local support output useful even before formal releases begin.
@@ -30,7 +29,6 @@ Use `Makefile` targets as the canonical build entrypoints:
 
 ```bash
 make build
-make build-ai
 ```
 
 By default, local builds report `dev` until a real release process starts supplying a semver.
@@ -56,7 +54,6 @@ deck dev
   "version": "dev",
   "commit": "abc1234",
   "date": "2026-03-17T10:00:00Z",
-  "variant": "core",
   "dirty": true
 }
 ```

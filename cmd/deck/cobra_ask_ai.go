@@ -1,5 +1,3 @@
-//go:build ai
-
 package main
 
 import (
