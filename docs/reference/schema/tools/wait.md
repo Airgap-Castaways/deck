@@ -209,6 +209,7 @@ spec:
 
 - `Wait` bridges convergence gaps between steps. It should not replace the configuration action itself.
 - Keep waits specific so failures identify exactly which dependency did not become ready within the timeout.
+- Use `initialDelay` when a service briefly flaps before binding its port.
 
 ## `WaitForMissingTCPPort`
 

@@ -88,7 +88,7 @@ spec:
 ### Notes
 
 - Use `DownloadPackage` during prepare to stage offline package-manager content.
-- Omit `outputDir` unless you need a custom package location.
+- Omit `outputDir` unless you need a custom package location; deck uses `packages/` by default, or `packages/deb/<release>` and `packages/rpm/<release>` when `repo.type` is set.
 - Container-backed `DownloadPackage` exports completed artifacts into a host-owned cache and does not bind-mount package-manager cache directories.
 - Keeping the same package list across `download` and `install` helps maintain offline parity.
 - Use `restrictToRepos` on the `InstallPackage` step to prevent the node's default online repos from being consulted during an offline apply.
