@@ -1,5 +1,7 @@
 package stepspec
 
+import "maps"
+
 var (
 	commonFileFieldDocs = map[string]FieldDoc{
 		"spec.path":                 {Description: "Destination path on the node.", Example: "/etc/containerd/config.toml"},
@@ -163,11 +165,7 @@ var (
 
 func mergeFieldDocs(base map[string]FieldDoc, extra map[string]FieldDoc) map[string]FieldDoc {
 	out := make(map[string]FieldDoc, len(base)+len(extra))
-	for k, v := range base {
-		out[k] = v
-	}
-	for k, v := range extra {
-		out[k] = v
-	}
+	maps.Copy(out, base)
+	maps.Copy(out, extra)
 	return out
 }

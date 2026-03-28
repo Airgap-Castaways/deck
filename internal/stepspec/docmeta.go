@@ -1,6 +1,9 @@
 package stepspec
 
-import "sync"
+import (
+	"maps"
+	"sync"
+)
 
 type FieldDoc struct {
 	Description string
@@ -38,10 +41,7 @@ func LookupToolDoc(kind string) (ToolDocMetadata, bool) {
 func cloneToolDocMetadata(meta ToolDocMetadata) ToolDocMetadata {
 	cloned := ToolDocMetadata{Example: meta.Example, Notes: append([]string(nil), meta.Notes...)}
 	if meta.FieldDocs != nil {
-		cloned.FieldDocs = make(map[string]FieldDoc, len(meta.FieldDocs))
-		for key, value := range meta.FieldDocs {
-			cloned.FieldDocs[key] = value
-		}
+		cloned.FieldDocs = maps.Clone(meta.FieldDocs)
 	}
 	return cloned
 }
