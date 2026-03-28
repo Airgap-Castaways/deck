@@ -385,7 +385,7 @@ spec:
 | `spec.include` | `array<string>` | no | `` | `` | Optional archive members to extract. Extract all members when omitted. | `[bridge,loopback]` |
 | `spec.mode` | `string` | no | `` | `` | File permissions applied to extracted files when supported. | `0755` |
 | `spec.path` | `string` | yes | `` | `` | Destination directory on the node. | `/opt/cni/bin` |
-| `spec.source` | `object` | yes | `` | `` | Structured source descriptor for copy or extraction operations. | `{path:/etc/kubernetes/admin.conf}` |
+| `spec.source` | `object` | yes | `` | `` | Structured source descriptor for the archive to extract. | `{path:/tmp/cni-plugins.tgz}` |
 
 ### Nested Objects
 

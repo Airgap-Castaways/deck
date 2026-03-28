@@ -57,6 +57,7 @@ spec:
 
 - `ConfigureRepository` only writes repository definition files.
 - Use `RefreshRepository` when the package manager needs an explicit metadata refresh.
+- Keep repository definitions mirror-specific rather than mutating the host's default online sources.
 
 ## `RefreshRepository`
 

@@ -139,7 +139,7 @@ var (
 	_ = registerToolDoc("ExtractArchive", ToolDocMetadata{
 		Example: "kind: ExtractArchive\nspec:\n  source:\n    path: /tmp/cni-plugins.tgz\n  path: /opt/cni/bin\n  include: [bridge, loopback]\n",
 		FieldDocs: map[string]FieldDoc{
-			"spec.source":               commonFileFieldDocs["spec.source"],
+			"spec.source":               {Description: "Structured source descriptor for the archive to extract.", Example: "{path:/tmp/cni-plugins.tgz}"},
 			"spec.source.url":           commonFileFieldDocs["spec.source.url"],
 			"spec.source.path":          commonFileFieldDocs["spec.source.path"],
 			"spec.source.sha256":        commonFileFieldDocs["spec.source.sha256"],
