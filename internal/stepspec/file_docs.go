@@ -105,7 +105,7 @@ var (
 			"spec.edits[].op":      {Description: "Structured edit operation.", Example: "set"},
 			"spec.edits[].rawPath": {Description: "Quoted-segment TOML path.", Example: "plugins.\"io.containerd.grpc.v1.cri\".registry.config_path"},
 			"spec.edits[].value":   {Description: "Typed edit value.", Example: "/etc/containerd/certs.d"},
-			"spec.mode":            {Description: "Optional file permissions to apply after the edit completes.", Example: "0644"},
+			"spec.mode":            {Description: "Optional file permissions in octal notation to apply after the edit completes.", Example: "0644"},
 		},
 		Notes: []string{"Use this for generic TOML editing when a domain-specific step is unnecessary."},
 	})
@@ -119,7 +119,7 @@ var (
 			"spec.edits[].op":      {Description: "Structured edit operation.", Example: "set"},
 			"spec.edits[].rawPath": {Description: "Dot-path with optional quoted key segments and numeric array indexes.", Example: "spec.template.spec.containers.0.image"},
 			"spec.edits[].value":   {Description: "Typed edit value.", Example: "registry.local/k8s"},
-			"spec.mode":            {Description: "Optional file permissions to apply after the edit completes.", Example: "0644"},
+			"spec.mode":            {Description: "Optional file permissions in octal notation to apply after the edit completes.", Example: "0644"},
 		},
 		Notes: []string{"Comment placement, anchors, aliases, merge keys, and style preservation are not guaranteed."},
 	})
@@ -133,7 +133,7 @@ var (
 			"spec.edits[].op":      {Description: "Structured edit operation.", Example: "set"},
 			"spec.edits[].rawPath": {Description: "Dot-path with optional quoted key segments and numeric array indexes.", Example: "plugins.0.type"},
 			"spec.edits[].value":   {Description: "Typed edit value.", Example: "bridge"},
-			"spec.mode":            {Description: "Optional file permissions to apply after the edit completes.", Example: "0644"},
+			"spec.mode":            {Description: "Optional file permissions in octal notation to apply after the edit completes.", Example: "0644"},
 		},
 	})
 
@@ -155,7 +155,7 @@ var (
 			"spec.fetch.sources[].url":  commonFileFieldDocs["spec.fetch.sources[].url"],
 			"spec.path":                 {Description: "Destination directory on the node.", Example: "/opt/cni/bin"},
 			"spec.include":              {Description: "Optional archive members to extract. Extract all members when omitted.", Example: "[bridge,loopback]"},
-			"spec.mode":                 {Description: "File permissions applied to extracted files when supported.", Example: "0755"},
+			"spec.mode":                 {Description: "File permissions in octal notation applied to extracted files when supported.", Example: "0755"},
 		},
 		Notes: []string{"Extract all archive members when `include` is omitted."},
 	})

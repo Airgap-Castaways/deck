@@ -280,7 +280,7 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.createIfMissing` | `boolean` | no | `false` | `` | Create a new empty TOML document when the file does not exist. | `true` |
 | `spec.edits` | `array<object>` | yes | `` | `` | Ordered list of structured edits applied sequentially to the TOML document. | `[{op:set,rawPath:plugins."io.containerd.grpc.v1.cri".registry.config_path,value:/etc/containerd/certs.d}]` |
-| `spec.mode` | `string` | no | `` | `` | Optional file permissions to apply after the edit completes. | `0644` |
+| `spec.mode` | `string` | no | `` | `` | Optional file permissions in octal notation to apply after the edit completes. | `0644` |
 | `spec.path` | `string` | yes | `` | `` | TOML file path to edit in place. | `/etc/containerd/config.toml` |
 
 ### Notes
@@ -316,7 +316,7 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.createIfMissing` | `boolean` | no | `false` | `` | Create a new empty YAML document when the file does not exist. | `true` |
 | `spec.edits` | `array<object>` | yes | `` | `` | Ordered list of structured edits applied sequentially to the YAML document. | `[{op:set,rawPath:spec.template.spec.containers.0.image,value:registry.local/app:v1}]` |
-| `spec.mode` | `string` | no | `` | `` | Optional file permissions to apply after the edit completes. | `0644` |
+| `spec.mode` | `string` | no | `` | `` | Optional file permissions in octal notation to apply after the edit completes. | `0644` |
 | `spec.path` | `string` | yes | `` | `` | YAML file path to edit in place. | `/etc/kubernetes/kubeadm-config.yaml` |
 
 ### Notes
@@ -352,7 +352,7 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.createIfMissing` | `boolean` | no | `false` | `` | Create a new empty JSON object when the file does not exist. | `true` |
 | `spec.edits` | `array<object>` | yes | `` | `` | Ordered list of structured edits applied sequentially to the JSON document. | `[{op:set,rawPath:plugins.0.type,value:bridge}]` |
-| `spec.mode` | `string` | no | `` | `` | Optional file permissions to apply after the edit completes. | `0644` |
+| `spec.mode` | `string` | no | `` | `` | Optional file permissions in octal notation to apply after the edit completes. | `0644` |
 | `spec.path` | `string` | yes | `` | `` | JSON file path to edit in place. | `/etc/cni/net.d/10-custom.conflist` |
 
 ## `ExtractArchive`
@@ -383,7 +383,7 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.fetch` | `object` | no | `` | `` | Optional download transport settings used when the source may need to be fetched. | `{offlineOnly:true}` |
 | `spec.include` | `array<string>` | no | `` | `` | Optional archive members to extract. Extract all members when omitted. | `[bridge,loopback]` |
-| `spec.mode` | `string` | no | `` | `` | File permissions applied to extracted files when supported. | `0755` |
+| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied to extracted files when supported. | `0755` |
 | `spec.path` | `string` | yes | `` | `` | Destination directory on the node. | `/opt/cni/bin` |
 | `spec.source` | `object` | yes | `` | `` | Structured source descriptor for the archive to extract. | `{path:/tmp/cni-plugins.tgz}` |
 
