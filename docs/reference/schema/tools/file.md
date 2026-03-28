@@ -52,7 +52,7 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.fetch` | `object` | no | `` | `` | Optional download transport settings used when the source may need to be fetched. | `{offlineOnly:true}` |
 | `spec.items` | `array<object>` | no | `` | `` | Optional list form for batching multiple download items in one step. | `[{source:{url:https://mirror.example.com/runc},outputPath:files/bin/runc,mode:0755}]` |
-| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after the step completes. | `0644` |
+| `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after the download completes. | `0755` |
 | `spec.outputPath` | `string` | no | `` | `` | Bundle-relative output path for the downloaded artifact. | `files/bin/runc` |
 | `spec.source` | `object` | no | `` | `` | Structured source descriptor for the download. | `{url:https://mirror.example.com/runc,sha256:abc123...}` |
 

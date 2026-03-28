@@ -21,6 +21,7 @@ var (
 
 	downloadFileFieldDocs = mergeFieldDocs(commonFileFieldDocs, map[string]FieldDoc{
 		"spec.items":                      {Description: "Optional list form for batching multiple download items in one step.", Example: "[{source:{url:https://mirror.example.com/runc},outputPath:files/bin/runc,mode:0755}]"},
+		"spec.mode":                       {Description: "File permissions in octal notation applied after the download completes.", Example: "0755"},
 		"spec.source":                     {Description: "Structured source descriptor for the download.", Example: "{url:https://mirror.example.com/runc,sha256:abc123...}"},
 		"spec.outputPath":                 {Description: "Bundle-relative output path for the downloaded artifact.", Example: "files/bin/runc"},
 		"spec.timeout":                    {Description: "Optional per-transfer timeout for the download.", Example: "30s"},
