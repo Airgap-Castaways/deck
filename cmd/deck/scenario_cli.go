@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -20,6 +22,8 @@ const (
 	scenarioSourceServer = "server"
 	scenarioSourceAll    = "all"
 )
+
+var scenarioHTTPClient = httpfetch.Client(10 * time.Second)
 
 type scenarioEntry struct {
 	Name     string `json:"name"`
@@ -280,15 +284,15 @@ func fetchScenarioIndexFromServer(ctx context.Context, server string) ([]string,
 	}
 	trimmed := strings.TrimRight(server, "/")
 	indexURL := trimmed + "/workflows/index.json"
-	resp, err := httpfetch.Do(ctx, nil, "GET", indexURL, nil, "scenario list request")
+	resp, err := httpfetch.Do(ctx, scenarioHTTPClient, http.MethodGet, indexURL, nil, "scenario list request")
 	if err != nil {
 		return nil, err
 	}
 	defer closeSilently(resp.Body)
-	if resp.StatusCode == 404 {
+	if resp.StatusCode == http.StatusNotFound {
 		return []string{}, nil
 	}
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("scenario list: unexpected status %d", resp.StatusCode)
 	}
 
