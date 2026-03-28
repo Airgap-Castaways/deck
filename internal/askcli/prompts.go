@@ -179,9 +179,6 @@ func compactStepGuidancePromptBlock(route askintent.Route, prompt string, brief 
 	if len(selected) == 0 {
 		return ""
 	}
-	if len(selected) > 5 {
-		selected = selected[:5]
-	}
 	b := &strings.Builder{}
 	b.WriteString("Candidate typed steps you may choose from:\n")
 	b.WriteString("- These are hints, not required selections. You do not need to use every candidate. Choose the smallest valid typed-step set that satisfies the request.\n")

@@ -15,9 +15,10 @@ type StepGuidanceOptions struct {
 }
 
 const (
-	confidenceHigh   = "high"
-	confidenceMedium = "medium"
-	confidenceLow    = "low"
+	confidenceHigh       = "high"
+	confidenceMedium     = "medium"
+	confidenceLow        = "low"
+	candidatePromptLimit = 5
 )
 
 type candidateScore struct {
@@ -494,7 +495,7 @@ func confidenceForScore(score int) string {
 
 func selectCandidateSteps(scoredKinds []candidateScore, capabilities map[string]bool) []SelectedStepGuidance {
 	selectedKinds := map[string]bool{}
-	out := make([]SelectedStepGuidance, 0, 6)
+	out := make([]SelectedStepGuidance, 0, candidatePromptLimit)
 	appendCandidate := func(item candidateScore) {
 		if selectedKinds[item.step.Kind] {
 			return
@@ -514,7 +515,7 @@ func selectCandidateSteps(scoredKinds []candidateScore, capabilities map[string]
 	ensureCapabilityCandidate(&out, selectedKinds, scoredKinds, capabilities, "image-staging", []string{"DownloadImage", "LoadImage"})
 	ensureCapabilityCandidate(&out, selectedKinds, scoredKinds, capabilities, "repository-setup", []string{"ConfigureRepository", "RefreshRepository"})
 	for _, item := range scoredKinds {
-		if len(out) >= 6 {
+		if len(out) >= candidatePromptLimit {
 			break
 		}
 		if item.confidence == confidenceMedium {
@@ -522,7 +523,7 @@ func selectCandidateSteps(scoredKinds []candidateScore, capabilities map[string]
 		}
 	}
 	for _, item := range scoredKinds {
-		if len(out) >= 6 {
+		if len(out) >= candidatePromptLimit {
 			break
 		}
 		if item.confidence == confidenceLow {
