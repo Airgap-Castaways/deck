@@ -53,7 +53,9 @@ git push origin v0.1.0
 
 ## Release notes
 
-Default tagged releases use the fixed GoReleaser header plus the auto-generated changelog.
+Default tagged releases use a short GoReleaser intro plus an auto-generated changelog grouped into `Features`, `Bug Fixes`, `Maintenance`, and `Other`.
+
+`Other` is a temporary catch-all for commit subjects that do not follow the conventional release-note prefixes. Prefer `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, and `test:` in PR titles and squash commit subjects so release notes stay well grouped.
 
 Use custom release notes only for larger releases such as:
 
