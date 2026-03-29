@@ -61,18 +61,25 @@ release:
   make_latest: true
   mode: replace
   header: |
-    ## Highlights
-
-    - This release publishes versioned `deck` binaries for air-gapped workflow execution.
-    - GitHub Releases include cross-platform tarballs, Linux packages, and checksums.
-    - The Airgap Castaways Homebrew tap is updated alongside each tagged release.
+    Release artifacts for `deck` are attached below. Changes since the previous tag are grouped by type.
 
 changelog:
+  format: "{{ .Message }}"
   sort: asc
+  groups:
+    - title: Features
+      regexp: '^feat(\([^)]+\))?!?: '
+      order: 0
+    - title: Bug Fixes
+      regexp: '^fix(\([^)]+\))?!?: '
+      order: 1
+    - title: Maintenance
+      regexp: '^(refactor|chore|docs|test)(\([^)]+\))?!?: '
+      order: 2
+    - title: Other
+      order: 999
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
       - '^Merge pull request'
       - '^Merge branch'
 
