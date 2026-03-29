@@ -64,7 +64,6 @@ release:
     Release artifacts for `deck` are attached below. Changes since the previous tag are grouped by type.
 
 changelog:
-  abbrev: -1
   format: "{{ .Message }}"
   sort: asc
   groups:
