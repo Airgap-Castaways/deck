@@ -33,11 +33,12 @@ Use this before refreshing caches or installing packages from a local mirror.
 ```yaml
 kind: ConfigureRepository
 spec:
-  format: deb
-  path: /etc/apt/sources.list.d/offline.list
-  repositories:
-    - baseurl: http://repo.local/debian
-      trusted: true
+
+	format: deb
+	path: /etc/apt/sources.list.d/offline.list
+	repositories:
+	  - baseurl: http://repo.local/debian
+	    trusted: true
 ```
 
 ### Spec Fields
@@ -45,18 +46,17 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.backupPaths` | `array<string>` | no | `` | `` | Paths to back up before modifying. | `[/etc/apt/sources.list]` |
-| `spec.cleanupPaths` | `array<string>` | no | `` | `` | Paths to remove before writing the new repository definition. | `[/etc/apt/sources.list.d/ubuntu.list]` |
+| `spec.cleanupPaths` | `array<string>` | no | `` | `` | Paths to remove before writing the new definition. | `[/etc/apt/sources.list.d/ubuntu.list]` |
 | `spec.disableExisting` | `boolean` | no | `` | `` | Disable all existing repository definitions before writing the new one. | `true` |
 | `spec.format` | `string` | no | `` | `auto, deb, rpm` | Repository file format to write. | `deb` |
-| `spec.mode` | `string` | no | `` | `` | File permissions applied to the generated repository file in octal notation. | `0644` |
+| `spec.mode` | `string` | no | `` | `` | File permissions applied to the generated repository file. | `0644` |
 | `spec.path` | `string` | no | `` | `` | Explicit output path for the generated repository file. | `/etc/apt/sources.list.d/offline.list` |
-| `spec.replaceExisting` | `boolean` | no | `` | `` | Replace an existing repository file at the target path before writing the new definition. | `true` |
+| `spec.replaceExisting` | `boolean` | no | `` | `` | Replace an existing repository file at the target path. | `true` |
 | `spec.repositories` | `array<object>` | yes | `` | `` | Repository entries to write. | `[{baseurl:http://repo.local/debian,trusted:true}]` |
 
 ### Notes
 
-- `ConfigureRepository` only writes repository definition files.
-- Use `RefreshRepository` when the package manager needs an explicit metadata refresh.
+- `ConfigureRepository` only writes repository definition files. Use `RefreshRepository` when the package manager needs an explicit metadata refresh.
 - Keep repository definitions mirror-specific rather than mutating the host's default online sources.
 
 ## `RefreshRepository`
@@ -74,11 +74,12 @@ Use this after writing repo definitions and before package install steps that de
 ```yaml
 kind: RefreshRepository
 spec:
-  manager: apt
-  clean: true
-  update: true
-  restrictToRepos:
-    - /etc/apt/sources.list.d/offline.list
+
+	manager: apt
+	clean: true
+	update: true
+	restrictToRepos:
+	  - /etc/apt/sources.list.d/offline.list
 ```
 
 ### Spec Fields
@@ -87,7 +88,7 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.clean` | `boolean` | no | `` | `` | Run a cache clean before updating metadata. | `true` |
 | `spec.excludeRepos` | `array<string>` | no | `` | `` | Repository selectors to skip during metadata update. | `[updates]` |
-| `spec.manager` | `string` | no | `` | `auto, apt, dnf` | Package manager to use for repository metadata refresh. | `apt` |
+| `spec.manager` | `string` | no | `` | `auto, apt, dnf` | Package manager to use. | `apt` |
 | `spec.restrictToRepos` | `array<string>` | no | `` | `` | Limit the metadata update to these repository selectors. | `[/etc/apt/sources.list.d/offline.list]` |
 | `spec.update` | `boolean` | no | `` | `` | Fetch fresh package metadata from the configured repositories. | `true` |
 

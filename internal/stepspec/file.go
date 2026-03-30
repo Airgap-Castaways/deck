@@ -91,6 +91,7 @@ var _ = stepmeta.MustRegister[DownloadFile](stepmeta.Definition{
 	Roles:       []string{"prepare"},
 	Outputs:     []string{"outputPath", "outputPaths", "artifacts"},
 	SchemaFile:  "file.download.schema.json",
+	SchemaPatch: stepmeta.PatchDownloadFileToolSchema,
 	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.source", "spec.fetch", "spec.mode"}},
 })
 
@@ -143,6 +144,7 @@ var _ = stepmeta.MustRegister[WriteFile](stepmeta.Definition{
 	Roles:       []string{"apply"},
 	Outputs:     []string{"path"},
 	SchemaFile:  "file.write.schema.json",
+	SchemaPatch: stepmeta.PatchWriteFileToolSchema,
 	Ask:         stepmeta.AskMetadata{MatchSignals: []string{"write", "file", "config", "motd", "content"}, KeyFields: []string{"spec.path", "spec.content", "spec.template", "spec.mode"}},
 })
 
@@ -182,6 +184,7 @@ var _ = stepmeta.MustRegister[CopyFile](stepmeta.Definition{
 	Roles:       []string{"apply"},
 	Outputs:     []string{"path"},
 	SchemaFile:  "file.copy.schema.json",
+	SchemaPatch: stepmeta.PatchCopyFileToolSchema,
 	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.source", "spec.path", "spec.mode"}},
 })
 
@@ -224,6 +227,7 @@ var _ = stepmeta.MustRegister[ExtractArchive](stepmeta.Definition{
 	Roles:       []string{"apply"},
 	Outputs:     []string{"path"},
 	SchemaFile:  "file.extract-archive.schema.json",
+	SchemaPatch: stepmeta.PatchExtractArchiveToolSchema,
 })
 
 type EditFileRule struct {
@@ -274,5 +278,6 @@ var _ = stepmeta.MustRegister[EditFile](stepmeta.Definition{
 	Roles:       []string{"apply"},
 	Outputs:     []string{"path"},
 	SchemaFile:  "file.edit.schema.json",
+	SchemaPatch: stepmeta.PatchEditFileToolSchema,
 	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.path", "spec.edits", "spec.backup", "spec.mode"}},
 })

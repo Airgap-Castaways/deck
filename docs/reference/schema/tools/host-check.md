@@ -40,6 +40,10 @@ spec:
 | `spec.checks` | `array<string>` | yes | `` | `` | Named checks to run against the local host. | `[os,arch,swap]` |
 | `spec.failFast` | `boolean` | no | `true` | `` | Stop on the first failing check rather than running all checks. | `true` |
 
+### Notes
+
+- Use `CheckHost` for host suitability validation instead of inventing custom preflight objects or shell-only probes when the built-in checks cover the requirement.
+
 ## Related
 
 - [Schema Reference](../README.md)

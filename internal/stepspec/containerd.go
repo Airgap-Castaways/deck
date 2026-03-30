@@ -35,7 +35,7 @@ type WriteContainerdConfig struct {
 	Timeout string `json:"timeout"`
 }
 
-var _ = stepmeta.MustRegister[WriteContainerdConfig](stepmeta.Definition{Kind: "WriteContainerdConfig", Family: "containerd", FamilyTitle: "Containerd", DocsPage: "containerd", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "containerd.config.schema.json"})
+var _ = stepmeta.MustRegister[WriteContainerdConfig](stepmeta.Definition{Kind: "WriteContainerdConfig", Family: "containerd", FamilyTitle: "Containerd", DocsPage: "containerd", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "containerd.config.schema.json", SchemaPatch: stepmeta.PatchWriteContainerdConfigToolSchema})
 
 type ContainerdConfigSetting struct {
 	// Edit operation.
@@ -93,4 +93,4 @@ type WriteContainerdRegistryHosts struct {
 	RegistryHosts []ContainerdRegistryHost `json:"registryHosts"`
 }
 
-var _ = stepmeta.MustRegister[WriteContainerdRegistryHosts](stepmeta.Definition{Kind: "WriteContainerdRegistryHosts", Family: "containerd", FamilyTitle: "Containerd", DocsPage: "containerd", DocsOrder: 20, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "containerd.registry-hosts.schema.json"})
+var _ = stepmeta.MustRegister[WriteContainerdRegistryHosts](stepmeta.Definition{Kind: "WriteContainerdRegistryHosts", Family: "containerd", FamilyTitle: "Containerd", DocsPage: "containerd", DocsOrder: 20, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "containerd.registry-hosts.schema.json", SchemaPatch: stepmeta.PatchWriteContainerdRegistryHostsToolSchema})

@@ -59,11 +59,3 @@ func propertyMap(node map[string]any) map[string]any {
 func setMap(root map[string]any, key string, value map[string]any) {
 	root[key] = value
 }
-
-func toAnySlice(values []string) []any {
-	out := make([]any, 0, len(values))
-	for _, value := range values {
-		out = append(out, value)
-	}
-	return out
-}

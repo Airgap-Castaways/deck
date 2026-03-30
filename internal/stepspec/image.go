@@ -70,11 +70,11 @@ var _ = stepmeta.MustRegister[DownloadImage](stepmeta.Definition{
 	Roles:       []string{"prepare"},
 	Outputs:     []string{"artifacts"},
 	SchemaFile:  "image.download.schema.json",
+	SchemaPatch: stepmeta.PatchDownloadImageToolSchema,
 	Ask: stepmeta.AskMetadata{
+		Capabilities:             []string{"prepare-artifacts", "image-staging"},
 		MatchSignals:             []string{"air-gapped", "image", "images", "registry", "mirror", "offline", "prepare"},
 		KeyFields:                []string{"spec.images", "spec.auth", "spec.backend", "spec.outputDir"},
-		CommonMistakes:           []string{"Use DownloadImage during prepare for offline image collection instead of falling back to Command scripts.", "Keep spec.images as a real YAML array and spec.backend.engine as a literal allowed value."},
-		RepairHints:              []string{"Use DownloadImage in prepare to collect image archives for offline apply instead of using Command for docker pull or docker save."},
 		ValidationHints:          []stepmeta.ValidationHint{{ErrorContains: "spec.backend.engine must be one of", Fix: "Keep spec.backend.engine as the literal value `go-containerregistry`; do not replace it with a vars template."}, {ErrorContains: "is not supported for role prepare", Fix: "For prepare-time image collection, use DownloadImage instead of Command so the step matches the prepare role."}},
 		ConstrainedLiteralFields: []stepmeta.ConstrainedLiteralField{{Path: "spec.backend.engine", AllowedValues: []string{"go-containerregistry"}, Guidance: "Keep spec.backend.engine as a literal enum, not a vars template."}},
 	},
@@ -118,11 +118,11 @@ var _ = stepmeta.MustRegister[LoadImage](stepmeta.Definition{
 	Visibility:  "public",
 	Roles:       []string{"apply"},
 	SchemaFile:  "image.load.schema.json",
+	SchemaPatch: stepmeta.PatchImageLoadToolSchema,
 	Ask: stepmeta.AskMetadata{
+		Capabilities:             []string{"image-staging", "apply-artifact-consumer", "kubeadm-bootstrap"},
 		MatchSignals:             []string{"air-gapped", "image", "images", "archive", "containerd", "docker", "offline"},
 		KeyFields:                []string{"spec.images", "spec.sourceDir", "spec.runtime", "spec.command"},
-		CommonMistakes:           []string{"Keep spec.images in the schema-supported shape from the step example.", "Do not replace the whole images collection with a single quoted template scalar."},
-		RepairHints:              []string{"Return a schema-valid LoadImage spec using the documented image archive shape from ask metadata."},
 		ConstrainedLiteralFields: []stepmeta.ConstrainedLiteralField{{Path: "spec.runtime", AllowedValues: []string{"auto", "ctr", "docker", "podman"}, Guidance: "Keep spec.runtime as a literal enum, not a vars template."}},
 	},
 })
@@ -158,4 +158,5 @@ var _ = stepmeta.MustRegister[VerifyImage](stepmeta.Definition{
 	Visibility:  "public",
 	Roles:       []string{"apply"},
 	SchemaFile:  "image.verify.schema.json",
+	SchemaPatch: stepmeta.PatchVerifyImageToolSchema,
 })

@@ -58,7 +58,8 @@ var _ = stepmeta.MustRegister[KubeadmInit](stepmeta.Definition{
 	Roles:       []string{"apply"},
 	Outputs:     []string{"joinFile"},
 	SchemaFile:  "kubeadm.init.schema.json",
-	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.outputJoinFile", "spec.configFile", "spec.kubernetesVersion", "spec.advertiseAddress", "spec.podNetworkCIDR"}},
+	SchemaPatch: stepmeta.PatchInitKubeadmToolSchema,
+	Ask:         stepmeta.AskMetadata{Capabilities: []string{"kubeadm-bootstrap"}, MatchSignals: []string{"kubeadm", "bootstrap", "init", "control-plane", "cluster init"}, KeyFields: []string{"spec.outputJoinFile", "spec.configFile", "spec.kubernetesVersion", "spec.advertiseAddress", "spec.podNetworkCIDR"}},
 })
 
 // Run kubeadm join for a worker or additional control-plane node.
@@ -97,7 +98,8 @@ var _ = stepmeta.MustRegister[KubeadmJoin](stepmeta.Definition{
 	Visibility:  "public",
 	Roles:       []string{"apply"},
 	SchemaFile:  "kubeadm.join.schema.json",
-	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.joinFile", "spec.configFile", "spec.asControlPlane", "spec.extraArgs"}},
+	SchemaPatch: stepmeta.PatchJoinKubeadmToolSchema,
+	Ask:         stepmeta.AskMetadata{Capabilities: []string{"kubeadm-join"}, MatchSignals: []string{"kubeadm", "join", "worker", "add node"}, KeyFields: []string{"spec.joinFile", "spec.configFile", "spec.asControlPlane", "spec.extraArgs"}},
 })
 
 // Run kubeadm reset and optional cleanup steps.
@@ -172,6 +174,7 @@ var _ = stepmeta.MustRegister[KubeadmReset](stepmeta.Definition{
 	Visibility:  "public",
 	Roles:       []string{"apply"},
 	SchemaFile:  "kubeadm.reset.schema.json",
+	SchemaPatch: stepmeta.PatchResetKubeadmToolSchema,
 })
 
 // Run kubeadm upgrade apply and optional kubelet restart.
@@ -213,5 +216,6 @@ var _ = stepmeta.MustRegister[KubeadmUpgrade](stepmeta.Definition{
 	Visibility:  "public",
 	Roles:       []string{"apply"},
 	SchemaFile:  "kubeadm.upgrade.schema.json",
-	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.kubernetesVersion", "spec.ignorePreflightErrors", "spec.restartKubelet", "spec.kubeletService"}},
+	SchemaPatch: stepmeta.PatchUpgradeKubeadmToolSchema,
+	Ask:         stepmeta.AskMetadata{Capabilities: []string{"kubeadm-bootstrap"}, MatchSignals: []string{"kubeadm", "upgrade", "control-plane"}, KeyFields: []string{"spec.kubernetesVersion", "spec.ignorePreflightErrors", "spec.restartKubelet", "spec.kubeletService"}},
 })
