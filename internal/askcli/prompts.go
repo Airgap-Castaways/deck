@@ -125,6 +125,9 @@ func compactRelevantSchemaPromptBlock(requestText string, target askintent.Targe
 	if len(selected) == 0 {
 		return ""
 	}
+	if len(selected) > 3 {
+		selected = selected[:3]
+	}
 	b := &strings.Builder{}
 	b.WriteString("Relevant typed-step schemas:\n")
 	b.WriteString("- Use these only when they match the requested workflow. Treat them as schema facts, not mandatory choices.\n")
@@ -145,6 +148,9 @@ func compactRelevantSchemaPromptBlock(requestText string, target askintent.Targe
 			if requirement == "" {
 				requirement = "optional"
 			}
+			if requirement == "optional" {
+				continue
+			}
 			b.WriteString("  - ")
 			b.WriteString(field.Path)
 			b.WriteString(" [")
@@ -163,17 +169,34 @@ func compactRelevantSchemaPromptBlock(requestText string, target askintent.Targe
 			b.WriteString("  - rule: ")
 			b.WriteString(strings.TrimSpace(rule))
 			b.WriteString("\n")
+			break
 		}
-		if len(item.Step.PromptExamples) > 0 {
-			example := strings.TrimSpace(item.Step.PromptExamples[0].YAML)
-			if example != "" {
-				b.WriteString("  - minimal valid shape:\n")
-				for _, line := range strings.Split(example, "\n") {
-					b.WriteString("      ")
-					b.WriteString(strings.TrimRight(line, " "))
-					b.WriteString("\n")
-				}
+		for _, hint := range item.Step.ValidationHints {
+			if strings.TrimSpace(hint.Fix) == "" {
+				continue
 			}
+			b.WriteString("  - validation: ")
+			b.WriteString(strings.TrimSpace(hint.Fix))
+			b.WriteString("\n")
+			break
+		}
+		for _, field := range item.Step.ConstrainedLiteralFields {
+			if strings.TrimSpace(field.Path) == "" {
+				continue
+			}
+			b.WriteString("  - constrained: ")
+			b.WriteString(strings.TrimSpace(field.Path))
+			if len(field.AllowedValues) > 0 {
+				b.WriteString(" [allowed: ")
+				b.WriteString(strings.Join(field.AllowedValues, ", "))
+				b.WriteString("]")
+			}
+			if strings.TrimSpace(field.Guidance) != "" {
+				b.WriteString(": ")
+				b.WriteString(strings.TrimSpace(field.Guidance))
+			}
+			b.WriteString("\n")
+			break
 		}
 	}
 	return strings.TrimSpace(b.String())

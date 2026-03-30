@@ -108,6 +108,7 @@ func ParsePath(rawPath string) ([]pathSegment, error) {
 	if rawPath == "" {
 		return nil, fmt.Errorf("rawPath is required")
 	}
+	rawPath = normalizeBracketPath(rawPath)
 	parts := make([]string, 0)
 	var current strings.Builder
 	inQuotes := false
@@ -153,6 +154,31 @@ func ParsePath(rawPath string) ([]pathSegment, error) {
 		segments = append(segments, pathSegment{key: part})
 	}
 	return segments, nil
+}
+
+func normalizeBracketPath(rawPath string) string {
+	var out strings.Builder
+	for i := 0; i < len(rawPath); i++ {
+		ch := rawPath[i]
+		if ch != '[' {
+			out.WriteByte(ch)
+			continue
+		}
+		end := strings.IndexByte(rawPath[i:], ']')
+		if end <= 0 {
+			out.WriteByte(ch)
+			continue
+		}
+		segment := strings.TrimSpace(rawPath[i+1 : i+end])
+		if segment != "" {
+			if out.Len() > 0 {
+				out.WriteByte('.')
+			}
+			out.WriteString(strings.Trim(segment, `"`))
+		}
+		i += end
+	}
+	return out.String()
 }
 
 func applyEdit(root any, path []pathSegment, edit stepspec.StructuredEdit) (any, error) {

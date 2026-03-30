@@ -78,6 +78,29 @@ func TestMaterializeDeleteDocument(t *testing.T) {
 	}
 }
 
+func TestMaterializeWithBasePreservesUntouchedFiles(t *testing.T) {
+	base := []askcontract.GeneratedFile{{Path: "workflows/vars.yaml", Content: "role: control-plane\n"}}
+	files, err := MaterializeWithBase(t.TempDir(), base, askcontract.GenerationResponse{
+		Documents: []askcontract.GeneratedDocument{{
+			Path: "workflows/scenarios/apply.yaml",
+			Kind: "workflow",
+			Workflow: &askcontract.WorkflowDocument{
+				Version: "v1alpha1",
+				Steps:   []askcontract.WorkflowStep{{ID: "run", Kind: "Command", Spec: map[string]any{"command": []any{"true"}}}},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("materialize with base: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected untouched base file plus new file, got %#v", files)
+	}
+	if files[0].Path != "workflows/vars.yaml" || files[0].Content != base[0].Content {
+		t.Fatalf("expected untouched base content to be preserved, got %#v", files)
+	}
+}
+
 func TestParseDocumentWorkflow(t *testing.T) {
 	doc, err := ParseDocument("workflows/scenarios/apply.yaml", []byte("version: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [true]\n"))
 	if err != nil {
@@ -95,5 +118,13 @@ func TestParseDocumentVars(t *testing.T) {
 	}
 	if doc.Vars == nil || doc.Vars["role"] != "control-plane" {
 		t.Fatalf("unexpected vars document: %#v", doc)
+	}
+}
+
+func TestResolveStructuredEditPathFindsPhaseStepByID(t *testing.T) {
+	doc := askcontract.GeneratedDocument{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1", Phases: []askcontract.WorkflowPhase{{Name: "apply", Steps: []askcontract.WorkflowStep{{ID: "apply-runtime-ready", Kind: "WaitForService", Spec: map[string]any{"timeout": "5m"}}}}}}}
+	path := resolveStructuredEditPath("steps.apply-runtime-ready.spec.timeout", doc)
+	if path != "phases.0.steps.0.spec.timeout" {
+		t.Fatalf("unexpected resolved path: %q", path)
 	}
 }

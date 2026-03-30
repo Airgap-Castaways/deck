@@ -258,6 +258,28 @@ func TestBuildStepKindsUsesStepmetaAskMetadata(t *testing.T) {
 	}
 }
 
+func TestDiscoverCandidateStepsWithOptionsDeprioritizesCommandForPrepareArtifacts(t *testing.T) {
+	selected := DiscoverCandidateStepsWithOptions(
+		"create an air-gapped prepare and apply workflow for offline package and image staging",
+		StepGuidanceOptions{ModeIntent: "prepare+apply", RequiredCapabilities: []string{"prepare-artifacts", "package-staging", "image-staging"}},
+	)
+	if len(selected) == 0 {
+		t.Fatalf("expected candidate steps")
+	}
+	for i, item := range selected {
+		if item.Step.Kind == "Command" && i < len(selected)-1 {
+			t.Fatalf("expected Command to be deprioritized for prepare artifacts, got %#v", selected)
+		}
+	}
+	joined := []string{}
+	for _, item := range selected {
+		joined = append(joined, item.Step.Kind)
+	}
+	if !containsString(joined, "DownloadPackage") || !containsString(joined, "DownloadImage") {
+		t.Fatalf("expected typed prepare artifact steps, got %v", joined)
+	}
+}
+
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

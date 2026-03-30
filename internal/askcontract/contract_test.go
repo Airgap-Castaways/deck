@@ -51,6 +51,71 @@ func TestParseGenerationRejectsLegacyFilesPayload(t *testing.T) {
 	}
 }
 
+func TestParseGenerationNormalizesEditAliases(t *testing.T) {
+	resp, err := ParseGeneration(`{"summary":"ok","documents":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","action":"revise","edits":[{"op":"replace","stepId":"wait-step","path":"spec.timeout","value":"10m"}]}]}`)
+	if err != nil {
+		t.Fatalf("parse generation aliases: %v", err)
+	}
+	edit := resp.Documents[0].Edits[0]
+	if edit.Op != "set" || edit.RawPath != "steps.wait-step.spec.timeout" {
+		t.Fatalf("unexpected normalized edit: %#v", edit)
+	}
+}
+
+func TestParseGenerationNormalizesTargetAliasEdit(t *testing.T) {
+	resp, err := ParseGeneration(`{"summary":"ok","documents":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"revise","edits":[{"op":"add","target":{"kind":"step","id":"prepare-download-packages","field":"spec.backend.image"},"value":"alpine:3.20"}]}]}`)
+	if err != nil {
+		t.Fatalf("parse generation target alias: %v", err)
+	}
+	edit := resp.Documents[0].Edits[0]
+	if edit.Op != "insert" || edit.RawPath != "steps.prepare-download-packages.spec.backend.image" {
+		t.Fatalf("unexpected normalized target edit: %#v", edit)
+	}
+}
+
+func TestParseGenerationNormalizesPatchActionAndTargetStepID(t *testing.T) {
+	resp, err := ParseGeneration(`{"summary":"ok","documents":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"patch","edits":[{"op":"set","targetStepId":"prepare-download-packages","path":"spec.backend.image","value":"alpine:3.20"}]}]}`)
+	if err != nil {
+		t.Fatalf("parse generation patch action: %v", err)
+	}
+	if resp.Documents[0].Action != "edit" {
+		t.Fatalf("expected patch action to normalize to edit, got %#v", resp.Documents[0])
+	}
+	if resp.Documents[0].Edits[0].RawPath != "steps.prepare-download-packages.spec.backend.image" {
+		t.Fatalf("unexpected normalized targetStepId edit: %#v", resp.Documents[0].Edits[0])
+	}
+}
+
+func TestParseGenerationNormalizesRemoveAlias(t *testing.T) {
+	resp, err := ParseGeneration(`{"summary":"ok","documents":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"revise","edits":[{"op":"remove","stepId":"prepare-download-packages","path":"spec.repo.path"}]}]}`)
+	if err != nil {
+		t.Fatalf("parse generation remove alias: %v", err)
+	}
+	if resp.Documents[0].Edits[0].Op != "delete" {
+		t.Fatalf("expected delete op, got %#v", resp.Documents[0].Edits[0])
+	}
+}
+
+func TestParseGenerationNormalizesBracketPath(t *testing.T) {
+	resp, err := ParseGeneration(`{"summary":"ok","documents":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","action":"edit","edits":[{"op":"replace","path":"steps[3].spec.timeout","value":"10m"}]}]}`)
+	if err != nil {
+		t.Fatalf("parse generation bracket path: %v", err)
+	}
+	if resp.Documents[0].Edits[0].RawPath != "steps.3.spec.timeout" {
+		t.Fatalf("expected normalized bracket path, got %#v", resp.Documents[0].Edits[0])
+	}
+}
+
+func TestParseGenerationTreatsReviseWithWorkflowAsReplace(t *testing.T) {
+	resp, err := ParseGeneration(`{"summary":"ok","documents":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"revise","workflow":{"version":"v1alpha1","steps":[]}}]}`)
+	if err != nil {
+		t.Fatalf("parse generation revise workflow: %v", err)
+	}
+	if resp.Documents[0].Action != "replace" {
+		t.Fatalf("expected revise workflow action to normalize to replace, got %#v", resp.Documents[0])
+	}
+}
+
 func TestParseClassification(t *testing.T) {
 	raw := `{"route":"explain","confidence":0.82,"reason":"analysis request","target":{"kind":"scenario","path":"workflows/scenarios/apply.yaml","name":"apply"},"generationAllowed":false}`
 	resp, err := ParseClassification(raw)

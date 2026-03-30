@@ -888,7 +888,7 @@ func TestGenerationSystemPromptOmitsTypedStepCandidateBlocks(t *testing.T) {
 			t.Fatalf("expected %q to be omitted from generation prompt, got %q", avoid, prompt)
 		}
 	}
-	for _, want := range []string{"Relevant typed-step schemas:", "minimal valid shape:"} {
+	for _, want := range []string{"Relevant typed-step schemas:", "spec.checks [required]:", "constrained: spec.runtime"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
 		}

@@ -144,6 +144,13 @@ func DiscoverCandidateStepsWithOptions(prompt string, options StepGuidanceOption
 		if step.Kind == "Command" {
 			score -= 15
 		}
+		if (capabilities["prepare-artifacts"] || capabilities["package-staging"] || capabilities["image-staging"]) && step.Kind == "Command" {
+			score -= 60
+			why = append(why, "deprioritized for typed artifact staging flow")
+		}
+		if modeIntent == "prepare+apply" && !containsGuidanceString(step.AllowedRoles, "prepare") && (capabilities["prepare-artifacts"] || capabilities["package-staging"] || capabilities["image-staging"]) {
+			score -= 45
+		}
 		applyCapabilityScore(&score, &why, step, capabilities, modeIntent, topology)
 		if score > 0 {
 			scoredKinds = append(scoredKinds, candidateScore{step: step, score: score, confidence: confidenceForScore(score), why: dedupeStrings(why)})
@@ -283,7 +290,7 @@ func applyCapabilityScore(score *int, why *[]string, step StepKindContext, capab
 			boost(20, "fits prepare stage in prepare+apply workflow")
 		}
 		if step.Kind == "Command" {
-			*score -= 10
+			*score -= 25
 		}
 	}
 	if topology == "multi-node" || topology == "ha" {

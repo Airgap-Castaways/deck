@@ -110,3 +110,13 @@ func TestApplyYAMLInsert(t *testing.T) {
 		t.Fatalf("expected inserted element between first and third, got %q", text)
 	}
 }
+
+func TestParsePathSupportsBracketIndexes(t *testing.T) {
+	segments, err := ParsePath("steps[3].spec.timeout")
+	if err != nil {
+		t.Fatalf("ParsePath bracket syntax: %v", err)
+	}
+	if len(segments) != 4 || segments[0].key != "steps" || !segments[1].isIndex || segments[1].index != 3 || segments[2].key != "spec" || segments[3].key != "timeout" {
+		t.Fatalf("unexpected parsed segments: %#v", segments)
+	}
+}

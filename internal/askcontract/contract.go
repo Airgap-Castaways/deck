@@ -62,10 +62,13 @@ type ComponentDocument struct {
 }
 
 type StructuredEditAction struct {
-	Op      string `json:"op"`
-	RawPath string `json:"rawPath"`
-	Path    string `json:"path,omitempty"`
-	Value   any    `json:"value,omitempty"`
+	Op           string         `json:"op"`
+	RawPath      string         `json:"rawPath"`
+	Path         string         `json:"path,omitempty"`
+	StepID       string         `json:"stepId,omitempty"`
+	TargetStepID string         `json:"targetStepId,omitempty"`
+	Target       map[string]any `json:"target,omitempty"`
+	Value        any            `json:"value,omitempty"`
 }
 
 type GenerationResponse struct {
@@ -289,13 +292,19 @@ func ParseGeneration(raw string) (GenerationResponse, error) {
 		resp.Documents[i].Path = strings.TrimSpace(resp.Documents[i].Path)
 		resp.Documents[i].Kind = normalizeDocumentKind(resp.Documents[i].Kind)
 		resp.Documents[i].Action = normalizeDocumentAction(resp.Documents[i].Action)
+		if resp.Documents[i].Action == "edit" && len(resp.Documents[i].Edits) == 0 && (resp.Documents[i].Workflow != nil || resp.Documents[i].Component != nil || resp.Documents[i].Vars != nil) {
+			resp.Documents[i].Action = "replace"
+		}
 		if strings.EqualFold(resp.Documents[i].Kind, "vars") && resp.Documents[i].Vars == nil {
 			resp.Documents[i].Vars = map[string]any{}
 		}
 		for j := range resp.Documents[i].Edits {
 			resp.Documents[i].Edits[j].Op = normalizeEditOp(resp.Documents[i].Edits[j].Op)
-			resp.Documents[i].Edits[j].RawPath = normalizeEditPath(resp.Documents[i].Edits[j].RawPath, resp.Documents[i].Edits[j].Path)
+			resp.Documents[i].Edits[j].RawPath = normalizeEditPath(resp.Documents[i].Edits[j].RawPath, resp.Documents[i].Edits[j].Path, firstNonEmpty(resp.Documents[i].Edits[j].StepID, resp.Documents[i].Edits[j].TargetStepID), resp.Documents[i].Edits[j].Target)
 			resp.Documents[i].Edits[j].Path = ""
+			resp.Documents[i].Edits[j].StepID = ""
+			resp.Documents[i].Edits[j].TargetStepID = ""
+			resp.Documents[i].Edits[j].Target = nil
 		}
 	}
 	if len(resp.Documents) == 0 {
@@ -324,12 +333,19 @@ func validateGeneratedDocuments(documents []GeneratedDocument) error {
 				return fmt.Errorf("generated document %s delete action must not include content or edits", doc.Path)
 			}
 		case "edit":
-			if len(doc.Edits) == 0 {
+			if len(doc.Edits) == 0 && (doc.Workflow != nil || doc.Component != nil || doc.Vars != nil) {
+				action = "replace"
+			}
+			if action == "edit" && len(doc.Edits) == 0 {
 				return fmt.Errorf("generated document %s edit action must include edits", doc.Path)
 			}
-			if doc.Workflow != nil || doc.Component != nil || doc.Vars != nil {
+			if action == "edit" && (doc.Workflow != nil || doc.Component != nil || doc.Vars != nil) {
 				return fmt.Errorf("generated document %s edit action must not include replacement content", doc.Path)
 			}
+			if action != "replace" {
+				continue
+			}
+			fallthrough
 		case "replace", "create":
 			if err := validateDocumentPayload(doc); err != nil {
 				return err
@@ -383,6 +399,9 @@ func normalizeEditOp(op string) string {
 	if trimmed == "add" {
 		return "insert"
 	}
+	if trimmed == "remove" {
+		return "delete"
+	}
 	if trimmed == "replace" {
 		return "set"
 	}
@@ -394,6 +413,8 @@ func normalizeDocumentAction(action string) string {
 	switch trimmed {
 	case "update", "revise":
 		return "edit"
+	case "patch":
+		return "edit"
 	case "noop", "skip":
 		return "preserve"
 	default:
@@ -401,11 +422,26 @@ func normalizeDocumentAction(action string) string {
 	}
 }
 
-func normalizeEditPath(rawPath string, alias string) string {
+func normalizeEditPath(rawPath string, alias string, stepID string, target map[string]any) string {
 	path := strings.TrimSpace(rawPath)
 	if path == "" {
 		path = strings.TrimSpace(alias)
 	}
+	if strings.TrimSpace(stepID) == "" && len(target) > 0 {
+		if id, ok := target["id"].(string); ok {
+			stepID = id
+		}
+		if path == "" {
+			if field, ok := target["field"].(string); ok {
+				path = field
+			}
+		}
+	}
+	if strings.TrimSpace(stepID) != "" && path != "" {
+		path = "steps." + strings.TrimSpace(stepID) + "." + strings.TrimPrefix(path, ".")
+	}
+	path = strings.ReplaceAll(path, "[", ".")
+	path = strings.ReplaceAll(path, "]", "")
 	if !strings.HasPrefix(path, "/") {
 		return path
 	}
@@ -415,6 +451,15 @@ func normalizeEditPath(rawPath string, alias string) string {
 		segments[i] = strings.ReplaceAll(segments[i], "~0", "~")
 	}
 	return strings.Join(segments, ".")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func ParseInfo(raw string) InfoResponse {
