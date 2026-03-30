@@ -6,18 +6,77 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
+	"github.com/Airgap-Castaways/deck/internal/structuredpath"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
 )
 
 type GeneratedFile struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+	Delete  bool   `json:"delete,omitempty"`
+}
+
+type GeneratedDocument struct {
+	Path      string                 `json:"path"`
+	Kind      string                 `json:"kind,omitempty"`
+	Action    string                 `json:"action,omitempty"`
+	Workflow  *WorkflowDocument      `json:"workflow,omitempty"`
+	Component *ComponentDocument     `json:"component,omitempty"`
+	Vars      map[string]any         `json:"vars,omitempty"`
+	Edits     []StructuredEditAction `json:"edits,omitempty"`
+}
+
+type WorkflowDocument struct {
+	Version string          `json:"version"`
+	Vars    map[string]any  `json:"vars,omitempty"`
+	Phases  []WorkflowPhase `json:"phases,omitempty"`
+	Steps   []WorkflowStep  `json:"steps,omitempty"`
+}
+
+type WorkflowPhase struct {
+	Name           string         `json:"name"`
+	MaxParallelism int            `json:"maxParallelism,omitempty"`
+	Imports        []PhaseImport  `json:"imports,omitempty"`
+	Steps          []WorkflowStep `json:"steps,omitempty"`
+}
+
+type PhaseImport struct {
+	Path string `json:"path"`
+	When string `json:"when,omitempty"`
+}
+
+type WorkflowStep struct {
+	ID            string            `json:"id"`
+	APIVersion    string            `json:"apiVersion,omitempty"`
+	Kind          string            `json:"kind"`
+	Metadata      map[string]any    `json:"metadata,omitempty"`
+	When          string            `json:"when,omitempty"`
+	ParallelGroup string            `json:"parallelGroup,omitempty"`
+	Register      map[string]string `json:"register,omitempty"`
+	Retry         int               `json:"retry,omitempty"`
+	Timeout       string            `json:"timeout,omitempty"`
+	Spec          map[string]any    `json:"spec"`
+}
+
+type ComponentDocument struct {
+	Steps []WorkflowStep `json:"steps"`
+}
+
+type StructuredEditAction struct {
+	Op           string         `json:"op"`
+	RawPath      string         `json:"rawPath"`
+	Path         string         `json:"path,omitempty"`
+	StepID       string         `json:"stepId,omitempty"`
+	TargetStepID string         `json:"targetStepId,omitempty"`
+	Target       map[string]any `json:"target,omitempty"`
+	Value        any            `json:"value,omitempty"`
 }
 
 type GenerationResponse struct {
-	Summary string          `json:"summary"`
-	Review  []string        `json:"review"`
-	Files   []GeneratedFile `json:"files"`
+	Summary   string              `json:"summary"`
+	Review    []string            `json:"review"`
+	Files     []GeneratedFile     `json:"-"`
+	Documents []GeneratedDocument `json:"documents,omitempty"`
 }
 
 type PlanFile struct {
@@ -144,6 +203,57 @@ type PostProcessResponse struct {
 	SuggestedFixes           []string `json:"suggestedFixes"`
 }
 
+func GenerationResponseSchema() json.RawMessage {
+	schema := map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []string{"summary", "review", "documents"},
+		"properties": map[string]any{
+			"summary": map[string]any{"type": "string"},
+			"review":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"documents": map[string]any{
+				"type":     "array",
+				"minItems": 1,
+				"items": map[string]any{
+					"type":                 "object",
+					"additionalProperties": false,
+					"required":             []string{"path"},
+					"properties": map[string]any{
+						"path":      map[string]any{"type": "string"},
+						"kind":      map[string]any{"type": "string"},
+						"action":    map[string]any{"type": "string"},
+						"workflow":  openObjectSchema(),
+						"component": openObjectSchema(),
+						"vars":      openObjectSchema(),
+						"edits": map[string]any{
+							"type": "array",
+							"items": map[string]any{
+								"type":                 "object",
+								"additionalProperties": false,
+								"required":             []string{"op", "rawPath"},
+								"properties": map[string]any{
+									"op":      map[string]any{"type": "string"},
+									"rawPath": map[string]any{"type": "string"},
+									"value":   map[string]any{},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		panic(err)
+	}
+	return raw
+}
+
+func openObjectSchema() map[string]any {
+	return map[string]any{"type": "object", "additionalProperties": true}
+}
+
 type InfoResponse struct {
 	Summary         string   `json:"summary"`
 	Answer          string   `json:"answer"`
@@ -179,7 +289,175 @@ func ParseGeneration(raw string) (GenerationResponse, error) {
 	if strings.TrimSpace(resp.Summary) == "" {
 		resp.Summary = "No summary provided."
 	}
+	for i := range resp.Documents {
+		resp.Documents[i].Path = strings.TrimSpace(resp.Documents[i].Path)
+		resp.Documents[i].Kind = normalizeDocumentKind(resp.Documents[i].Kind)
+		resp.Documents[i].Action = normalizeDocumentAction(resp.Documents[i].Action)
+		if resp.Documents[i].Action == "edit" && len(resp.Documents[i].Edits) == 0 && (resp.Documents[i].Workflow != nil || resp.Documents[i].Component != nil || resp.Documents[i].Vars != nil) {
+			resp.Documents[i].Action = "replace"
+		}
+		if strings.EqualFold(resp.Documents[i].Kind, "vars") && resp.Documents[i].Vars == nil {
+			resp.Documents[i].Vars = map[string]any{}
+		}
+		for j := range resp.Documents[i].Edits {
+			resp.Documents[i].Edits[j].Op = normalizeEditOp(resp.Documents[i].Edits[j].Op)
+			resp.Documents[i].Edits[j].RawPath = normalizeEditPath(resp.Documents[i].Edits[j].RawPath, resp.Documents[i].Edits[j].Path, firstNonEmpty(resp.Documents[i].Edits[j].StepID, resp.Documents[i].Edits[j].TargetStepID), resp.Documents[i].Edits[j].Target)
+			resp.Documents[i].Edits[j].Path = ""
+			resp.Documents[i].Edits[j].StepID = ""
+			resp.Documents[i].Edits[j].TargetStepID = ""
+			resp.Documents[i].Edits[j].Target = nil
+		}
+	}
+	if len(resp.Documents) == 0 {
+		return GenerationResponse{}, fmt.Errorf("generation response did not include documents")
+	}
+	if err := validateGeneratedDocuments(resp.Documents); err != nil {
+		return GenerationResponse{}, err
+	}
 	return resp, nil
+}
+
+func validateGeneratedDocuments(documents []GeneratedDocument) error {
+	for _, doc := range documents {
+		if strings.TrimSpace(doc.Path) == "" {
+			return fmt.Errorf("generated document path is empty")
+		}
+		action := strings.TrimSpace(doc.Action)
+		if action == "" {
+			action = inferredDocumentAction(doc)
+		}
+		switch action {
+		case "preserve":
+			continue
+		case "delete":
+			if doc.Workflow != nil || doc.Component != nil || doc.Vars != nil || len(doc.Edits) > 0 {
+				return fmt.Errorf("generated document %s delete action must not include content or edits", doc.Path)
+			}
+		case "edit":
+			if len(doc.Edits) == 0 && (doc.Workflow != nil || doc.Component != nil || doc.Vars != nil) {
+				action = "replace"
+			}
+			if action == "edit" && len(doc.Edits) == 0 {
+				return fmt.Errorf("generated document %s edit action must include edits", doc.Path)
+			}
+			if action == "edit" && (doc.Workflow != nil || doc.Component != nil || doc.Vars != nil) {
+				return fmt.Errorf("generated document %s edit action must not include replacement content", doc.Path)
+			}
+			if action != "replace" {
+				continue
+			}
+			fallthrough
+		case "replace", "create":
+			if err := validateDocumentPayload(doc); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("generated document %s uses unsupported action %q", doc.Path, action)
+		}
+	}
+	return nil
+}
+
+func validateDocumentPayload(doc GeneratedDocument) error {
+	count := 0
+	if doc.Workflow != nil {
+		count++
+	}
+	if doc.Component != nil {
+		count++
+	}
+	if doc.Vars != nil {
+		count++
+	}
+	if count != 1 {
+		return fmt.Errorf("generated document %s must include exactly one of workflow, component, or vars", doc.Path)
+	}
+	return nil
+}
+
+func inferredDocumentAction(doc GeneratedDocument) string {
+	if len(doc.Edits) > 0 {
+		return "edit"
+	}
+	if doc.Workflow != nil || doc.Component != nil || doc.Vars != nil {
+		return "replace"
+	}
+	return "preserve"
+}
+
+func normalizeDocumentKind(kind string) string {
+	trimmed := strings.ToLower(strings.TrimSpace(kind))
+	switch trimmed {
+	case "scenario":
+		return "workflow"
+	default:
+		return trimmed
+	}
+}
+
+func normalizeEditOp(op string) string {
+	trimmed := strings.ToLower(strings.TrimSpace(op))
+	if trimmed == "add" {
+		return "insert"
+	}
+	if trimmed == "remove" {
+		return "delete"
+	}
+	if trimmed == "replace" {
+		return "set"
+	}
+	return trimmed
+}
+
+func normalizeDocumentAction(action string) string {
+	trimmed := strings.ToLower(strings.TrimSpace(action))
+	switch trimmed {
+	case "update", "revise":
+		return "edit"
+	case "patch":
+		return "edit"
+	case "noop", "skip":
+		return "preserve"
+	default:
+		return trimmed
+	}
+}
+
+func normalizeEditPath(rawPath string, alias string, stepID string, target map[string]any) string {
+	path := strings.TrimSpace(rawPath)
+	if path == "" {
+		path = strings.TrimSpace(alias)
+	}
+	if strings.TrimSpace(stepID) == "" && len(target) > 0 {
+		if id, ok := target["id"].(string); ok {
+			stepID = id
+		}
+		if path == "" {
+			if field, ok := target["field"].(string); ok {
+				path = field
+			}
+		}
+	}
+	if strings.TrimSpace(stepID) != "" && path != "" {
+		path = "steps." + strings.TrimSpace(stepID) + "." + strings.TrimPrefix(path, ".")
+	}
+	if strings.TrimSpace(path) == "" {
+		return ""
+	}
+	canonical, err := structuredpath.Canonicalize(path)
+	if err != nil {
+		return path
+	}
+	return canonical
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func ParseInfo(raw string) InfoResponse {

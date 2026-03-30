@@ -50,7 +50,7 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.fetch` | `object` | no | `` | `` | Optional download transport settings used when the source may need to be fetched. | `{offlineOnly:true}` |
+| `spec.fetch` | `object` | no | `` | `` | Optional transport policy for the download. | `{offlineOnly:true}` |
 | `spec.items` | `array<object>` | no | `` | `` | Optional list form for batching multiple download items in one step. | `[{source:{url:https://mirror.example.com/runc},outputPath:files/bin/runc,mode:0755}]` |
 | `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after the download completes. | `0755` |
 | `spec.outputPath` | `string` | no | `` | `` | Bundle-relative output path for the downloaded artifact. | `files/bin/runc` |
@@ -63,38 +63,38 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.fetch.offlineOnly` | `boolean` | no | `` | `` | Restrict fetches to offline-safe sources only. | `true` |
-| `spec.fetch.sources` | `array<object>` | no | `` | `` | Ordered list of fetch source candidates tried for the transfer. | `[{type:url,url:https://mirror.example.com/runc}]` |
+| `spec.fetch.sources` | `array<object>` | no | `` | `` | Ordered list of source candidates tried for the fetch. | `[{type:url,url:https://mirror.example.com/runc}]` |
 
 ### `spec.items[].fetch`
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.items[].fetch.offlineOnly` | `boolean` | no | `` | `` | Restrict this item to offline-safe sources only. | `true` |
-| `spec.items[].fetch.sources` | `array<object>` | no | `` | `` | Ordered list of source candidates for this item. | `[{type:url,url:https://mirror.example.com/runc}]` |
+| `spec.items[].fetch.offlineOnly` | `boolean` | no | `` | `` | Restrict fetches to offline-safe sources only. | `true` |
+| `spec.items[].fetch.sources` | `array<object>` | no | `` | `` | Ordered list of source candidates tried for the fetch. | `[{type:url,url:https://mirror.example.com/runc}]` |
 
 ### `spec.items[].source`
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.items[].source.bundle` | `object` | no | `` | `` | Bundle reference source for this item. | `{root:files,path:bin/linux/amd64/runc}` |
-| `spec.items[].source.path` | `string` | no | `` | `` | Local path source for this item. | `/opt/cache/runc` |
-| `spec.items[].source.sha256` | `string` | no | `` | `` | Expected SHA-256 checksum for this item. | `abc123...` |
-| `spec.items[].source.url` | `string` | no | `` | `` | URL to fetch for this item. | `https://mirror.example.com/runc` |
+| `spec.items[].source.bundle` | `object` | no | `` | `` | Reference to a file already present in the bundle. | `{root:files,path:bin/linux/amd64/runc}` |
+| `spec.items[].source.path` | `string` | no | `` | `` | Local filesystem path used as the source. | `/opt/cache/runc` |
+| `spec.items[].source.sha256` | `string` | no | `` | `` | Expected SHA-256 checksum for the fetched or copied file. | `abc123...` |
+| `spec.items[].source.url` | `string` | no | `` | `` | URL to fetch the file from during prepare. | `https://mirror.example.com/runc` |
 
 ### `spec.items[].source.bundle`
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.items[].source.bundle.path` | `string` | yes | `` | `` | Relative path within the selected bundle root for this item. | `bin/linux/amd64/runc` |
-| `spec.items[].source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category for this item. | `files` |
+| `spec.items[].source.bundle.path` | `string` | yes | `` | `` | Relative path within the selected bundle root. | `bin/linux/amd64/runc` |
+| `spec.items[].source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from (`files`, `images`, or `packages`). | `files` |
 
 ### `spec.source`
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.source.bundle` | `object` | no | `` | `` | Reference to a file already stored in the prepared bundle. | `{root:files,path:bin/linux/amd64/runc}` |
-| `spec.source.path` | `string` | no | `` | `` | Local filesystem path to use as the source. | `/opt/cache/runc` |
-| `spec.source.sha256` | `string` | no | `` | `` | Expected SHA-256 checksum for the fetched file. | `abc123...` |
+| `spec.source.bundle` | `object` | no | `` | `` | Reference to a file already present in the bundle. | `{root:files,path:bin/linux/amd64/runc}` |
+| `spec.source.path` | `string` | no | `` | `` | Local filesystem path used as the source. | `/opt/cache/runc` |
+| `spec.source.sha256` | `string` | no | `` | `` | Expected SHA-256 checksum for the fetched or copied file. | `abc123...` |
 | `spec.source.url` | `string` | no | `` | `` | URL to fetch the file from during prepare. | `https://mirror.example.com/runc` |
 
 ### `spec.source.bundle`
@@ -102,7 +102,7 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.source.bundle.path` | `string` | yes | `` | `` | Relative path within the selected bundle root. | `bin/linux/amd64/runc` |
-| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from. | `files` |
+| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from (`files`, `images`, or `packages`). | `files` |
 
 
 ### Validation Rules
@@ -111,9 +111,8 @@ spec:
 
 ### Notes
 
-- `DownloadFile` writes into prepared bundle storage through `outputPath` rather than a node path.
-- Omit `outputPath` unless later steps need a stable custom prepared location.
-- Use `template` instead of `content` only for `WriteFile`; `DownloadFile` always uses explicit sources.
+- `DownloadFile` writes into bundle storage through `outputPath` rather than a node path.
+- Omit `outputPath` unless later steps need a stable custom bundle location.
 
 ## `WriteFile`
 
@@ -131,21 +130,18 @@ Use this to create or fully replace a managed file on the node.
 ```yaml
 kind: WriteFile
 spec:
-  path: /etc/containerd/config.toml
-  template: |
-    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
-      SystemdCgroup = {{ .vars.systemdCgroup }}
-  mode: "0644"
+  path: /etc/motd
+  content: hello
 ```
 
 ### Spec Fields
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.content` | `string` | no | `` | `` | Inline file content written verbatim to `path`. | `[offline-base]<br>baseurl=http://repo.local` |
+| `spec.content` | `string` | no | `` | `` | Inline content written verbatim to `path`. | `hello` |
 | `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after the write completes. | `0644` |
-| `spec.path` | `string` | yes | `` | `` | Destination path on the node. | `/etc/containerd/config.toml` |
-| `spec.template` | `string` | no | `` | `` | Inline multi-line content rendered with current vars before writing. | `[Service]<br>Environment=ROLE={{ .vars.role }}` |
+| `spec.path` | `string` | yes | `` | `` | Destination path on the node. | `/etc/motd` |
+| `spec.template` | `string` | no | `` | `` | Inline multi-line content rendered with the current vars before writing. | `Hello {{ .vars.name }}` |
 
 ### Validation Rules
 
@@ -181,10 +177,10 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.fetch` | `object` | no | `` | `` | Optional download transport settings used when the source may need to be fetched. | `{offlineOnly:true}` |
+| `spec.fetch` | `object` | no | `` | `` | Optional transport policy when the source must be fetched first. | `{offlineOnly:true}` |
 | `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after the copy completes. | `0644` |
 | `spec.path` | `string` | yes | `` | `` | Destination path on the node. | `/home/vagrant/.kube/config` |
-| `spec.source` | `object` | yes | `` | `` | Structured source descriptor for copy or extraction operations. | `{path:/etc/kubernetes/admin.conf}` |
+| `spec.source` | `object` | yes | `` | `` | Structured source descriptor for the file to copy. | `{path:/etc/kubernetes/admin.conf}` |
 
 ### Nested Objects
 
@@ -193,15 +189,15 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.fetch.offlineOnly` | `boolean` | no | `` | `` | Restrict fetches to offline-safe sources only. | `true` |
-| `spec.fetch.sources` | `array<object>` | no | `` | `` | Ordered list of fetch source candidates tried for the transfer. | `[{type:url,url:https://mirror.example.com/runc}]` |
+| `spec.fetch.sources` | `array<object>` | no | `` | `` | Ordered list of source candidates tried for the fetch. | `[{type:url,url:https://mirror.example.com/runc}]` |
 
 ### `spec.source`
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.source.bundle` | `object` | no | `` | `` | Reference to a file already stored in the prepared bundle. | `{root:files,path:bin/linux/amd64/runc}` |
-| `spec.source.path` | `string` | no | `` | `` | Local filesystem path to use as the source. | `/opt/cache/runc` |
-| `spec.source.sha256` | `string` | no | `` | `` | Expected SHA-256 checksum for the fetched file. | `abc123...` |
+| `spec.source.bundle` | `object` | no | `` | `` | Reference to a file already present in the bundle. | `{root:files,path:bin/linux/amd64/runc}` |
+| `spec.source.path` | `string` | no | `` | `` | Local filesystem path used as the source. | `/opt/cache/runc` |
+| `spec.source.sha256` | `string` | no | `` | `` | Expected SHA-256 checksum for the fetched or copied file. | `abc123...` |
 | `spec.source.url` | `string` | no | `` | `` | URL to fetch the file from during prepare. | `https://mirror.example.com/runc` |
 
 ### `spec.source.bundle`
@@ -209,7 +205,7 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.source.bundle.path` | `string` | yes | `` | `` | Relative path within the selected bundle root. | `bin/linux/amd64/runc` |
-| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from. | `files` |
+| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from (`files`, `images`, or `packages`). | `files` |
 
 
 ### Notes
@@ -242,8 +238,8 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.backup` | `boolean` | no | `` | `` | Create a `.bak` copy of the original file before overwriting it. | `true` |
-| `spec.edits` | `array<object>` | yes | `` | `` | Ordered list of match/replace rules applied sequentially to the file. | `[{match:SystemdCgroup = false,replaceWith:SystemdCgroup = true}]` |
+| `spec.backup` | `boolean` | no | `` | `` | Create a `.bak` copy before overwriting the original file. | `true` |
+| `spec.edits` | `array<object>` | yes | `` | `` | Ordered match/replace rules applied sequentially. | `[{match:SystemdCgroup = false,replaceWith:SystemdCgroup = true}]` |
 | `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied after the edit completes. | `0644` |
 | `spec.path` | `string` | yes | `` | `` | File path to edit in place. | `/etc/containerd/config.toml` |
 
@@ -279,8 +275,8 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.createIfMissing` | `boolean` | no | `false` | `` | Create a new empty TOML document when the file does not exist. | `true` |
-| `spec.edits` | `array<object>` | yes | `` | `` | Ordered list of structured edits applied sequentially to the TOML document. | `[{op:set,rawPath:plugins."io.containerd.grpc.v1.cri".registry.config_path,value:/etc/containerd/certs.d}]` |
-| `spec.mode` | `string` | no | `` | `` | Optional file permissions in octal notation to apply after the edit completes. | `0644` |
+| `spec.edits` | `array<object>` | yes | `` | `` | Ordered list of structured edits applied sequentially. | `[{op:set,rawPath:plugins."io.containerd.grpc.v1.cri".registry.config_path,value:/etc/containerd/certs.d}]` |
+| `spec.mode` | `string` | no | `` | `` | Optional file permissions to apply after the edit completes. | `0644` |
 | `spec.path` | `string` | yes | `` | `` | TOML file path to edit in place. | `/etc/containerd/config.toml` |
 
 ### Notes
@@ -315,8 +311,8 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.createIfMissing` | `boolean` | no | `false` | `` | Create a new empty YAML document when the file does not exist. | `true` |
-| `spec.edits` | `array<object>` | yes | `` | `` | Ordered list of structured edits applied sequentially to the YAML document. | `[{op:set,rawPath:spec.template.spec.containers.0.image,value:registry.local/app:v1}]` |
-| `spec.mode` | `string` | no | `` | `` | Optional file permissions in octal notation to apply after the edit completes. | `0644` |
+| `spec.edits` | `array<object>` | yes | `` | `` | Ordered list of structured edits applied sequentially. | `[{op:set,rawPath:spec.template.spec.containers.0.image,value:registry.local/app:v1}]` |
+| `spec.mode` | `string` | no | `` | `` | Optional file permissions to apply after the edit completes. | `0644` |
 | `spec.path` | `string` | yes | `` | `` | YAML file path to edit in place. | `/etc/kubernetes/kubeadm-config.yaml` |
 
 ### Notes
@@ -351,8 +347,8 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.createIfMissing` | `boolean` | no | `false` | `` | Create a new empty JSON object when the file does not exist. | `true` |
-| `spec.edits` | `array<object>` | yes | `` | `` | Ordered list of structured edits applied sequentially to the JSON document. | `[{op:set,rawPath:plugins.0.type,value:bridge}]` |
-| `spec.mode` | `string` | no | `` | `` | Optional file permissions in octal notation to apply after the edit completes. | `0644` |
+| `spec.edits` | `array<object>` | yes | `` | `` | Ordered list of structured edits applied sequentially. | `[{op:set,rawPath:plugins.0.type,value:bridge}]` |
+| `spec.mode` | `string` | no | `` | `` | Optional file permissions to apply after the edit completes. | `0644` |
 | `spec.path` | `string` | yes | `` | `` | JSON file path to edit in place. | `/etc/cni/net.d/10-custom.conflist` |
 
 ## `ExtractArchive`
@@ -381,8 +377,8 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.fetch` | `object` | no | `` | `` | Optional download transport settings used when the source may need to be fetched. | `{offlineOnly:true}` |
-| `spec.include` | `array<string>` | no | `` | `` | Optional archive members to extract. Extract all members when omitted. | `[bridge,loopback]` |
+| `spec.fetch` | `object` | no | `` | `` | Optional transport policy when the archive must be fetched first. | `{offlineOnly:true}` |
+| `spec.include` | `array<string>` | no | `` | `` | Optional archive members to extract. | `[bridge,loopback]` |
 | `spec.mode` | `string` | no | `` | `` | File permissions in octal notation applied to extracted files when supported. | `0755` |
 | `spec.path` | `string` | yes | `` | `` | Destination directory on the node. | `/opt/cni/bin` |
 | `spec.source` | `object` | yes | `` | `` | Structured source descriptor for the archive to extract. | `{path:/tmp/cni-plugins.tgz}` |
@@ -394,15 +390,15 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.fetch.offlineOnly` | `boolean` | no | `` | `` | Restrict fetches to offline-safe sources only. | `true` |
-| `spec.fetch.sources` | `array<object>` | no | `` | `` | Ordered list of fetch source candidates tried for the transfer. | `[{type:url,url:https://mirror.example.com/runc}]` |
+| `spec.fetch.sources` | `array<object>` | no | `` | `` | Ordered list of source candidates tried for the fetch. | `[{type:url,url:https://mirror.example.com/runc}]` |
 
 ### `spec.source`
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.source.bundle` | `object` | no | `` | `` | Reference to a file already stored in the prepared bundle. | `{root:files,path:bin/linux/amd64/runc}` |
-| `spec.source.path` | `string` | no | `` | `` | Local filesystem path to use as the source. | `/opt/cache/runc` |
-| `spec.source.sha256` | `string` | no | `` | `` | Expected SHA-256 checksum for the fetched file. | `abc123...` |
+| `spec.source.bundle` | `object` | no | `` | `` | Reference to a file already present in the bundle. | `{root:files,path:bin/linux/amd64/runc}` |
+| `spec.source.path` | `string` | no | `` | `` | Local filesystem path used as the source. | `/opt/cache/runc` |
+| `spec.source.sha256` | `string` | no | `` | `` | Expected SHA-256 checksum for the fetched or copied file. | `abc123...` |
 | `spec.source.url` | `string` | no | `` | `` | URL to fetch the file from during prepare. | `https://mirror.example.com/runc` |
 
 ### `spec.source.bundle`
@@ -410,12 +406,12 @@ spec:
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
 | `spec.source.bundle.path` | `string` | yes | `` | `` | Relative path within the selected bundle root. | `bin/linux/amd64/runc` |
-| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from. | `files` |
+| `spec.source.bundle.root` | `string` | yes | `` | `files, images, packages` | Bundle root category to read from (`files`, `images`, or `packages`). | `files` |
 
 
 ### Notes
 
-- Extract all archive members when `include` is omitted.
+- Extract all members when `include` is omitted.
 
 ## Related
 

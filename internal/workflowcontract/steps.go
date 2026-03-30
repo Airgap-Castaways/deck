@@ -31,44 +31,10 @@ type StepTypeKey struct {
 }
 
 func StepDefinitions() []StepDefinition {
-	defs := []StepDefinition{
-		stepDefFromMeta("CheckHost", "host-check", "system"),
-		stepDefFromMeta("Command", "command", "advanced"),
-		stepDefFromMeta("WriteContainerdConfig", "containerd.config", "runtime"),
-		stepDefFromMeta("WriteContainerdRegistryHosts", "containerd.registry-hosts", "runtime"),
-		stepDefFromMeta("EnsureDirectory", "directory", "filesystem"),
-		stepDefFromMeta("DownloadFile", "file.download", "filesystem"),
-		stepDefFromMeta("WriteFile", "file.write", "filesystem"),
-		stepDefFromMeta("CopyFile", "file.copy", "filesystem"),
-		stepDefFromMeta("EditFile", "file.edit", "filesystem"),
-		stepDefFromMeta("EditTOML", "file.edit-toml", "filesystem"),
-		stepDefFromMeta("EditYAML", "file.edit-yaml", "filesystem"),
-		stepDefFromMeta("EditJSON", "file.edit-json", "filesystem"),
-		stepDefFromMeta("ExtractArchive", "file.extract-archive", "filesystem"),
-		stepDefFromMeta("DownloadImage", "image.download", "containers"),
-		stepDefFromMeta("LoadImage", "image.load", "containers"),
-		stepDefFromMeta("VerifyImage", "image.verify", "containers"),
-		stepDefFromMeta("KernelModule", "kernel-module", "system"),
-		stepDefFromMeta("CheckCluster", "cluster-check", "kubernetes"),
-		stepDefFromMeta("InitKubeadm", "kubeadm.init", "kubernetes"),
-		stepDefFromMeta("JoinKubeadm", "kubeadm.join", "kubernetes"),
-		stepDefFromMeta("ResetKubeadm", "kubeadm.reset", "kubernetes"),
-		stepDefFromMeta("UpgradeKubeadm", "kubeadm.upgrade", "kubernetes"),
-		stepDefFromMeta("DownloadPackage", "package.download", "packages"),
-		stepDefFromMeta("InstallPackage", "package.install", "packages"),
-		stepDefFromMeta("ConfigureRepository", "repository.configure", "packages"),
-		stepDefFromMeta("RefreshRepository", "repository.refresh", "packages"),
-		stepDefFromMeta("ManageService", "service", "system"),
-		stepDefFromMeta("Swap", "swap", "system"),
-		stepDefFromMeta("CreateSymlink", "symlink", "filesystem"),
-		stepDefFromMeta("Sysctl", "sysctl", "system"),
-		stepDefFromMeta("WriteSystemdUnit", "systemd-unit", "system"),
-		stepDefFromMeta("WaitForService", "wait.service-active", "control-flow"),
-		stepDefFromMeta("WaitForCommand", "wait.command", "control-flow"),
-		stepDefFromMeta("WaitForFile", "wait.file-exists", "control-flow"),
-		stepDefFromMeta("WaitForMissingFile", "wait.file-absent", "control-flow"),
-		stepDefFromMeta("WaitForTCPPort", "wait.tcp-port-open", "control-flow"),
-		stepDefFromMeta("WaitForMissingTCPPort", "wait.tcp-port-closed", "control-flow"),
+	kinds := stepmeta.RegisteredKinds()
+	defs := make([]StepDefinition, 0, len(kinds))
+	for _, kind := range kinds {
+		defs = append(defs, stepDefFromMeta(kind, generatorForKind(kind), categoryForKind(kind)))
 	}
 	sort.Slice(defs, func(i, j int) bool { return defs[i].Kind < defs[j].Kind })
 	return defs
@@ -129,4 +95,50 @@ func stepDefFromMeta(kind string, generator string, category string) StepDefinit
 		projection.Roles,
 		projection.Outputs,
 	)
+}
+
+func generatorForKind(kind string) string {
+	entry, ok, err := stepmeta.LookupCatalogEntry(kind)
+	if err != nil {
+		panic(err)
+	}
+	if !ok {
+		panic("missing stepmeta registration for " + kind)
+	}
+	projection := stepmeta.ProjectWorkflow(entry, "", "")
+	schemaFile := strings.TrimSpace(projection.SchemaFile)
+	if strings.HasSuffix(schemaFile, ".schema.json") {
+		return strings.TrimSuffix(schemaFile, ".schema.json")
+	}
+	return strings.ToLower(strings.TrimSpace(kind))
+}
+
+func categoryForKind(kind string) string {
+	entry, ok, err := stepmeta.LookupCatalogEntry(kind)
+	if err != nil {
+		panic(err)
+	}
+	if !ok {
+		panic("missing stepmeta registration for " + kind)
+	}
+	switch strings.TrimSpace(entry.Definition.Family) {
+	case "command":
+		return "advanced"
+	case "containerd":
+		return "runtime"
+	case "directory", "file", "symlink":
+		return "filesystem"
+	case "image":
+		return "containers"
+	case "cluster-check", "kubeadm":
+		return "kubernetes"
+	case "package", "repository":
+		return "packages"
+	case "wait":
+		return "control-flow"
+	case "host-check", "kernel-module", "service", "swap", "sysctl", "systemd-unit":
+		return "system"
+	default:
+		return "system"
+	}
 }

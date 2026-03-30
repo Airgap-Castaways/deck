@@ -80,12 +80,13 @@ func loadToolPageInputs(dir string) ([]schemadoc.PageInput, error) {
 		}
 		page := pagesBySlug[def.DocsPage]
 		if page == nil {
+			title := schemadoc.DisplayFamilyTitle(def.Family, "")
 			page = &schemadoc.PageInput{
 				Family:      def.Family,
 				PageSlug:    def.DocsPage,
-				Title:       def.FamilyTitle,
-				Summary:     familyPageSummary(def),
-				Description: familyPageSummary(def),
+				Title:       title,
+				Summary:     familyPageSummary(def, title),
+				Description: familyPageSummary(def, title),
 			}
 			pagesBySlug[def.DocsPage] = page
 		}
@@ -111,11 +112,11 @@ func loadToolPageInputs(dir string) ([]schemadoc.PageInput, error) {
 	return pages, nil
 }
 
-func familyPageSummary(def workflowexec.StepDefinition) string {
+func familyPageSummary(def workflowexec.StepDefinition, title string) string {
 	if def.Kind == def.Family {
 		return def.Summary
 	}
-	return fmt.Sprintf("Reference for the `%s` family of typed workflow steps.", def.FamilyTitle)
+	return fmt.Sprintf("Reference for the `%s` family of typed workflow steps.", title)
 }
 
 func loadToolSchemas(dir string) ([]toolSchemaDoc, error) {

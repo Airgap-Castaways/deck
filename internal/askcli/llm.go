@@ -142,7 +142,7 @@ func generationAttempts(requested int, decision askintent.Decision, prompt strin
 	if requested > 0 {
 		return requested
 	}
-	return 2
+	return 3
 }
 
 func askRequestTimeout(kind string, maxIterations int, systemPrompt string, prompt string) time.Duration {

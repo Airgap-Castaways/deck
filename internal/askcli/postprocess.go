@@ -7,6 +7,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
+	"github.com/Airgap-Castaways/deck/internal/askir"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
@@ -14,58 +15,69 @@ import (
 type postProcessSummary struct {
 	Applied     bool
 	Generation  askcontract.GenerationResponse
+	Files       []askcontract.GeneratedFile
 	LintSummary string
 	Critic      askcontract.CriticResponse
 	Judge       askcontract.JudgeResponse
 	Notes       []string
 }
 
-func maybePostProcessGeneration(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult, gen askcontract.GenerationResponse, lintSummary string, critic askcontract.CriticResponse, judge askcontract.JudgeResponse, planCritic askcontract.PlanCriticResponse) (postProcessSummary, error) {
-	if !shouldAutoPostProcess(brief, judge, gen) {
+func maybePostProcessGeneration(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult, gen askcontract.GenerationResponse, files []askcontract.GeneratedFile, lintSummary string, critic askcontract.CriticResponse, judge askcontract.JudgeResponse, planCritic askcontract.PlanCriticResponse) (postProcessSummary, error) {
+	if !shouldAutoPostProcess(brief, judge, files) {
 		return postProcessSummary{}, fmt.Errorf("post-process not needed")
 	}
-	findings, err := critiquePostProcess(ctx, client, req, plan, brief, gen, judge, critic, planCritic, logger)
+	findings, err := critiquePostProcess(ctx, client, req, plan, brief, files, judge, critic, planCritic, logger)
 	if err != nil {
 		return postProcessSummary{}, err
 	}
 	notes := renderPostProcessNotes(findings)
 	if len(findings.Blocking) == 0 {
-		if shouldAttemptStructuralCleanup(findings, gen) {
-			edited, err := applyStructuralCleanupEdit(ctx, client, req, plan, brief, findings, gen, logger)
+		if shouldAttemptStructuralCleanup(findings, files) {
+			edited, err := applyStructuralCleanupEdit(ctx, client, req, plan, brief, findings, files, logger)
 			if err != nil {
 				return postProcessSummary{}, err
 			}
-			newLint, newCritic, err := validateGeneration(ctx, root, edited, decision, plan, brief, retrieval)
+			editedFiles, err := askir.MaterializeWithBase(root, files, edited)
 			if err != nil {
 				return postProcessSummary{}, err
 			}
-			newJudge, err := maybeJudgeGeneration(ctx, client, req, edited, newLint, newCritic, plan, brief, logger)
+			edited.Files = append([]askcontract.GeneratedFile(nil), editedFiles...)
+			newLint, newCritic, err := validateGeneration(ctx, root, edited, editedFiles, decision, plan, brief, retrieval)
+			if err != nil {
+				return postProcessSummary{}, err
+			}
+			newJudge, err := maybeJudgeGeneration(ctx, client, req, edited, editedFiles, newLint, newCritic, plan, brief, logger)
 			if err != nil {
 				logger.logf("debug", "[ask][phase:postprocess-structural:judge-skip] error=%v\n", err)
 				newJudge = judge
 			}
-			return postProcessSummary{Applied: true, Generation: edited, LintSummary: newLint, Critic: newCritic, Judge: newJudge, Notes: append([]string{"post-process: applied optional structural cleanup"}, notes...)}, nil
+			return postProcessSummary{Applied: true, Generation: edited, Files: editedFiles, LintSummary: newLint, Critic: newCritic, Judge: newJudge, Notes: append([]string{"post-process: applied optional structural cleanup"}, notes...)}, nil
 		}
 		return postProcessSummary{Applied: false, Notes: notes}, nil
 	}
-	edited, err := applyPostProcessEdit(ctx, client, req, plan, brief, findings, gen, planCritic, logger)
+	edited, err := applyPostProcessEdit(ctx, client, req, plan, brief, findings, files, planCritic, logger)
 	if err != nil {
 		return postProcessSummary{}, err
 	}
-	newLint, newCritic, err := validateGeneration(ctx, root, edited, decision, plan, brief, retrieval)
+	editedFiles, err := askir.MaterializeWithBase(root, files, edited)
 	if err != nil {
 		return postProcessSummary{}, err
 	}
-	newJudge, err := maybeJudgeGeneration(ctx, client, req, edited, newLint, newCritic, plan, brief, logger)
+	edited.Files = append([]askcontract.GeneratedFile(nil), editedFiles...)
+	newLint, newCritic, err := validateGeneration(ctx, root, edited, editedFiles, decision, plan, brief, retrieval)
+	if err != nil {
+		return postProcessSummary{}, err
+	}
+	newJudge, err := maybeJudgeGeneration(ctx, client, req, edited, editedFiles, newLint, newCritic, plan, brief, logger)
 	if err != nil {
 		logger.logf("debug", "[ask][phase:postprocess:judge-skip] error=%v\n", err)
 		newJudge = judge
 	}
-	return postProcessSummary{Applied: true, Generation: edited, LintSummary: newLint, Critic: newCritic, Judge: newJudge, Notes: append([]string{"post-process: applied targeted operational refinement"}, notes...)}, nil
+	return postProcessSummary{Applied: true, Generation: edited, Files: editedFiles, LintSummary: newLint, Critic: newCritic, Judge: newJudge, Notes: append([]string{"post-process: applied targeted operational refinement"}, notes...)}, nil
 }
 
-func shouldAutoPostProcess(brief askcontract.AuthoringBrief, judge askcontract.JudgeResponse, gen askcontract.GenerationResponse) bool {
-	if len(gen.Files) < 2 {
+func shouldAutoPostProcess(brief askcontract.AuthoringBrief, judge askcontract.JudgeResponse, files []askcontract.GeneratedFile) bool {
+	if len(files) < 2 {
 		return false
 	}
 	if strings.TrimSpace(brief.CompletenessTarget) != "complete" {
@@ -87,9 +99,9 @@ func shouldAutoPostProcess(brief askcontract.AuthoringBrief, judge askcontract.J
 	return false
 }
 
-func critiquePostProcess(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, gen askcontract.GenerationResponse, judge askcontract.JudgeResponse, critic askcontract.CriticResponse, planCritic askcontract.PlanCriticResponse, logger askLogger) (askcontract.PostProcessResponse, error) {
+func critiquePostProcess(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, files []askcontract.GeneratedFile, judge askcontract.JudgeResponse, critic askcontract.CriticResponse, planCritic askcontract.PlanCriticResponse, logger askLogger) (askcontract.PostProcessResponse, error) {
 	systemPrompt := postProcessCriticSystemPrompt(brief, plan)
-	userPrompt := postProcessCriticUserPrompt(plan, gen, judge, critic, planCritic)
+	userPrompt := postProcessCriticUserPrompt(plan, files, judge, critic, planCritic)
 	logger.prompt("postprocess-critic", systemPrompt, userPrompt)
 	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-critic", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: providerRetryCount("postprocess-critic"), Timeout: askRequestTimeout("postprocess-critic", 1, systemPrompt, userPrompt)})
 	if err != nil {
@@ -100,12 +112,12 @@ func critiquePostProcess(ctx context.Context, client askprovider.Client, req ask
 	if err != nil {
 		return askcontract.PostProcessResponse{}, err
 	}
-	return enrichPostProcessFindings(parsed, gen), nil
+	return enrichPostProcessFindings(parsed, files), nil
 }
 
-func applyPostProcessEdit(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, findings askcontract.PostProcessResponse, gen askcontract.GenerationResponse, planCritic askcontract.PlanCriticResponse, logger askLogger) (askcontract.GenerationResponse, error) {
+func applyPostProcessEdit(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, findings askcontract.PostProcessResponse, files []askcontract.GeneratedFile, planCritic askcontract.PlanCriticResponse, logger askLogger) (askcontract.GenerationResponse, error) {
 	systemPrompt := postProcessEditSystemPrompt(brief, plan)
-	userPrompt := postProcessEditUserPrompt(gen, findings, planCritic)
+	userPrompt := postProcessEditUserPrompt(files, findings, planCritic)
 	logger.prompt("postprocess-edit", systemPrompt, userPrompt)
 	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-edit", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: providerRetryCount("postprocess-edit"), Timeout: askRequestTimeout("postprocess-edit", 1, systemPrompt, userPrompt)})
 	if err != nil {
@@ -138,14 +150,14 @@ func renderPostProcessNotes(findings askcontract.PostProcessResponse) []string {
 	return lines
 }
 
-func shouldAttemptStructuralCleanup(findings askcontract.PostProcessResponse, gen askcontract.GenerationResponse) bool {
+func shouldAttemptStructuralCleanup(findings askcontract.PostProcessResponse, files []askcontract.GeneratedFile) bool {
 	if len(findings.Blocking) > 0 {
 		return false
 	}
 	if !hasStrongStructuralCleanupCandidate(findings.UpgradeCandidates) {
 		return false
 	}
-	return repeatedPathOrVersionLiterals(gen) || repeatedLargeRuntimeBlocks(gen)
+	return repeatedPathOrVersionLiterals(files) || repeatedLargeRuntimeBlocks(files)
 }
 
 func hasStrongStructuralCleanupCandidate(candidates []string) bool {
@@ -158,8 +170,8 @@ func hasStrongStructuralCleanupCandidate(candidates []string) bool {
 	return false
 }
 
-func enrichPostProcessFindings(findings askcontract.PostProcessResponse, gen askcontract.GenerationResponse) askcontract.PostProcessResponse {
-	files := filePathSet(gen.Files)
+func enrichPostProcessFindings(findings askcontract.PostProcessResponse, rendered []askcontract.GeneratedFile) askcontract.PostProcessResponse {
+	files := filePathSet(rendered)
 	if len(findings.ReviseFiles) == 0 && len(findings.Blocking) > 0 {
 		if files["workflows/scenarios/apply.yaml"] {
 			findings.ReviseFiles = append(findings.ReviseFiles, "workflows/scenarios/apply.yaml")
@@ -170,7 +182,7 @@ func enrichPostProcessFindings(findings askcontract.PostProcessResponse, gen ask
 			findings.PreserveFiles = append(findings.PreserveFiles, path)
 		}
 	}
-	advisory, candidates := localStructuralCleanupHeuristics(gen)
+	advisory, candidates := localStructuralCleanupHeuristics(rendered)
 	findings.Advisory = dedupe(append(findings.Advisory, advisory...))
 	findings.UpgradeCandidates = dedupe(append(findings.UpgradeCandidates, candidates...))
 	if len(findings.UpgradeCandidates) == 0 {
@@ -184,23 +196,23 @@ func enrichPostProcessFindings(findings askcontract.PostProcessResponse, gen ask
 	return findings
 }
 
-func localStructuralCleanupHeuristics(gen askcontract.GenerationResponse) ([]string, []string) {
+func localStructuralCleanupHeuristics(files []askcontract.GeneratedFile) ([]string, []string) {
 	advisory := []string{}
 	candidates := []string{"preserve-inline"}
-	if repeatedPathOrVersionLiterals(gen) {
+	if repeatedPathOrVersionLiterals(files) {
 		advisory = append(advisory, "extract-vars is optional because repeated path/version literals appear more than once, but preserve inline structure if readability is already good")
 		candidates = append(candidates, "extract-vars")
 	}
-	if repeatedLargeRuntimeBlocks(gen) {
+	if repeatedLargeRuntimeBlocks(files) {
 		advisory = append(advisory, "extract-component is optional because repeated runtime/setup step groups appear large enough to consider reuse")
 		candidates = append(candidates, "extract-component")
 	}
 	return advisory, candidates
 }
 
-func repeatedPathOrVersionLiterals(gen askcontract.GenerationResponse) bool {
+func repeatedPathOrVersionLiterals(files []askcontract.GeneratedFile) bool {
 	counts := map[string]int{}
-	for _, file := range gen.Files {
+	for _, file := range files {
 		for _, line := range strings.Split(file.Content, "\n") {
 			trimmed := strings.TrimSpace(line)
 			if strings.HasPrefix(strings.ToLower(trimmed), "version:") {
@@ -226,9 +238,9 @@ func repeatedPathOrVersionLiterals(gen askcontract.GenerationResponse) bool {
 	return false
 }
 
-func repeatedLargeRuntimeBlocks(gen askcontract.GenerationResponse) bool {
+func repeatedLargeRuntimeBlocks(files []askcontract.GeneratedFile) bool {
 	stepSets := map[string]int{}
-	for _, file := range gen.Files {
+	for _, file := range files {
 		content := strings.ToLower(file.Content)
 		marker := 0
 		for _, token := range []string{"kind: installpackage", "kind: loadimage", "kind: manageservice", "kind: writefile"} {
@@ -247,9 +259,9 @@ func repeatedLargeRuntimeBlocks(gen askcontract.GenerationResponse) bool {
 	return false
 }
 
-func applyStructuralCleanupEdit(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, findings askcontract.PostProcessResponse, gen askcontract.GenerationResponse, logger askLogger) (askcontract.GenerationResponse, error) {
+func applyStructuralCleanupEdit(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, findings askcontract.PostProcessResponse, files []askcontract.GeneratedFile, logger askLogger) (askcontract.GenerationResponse, error) {
 	systemPrompt := structuralCleanupEditSystemPrompt(brief, plan)
-	userPrompt := structuralCleanupEditUserPrompt(gen, findings)
+	userPrompt := structuralCleanupEditUserPrompt(files, findings)
 	logger.prompt("postprocess-structural", systemPrompt, userPrompt)
 	resp, err := client.Generate(ctx, askprovider.Request{Kind: "postprocess-structural", Provider: req.Provider, Model: req.Model, APIKey: req.APIKey, OAuthToken: req.OAuthToken, AccountID: req.AccountID, Endpoint: req.Endpoint, SystemPrompt: systemPrompt, Prompt: userPrompt, MaxRetries: providerRetryCount("postprocess-structural"), Timeout: askRequestTimeout("postprocess-structural", 1, systemPrompt, userPrompt)})
 	if err != nil {

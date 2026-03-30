@@ -41,6 +41,9 @@ func validateGeneratedFile(root string, file askcontract.GeneratedFile) error {
 	if err := validateGeneratedPath(file.Path); err != nil {
 		return err
 	}
+	if file.Delete {
+		return nil
+	}
 	target, err := fsutil.ResolveUnder(root, strings.Split(filepath.ToSlash(file.Path), "/")...)
 	if err != nil {
 		return err
@@ -72,6 +75,12 @@ func writeFiles(root string, files []askcontract.GeneratedFile) error {
 		if err != nil {
 			return err
 		}
+		if file.Delete {
+			if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("delete %s: %w", file.Path, err)
+			}
+			continue
+		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 			return fmt.Errorf("create ask target directory: %w", err)
 		}
@@ -82,47 +91,41 @@ func writeFiles(root string, files []askcontract.GeneratedFile) error {
 	return nil
 }
 
-func normalizeGeneratedFiles(gen askcontract.GenerationResponse) askcontract.GenerationResponse {
-	gen.Files = append([]askcontract.GeneratedFile(nil), gen.Files...)
-	for i := range gen.Files {
-		gen.Files[i].Content = normalizeGeneratedContent(gen.Files[i].Path, gen.Files[i].Content)
-	}
-	return gen
-}
-
-func mergeGeneratedFiles(base askcontract.GenerationResponse, patch askcontract.GenerationResponse) askcontract.GenerationResponse {
-	if len(base.Files) == 0 {
-		return patch
-	}
-	merged := askcontract.GenerationResponse{
-		Summary: strings.TrimSpace(patch.Summary),
-		Review:  append([]string(nil), patch.Review...),
-		Files:   append([]askcontract.GeneratedFile(nil), base.Files...),
-	}
-	if merged.Summary == "" {
-		merged.Summary = base.Summary
-	}
-	if len(merged.Review) == 0 {
-		merged.Review = append([]string(nil), base.Review...)
-	}
-	index := map[string]int{}
-	for i, file := range merged.Files {
-		index[strings.TrimSpace(file.Path)] = i
-	}
-	for _, file := range patch.Files {
-		path := strings.TrimSpace(file.Path)
-		if idx, ok := index[path]; ok {
-			merged.Files[idx] = file
+func normalizeGeneratedFiles(files []askcontract.GeneratedFile) []askcontract.GeneratedFile {
+	files = append([]askcontract.GeneratedFile(nil), files...)
+	for i := range files {
+		if files[i].Delete {
+			files[i].Content = ""
 			continue
 		}
-		merged.Files = append(merged.Files, file)
+		files[i].Content = normalizeGeneratedContent(files[i].Path, files[i].Content)
+	}
+	return files
+}
+
+func mergeGeneratedFiles(base []askcontract.GeneratedFile, patch []askcontract.GeneratedFile) []askcontract.GeneratedFile {
+	if len(base) == 0 {
+		return append([]askcontract.GeneratedFile(nil), patch...)
+	}
+	merged := append([]askcontract.GeneratedFile(nil), base...)
+	index := map[string]int{}
+	for i, file := range merged {
+		index[strings.TrimSpace(file.Path)] = i
+	}
+	for _, file := range patch {
+		path := strings.TrimSpace(file.Path)
+		if idx, ok := index[path]; ok {
+			merged[idx] = file
+			continue
+		}
+		merged = append(merged, file)
 	}
 	return merged
 }
 
-func dropGeneratedFiles(gen askcontract.GenerationResponse, paths []string) askcontract.GenerationResponse {
-	if len(paths) == 0 || len(gen.Files) == 0 {
-		return gen
+func dropGeneratedFiles(files []askcontract.GeneratedFile, paths []string) []askcontract.GeneratedFile {
+	if len(paths) == 0 || len(files) == 0 {
+		return append([]askcontract.GeneratedFile(nil), files...)
 	}
 	drop := map[string]bool{}
 	for _, path := range paths {
@@ -131,21 +134,23 @@ func dropGeneratedFiles(gen askcontract.GenerationResponse, paths []string) askc
 			drop[path] = true
 		}
 	}
-	filtered := askcontract.GenerationResponse{
-		Summary: gen.Summary,
-		Review:  append([]string(nil), gen.Review...),
-		Files:   make([]askcontract.GeneratedFile, 0, len(gen.Files)),
-	}
-	for _, file := range gen.Files {
+	filtered := make([]askcontract.GeneratedFile, 0, len(files))
+	for _, file := range files {
 		if !drop[strings.TrimSpace(file.Path)] {
-			filtered.Files = append(filtered.Files, file)
+			filtered = append(filtered, file)
 		}
 	}
 	return filtered
 }
 
 func normalizeGeneratedContent(path string, content string) string {
-	_ = path
+	if strings.HasSuffix(strings.ToLower(strings.TrimSpace(path)), ".yaml") || strings.HasSuffix(strings.ToLower(strings.TrimSpace(path)), ".yml") {
+		trimmed := strings.TrimRight(content, "\n")
+		if trimmed == "" {
+			return ""
+		}
+		return trimmed + "\n"
+	}
 	return content
 }
 
@@ -167,6 +172,12 @@ func stageWorkspace(root string, files []askcontract.GeneratedFile) (string, err
 		target, err := fsutil.ResolveUnder(tempRoot, strings.Split(filepath.ToSlash(file.Path), "/")...)
 		if err != nil {
 			return "", err
+		}
+		if file.Delete {
+			if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+				return "", fmt.Errorf("delete ask staging file: %w", err)
+			}
+			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 			return "", fmt.Errorf("create ask staging directory: %w", err)
@@ -217,6 +228,9 @@ func scenarioPaths(root string, candidatePaths []string) []string {
 func localFindings(files []askcontract.GeneratedFile) []askreview.Finding {
 	content := make(map[string]string, len(files))
 	for _, file := range files {
+		if file.Delete {
+			continue
+		}
 		content[file.Path] = file.Content
 	}
 	return askreview.Candidate(content)

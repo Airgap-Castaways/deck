@@ -1,0 +1,61 @@
+package stepspec
+
+import "github.com/Airgap-Castaways/deck/internal/stepmeta"
+
+var (
+	_ = stepmeta.MustRegister[ManageService](manageServiceDefinition())
+	_ = stepmeta.MustRegister[Swap](swapDefinition())
+	_ = stepmeta.MustRegister[KernelModule](kernelModuleDefinition())
+	_ = stepmeta.MustRegister[Sysctl](sysctlDefinition())
+	_ = stepmeta.MustRegister[WriteSystemdUnit](writeSystemdUnitDefinition())
+	_ = stepmeta.MustRegister[EnsureDirectory](ensureDirectoryDefinition())
+	_ = stepmeta.MustRegister[CreateSymlink](createSymlinkDefinition())
+	_ = stepmeta.MustRegister[ConfigureRepository](configureRepositoryDefinition())
+	_ = stepmeta.MustRegister[RefreshRepository](refreshRepositoryDefinition())
+	_ = stepmeta.MustRegister[InstallPackage](installPackageDefinition())
+	_ = stepmeta.MustRegister[DownloadPackage](downloadPackageDefinition())
+)
+
+func manageServiceDefinition() stepmeta.Definition {
+	return stepmeta.Definition{Kind: "ManageService", Family: "service", FamilyTitle: "Service", DocsPage: "service", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"name", "names"}, SchemaFile: "service.schema.json", SchemaPatch: stepmeta.PatchManageServiceToolSchema, Ask: stepmeta.AskMetadata{Capabilities: []string{"service-lifecycle"}, MatchSignals: []string{"service", "enable", "restart", "reload", "systemctl"}, KeyFields: []string{"spec.name", "spec.names", "spec.state", "spec.enabled"}}}
+}
+
+func swapDefinition() stepmeta.Definition {
+	return stepmeta.Definition{Kind: "Swap", Family: "swap", FamilyTitle: "Swap", DocsPage: "swap", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, SchemaFile: "swap.schema.json", SchemaPatch: stepmeta.PatchSwapToolSchema}
+}
+
+func kernelModuleDefinition() stepmeta.Definition {
+	return stepmeta.Definition{Kind: "KernelModule", Family: "kernel-module", FamilyTitle: "KernelModule", DocsPage: "kernel-module", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"name", "names"}, SchemaFile: "kernel-module.schema.json", SchemaPatch: stepmeta.PatchKernelModuleToolSchema, Ask: stepmeta.AskMetadata{MatchSignals: []string{"kernel", "module", "br_netfilter", "overlay", "kubernetes"}}}
+}
+
+func sysctlDefinition() stepmeta.Definition {
+	return stepmeta.Definition{Kind: "Sysctl", Family: "sysctl", FamilyTitle: "Sysctl", DocsPage: "sysctl", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, SchemaFile: "sysctl.schema.json", SchemaPatch: stepmeta.PatchSysctlToolSchema}
+}
+
+func writeSystemdUnitDefinition() stepmeta.Definition {
+	return stepmeta.Definition{Kind: "WriteSystemdUnit", Family: "systemd-unit", FamilyTitle: "SystemdUnit", DocsPage: "systemd-unit", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "systemd-unit.schema.json", SchemaPatch: stepmeta.PatchWriteSystemdUnitToolSchema, Example: "kind: WriteSystemdUnit\nspec:\n  path: /etc/systemd/system/kubelet.service\n  template: |\n    [Unit]\n    Description=Kubelet\n  daemonReload: true", Notes: []string{"`WriteSystemdUnit` only writes the unit file and optionally performs `daemonReload`.", "Use `ManageService` separately to enable, start, restart, or reload the unit after it is written."}}
+}
+
+func ensureDirectoryDefinition() stepmeta.Definition {
+	return stepmeta.Definition{Kind: "EnsureDirectory", Family: "directory", FamilyTitle: "Directory", DocsPage: "directory", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "directory.schema.json", SchemaPatch: stepmeta.PatchEnsureDirectoryToolSchema}
+}
+
+func createSymlinkDefinition() stepmeta.Definition {
+	return stepmeta.Definition{Kind: "CreateSymlink", Family: "symlink", FamilyTitle: "Symlink", DocsPage: "symlink", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "symlink.schema.json", SchemaPatch: stepmeta.PatchCreateSymlinkToolSchema}
+}
+
+func configureRepositoryDefinition() stepmeta.Definition {
+	return stepmeta.Definition{Kind: "ConfigureRepository", Family: "repository", FamilyTitle: "Repository", DocsPage: "repository", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "repository.configure.schema.json", SchemaPatch: stepmeta.PatchConfigureRepositoryToolSchema, Notes: []string{"`ConfigureRepository` only writes repository definition files. Use `RefreshRepository` when the package manager needs an explicit metadata refresh.", "Keep repository definitions mirror-specific rather than mutating the host's default online sources."}, Ask: stepmeta.AskMetadata{Capabilities: []string{"repository-setup"}, MatchSignals: []string{"repo", "repository", "mirror", "yum", "dnf", "apt"}, KeyFields: []string{"spec.format", "spec.path", "spec.repositories", "spec.replaceExisting", "spec.cleanupPaths"}, ValidationHints: []stepmeta.ValidationHint{{ErrorContains: "invalid map key", Fix: "Do not use whole-value template expressions for spec.repositories; inline YAML repository objects instead."}}, ConstrainedLiteralFields: []stepmeta.ConstrainedLiteralField{{Path: "spec.format", AllowedValues: []string{"auto", "deb", "rpm"}, Guidance: "Keep spec.format as a literal enum, not a vars template."}}}}
+}
+
+func refreshRepositoryDefinition() stepmeta.Definition {
+	return stepmeta.Definition{Kind: "RefreshRepository", Family: "repository", FamilyTitle: "Repository", DocsPage: "repository", DocsOrder: 20, Visibility: "public", Roles: []string{"apply"}, SchemaFile: "repository.refresh.schema.json", SchemaPatch: stepmeta.PatchRefreshRepositoryToolSchema, Notes: []string{"Use `RefreshRepository` after writing repo definitions and before package installs that depend on fresh metadata."}, Ask: stepmeta.AskMetadata{Capabilities: []string{"repository-setup"}, MatchSignals: []string{"repo", "repository", "metadata", "refresh", "cache", "dnf", "apt"}, KeyFields: []string{"spec.manager", "spec.clean", "spec.update", "spec.restrictToRepos", "spec.excludeRepos"}, ConstrainedLiteralFields: []stepmeta.ConstrainedLiteralField{{Path: "spec.manager", AllowedValues: []string{"auto", "apt", "dnf"}, Guidance: "Keep spec.manager as a literal enum, not a vars template."}}}}
+}
+
+func installPackageDefinition() stepmeta.Definition {
+	return stepmeta.Definition{Kind: "InstallPackage", Family: "package", FamilyTitle: "Package", DocsPage: "package", DocsOrder: 20, Visibility: "public", Roles: []string{"apply"}, SchemaFile: "package.install.schema.json", SchemaPatch: stepmeta.PatchInstallPackageToolSchema, Notes: []string{"Use `InstallPackage` during apply to install packages from configured local or mirrored repositories."}, Ask: stepmeta.AskMetadata{Capabilities: []string{"package-staging", "apply-artifact-consumer", "kubeadm-bootstrap"}, MatchSignals: []string{"install", "package", "packages", "rpm", "dnf", "apt"}, KeyFields: []string{"spec.packages", "spec.source", "spec.source.type", "spec.source.path", "spec.restrictToRepos", "spec.excludeRepos"}, ValidationHints: []stepmeta.ValidationHint{{ErrorContains: "invalid map key", Fix: "Do not use whole-value template expressions for package arrays; inline YAML list items under spec.packages."}, {ErrorContains: "spec.backend.mode must be one of", Fix: "Keep spec.backend.mode as the literal value `container`; do not replace enum fields with vars templates."}, {ErrorContains: "spec.backend.runtime must be one of", Fix: "Keep spec.backend.runtime as a literal enum such as `docker`, `podman`, or `auto`; do not replace it with a vars template."}, {ErrorContains: "spec.repo.type must be one of", Fix: "Keep spec.repo.type as a literal allowed value such as `rpm` or `deb-flat`; do not replace it with a vars template."}}}}
+}
+
+func downloadPackageDefinition() stepmeta.Definition {
+	return stepmeta.Definition{Kind: "DownloadPackage", Family: "package", FamilyTitle: "Package", DocsPage: "package", DocsOrder: 10, Visibility: "public", Roles: []string{"prepare"}, Outputs: []string{"artifacts"}, SchemaFile: "package.download.schema.json", SchemaPatch: stepmeta.PatchDownloadPackageToolSchema, Notes: []string{"Use `DownloadPackage` and `InstallPackage` with `ConfigureRepository` and `RefreshRepository` for a complete typed package-management flow.", "Omit `outputDir` unless you need a custom package location; deck uses `packages/` by default, or `packages/deb/<release>` and `packages/rpm/<release>` when `repo.type` is set.", "Keeping the same package list across `download` and `install` helps maintain offline parity.", "Use `restrictToRepos` on the `InstallPackage` step to prevent the node's default online repos from being consulted during an offline apply.", "When `repo` is set for `DownloadPackage`, deck expects `repo.type` and `distro.release` so it can build a `deb-flat` or `rpm` repository layout.", "Container-backed `DownloadPackage` exports completed artifacts into a host-owned cache and does not bind-mount deb/rpm package-manager cache directories."}, Ask: stepmeta.AskMetadata{Capabilities: []string{"prepare-artifacts", "package-staging"}, MatchSignals: []string{"download", "package", "packages", "rpm", "dnf", "air-gapped", "offline"}, KeyFields: []string{"spec.packages", "spec.distro", "spec.repo", "spec.backend"}, ValidationHints: []stepmeta.ValidationHint{{ErrorContains: "invalid map key", Fix: "Do not use whole-value template expressions for package arrays; inline YAML list items under spec.packages."}, {ErrorContains: "spec.backend.mode must be one of", Fix: "Keep spec.backend.mode as the literal value `container`; do not replace enum fields with vars templates."}, {ErrorContains: "spec.backend.runtime must be one of", Fix: "Keep spec.backend.runtime as a literal enum such as `docker`, `podman`, or `auto`; do not replace it with a vars template."}, {ErrorContains: "spec.repo.type must be one of", Fix: "Keep spec.repo.type as a literal allowed value such as `rpm` or `deb-flat`; do not replace it with a vars template."}, {ErrorContains: "spec.repo.path", Fix: "Do not invent spec.repo.path for DownloadPackage; use supported repo settings like spec.repo.type and distro.release instead."}, {ErrorContains: "spec.backend.image is required", Fix: "When using DownloadPackage backend.mode=container, include spec.backend.image as a literal container image."}}, ConstrainedLiteralFields: []stepmeta.ConstrainedLiteralField{{Path: "spec.backend.mode", AllowedValues: []string{"container"}, Guidance: "Keep spec.backend.mode as a literal enum, not a vars template."}, {Path: "spec.backend.runtime", AllowedValues: []string{"auto", "docker", "podman"}, Guidance: "Keep spec.backend.runtime as a literal enum, not a vars template."}, {Path: "spec.repo.type", AllowedValues: []string{"deb-flat", "rpm"}, Guidance: "Keep spec.repo.type as a literal enum, not a vars template."}}}}
+}

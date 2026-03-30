@@ -165,6 +165,12 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 			return err
 		}
 		for _, file := range result.Files {
+			if file.Delete {
+				if _, err := fmt.Fprintf(stdout, "--- %s\n<delete>\n", file.Path); err != nil {
+					return err
+				}
+				continue
+			}
 			if _, err := fmt.Fprintf(stdout, "--- %s\n%s", file.Path, file.Content); err != nil {
 				return err
 			}

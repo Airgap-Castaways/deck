@@ -27,9 +27,8 @@ Use this for Kubernetes-oriented host prep where swap policy matters.
 ```yaml
 kind: Swap
 spec:
-
-	disable: true
-	persist: true
+  disable: true
+  persist: true
 ```
 
 ### Spec Fields

@@ -102,3 +102,39 @@ func TestToolMetadataRemovesLegacyActionFieldDocs(t *testing.T) {
 		}
 	}
 }
+
+func TestRepresentativeToolMetadataStaysDetailed(t *testing.T) {
+	tests := []struct {
+		kind       string
+		fieldPaths []string
+	}{
+		{kind: "CheckHost", fieldPaths: []string{"spec.checks", "spec.failFast"}},
+		{kind: "DownloadImage", fieldPaths: []string{"spec.images", "spec.outputDir"}},
+		{kind: "LoadImage", fieldPaths: []string{"spec.sourceDir", "spec.runtime"}},
+		{kind: "DownloadPackage", fieldPaths: []string{"spec.packages", "spec.distro.family", "spec.backend.image"}},
+		{kind: "InstallPackage", fieldPaths: []string{"spec.packages", "spec.source.path"}},
+		{kind: "JoinKubeadm", fieldPaths: []string{"spec.joinFile", "spec.configFile"}},
+	}
+	for _, tc := range tests {
+		def, ok := workflowcontract.StepDefinitionForKey(workflowcontract.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: tc.kind})
+		if !ok {
+			t.Fatalf("missing step definition for %s", tc.kind)
+		}
+		meta := ToolMetaForDefinition(def)
+		if strings.TrimSpace(meta.Example) == "" {
+			t.Fatalf("expected example for %s", tc.kind)
+		}
+		if len(meta.Notes) == 0 {
+			t.Fatalf("expected operational notes for %s", tc.kind)
+		}
+		for _, fieldPath := range tc.fieldPaths {
+			field, ok := meta.FieldDocs[fieldPath]
+			if !ok {
+				t.Fatalf("expected field doc %s for %s", fieldPath, tc.kind)
+			}
+			if strings.TrimSpace(field.Description) == "" {
+				t.Fatalf("expected description for %s on %s", fieldPath, tc.kind)
+			}
+		}
+	}
+}

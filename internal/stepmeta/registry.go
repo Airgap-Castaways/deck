@@ -20,6 +20,7 @@ type Definition struct {
 	Roles       []string
 	Outputs     []string
 	SchemaFile  string
+	SchemaPatch func(root map[string]any)
 	Summary     string
 	WhenToUse   string
 	Example     string
@@ -28,10 +29,9 @@ type Definition struct {
 }
 
 type AskMetadata struct {
+	Capabilities             []string
 	MatchSignals             []string
 	KeyFields                []string
-	CommonMistakes           []string
-	RepairHints              []string
 	ValidationHints          []ValidationHint
 	ConstrainedLiteralFields []ConstrainedLiteralField
 	QualityRules             []QualityRule
@@ -92,20 +92,19 @@ type Entry struct {
 }
 
 var (
-	mu           sync.RWMutex
-	entries      = map[string]registeredDef{}
-	schemaByKind = map[string]registeredSchema{}
-	stepspecFS   fs.FS
+	mu         sync.RWMutex
+	entries    = map[string]registeredDef{}
+	stepspecFS fs.FS
 )
 
 type registeredDef struct {
 	Definition Definition
 	TypeName   string
 	Type       reflect.Type
+	Schema     registeredSchema
 }
 
 type registeredSchema struct {
-	Type   reflect.Type
 	Patch  func(root map[string]any)
 	Source SourceRef
 }
@@ -135,7 +134,12 @@ func MustRegister[T any](def Definition) struct{} {
 	if _, exists := entries[kind]; exists {
 		panic(fmt.Sprintf("stepmeta: duplicate registration for %s", kind))
 	}
-	entries[kind] = registeredDef{Definition: def, TypeName: typeName, Type: t}
+	registered := registeredDef{Definition: def, TypeName: typeName, Type: t}
+	if def.SchemaPatch != nil {
+		file, line := callerSource()
+		registered.Schema = registeredSchema{Patch: def.SchemaPatch, Source: SourceRef{File: file, Line: line}}
+	}
+	entries[kind] = registered
 	return struct{}{}
 }
 
@@ -153,7 +157,6 @@ func RegisteredKinds() []string {
 func Lookup(kind string) (Entry, bool, error) {
 	mu.RLock()
 	registered, ok := entries[strings.TrimSpace(kind)]
-	schemaRegistered, schemaOK := schemaByKind[strings.TrimSpace(kind)]
 	mu.RUnlock()
 	if !ok {
 		return Entry{}, false, nil
@@ -164,43 +167,14 @@ func Lookup(kind string) (Entry, bool, error) {
 		return Entry{}, true, err
 	}
 	entry := Entry{Definition: cloneDefinition(registered.Definition), TypeName: typeName, Docs: docs}
-	if schemaOK {
-		entry.Schema = Schema{SpecType: reflect.New(schemaRegistered.Type).Interface(), Patch: schemaRegistered.Patch, Source: schemaRegistered.Source}
+	if registered.Schema.Patch != nil {
+		entry.Schema = Schema{SpecType: reflect.New(registered.Type).Interface(), Patch: registered.Schema.Patch, Source: registered.Schema.Source}
 	}
 	entry.Docs = mergeDefinitionDocs(entry.Definition, entry.Docs)
 	if err := validateEntry(entry); err != nil {
 		return Entry{}, true, err
 	}
 	return entry, true, nil
-}
-
-func MustRegisterSchema[T any](kind string, patch func(root map[string]any)) struct{} {
-	kind = strings.TrimSpace(kind)
-	if kind == "" {
-		panic("stepmeta: schema kind is required")
-	}
-	if patch == nil {
-		panic(fmt.Sprintf("stepmeta: schema patch is required for %s", kind))
-	}
-	var zero T
-	t := reflect.TypeOf(zero)
-	if t == nil {
-		panic(fmt.Sprintf("stepmeta: could not resolve schema reflect type for %s", kind))
-	}
-	for t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	if t.Kind() != reflect.Struct {
-		panic(fmt.Sprintf("stepmeta: schema type for %s must be a struct", kind))
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if _, exists := schemaByKind[kind]; exists {
-		panic(fmt.Sprintf("stepmeta: duplicate schema registration for %s", kind))
-	}
-	file, line := callerSource()
-	schemaByKind[kind] = registeredSchema{Type: t, Patch: patch, Source: SourceRef{File: file, Line: line}}
-	return struct{}{}
 }
 
 func typeNameFor[T any]() string {
@@ -220,10 +194,9 @@ func cloneDefinition(def Definition) Definition {
 	cloned.Roles = append([]string(nil), def.Roles...)
 	cloned.Outputs = append([]string(nil), def.Outputs...)
 	cloned.Notes = append([]string(nil), def.Notes...)
+	cloned.Ask.Capabilities = append([]string(nil), def.Ask.Capabilities...)
 	cloned.Ask.MatchSignals = append([]string(nil), def.Ask.MatchSignals...)
 	cloned.Ask.KeyFields = append([]string(nil), def.Ask.KeyFields...)
-	cloned.Ask.CommonMistakes = append([]string(nil), def.Ask.CommonMistakes...)
-	cloned.Ask.RepairHints = append([]string(nil), def.Ask.RepairHints...)
 	cloned.Ask.AntiSignals = append([]string(nil), def.Ask.AntiSignals...)
 	cloned.Ask.ValidationHints = append([]ValidationHint(nil), def.Ask.ValidationHints...)
 	cloned.Ask.QualityRules = append([]QualityRule(nil), def.Ask.QualityRules...)

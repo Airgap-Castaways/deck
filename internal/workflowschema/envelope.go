@@ -39,48 +39,8 @@ func stepEnvelopeSchema(kind, title, description, visibility string) map[string]
 	}
 }
 
-func bundleRefSchema() map[string]any {
-	return map[string]any{
-		"type":                 "object",
-		"additionalProperties": false,
-		"required":             []any{"root", "path"},
-		"properties": map[string]any{
-			"root": enumStringSchema("files", "images", "packages"),
-			"path": minLenStringSchema(),
-		},
-	}
-}
-
-func enumStringSchema(values ...string) map[string]any {
-	return map[string]any{"type": "string", "enum": toAnySlice(values)}
-}
-
-func minLenStringSchema() map[string]any {
-	return map[string]any{"type": "string", "minLength": 1}
-}
-
 func durationStringSchema() map[string]any {
 	return map[string]any{"type": "string", "pattern": "^[0-9]+(ms|s|m|h)$"}
-}
-
-func modeSchema() map[string]any {
-	return map[string]any{"type": "string", "pattern": "^[0-7]{4}$"}
-}
-
-func sha256Schema() map[string]any {
-	return map[string]any{"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}
-}
-
-func stringArraySchema(minItems int, minLen bool) map[string]any {
-	item := map[string]any{"type": "string"}
-	if minLen {
-		item["minLength"] = 1
-	}
-	field := map[string]any{"type": "array", "items": item}
-	if minItems > 0 {
-		field["minItems"] = minItems
-	}
-	return field
 }
 
 func schemaFileName(kind string) string {

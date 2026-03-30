@@ -2,6 +2,7 @@ package structurededit
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	toml "github.com/pelletier/go-toml/v2"
@@ -90,5 +91,49 @@ func TestApplyRejectsArrayIndexOutOfRange(t *testing.T) {
 	_, err := Apply(FormatJSON, []byte(`{"plugins":[]}`), []stepspec.StructuredEdit{{Op: "set", RawPath: "plugins.2.type", Value: "bridge"}})
 	if err == nil {
 		t.Fatalf("expected array range error")
+	}
+}
+
+func TestApplyYAMLInsert(t *testing.T) {
+	raw := []byte("steps:\n  - id: first\n    kind: Command\n    spec:\n      command: [true]\n  - id: third\n    kind: Command\n    spec:\n      command: [true]\n")
+	updated, err := Apply(FormatYAML, raw, []stepspec.StructuredEdit{{Op: "insert", RawPath: "steps.1", Value: map[string]any{"id": "second", "kind": "Command", "spec": map[string]any{"command": []any{"true"}}}}})
+	if err != nil {
+		t.Fatalf("Apply insert failed: %v", err)
+	}
+	text := string(updated)
+	for _, want := range []string{"id: first", "id: second", "id: third"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected %q in inserted YAML, got %q", want, text)
+		}
+	}
+	if strings.Index(text, "id: second") < strings.Index(text, "id: first") || strings.Index(text, "id: second") > strings.Index(text, "id: third") {
+		t.Fatalf("expected inserted element between first and third, got %q", text)
+	}
+}
+
+func TestParsePathSupportsBracketIndexes(t *testing.T) {
+	segments, err := ParsePath("steps[3].spec.timeout")
+	if err != nil {
+		t.Fatalf("ParsePath bracket syntax: %v", err)
+	}
+	if len(segments) != 4 || segments[0].key != "steps" || !segments[1].isIndex || segments[1].index != 3 || segments[2].key != "spec" || segments[3].key != "timeout" {
+		t.Fatalf("unexpected parsed segments: %#v", segments)
+	}
+}
+
+func TestParsePathSupportsJSONPointerAndQuotedKeys(t *testing.T) {
+	segments, err := ParsePath(`/a/b~1c`)
+	if err != nil {
+		t.Fatalf("ParsePath pointer: %v", err)
+	}
+	if len(segments) != 2 || segments[0].key != "a" || segments[1].key != "b/c" {
+		t.Fatalf("unexpected pointer segments: %#v", segments)
+	}
+	segments, err = ParsePath(`a["b.c"]`)
+	if err != nil {
+		t.Fatalf("ParsePath quoted bracket: %v", err)
+	}
+	if len(segments) != 2 || segments[0].key != "a" || segments[1].key != "b.c" {
+		t.Fatalf("unexpected quoted segments: %#v", segments)
 	}
 }

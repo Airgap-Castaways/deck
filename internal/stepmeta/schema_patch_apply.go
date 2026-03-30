@@ -1,33 +1,25 @@
-package workflowschema
-
-import (
-	"github.com/Airgap-Castaways/deck/internal/stepmeta"
-	"github.com/Airgap-Castaways/deck/internal/stepspec"
-)
+package stepmeta
 
 var (
-	_ = stepmeta.MustRegisterSchema[stepspec.CheckHost]("CheckHost", patchCheckHostToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.Command]("Command", patchCommandToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.WriteContainerdConfig]("WriteContainerdConfig", patchWriteContainerdConfigToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.WriteContainerdRegistryHosts]("WriteContainerdRegistryHosts", patchWriteContainerdRegistryHostsToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.EnsureDirectory]("EnsureDirectory", patchEnsureDirectoryToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.DownloadImage]("DownloadImage", patchDownloadImageToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.LoadImage]("LoadImage", patchImageLoadToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.VerifyImage]("VerifyImage", patchVerifyImageToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.KernelModule]("KernelModule", patchKernelModuleToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.KubeadmInit]("InitKubeadm", patchInitKubeadmToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.KubeadmJoin]("JoinKubeadm", patchJoinKubeadmToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.KubeadmReset]("ResetKubeadm", patchResetKubeadmToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.KubeadmUpgrade]("UpgradeKubeadm", patchUpgradeKubeadmToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.ClusterCheck]("CheckCluster", patchCheckClusterToolSchema)
+	PatchCommandToolSchema                      = patchCommandToolSchema
+	PatchWriteContainerdConfigToolSchema        = patchWriteContainerdConfigToolSchema
+	PatchWriteContainerdRegistryHostsToolSchema = patchWriteContainerdRegistryHostsToolSchema
+	PatchEnsureDirectoryToolSchema              = patchEnsureDirectoryToolSchema
+	PatchDownloadImageToolSchema                = patchDownloadImageToolSchema
+	PatchImageLoadToolSchema                    = patchImageLoadToolSchema
+	PatchVerifyImageToolSchema                  = patchVerifyImageToolSchema
+	PatchCheckHostToolSchema                    = patchCheckHostToolSchema
+	PatchKernelModuleToolSchema                 = patchKernelModuleToolSchema
+	PatchInitKubeadmToolSchema                  = patchInitKubeadmToolSchema
+	PatchJoinKubeadmToolSchema                  = patchJoinKubeadmToolSchema
+	PatchResetKubeadmToolSchema                 = patchResetKubeadmToolSchema
+	PatchUpgradeKubeadmToolSchema               = patchUpgradeKubeadmToolSchema
+	PatchCheckClusterToolSchema                 = patchCheckClusterToolSchema
 )
 
 func patchCommandToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.Command{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	properties := propertyMap(spec)
 	setMap(properties, "command", stringArraySchema(1, false))
 	setMap(properties, "env", map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}})
@@ -39,10 +31,7 @@ func patchCommandToolSchema(root map[string]any) {
 
 func patchWriteContainerdConfigToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.WriteContainerdConfig{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	properties := propertyMap(spec)
 	setMap(properties, "path", minLenStringSchema())
@@ -80,10 +69,7 @@ func patchWriteContainerdConfigToolSchema(root map[string]any) {
 
 func patchWriteContainerdRegistryHostsToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.WriteContainerdRegistryHosts{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	properties := propertyMap(spec)
 	setMap(properties, "path", minLenStringSchema())
 	if registryHosts, ok := properties["registryHosts"].(map[string]any); ok {
@@ -104,10 +90,7 @@ func patchWriteContainerdRegistryHostsToolSchema(root map[string]any) {
 
 func patchEnsureDirectoryToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.EnsureDirectory{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	properties := propertyMap(spec)
 	setMap(properties, "path", minLenStringSchema())
 	setMap(properties, "mode", modeSchema())
@@ -117,10 +100,7 @@ func patchEnsureDirectoryToolSchema(root map[string]any) {
 
 func patchDownloadImageToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.DownloadImage{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	spec["required"] = []any{"images"}
 	properties := propertyMap(spec)
@@ -133,10 +113,7 @@ func patchDownloadImageToolSchema(root map[string]any) {
 
 func patchImageLoadToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.LoadImage{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	spec["required"] = []any{"images"}
 	properties := propertyMap(spec)
@@ -149,10 +126,7 @@ func patchImageLoadToolSchema(root map[string]any) {
 
 func patchVerifyImageToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.VerifyImage{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	spec["required"] = []any{"images"}
 	properties := propertyMap(spec)
@@ -197,10 +171,7 @@ func imageBackendSchema() map[string]any {
 
 func patchCheckHostToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.CheckHost{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	properties := propertyMap(spec)
 	setMap(properties, "checks", map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "enum": []any{"os", "arch", "kernelModules", "swap", "binaries"}}})
 	setMap(properties, "binaries", stringArraySchema(0, false))
@@ -211,10 +182,7 @@ func patchCheckHostToolSchema(root map[string]any) {
 
 func patchKernelModuleToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.KernelModule{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	properties := propertyMap(spec)
 	setMap(properties, "name", minLenStringSchema())
@@ -231,10 +199,7 @@ func patchKernelModuleToolSchema(root map[string]any) {
 
 func patchInitKubeadmToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.KubeadmInit{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	spec["required"] = []any{"outputJoinFile"}
 	properties := propertyMap(spec)
@@ -245,10 +210,7 @@ func patchInitKubeadmToolSchema(root map[string]any) {
 
 func patchJoinKubeadmToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.KubeadmJoin{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	spec["oneOf"] = []any{
 		map[string]any{"required": []any{"joinFile"}},
@@ -263,10 +225,7 @@ func patchJoinKubeadmToolSchema(root map[string]any) {
 
 func patchResetKubeadmToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.KubeadmReset{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	properties := propertyMap(spec)
 	setMap(properties, "force", map[string]any{"type": "boolean", "default": false})
@@ -277,10 +236,7 @@ func patchResetKubeadmToolSchema(root map[string]any) {
 
 func patchUpgradeKubeadmToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.KubeadmUpgrade{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	spec["required"] = []any{"kubernetesVersion"}
 	properties := propertyMap(spec)
@@ -292,10 +248,7 @@ func patchUpgradeKubeadmToolSchema(root map[string]any) {
 
 func patchCheckClusterToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.ClusterCheck{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	properties := propertyMap(spec)
 	setMap(properties, "kubeconfig", minLenStringSchema())
 	setMap(properties, "interval", durationStringSchema())

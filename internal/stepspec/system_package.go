@@ -1,7 +1,5 @@
 package stepspec
 
-import "github.com/Airgap-Castaways/deck/internal/stepmeta"
-
 // Start, stop, enable, disable, restart, or reload local services.
 // @deck.when Use this after config changes that need a service lifecycle action.
 // @deck.example
@@ -38,8 +36,6 @@ type ManageService struct {
 	Timeout string `json:"timeout"`
 }
 
-var _ = stepmeta.MustRegister[ManageService](stepmeta.Definition{Kind: "ManageService", Family: "service", FamilyTitle: "Service", DocsPage: "service", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"name", "names"}, SchemaFile: "service.schema.json", Ask: stepmeta.AskMetadata{MatchSignals: []string{"service", "enable", "restart", "reload", "systemctl"}, KeyFields: []string{"spec.name", "spec.names", "spec.state", "spec.enabled"}}})
-
 // Enable or disable swap and its persistence.
 // @deck.when Use this for Kubernetes-oriented host prep where swap policy matters.
 // @deck.example
@@ -62,8 +58,6 @@ type Swap struct {
 	// @deck.example 2m
 	Timeout string `json:"timeout"`
 }
-
-var _ = stepmeta.MustRegister[Swap](stepmeta.Definition{Kind: "Swap", Family: "swap", FamilyTitle: "Swap", DocsPage: "swap", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, SchemaFile: "swap.schema.json"})
 
 // Load and persist kernel modules.
 // @deck.when Use this for modules that must be present before networking or container runtime setup.
@@ -96,8 +90,6 @@ type KernelModule struct {
 	Timeout string `json:"timeout"`
 }
 
-var _ = stepmeta.MustRegister[KernelModule](stepmeta.Definition{Kind: "KernelModule", Family: "kernel-module", FamilyTitle: "KernelModule", DocsPage: "kernel-module", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"name", "names"}, SchemaFile: "kernel-module.schema.json", Ask: stepmeta.AskMetadata{MatchSignals: []string{"kernel", "module", "br_netfilter", "overlay", "kubernetes"}}})
-
 // Write and optionally apply sysctl values.
 // @deck.when Use this for kernel tunables that must survive reboot and may need immediate application.
 // @deck.example
@@ -122,8 +114,6 @@ type Sysctl struct {
 	// @deck.example 2m
 	Timeout string `json:"timeout"`
 }
-
-var _ = stepmeta.MustRegister[Sysctl](stepmeta.Definition{Kind: "Sysctl", Family: "sysctl", FamilyTitle: "Sysctl", DocsPage: "sysctl", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, SchemaFile: "sysctl.schema.json"})
 
 // Write a systemd unit file on the node.
 // @deck.when Use this when workflows need to install or override a custom unit definition.
@@ -162,8 +152,6 @@ type WriteSystemdUnit struct {
 	Timeout string `json:"timeout"`
 }
 
-var _ = stepmeta.MustRegister[WriteSystemdUnit](stepmeta.Definition{Kind: "WriteSystemdUnit", Family: "systemd-unit", FamilyTitle: "SystemdUnit", DocsPage: "systemd-unit", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "systemd-unit.schema.json", Example: "kind: WriteSystemdUnit\nspec:\n  path: /etc/systemd/system/kubelet.service\n  template: |\n    [Unit]\n    Description=Kubelet\n  daemonReload: true", Notes: []string{"`WriteSystemdUnit` only writes the unit file and optionally performs `daemonReload`.", "Use `ManageService` separately to enable, start, restart, or reload the unit after it is written."}})
-
 // Ensure a directory exists with an optional mode.
 // @deck.when Use this before writing files or placing extracted content.
 // @deck.example
@@ -180,8 +168,6 @@ type EnsureDirectory struct {
 	// @deck.example 0755
 	Mode string `json:"mode"`
 }
-
-var _ = stepmeta.MustRegister[EnsureDirectory](stepmeta.Definition{Kind: "EnsureDirectory", Family: "directory", FamilyTitle: "Directory", DocsPage: "directory", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "directory.schema.json"})
 
 // Create or replace a symbolic link.
 // @deck.when Use this when tools or runtimes expect a stable path alias.
@@ -212,8 +198,6 @@ type CreateSymlink struct {
 	// @deck.example true
 	IgnoreMissingTarget bool `json:"ignoreMissingTarget"`
 }
-
-var _ = stepmeta.MustRegister[CreateSymlink](stepmeta.Definition{Kind: "CreateSymlink", Family: "symlink", FamilyTitle: "Symlink", DocsPage: "symlink", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "symlink.schema.json"})
 
 // Write deb or rpm repository definitions.
 // @deck.when Use this before refreshing caches or installing packages from a local mirror.
@@ -253,8 +237,6 @@ type ConfigureRepository struct {
 	// @deck.example [{baseurl:http://repo.local/debian,trusted:true}]
 	Repositories []RepositoryEntry `json:"repositories"`
 }
-
-var _ = stepmeta.MustRegister[ConfigureRepository](stepmeta.Definition{Kind: "ConfigureRepository", Family: "repository", FamilyTitle: "Repository", DocsPage: "repository", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "repository.configure.schema.json", Notes: []string{"`ConfigureRepository` only writes repository definition files. Use `RefreshRepository` when the package manager needs an explicit metadata refresh.", "Keep repository definitions mirror-specific rather than mutating the host's default online sources."}, Ask: stepmeta.AskMetadata{MatchSignals: []string{"repo", "repository", "mirror", "yum", "dnf", "apt"}, KeyFields: []string{"spec.format", "spec.path", "spec.repositories", "spec.replaceExisting", "spec.cleanupPaths"}, CommonMistakes: []string{"spec.repositories must stay a real YAML array of repository objects, not a scalar shortcut.", "Do not set spec.repositories to `{{ .vars.* }}` or any other whole-value template expression; inline repository objects instead."}, RepairHints: []string{"Inline repository objects under spec.repositories rather than using a scalar or whole-value template."}, ValidationHints: []stepmeta.ValidationHint{{ErrorContains: "invalid map key", Fix: "Do not use whole-value template expressions for spec.repositories; inline YAML repository objects instead."}}, ConstrainedLiteralFields: []stepmeta.ConstrainedLiteralField{{Path: "spec.format", AllowedValues: []string{"auto", "deb", "rpm"}, Guidance: "Keep spec.format as a literal enum, not a vars template."}}}})
 
 type RepositoryEntry struct {
 	// RPM repository ID.
@@ -324,8 +306,6 @@ type RefreshRepository struct {
 	Timeout string `json:"timeout"`
 }
 
-var _ = stepmeta.MustRegister[RefreshRepository](stepmeta.Definition{Kind: "RefreshRepository", Family: "repository", FamilyTitle: "Repository", DocsPage: "repository", DocsOrder: 20, Visibility: "public", Roles: []string{"apply"}, SchemaFile: "repository.refresh.schema.json", Ask: stepmeta.AskMetadata{MatchSignals: []string{"repo", "repository", "metadata", "refresh", "cache", "dnf", "apt"}, KeyFields: []string{"spec.manager", "spec.clean", "spec.update", "spec.restrictToRepos", "spec.excludeRepos"}, ConstrainedLiteralFields: []stepmeta.ConstrainedLiteralField{{Path: "spec.manager", AllowedValues: []string{"auto", "apt", "dnf"}, Guidance: "Keep spec.manager as a literal enum, not a vars template."}}}})
-
 type InstallPackageSource struct {
 	// Source type. Currently only `local-repo` is supported.
 	// @deck.example local-repo
@@ -362,8 +342,6 @@ type InstallPackage struct {
 	// @deck.example 20m
 	Timeout string `json:"timeout"`
 }
-
-var _ = stepmeta.MustRegister[InstallPackage](stepmeta.Definition{Kind: "InstallPackage", Family: "package", FamilyTitle: "Package", DocsPage: "package", DocsOrder: 20, Visibility: "public", Roles: []string{"apply"}, SchemaFile: "package.install.schema.json", Ask: stepmeta.AskMetadata{MatchSignals: []string{"install", "package", "packages", "rpm", "dnf", "apt"}, KeyFields: []string{"spec.packages", "spec.source", "spec.source.type", "spec.source.path", "spec.restrictToRepos", "spec.excludeRepos"}, CommonMistakes: []string{"spec.packages must stay a real YAML array, not a quoted template string.", "Do not set spec.packages to `{{ .vars.* }}` or any other whole-value template expression; inline package items instead.", "Keep constrained enum fields such as spec.backend.mode, spec.backend.runtime, and spec.repo.type as literal allowed values instead of vars templates."}, RepairHints: []string{"Inline concrete YAML arrays for spec.packages rather than using a whole-value template expression.", "Keep enum-like fields such as spec.backend.mode, spec.backend.runtime, and spec.repo.type as literal schema-supported values."}, ValidationHints: []stepmeta.ValidationHint{{ErrorContains: "invalid map key", Fix: "Do not use whole-value template expressions for package arrays; inline YAML list items under spec.packages."}, {ErrorContains: "spec.backend.mode must be one of", Fix: "Keep spec.backend.mode as the literal value `container`; do not replace enum fields with vars templates."}, {ErrorContains: "spec.backend.runtime must be one of", Fix: "Keep spec.backend.runtime as a literal enum such as `docker`, `podman`, or `auto`; do not replace it with a vars template."}, {ErrorContains: "spec.repo.type must be one of", Fix: "Keep spec.repo.type as a literal allowed value such as `rpm` or `deb-flat`; do not replace it with a vars template."}}}})
 
 type DownloadPackageDistro struct {
 	// Distribution family used to resolve package tooling.
@@ -451,5 +429,3 @@ type DownloadPackage struct {
 	// @deck.example 30m
 	Timeout string `json:"timeout"`
 }
-
-var _ = stepmeta.MustRegister[DownloadPackage](stepmeta.Definition{Kind: "DownloadPackage", Family: "package", FamilyTitle: "Package", DocsPage: "package", DocsOrder: 10, Visibility: "public", Roles: []string{"prepare"}, Outputs: []string{"artifacts"}, SchemaFile: "package.download.schema.json", Notes: []string{"Use `DownloadPackage` and `InstallPackage` with `ConfigureRepository` and `RefreshRepository` for a complete typed package-management flow.", "Omit `outputDir` unless you need a custom package location; deck uses `packages/` by default, or `packages/deb/<release>` and `packages/rpm/<release>` when `repo.type` is set.", "Keeping the same package list across `download` and `install` helps maintain offline parity.", "Use `restrictToRepos` on the `InstallPackage` step to prevent the node's default online repos from being consulted during an offline apply.", "When `repo` is set for `DownloadPackage`, deck expects `repo.type` and `distro.release` so it can build a `deb-flat` or `rpm` repository layout.", "Container-backed `DownloadPackage` exports completed artifacts into a host-owned cache and does not bind-mount deb/rpm package-manager cache directories."}, Ask: stepmeta.AskMetadata{MatchSignals: []string{"download", "package", "packages", "rpm", "dnf", "air-gapped", "offline"}, KeyFields: []string{"spec.packages", "spec.distro", "spec.repo", "spec.backend"}, CommonMistakes: []string{"spec.packages must stay a real YAML array, not a quoted template string.", "Do not set spec.packages to `{{ .vars.* }}` or any other whole-value template expression; inline package items instead.", "Keep constrained enum fields such as spec.backend.mode, spec.backend.runtime, and spec.repo.type as literal allowed values instead of vars templates."}, RepairHints: []string{"Inline concrete YAML arrays for spec.packages rather than using a whole-value template expression.", "Keep enum-like fields such as spec.backend.mode, spec.backend.runtime, and spec.repo.type as literal schema-supported values."}, ValidationHints: []stepmeta.ValidationHint{{ErrorContains: "invalid map key", Fix: "Do not use whole-value template expressions for package arrays; inline YAML list items under spec.packages."}, {ErrorContains: "spec.backend.mode must be one of", Fix: "Keep spec.backend.mode as the literal value `container`; do not replace enum fields with vars templates."}, {ErrorContains: "spec.backend.runtime must be one of", Fix: "Keep spec.backend.runtime as a literal enum such as `docker`, `podman`, or `auto`; do not replace it with a vars template."}, {ErrorContains: "spec.repo.type must be one of", Fix: "Keep spec.repo.type as a literal allowed value such as `rpm` or `deb-flat`; do not replace it with a vars template."}}, ConstrainedLiteralFields: []stepmeta.ConstrainedLiteralField{{Path: "spec.backend.mode", AllowedValues: []string{"container"}, Guidance: "Keep spec.backend.mode as a literal enum, not a vars template."}, {Path: "spec.backend.runtime", AllowedValues: []string{"auto", "docker", "podman"}, Guidance: "Keep spec.backend.runtime as a literal enum, not a vars template."}, {Path: "spec.repo.type", AllowedValues: []string{"deb-flat", "rpm"}, Guidance: "Keep spec.repo.type as a literal enum, not a vars template."}}}})

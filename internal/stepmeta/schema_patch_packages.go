@@ -1,23 +1,15 @@
-package workflowschema
-
-import (
-	"github.com/Airgap-Castaways/deck/internal/stepmeta"
-	"github.com/Airgap-Castaways/deck/internal/stepspec"
-)
+package stepmeta
 
 var (
-	_ = stepmeta.MustRegisterSchema[stepspec.RefreshRepository]("RefreshRepository", patchRefreshRepositoryToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.DownloadPackage]("DownloadPackage", patchDownloadPackageToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.InstallPackage]("InstallPackage", patchInstallPackageToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.ConfigureRepository]("ConfigureRepository", patchConfigureRepositoryToolSchema)
+	PatchRefreshRepositoryToolSchema   = patchRefreshRepositoryToolSchema
+	PatchDownloadPackageToolSchema     = patchDownloadPackageToolSchema
+	PatchInstallPackageToolSchema      = patchInstallPackageToolSchema
+	PatchConfigureRepositoryToolSchema = patchConfigureRepositoryToolSchema
 )
 
 func patchRefreshRepositoryToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.RefreshRepository{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	properties := propertyMap(spec)
 	setMap(properties, "manager", enumStringSchema("auto", "apt", "dnf"))
@@ -34,10 +26,7 @@ func patchRefreshRepositoryToolSchema(root map[string]any) {
 
 func patchDownloadPackageToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.DownloadPackage{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	properties := propertyMap(spec)
 	setMap(properties, "packages", stringArraySchema(1, false))
@@ -70,10 +59,7 @@ func patchDownloadPackageToolSchema(root map[string]any) {
 
 func patchInstallPackageToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.InstallPackage{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	properties := propertyMap(spec)
 	if source, ok := properties["source"].(map[string]any); ok {
@@ -91,10 +77,7 @@ func patchInstallPackageToolSchema(root map[string]any) {
 
 func patchConfigureRepositoryToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.ConfigureRepository{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	properties := propertyMap(spec)
 	setMap(properties, "format", enumStringSchema("auto", "deb", "rpm"))
 	setMap(properties, "path", map[string]any{"type": "string"})

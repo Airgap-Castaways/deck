@@ -3,9 +3,9 @@
 
 Reference documentation for each typed workflow step supported by deck.
 
-## [ClusterCheck](cluster-check.md)
+## [Cluster Check](cluster-check.md)
 
-- **Summary**: Reference for the `ClusterCheck` family of typed workflow steps.
+- **Summary**: Reference for the `Cluster Check` family of typed workflow steps.
 - **Kinds**: `CheckCluster`
 
 ## [Command](command.md)
@@ -28,9 +28,9 @@ Reference documentation for each typed workflow step supported by deck.
 - **Summary**: Reference for the `File` family of typed workflow steps.
 - **Kinds**: `DownloadFile`, `WriteFile`, `CopyFile`, `EditFile`, `EditTOML`, `EditYAML`, `EditJSON`, `ExtractArchive`
 
-## [HostCheck](host-check.md)
+## [Host Check](host-check.md)
 
-- **Summary**: Reference for the `HostCheck` family of typed workflow steps.
+- **Summary**: Reference for the `Host Check` family of typed workflow steps.
 - **Kinds**: `CheckHost`
 
 ## [Image](image.md)
@@ -38,9 +38,9 @@ Reference documentation for each typed workflow step supported by deck.
 - **Summary**: Reference for the `Image` family of typed workflow steps.
 - **Kinds**: `DownloadImage`, `LoadImage`, `VerifyImage`
 
-## [KernelModule](kernel-module.md)
+## [Kernel Module](kernel-module.md)
 
-- **Summary**: Reference for the `KernelModule` family of typed workflow steps.
+- **Summary**: Reference for the `Kernel Module` family of typed workflow steps.
 - **Kinds**: `KernelModule`
 
 ## [Kubeadm](kubeadm.md)
@@ -78,9 +78,9 @@ Reference documentation for each typed workflow step supported by deck.
 - **Summary**: Reference for the `Sysctl` family of typed workflow steps.
 - **Kinds**: `Sysctl`
 
-## [SystemdUnit](systemd-unit.md)
+## [Systemd Unit](systemd-unit.md)
 
-- **Summary**: Reference for the `SystemdUnit` family of typed workflow steps.
+- **Summary**: Reference for the `Systemd Unit` family of typed workflow steps.
 - **Kinds**: `WriteSystemdUnit`
 
 ## [Wait](wait.md)

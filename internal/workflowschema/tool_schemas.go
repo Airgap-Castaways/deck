@@ -45,22 +45,35 @@ func ToolSchemaDefinitions() (map[string]map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		generated[def.Step.SchemaFile] = schema
+		entry, ok, err := stepmeta.LookupCatalogEntry(def.Step.Kind)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, fmt.Errorf("missing stepmeta entry for %s", def.Step.Kind)
+		}
+		generated[stepmeta.ProjectWorkflow(entry, def.Step.Category, def.Step.ToolSchemaGenerator).SchemaFile] = schema
 	}
 	return generated, nil
 }
 
 func generateToolSchemaFromRegistry(def workflowexec.BuiltInTypeDefinition) (map[string]any, error) {
-	root := stepEnvelopeSchema(def.Step.Kind, def.Step.Kind+"Step", def.Step.Summary, def.Step.Visibility)
+	entry, ok, err := stepmeta.LookupCatalogEntry(def.Step.Kind)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("missing stepmeta entry for %s", def.Step.Kind)
+	}
+	workflowMeta := stepmeta.ProjectWorkflow(entry, def.Step.Category, def.Step.ToolSchemaGenerator)
+	root := stepEnvelopeSchema(workflowMeta.Kind, workflowMeta.Kind+"Step", workflowMeta.Summary, workflowMeta.Visibility)
 	spec, err := reflectedSpecSchema(def.Schema.SpecType)
 	if err != nil {
 		return nil, err
 	}
 	setMap(propertyMap(root), "spec", spec)
 	def.Schema.Patch(root)
-	if entry, ok, err := stepmeta.LookupCatalogEntry(def.Step.Kind); err == nil && ok {
-		applyStepDocs(root, entry)
-	}
+	applyStepDocs(root, entry)
 	return root, nil
 }
 

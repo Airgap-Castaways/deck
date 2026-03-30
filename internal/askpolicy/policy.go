@@ -335,7 +335,17 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 		generatedPaths := generatedMap(gen.Files)
 		for _, path := range brief.TargetPaths {
 			if _, ok := generatedPaths[path]; !ok {
-				findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_target_missing", Message: fmt.Sprintf("generated output is missing expected target from authoring brief: %s", path), Fix: "Return the expected workflow files for the full workspace-scoped request", Path: path})
+				severity := "blocking"
+				code := "brief_target_missing"
+				message := fmt.Sprintf("generated output is missing expected target from authoring brief: %s", path)
+				fix := "Return the expected workflow files for the full workspace-scoped request"
+				if isAdvisoryComponentTarget(path, brief) {
+					severity = "advisory"
+					code = "brief_component_target_advisory"
+					message = fmt.Sprintf("authoring brief recommends extracted component target but schema-valid entry workflows take priority for the first draft: %s", path)
+					fix = "Start with schema-valid entry workflows, then extract reusable component files after the draft validates"
+				}
+				findings = append(findings, EvaluationFinding{Severity: severity, Code: code, Message: message, Fix: fix, Path: path})
 			}
 		}
 	}
@@ -345,12 +355,32 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 		consumer := filepath.ToSlash(strings.TrimSpace(contract.ConsumerPath))
 		if producer != "" {
 			if _, ok := generatedPaths[producer]; !ok {
-				findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "execution_model_producer_missing", Message: fmt.Sprintf("generated output is missing artifact producer required by execution model: %s", producer), Fix: "Generate the workflow file that produces staged artifacts before apply consumes them", Path: producer})
+				severity := "blocking"
+				code := "execution_model_producer_missing"
+				message := fmt.Sprintf("generated output is missing artifact producer required by execution model: %s", producer)
+				fix := "Generate the workflow file that produces staged artifacts before apply consumes them"
+				if isAdvisoryComponentTarget(producer, brief) {
+					severity = "advisory"
+					code = "execution_model_component_producer_advisory"
+					message = fmt.Sprintf("execution model recommends an extracted component artifact producer, but schema-valid entry workflows take priority for the first draft: %s", producer)
+					fix = "Keep the producer contract clear in entry workflows first, then extract the component file after validation passes"
+				}
+				findings = append(findings, EvaluationFinding{Severity: severity, Code: code, Message: message, Fix: fix, Path: producer})
 			}
 		}
 		if consumer != "" {
 			if _, ok := generatedPaths[consumer]; !ok {
-				findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "execution_model_consumer_missing", Message: fmt.Sprintf("generated output is missing artifact consumer required by execution model: %s", consumer), Fix: "Generate the workflow file that consumes the staged artifacts described by the execution model", Path: consumer})
+				severity := "blocking"
+				code := "execution_model_consumer_missing"
+				message := fmt.Sprintf("generated output is missing artifact consumer required by execution model: %s", consumer)
+				fix := "Generate the workflow file that consumes the staged artifacts described by the execution model"
+				if isAdvisoryComponentTarget(consumer, brief) {
+					severity = "advisory"
+					code = "execution_model_component_consumer_advisory"
+					message = fmt.Sprintf("execution model recommends an extracted component artifact consumer, but schema-valid entry workflows take priority for the first draft: %s", consumer)
+					fix = "Keep the consumer contract clear in entry workflows first, then extract the component file after validation passes"
+				}
+				findings = append(findings, EvaluationFinding{Severity: severity, Code: code, Message: message, Fix: fix, Path: consumer})
 			}
 		}
 	}
@@ -436,6 +466,17 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 		}
 	}
 	return EvaluationResult{Findings: findings}
+}
+
+func isAdvisoryComponentTarget(path string, brief askcontract.AuthoringBrief) bool {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	if !strings.HasPrefix(path, "workflows/components/") {
+		return false
+	}
+	if strings.TrimSpace(brief.TargetScope) == "component" {
+		return false
+	}
+	return true
 }
 
 func generationAppearsToHandleJoinState(files []askcontract.GeneratedFile) bool {
@@ -821,6 +862,9 @@ func typedPreferenceRequested(prompt string) bool {
 func generatedMap(files []askcontract.GeneratedFile) map[string]askcontract.GeneratedFile {
 	out := map[string]askcontract.GeneratedFile{}
 	for _, file := range files {
+		if file.Delete {
+			continue
+		}
 		out[filepath.ToSlash(strings.TrimSpace(file.Path))] = file
 	}
 	return out
@@ -828,6 +872,9 @@ func generatedMap(files []askcontract.GeneratedFile) map[string]askcontract.Gene
 
 func generatedHas(files []askcontract.GeneratedFile, want string) bool {
 	for _, file := range files {
+		if file.Delete {
+			continue
+		}
 		if filepath.ToSlash(strings.TrimSpace(file.Path)) == want {
 			return true
 		}
@@ -838,6 +885,9 @@ func generatedHas(files []askcontract.GeneratedFile, want string) bool {
 func countCommands(files []askcontract.GeneratedFile) int {
 	count := 0
 	for _, file := range files {
+		if file.Delete {
+			continue
+		}
 		for _, line := range strings.Split(file.Content, "\n") {
 			if strings.TrimSpace(line) == "kind: Command" {
 				count++

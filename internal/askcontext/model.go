@@ -21,8 +21,6 @@ const (
 	TopicComponentsImports    Topic = "components-imports"
 	TopicVarsGuidance         Topic = "vars-guidance"
 	TopicTypedSteps           Topic = "typed-steps"
-	TopicStepComposition      Topic = "step-composition"
-	TopicStepRepair           Topic = "step-repair"
 	TopicStepQuality          Topic = "step-quality-rules"
 	TopicCLIHints             Topic = "cli-hints"
 	TopicProjectPhilosophy    Topic = "project-philosophy"
@@ -123,10 +121,9 @@ type StepKindContext struct {
 	SchemaRuleSummaries      []string
 	ActionGuides             []StepActionContext
 	PromptExamples           []StepExampleContext
-	CommonMistakes           []string
-	RepairHints              []string
 	ValidationHints          []ValidationHint
 	ConstrainedLiteralFields []ConstrainedFieldHint
+	Capabilities             []string
 	MatchSignals             []string
 	AntiSignals              []string
 	QualityRules             []QualityRule

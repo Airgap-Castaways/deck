@@ -1,24 +1,16 @@
-package workflowschema
-
-import (
-	"github.com/Airgap-Castaways/deck/internal/stepmeta"
-	"github.com/Airgap-Castaways/deck/internal/stepspec"
-)
+package stepmeta
 
 var (
-	_ = stepmeta.MustRegisterSchema[stepspec.ManageService]("ManageService", patchManageServiceToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.Swap]("Swap", patchSwapToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.CreateSymlink]("CreateSymlink", patchCreateSymlinkToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.Sysctl]("Sysctl", patchSysctlToolSchema)
-	_ = stepmeta.MustRegisterSchema[stepspec.WriteSystemdUnit]("WriteSystemdUnit", patchWriteSystemdUnitToolSchema)
+	PatchManageServiceToolSchema    = patchManageServiceToolSchema
+	PatchSwapToolSchema             = patchSwapToolSchema
+	PatchCreateSymlinkToolSchema    = patchCreateSymlinkToolSchema
+	PatchSysctlToolSchema           = patchSysctlToolSchema
+	PatchWriteSystemdUnitToolSchema = patchWriteSystemdUnitToolSchema
 )
 
 func patchManageServiceToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.ManageService{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	properties := propertyMap(spec)
 	setMap(properties, "name", minLenStringSchema())
@@ -37,10 +29,7 @@ func patchManageServiceToolSchema(root map[string]any) {
 
 func patchSwapToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.Swap{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	properties := propertyMap(spec)
 	setMap(properties, "disable", map[string]any{"type": "boolean", "default": true})
@@ -51,10 +40,7 @@ func patchSwapToolSchema(root map[string]any) {
 
 func patchCreateSymlinkToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.CreateSymlink{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	properties := propertyMap(spec)
 	setMap(properties, "path", minLenStringSchema())
 	setMap(properties, "target", minLenStringSchema())
@@ -68,10 +54,7 @@ func patchCreateSymlinkToolSchema(root map[string]any) {
 
 func patchSysctlToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.Sysctl{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	properties := propertyMap(spec)
 	setMap(properties, "values", map[string]any{
@@ -88,10 +71,7 @@ func patchSysctlToolSchema(root map[string]any) {
 
 func patchWriteSystemdUnitToolSchema(root map[string]any) {
 	props := propertyMap(root)
-	spec, err := reflectedSpecSchema(&stepspec.WriteSystemdUnit{})
-	if err != nil {
-		panic(err)
-	}
+	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	properties := propertyMap(spec)
 	setMap(properties, "path", minLenStringSchema())

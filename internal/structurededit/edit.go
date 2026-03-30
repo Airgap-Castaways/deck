@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 
 	"github.com/Airgap-Castaways/deck/internal/stepspec"
+	"github.com/Airgap-Castaways/deck/internal/structuredpath"
 )
 
 type Format string
@@ -105,54 +105,19 @@ type pathSegment struct {
 }
 
 func ParsePath(rawPath string) ([]pathSegment, error) {
-	if rawPath == "" {
-		return nil, fmt.Errorf("rawPath is required")
+	segments, err := structuredpath.Parse(rawPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid rawPath %q: %w", rawPath, err)
 	}
-	parts := make([]string, 0)
-	var current strings.Builder
-	inQuotes := false
-	escaped := false
-	for i := 0; i < len(rawPath); i++ {
-		ch := rawPath[i]
-		switch {
-		case escaped:
-			current.WriteByte(ch)
-			escaped = false
-		case ch == '\\' && inQuotes:
-			escaped = true
-		case ch == '"':
-			inQuotes = !inQuotes
-		case ch == '.' && !inQuotes:
-			segment := strings.TrimSpace(current.String())
-			if segment == "" {
-				return nil, fmt.Errorf("invalid rawPath %q", rawPath)
-			}
-			parts = append(parts, segment)
-			current.Reset()
-		default:
-			current.WriteByte(ch)
-		}
-	}
-	if inQuotes || escaped {
-		return nil, fmt.Errorf("invalid rawPath %q", rawPath)
-	}
-	last := strings.TrimSpace(current.String())
-	if last == "" {
-		return nil, fmt.Errorf("invalid rawPath %q", rawPath)
-	}
-	parts = append(parts, last)
-	segments := make([]pathSegment, 0, len(parts))
-	for _, part := range parts {
-		if idx, err := strconv.Atoi(part); err == nil {
-			if idx < 0 {
-				return nil, fmt.Errorf("invalid negative index in rawPath %q", rawPath)
-			}
-			segments = append(segments, pathSegment{index: idx, isIndex: true})
+	out := make([]pathSegment, 0, len(segments))
+	for _, segment := range segments {
+		if segment.IsIndex {
+			out = append(out, pathSegment{index: segment.Index, isIndex: true})
 			continue
 		}
-		segments = append(segments, pathSegment{key: part})
+		out = append(out, pathSegment{key: segment.Key})
 	}
-	return segments, nil
+	return out, nil
 }
 
 func applyEdit(root any, path []pathSegment, edit stepspec.StructuredEdit) (any, error) {
@@ -170,6 +135,12 @@ func applyEdit(root any, path []pathSegment, edit stepspec.StructuredEdit) (any,
 			return nil, err
 		}
 		return setAtPath(root, path, value)
+	case "insert":
+		value, err := normalizeValue(edit.Value)
+		if err != nil {
+			return nil, err
+		}
+		return insertAtPath(root, path, value)
 	case "delete":
 		return deleteAtPath(root, path)
 	case "appendUnique":
@@ -291,6 +262,14 @@ func setAtPath(root any, path []pathSegment, value any) (any, error) {
 	return updated, nil
 }
 
+func insertAtPath(root any, path []pathSegment, value any) (any, error) {
+	updated, err := insertNode(root, path, value)
+	if err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
 func deleteAtPath(root any, path []pathSegment) (any, error) {
 	updated, found, err := deleteNode(root, path)
 	if err != nil {
@@ -380,6 +359,60 @@ func setNode(current any, path []pathSegment, value any) (any, error) {
 		return nil, err
 	}
 	holder[segment.key] = updatedChild
+	return holder, nil
+}
+
+func insertNode(current any, path []pathSegment, value any) (any, error) {
+	segment := path[0]
+	if !segment.isIndex {
+		if current == nil {
+			current = map[string]any{}
+		}
+		holder, ok := current.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("path segment must be an object key")
+		}
+		child := holder[segment.key]
+		if len(path) == 1 {
+			holder[segment.key] = value
+			return holder, nil
+		}
+		if child == nil {
+			child = newContainer(path[1])
+		}
+		updatedChild, err := insertNode(child, path[1:], value)
+		if err != nil {
+			return nil, err
+		}
+		holder[segment.key] = updatedChild
+		return holder, nil
+	}
+	holder, ok := current.([]any)
+	if !ok {
+		return nil, fmt.Errorf("path segment must be an array index")
+	}
+	if segment.index < 0 || segment.index > len(holder) {
+		return nil, fmt.Errorf("array index %d out of range", segment.index)
+	}
+	if len(path) == 1 {
+		holder = append(holder, nil)
+		copy(holder[segment.index+1:], holder[segment.index:])
+		holder[segment.index] = value
+		return holder, nil
+	}
+	if segment.index == len(holder) {
+		seed := newContainer(path[1])
+		holder = append(holder, seed)
+	}
+	child := holder[segment.index]
+	if child == nil {
+		child = newContainer(path[1])
+	}
+	updatedChild, err := insertNode(child, path[1:], value)
+	if err != nil {
+		return nil, err
+	}
+	holder[segment.index] = updatedChild
 	return holder, nil
 }
 

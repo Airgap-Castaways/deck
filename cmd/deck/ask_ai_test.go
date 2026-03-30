@@ -10,6 +10,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
+	"github.com/Airgap-Castaways/deck/internal/testutil/legacygen"
 )
 
 type mockAskClient struct {
@@ -18,12 +19,12 @@ type mockAskClient struct {
 	calls     int
 }
 
-func (m *mockAskClient) Generate(_ context.Context, _ askprovider.Request) (askprovider.Response, error) {
+func (m *mockAskClient) Generate(_ context.Context, req askprovider.Request) (askprovider.Response, error) {
 	m.calls++
 	if m.index >= len(m.responses) {
-		return askprovider.Response{Content: m.responses[len(m.responses)-1]}, nil
+		return askprovider.Response{Content: legacygen.MaybeConvert(req.Kind, m.responses[len(m.responses)-1])}, nil
 	}
-	resp := m.responses[m.index]
+	resp := legacygen.MaybeConvert(req.Kind, m.responses[m.index])
 	m.index++
 	return askprovider.Response{Content: resp}, nil
 }
@@ -228,7 +229,7 @@ func TestAskRepairLoop(t *testing.T) {
 
 	originalFactory := newAskBackend
 	newAskBackend = func() askprovider.Client {
-		return &mockAskClient{responses: []string{`{"summary":"bad","files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps: ["}]}`, validAskJSON()}}
+		return &mockAskClient{responses: []string{`{"summary":"bad","documents":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","workflow":{"version":"v1alpha1","steps":[{"id":"run","kind":"Command","spec":{}}]}}]}`, validAskJSON()}}
 	}
 	defer func() { newAskBackend = originalFactory }()
 
@@ -440,7 +441,7 @@ func TestAskComplexPromptShowsJudgeFindingsAndRepairsLoosePlanJSON(t *testing.T)
 }
 
 func validAskJSON() string {
-	return `{"summary":"generated starter workflows","review":["Prefer typed steps where possible."],"files":[{"path":"workflows/vars.yaml","content":"{}\n"},{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nphases:\n  - name: collect\n    steps: []\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: install\n    imports:\n      - path: example-apply.yaml\n"},{"path":"workflows/components/example-apply.yaml","content":"steps:\n  - id: wait-runtime\n    kind: WaitForFile\n    spec:\n      path: /etc/containerd/config.toml\n      interval: 1s\n      timeout: 5s\n"}]}`
+	return `{"summary":"generated starter workflows","review":["Prefer typed steps where possible."],"documents":[{"path":"workflows/vars.yaml","kind":"vars","vars":{}},{"path":"workflows/scenarios/apply.yaml","kind":"workflow","workflow":{"version":"v1alpha1","phases":[{"name":"install","steps":[{"id":"wait-runtime","kind":"WaitForFile","spec":{"path":"/etc/containerd/config.toml","interval":"1s","timeout":"5s"}}]}]}}]}`
 }
 
 func validClassificationReview() string {

@@ -40,3 +40,22 @@ func TestLookupErrorIncludesSourceLocation(t *testing.T) {
 		t.Fatalf("unexpected source file %q", entry.Docs.Source.File)
 	}
 }
+
+func TestParsedExamplesAreNormalized(t *testing.T) {
+	for _, kind := range []string{"DownloadPackage", "DownloadImage", "KernelModule"} {
+		entry, ok, err := stepmeta.Lookup(kind)
+		if err != nil {
+			t.Fatalf("Lookup(%s): %v", kind, err)
+		}
+		if !ok {
+			t.Fatalf("expected %s registration", kind)
+		}
+		example := entry.Docs.Example
+		if strings.Contains(example, "\t") {
+			t.Fatalf("expected %s example to avoid tabs, got %q", kind, example)
+		}
+		if strings.Contains(example, "spec:\n\n") {
+			t.Fatalf("expected %s example to avoid blank line after spec, got %q", kind, example)
+		}
+	}
+}

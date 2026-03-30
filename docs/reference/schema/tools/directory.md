@@ -28,9 +28,8 @@ Use this before writing files or placing extracted content.
 ```yaml
 kind: EnsureDirectory
 spec:
-
-	path: /home/vagrant/.kube
-	mode: "0755"
+  path: /home/vagrant/.kube
+  mode: "0755"
 ```
 
 ### Spec Fields

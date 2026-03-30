@@ -1,7 +1,5 @@
 package stepspec
 
-import "github.com/Airgap-Castaways/deck/internal/stepmeta"
-
 // Write the containerd config file on the node.
 // @deck.when Use this when the node runtime needs a managed containerd config.toml.
 // @deck.note Use `WriteContainerdConfig` for the main `config.toml` only.
@@ -34,8 +32,6 @@ type WriteContainerdConfig struct {
 	// @deck.example 5m
 	Timeout string `json:"timeout"`
 }
-
-var _ = stepmeta.MustRegister[WriteContainerdConfig](stepmeta.Definition{Kind: "WriteContainerdConfig", Family: "containerd", FamilyTitle: "Containerd", DocsPage: "containerd", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "containerd.config.schema.json"})
 
 type ContainerdConfigSetting struct {
 	// Edit operation.
@@ -92,5 +88,3 @@ type WriteContainerdRegistryHosts struct {
 	// @deck.example [{registry:registry.k8s.io,host:http://mirror.local:5000}]
 	RegistryHosts []ContainerdRegistryHost `json:"registryHosts"`
 }
-
-var _ = stepmeta.MustRegister[WriteContainerdRegistryHosts](stepmeta.Definition{Kind: "WriteContainerdRegistryHosts", Family: "containerd", FamilyTitle: "Containerd", DocsPage: "containerd", DocsOrder: 20, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "containerd.registry-hosts.schema.json"})

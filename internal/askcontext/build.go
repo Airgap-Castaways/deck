@@ -197,16 +197,21 @@ func buildStepKinds() []StepKindContext {
 	defs := workflowexec.BuiltInTypeDefinitions()
 	out := make([]StepKindContext, 0, len(defs))
 	for _, def := range defs {
+		entry, ok, err := stepmeta.LookupCatalogEntry(def.Step.Kind)
+		if err != nil || !ok {
+			continue
+		}
+		workflowMeta := stepmeta.ProjectWorkflow(entry, def.Step.Category, def.Step.ToolSchemaGenerator)
 		meta := schemadoc.ToolMetaForDefinition(def.Step)
 		facts := schemaFactsForKind(def.Step.Kind)
 		ctx := StepKindContext{
-			Kind:                def.Step.Kind,
-			Category:            def.Step.Category,
+			Kind:                workflowMeta.Kind,
+			Category:            workflowMeta.Category,
 			Summary:             meta.Summary,
 			WhenToUse:           meta.WhenToUse,
-			SchemaFile:          def.Step.SchemaFile,
-			AllowedRoles:        append([]string(nil), def.Step.Roles...),
-			Outputs:             append([]string(nil), def.Step.Outputs...),
+			SchemaFile:          workflowMeta.SchemaFile,
+			AllowedRoles:        append([]string(nil), workflowMeta.Roles...),
+			Outputs:             append([]string(nil), workflowMeta.Outputs...),
 			MinimalShape:        strings.TrimSpace(meta.Example),
 			CuratedShape:        strings.TrimSpace(meta.Example),
 			KeyFields:           buildStepKeyFields(def.Step.Kind, meta, facts),
@@ -214,26 +219,25 @@ func buildStepKinds() []StepKindContext {
 			Notes:               append([]string(nil), meta.Notes...),
 		}
 		ctx.PromptExamples = promptExamplesFromShape(ctx.CuratedShape)
-		applyCuratedStepMetadata(&ctx)
+		applyStepCatalogAskMetadata(&ctx)
 		ctx.Outputs = dedupe(ctx.Outputs)
 		out = append(out, ctx)
 	}
 	return out
 }
 
-func applyCuratedStepMetadata(ctx *StepKindContext) {
-	// Derived fields come from workflow contracts and schema doc metadata assembled in
-	// buildStepKinds. This helper adds a narrow curated layer only for recurring ask
-	// quality issues such as common schema mistakes, repair hints, and prompt-ready
-	// examples that are awkward to infer directly from validator output.
+func applyStepCatalogAskMetadata(ctx *StepKindContext) {
+	// Derived fields come from workflow contracts, schema doc metadata, and the
+	// step catalog's machine-readable ask metadata projection.
 	ctx.MatchSignals = append([]string(nil), defaultMatchSignals(ctx.Kind)...)
-	ctx.CommonMistakes = append([]string(nil), defaultCommonMistakes(ctx.Kind)...)
-	ctx.RepairHints = append([]string(nil), defaultRepairHints(ctx.Kind)...)
 	ctx.ValidationHints = append([]ValidationHint(nil), defaultValidationHints(ctx.Kind)...)
 	ctx.ConstrainedLiteralFields = append([]ConstrainedFieldHint(nil), defaultConstrainedLiteralFields(ctx.Kind)...)
 	ctx.QualityRules = append([]QualityRule(nil), defaultQualityRules(ctx.Kind)...)
 	if ask, ok := stepmetaAsk(ctx.Kind); ok && len(ask.AntiSignals) > 0 {
 		ctx.AntiSignals = append([]string(nil), ask.AntiSignals...)
+	}
+	if ask, ok := stepmetaAsk(ctx.Kind); ok && len(ask.Capabilities) > 0 {
+		ctx.Capabilities = dedupe(append([]string(nil), ask.Capabilities...))
 	}
 }
 
@@ -257,20 +261,6 @@ func promptExamplesFromShape(shape string) []StepExampleContext {
 		return nil
 	}
 	return []StepExampleContext{{Purpose: "compact shape", YAML: strings.TrimSpace(shape)}}
-}
-
-func defaultCommonMistakes(kind string) []string {
-	if ask, ok := stepmetaAsk(kind); ok && len(ask.CommonMistakes) > 0 {
-		return append([]string(nil), ask.CommonMistakes...)
-	}
-	return nil
-}
-
-func defaultRepairHints(kind string) []string {
-	if ask, ok := stepmetaAsk(kind); ok && len(ask.RepairHints) > 0 {
-		return append([]string(nil), ask.RepairHints...)
-	}
-	return nil
 }
 
 func defaultValidationHints(kind string) []ValidationHint {

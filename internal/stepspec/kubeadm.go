@@ -1,7 +1,5 @@
 package stepspec
 
-import "github.com/Airgap-Castaways/deck/internal/stepmeta"
-
 // Run kubeadm init and write the join command to a file.
 // @deck.when Use this to bootstrap a control-plane node after host prerequisites are ready.
 // @deck.note When `skipIfAdminConfExists` skips the step, deck does not create a new join artifact unless the file already exists.
@@ -48,19 +46,6 @@ type KubeadmInit struct {
 	Timeout string `json:"timeout"`
 }
 
-var _ = stepmeta.MustRegister[KubeadmInit](stepmeta.Definition{
-	Kind:        "InitKubeadm",
-	Family:      "kubeadm",
-	FamilyTitle: "Kubeadm",
-	DocsPage:    "kubeadm",
-	DocsOrder:   10,
-	Visibility:  "public",
-	Roles:       []string{"apply"},
-	Outputs:     []string{"joinFile"},
-	SchemaFile:  "kubeadm.init.schema.json",
-	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.outputJoinFile", "spec.configFile", "spec.kubernetesVersion", "spec.advertiseAddress", "spec.podNetworkCIDR"}},
-})
-
 // Run kubeadm join for a worker or additional control-plane node.
 // @deck.when Use this after a bootstrap node has produced a valid join file or config.
 // @deck.note Provide exactly one of `joinFile` or `configFile`.
@@ -87,18 +72,6 @@ type KubeadmJoin struct {
 	// @deck.example 15m
 	Timeout string `json:"timeout"`
 }
-
-var _ = stepmeta.MustRegister[KubeadmJoin](stepmeta.Definition{
-	Kind:        "JoinKubeadm",
-	Family:      "kubeadm",
-	FamilyTitle: "Kubeadm",
-	DocsPage:    "kubeadm",
-	DocsOrder:   20,
-	Visibility:  "public",
-	Roles:       []string{"apply"},
-	SchemaFile:  "kubeadm.join.schema.json",
-	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.joinFile", "spec.configFile", "spec.asControlPlane", "spec.extraArgs"}},
-})
 
 // Run kubeadm reset and optional cleanup steps.
 // @deck.when Use this to tear down an existing kubeadm-managed node safely.
@@ -163,17 +136,6 @@ type KubeadmReset struct {
 	Timeout string `json:"timeout"`
 }
 
-var _ = stepmeta.MustRegister[KubeadmReset](stepmeta.Definition{
-	Kind:        "ResetKubeadm",
-	Family:      "kubeadm",
-	FamilyTitle: "Kubeadm",
-	DocsPage:    "kubeadm",
-	DocsOrder:   30,
-	Visibility:  "public",
-	Roles:       []string{"apply"},
-	SchemaFile:  "kubeadm.reset.schema.json",
-})
-
 // Run kubeadm upgrade apply and optional kubelet restart.
 // @deck.when Use this to upgrade a local kubeadm-managed control-plane node with a typed workflow step.
 // @deck.note Restart kubelet after a successful upgrade unless a separate service step owns that lifecycle.
@@ -203,15 +165,3 @@ type KubeadmUpgrade struct {
 	// @deck.example 30m
 	Timeout string `json:"timeout"`
 }
-
-var _ = stepmeta.MustRegister[KubeadmUpgrade](stepmeta.Definition{
-	Kind:        "UpgradeKubeadm",
-	Family:      "kubeadm",
-	FamilyTitle: "Kubeadm",
-	DocsPage:    "kubeadm",
-	DocsOrder:   40,
-	Visibility:  "public",
-	Roles:       []string{"apply"},
-	SchemaFile:  "kubeadm.upgrade.schema.json",
-	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.kubernetesVersion", "spec.ignorePreflightErrors", "spec.restartKubelet", "spec.kubeletService"}},
-})

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/validate"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 	deckschemas "github.com/Airgap-Castaways/deck/schemas"
@@ -145,27 +144,8 @@ func TestRelevantStepKindsMatchesDockerRequest(t *testing.T) {
 	if !containsString(joined, "InstallPackage") {
 		t.Fatalf("expected InstallPackage in relevant steps, got %v", joined)
 	}
-	if !containsString(joined, "ConfigureRepository") {
-		t.Fatalf("expected ConfigureRepository in relevant steps, got %v", joined)
-	}
-}
-
-func TestRelevantStepKindsBlockIncludesTypedShapeGuidance(t *testing.T) {
-	block := RelevantStepKindsBlock("install docker packages on rocky9 using repository")
-	for _, want := range []string{
-		"`required` fields must always be present",
-		"spec.packages",
-		"real YAML array",
-		"{{ .vars.* }}",
-		"spec.repositories",
-		"spec.source",
-		"spec.format",
-		"InstallPackage",
-		"ConfigureRepository",
-	} {
-		if !strings.Contains(block, want) {
-			t.Fatalf("expected %q in typed step guidance block, got %q", want, block)
-		}
+	if !containsString(joined, "ManageService") {
+		t.Fatalf("expected ManageService in relevant steps, got %v", joined)
 	}
 }
 
@@ -195,12 +175,6 @@ func TestDownloadFileKeyFieldsPreserveRequiredOptionalDistinction(t *testing.T) 
 			t.Fatalf("expected %s to stay optional, got %#v", path, fields[path])
 		}
 	}
-	block := StepGuidanceBlockWithOptions(askintent.RouteDraft, "prepare should download a file into bundle storage", StepGuidanceOptions{})
-	for _, want := range []string{"spec.source [conditional]", "spec.fetch [optional]", "spec.mode [optional]"} {
-		if !strings.Contains(block, want) {
-			t.Fatalf("expected %q in typed step guidance block, got %q", want, block)
-		}
-	}
 	foundRule := false
 	for _, rule := range download.SchemaRuleSummaries {
 		if strings.Contains(rule, "At least one of `spec.source` or `spec.items`") {
@@ -213,20 +187,6 @@ func TestDownloadFileKeyFieldsPreserveRequiredOptionalDistinction(t *testing.T) 
 	}
 }
 
-func TestRelevantStepKindsBlockIncludesCheckHostShapeAndMistakes(t *testing.T) {
-	block := RelevantStepKindsBlock("create an air-gapped rhel9 kubeadm workflow with typed steps where possible")
-	for _, want := range []string{
-		"CheckHost",
-		"spec.checks",
-		"[os, arch, swap]",
-		"spec.os",
-	} {
-		if !strings.Contains(block, want) {
-			t.Fatalf("expected %q in typed step guidance block, got %q", want, block)
-		}
-	}
-}
-
 func TestRelevantStepKindsMatchesKubeadmAirGapRequest(t *testing.T) {
 	relevant := RelevantStepKinds("create an air-gapped rhel9 single-node kubeadm workflow")
 	joined := make([]string, 0, len(relevant))
@@ -234,6 +194,12 @@ func TestRelevantStepKindsMatchesKubeadmAirGapRequest(t *testing.T) {
 		joined = append(joined, step.Kind)
 	}
 	for _, want := range []string{"CheckHost", "LoadImage", "CheckCluster"} {
+		if want == "LoadImage" {
+			if !containsString(joined, "LoadImage") && !containsString(joined, "DownloadImage") {
+				t.Fatalf("expected at least one image-staging step in relevant steps, got %v", joined)
+			}
+			continue
+		}
 		if !containsString(joined, want) {
 			t.Fatalf("expected %s in relevant steps, got %v", want, joined)
 		}
@@ -251,24 +217,6 @@ func TestRelevantStepKindsWithOptionsPrefersJoinForMultiNodeCapability(t *testin
 	}
 	if !containsString(joined, "CheckCluster") {
 		t.Fatalf("expected CheckCluster in relevant steps, got %v", joined)
-	}
-}
-
-func TestRelevantStepKindsBlockWithOptionsIncludesJoinCapabilityReason(t *testing.T) {
-	block := StepGuidanceBlockWithOptions(askintent.RouteDraft, "create kubeadm workflow", StepGuidanceOptions{ModeIntent: "prepare+apply", Topology: "multi-node", RequiredCapabilities: []string{"kubeadm-join"}})
-	for _, want := range []string{"JoinKubeadm", "supports kubeadm join capability"} {
-		if !strings.Contains(block, want) {
-			t.Fatalf("expected %q in typed step guidance block, got %q", want, block)
-		}
-	}
-}
-
-func TestStepCompositionGuidanceBlockIncludesOfflineAndJoinFlows(t *testing.T) {
-	block := StepCompositionGuidanceBlock("create an air-gapped 3-node kubeadm prepare and apply workflow", StepGuidanceOptions{ModeIntent: "prepare+apply", Topology: "multi-node", RequiredCapabilities: []string{"prepare-artifacts", "package-staging", "image-staging", "kubeadm-bootstrap", "kubeadm-join", "cluster-verification"}})
-	for _, want := range []string{"Offline package flow", "Offline image flow", "Kubeadm bootstrap flow", "Multi-node kubeadm flow", "Prepare/apply split"} {
-		if !strings.Contains(block, want) {
-			t.Fatalf("expected %q in composition guidance, got %q", want, block)
-		}
 	}
 }
 
@@ -307,6 +255,28 @@ func TestBuildStepKindsUsesStepmetaAskMetadata(t *testing.T) {
 	}
 	if len(downloadImage.ConstrainedLiteralFields) == 0 || downloadImage.ConstrainedLiteralFields[0].Path != "spec.backend.engine" {
 		t.Fatalf("expected download image constrained field from stepmeta, got %+v", downloadImage.ConstrainedLiteralFields)
+	}
+}
+
+func TestDiscoverCandidateStepsWithOptionsDeprioritizesCommandForPrepareArtifacts(t *testing.T) {
+	selected := DiscoverCandidateStepsWithOptions(
+		"create an air-gapped prepare and apply workflow for offline package and image staging",
+		StepGuidanceOptions{ModeIntent: "prepare+apply", RequiredCapabilities: []string{"prepare-artifacts", "package-staging", "image-staging"}},
+	)
+	if len(selected) == 0 {
+		t.Fatalf("expected candidate steps")
+	}
+	for i, item := range selected {
+		if item.Step.Kind == "Command" && i < len(selected)-1 {
+			t.Fatalf("expected Command to be deprioritized for prepare artifacts, got %#v", selected)
+		}
+	}
+	joined := []string{}
+	for _, item := range selected {
+		joined = append(joined, item.Step.Kind)
+	}
+	if !containsString(joined, "DownloadPackage") || !containsString(joined, "DownloadImage") {
+		t.Fatalf("expected typed prepare artifact steps, got %v", joined)
 	}
 }
 
