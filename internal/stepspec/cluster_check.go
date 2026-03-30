@@ -1,7 +1,5 @@
 package stepspec
 
-import "github.com/Airgap-Castaways/deck/internal/stepmeta"
-
 // Poll and verify Kubernetes cluster health on the local node.
 // @deck.when Use this for typed bootstrap and upgrade verification instead of ad-hoc kubectl shell loops.
 // @deck.example
@@ -44,8 +42,6 @@ type ClusterCheck struct {
 	// @deck.example {nodesPath:/tmp/deck/reports/bootstrap-nodes.txt}
 	Reports ClusterCheckReports `json:"reports"`
 }
-
-var _ = stepmeta.MustRegister[ClusterCheck](stepmeta.Definition{Kind: "CheckCluster", Family: "cluster-check", FamilyTitle: "ClusterCheck", DocsPage: "cluster-check", DocsOrder: 10, Visibility: "public", Roles: []string{"apply"}, SchemaFile: "cluster-check.schema.json", SchemaPatch: stepmeta.PatchCheckClusterToolSchema, Ask: stepmeta.AskMetadata{Capabilities: []string{"cluster-verification", "kubeadm-bootstrap"}, MatchSignals: []string{"kubernetes", "kubeadm", "cluster", "verify", "health", "ready"}, KeyFields: []string{"spec.nodes", "spec.versions", "spec.kubeSystem", "spec.reports"}, ValidationHints: []stepmeta.ValidationHint{{ErrorContains: "spec.interval: does not match pattern", Fix: "Keep CheckCluster spec.interval as a literal duration such as 5s; do not replace it with a vars template."}}, ConstrainedLiteralFields: []stepmeta.ConstrainedLiteralField{{Path: "spec.interval", Guidance: "Keep spec.interval as a literal duration such as 5s or 30s, not a vars template."}}}})
 
 type ClusterCheckNodes struct {
 	// Expected total node count returned by `kubectl get nodes`.

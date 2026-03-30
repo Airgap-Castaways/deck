@@ -1,7 +1,5 @@
 package stepspec
 
-import "github.com/Airgap-Castaways/deck/internal/stepmeta"
-
 type FileBundleRef struct {
 	// Bundle root category to read from (`files`, `images`, or `packages`).
 	// @deck.example files
@@ -81,20 +79,6 @@ type DownloadFile struct {
 	Timeout string `json:"timeout"`
 }
 
-var _ = stepmeta.MustRegister[DownloadFile](stepmeta.Definition{
-	Kind:        "DownloadFile",
-	Family:      "file",
-	FamilyTitle: "File",
-	DocsPage:    "file",
-	DocsOrder:   10,
-	Visibility:  "public",
-	Roles:       []string{"prepare"},
-	Outputs:     []string{"outputPath", "outputPaths", "artifacts"},
-	SchemaFile:  "file.download.schema.json",
-	SchemaPatch: stepmeta.PatchDownloadFileToolSchema,
-	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.source", "spec.fetch", "spec.mode"}},
-})
-
 type DownloadFileItem struct {
 	// Source descriptor for this item.
 	// @deck.example {url:https://mirror.example.com/runc}
@@ -134,20 +118,6 @@ type WriteFile struct {
 	Mode string `json:"mode"`
 }
 
-var _ = stepmeta.MustRegister[WriteFile](stepmeta.Definition{
-	Kind:        "WriteFile",
-	Family:      "file",
-	FamilyTitle: "File",
-	DocsPage:    "file",
-	DocsOrder:   20,
-	Visibility:  "public",
-	Roles:       []string{"apply"},
-	Outputs:     []string{"path"},
-	SchemaFile:  "file.write.schema.json",
-	SchemaPatch: stepmeta.PatchWriteFileToolSchema,
-	Ask:         stepmeta.AskMetadata{MatchSignals: []string{"write", "file", "config", "motd", "content"}, KeyFields: []string{"spec.path", "spec.content", "spec.template", "spec.mode"}},
-})
-
 // Copy a file from a declared source to a destination path.
 // @deck.when Use this to place a prepared or local file at its final location on the node.
 // @deck.note Use `source.path` for simple local paths and `source.bundle` or `source.url` when the source is structured or external.
@@ -173,20 +143,6 @@ type CopyFile struct {
 	// @deck.example 0644
 	Mode string `json:"mode"`
 }
-
-var _ = stepmeta.MustRegister[CopyFile](stepmeta.Definition{
-	Kind:        "CopyFile",
-	Family:      "file",
-	FamilyTitle: "File",
-	DocsPage:    "file",
-	DocsOrder:   30,
-	Visibility:  "public",
-	Roles:       []string{"apply"},
-	Outputs:     []string{"path"},
-	SchemaFile:  "file.copy.schema.json",
-	SchemaPatch: stepmeta.PatchCopyFileToolSchema,
-	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.source", "spec.path", "spec.mode"}},
-})
 
 // Extract an archive from a declared source into a destination directory.
 // @deck.when Use this when prepared tarballs or local archives should be expanded onto the node.
@@ -216,19 +172,6 @@ type ExtractArchive struct {
 	// @deck.example 0755
 	Mode string `json:"mode"`
 }
-
-var _ = stepmeta.MustRegister[ExtractArchive](stepmeta.Definition{
-	Kind:        "ExtractArchive",
-	Family:      "file",
-	FamilyTitle: "File",
-	DocsPage:    "file",
-	DocsOrder:   80,
-	Visibility:  "public",
-	Roles:       []string{"apply"},
-	Outputs:     []string{"path"},
-	SchemaFile:  "file.extract-archive.schema.json",
-	SchemaPatch: stepmeta.PatchExtractArchiveToolSchema,
-})
 
 type EditFileRule struct {
 	// Literal string or pattern to search for in the file.
@@ -267,17 +210,3 @@ type EditFile struct {
 	// @deck.example 0644
 	Mode string `json:"mode"`
 }
-
-var _ = stepmeta.MustRegister[EditFile](stepmeta.Definition{
-	Kind:        "EditFile",
-	Family:      "file",
-	FamilyTitle: "File",
-	DocsPage:    "file",
-	DocsOrder:   40,
-	Visibility:  "public",
-	Roles:       []string{"apply"},
-	Outputs:     []string{"path"},
-	SchemaFile:  "file.edit.schema.json",
-	SchemaPatch: stepmeta.PatchEditFileToolSchema,
-	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.path", "spec.edits", "spec.backup", "spec.mode"}},
-})

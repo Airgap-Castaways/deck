@@ -1,7 +1,5 @@
 package stepspec
 
-import "github.com/Airgap-Castaways/deck/internal/stepmeta"
-
 type StructuredEdit struct {
 	// Structured edit operation.
 	// @deck.example set
@@ -41,8 +39,6 @@ type EditTOML struct {
 	Mode string `json:"mode"`
 }
 
-var _ = stepmeta.MustRegister[EditTOML](stepmeta.Definition{Kind: "EditTOML", Family: "file", FamilyTitle: "File", DocsPage: "file", DocsOrder: 50, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "file.edit-toml.schema.json", SchemaPatch: stepmeta.PatchEditTOMLToolSchema})
-
 // Edit a YAML file in place using structured path operations.
 // @deck.when Use this for common map/list YAML updates where direct text replacement is too fragile.
 // @deck.note Comment placement, anchors, aliases, merge keys, and style preservation are not guaranteed.
@@ -70,8 +66,6 @@ type EditYAML struct {
 	Mode string `json:"mode"`
 }
 
-var _ = stepmeta.MustRegister[EditYAML](stepmeta.Definition{Kind: "EditYAML", Family: "file", FamilyTitle: "File", DocsPage: "file", DocsOrder: 60, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "file.edit-yaml.schema.json", SchemaPatch: stepmeta.PatchEditYAMLToolSchema, Ask: stepmeta.AskMetadata{MatchSignals: []string{"yaml", "edit", "patch", "config"}}})
-
 // Edit a JSON file in place using structured path operations.
 // @deck.when Use this when JSON configuration should be modified by path instead of full rewrites.
 // @deck.example
@@ -97,5 +91,3 @@ type EditJSON struct {
 	// @deck.example 0644
 	Mode string `json:"mode"`
 }
-
-var _ = stepmeta.MustRegister[EditJSON](stepmeta.Definition{Kind: "EditJSON", Family: "file", FamilyTitle: "File", DocsPage: "file", DocsOrder: 70, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "file.edit-json.schema.json", SchemaPatch: stepmeta.PatchEditJSONToolSchema})
