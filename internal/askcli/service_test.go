@@ -10,8 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
@@ -23,6 +21,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askscaffold"
 	"github.com/Airgap-Castaways/deck/internal/askstate"
 	"github.com/Airgap-Castaways/deck/internal/schemadoc"
+	"github.com/Airgap-Castaways/deck/internal/testutil/legacygen"
 	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
 	"github.com/Airgap-Castaways/deck/schemas"
@@ -53,7 +52,7 @@ func (s *stubClient) Generate(_ context.Context, req askprovider.Request) (askpr
 	}
 	content := s.responses[idx]
 	if strings.Contains(strings.TrimSpace(content), `"files"`) && isGenerationLikeKind(req.Kind) {
-		content = legacyGenerationJSONToDocuments(content)
+		content = legacygen.ToDocuments(content)
 	}
 	return askprovider.Response{Content: content}, nil
 }
@@ -65,63 +64,6 @@ func isGenerationLikeKind(kind string) bool {
 	default:
 		return false
 	}
-}
-
-func legacyGenerationJSONToDocuments(raw string) string {
-	type legacyFile struct {
-		Path    string `json:"path"`
-		Content string `json:"content"`
-	}
-	type legacyResponse struct {
-		Summary string       `json:"summary"`
-		Review  []string     `json:"review"`
-		Files   []legacyFile `json:"files"`
-	}
-	var legacy legacyResponse
-	if err := json.Unmarshal([]byte(raw), &legacy); err != nil || len(legacy.Files) == 0 {
-		return raw
-	}
-	resp := askcontract.GenerationResponse{Summary: legacy.Summary, Review: legacy.Review, Documents: make([]askcontract.GeneratedDocument, 0, len(legacy.Files))}
-	for _, file := range legacy.Files {
-		kind := "workflow"
-		doc := askcontract.GeneratedDocument{Path: file.Path, Action: "replace"}
-		switch {
-		case strings.HasSuffix(file.Path, "vars.yaml"):
-			kind = "vars"
-			var vars map[string]any
-			if err := yaml.Unmarshal([]byte(file.Content), &vars); err != nil {
-				return raw
-			}
-			if vars == nil {
-				vars = map[string]any{}
-			}
-			doc.Kind = kind
-			doc.Vars = vars
-		case strings.Contains(file.Path, "/components/"):
-			kind = "component"
-			var component struct {
-				Steps []askcontract.WorkflowStep `yaml:"steps"`
-			}
-			if err := yaml.Unmarshal([]byte(file.Content), &component); err != nil {
-				return raw
-			}
-			doc.Kind = kind
-			doc.Component = &askcontract.ComponentDocument{Steps: component.Steps}
-		default:
-			var workflow askcontract.WorkflowDocument
-			if err := yaml.Unmarshal([]byte(file.Content), &workflow); err != nil {
-				return raw
-			}
-			doc.Kind = kind
-			doc.Workflow = &workflow
-		}
-		resp.Documents = append(resp.Documents, doc)
-	}
-	out, err := json.Marshal(resp)
-	if err != nil {
-		return raw
-	}
-	return string(out)
 }
 
 func testMaterialized(summary string, files []askcontract.GeneratedFile) askcontract.GenerationResponse {
