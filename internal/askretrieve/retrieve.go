@@ -141,26 +141,6 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 		Chunk{ID: "vars-guidance", Source: "askcontext", Label: "vars-guidance", Topic: askcontext.TopicVarsGuidance, Content: bundle.VarsPromptBlock(), Score: 52},
 		Chunk{ID: "cli-guidance", Source: "askcontext", Label: "cli-hints", Topic: askcontext.TopicCLIHints, Content: askcontext.CLIHintsBlock(), Score: 25},
 	)
-	if typedSteps := askcontext.StepGuidanceBlock(route, prompt); strings.TrimSpace(typedSteps) != "" {
-		chunks = append(chunks, Chunk{
-			ID:      "typed-steps-" + string(route),
-			Source:  "askcontext",
-			Label:   "typed-steps",
-			Topic:   askcontext.TopicTypedSteps,
-			Content: typedSteps,
-			Score:   typedStepsScore(route, lowerPrompt),
-		})
-	}
-	if composition := askcontext.StepCompositionGuidanceBlock(prompt, askcontext.StepGuidanceOptions{}); strings.TrimSpace(composition) != "" {
-		chunks = append(chunks, Chunk{
-			ID:      "step-composition-" + string(route),
-			Source:  "askcontext",
-			Label:   "step-composition",
-			Topic:   askcontext.TopicStepComposition,
-			Content: composition,
-			Score:   typedStepsScore(route, lowerPrompt) + 8,
-		})
-	}
 	chunks = append(chunks, exampleReferenceChunks(route, lowerPrompt)...)
 	for _, file := range workspace.Files {
 		if !workspaceFileAllowed(file.Path) {
@@ -252,19 +232,12 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 func reserveComplexAuthoringChunks(chunks []Chunk, selected []Chunk, remaining int, maxChunks int, dropped []string) ([]Chunk, int, map[string]bool, []string) {
 	reserved := map[string]bool{}
 	keptExamples := 0
-	keptTyped := false
-	keptComposition := false
 	for _, chunk := range chunks {
 		if len(selected) >= maxChunks {
 			break
 		}
 		want := false
-		switch {
-		case chunk.Source == "example" && keptExamples < 2:
-			want = true
-		case chunk.Source == "askcontext" && chunk.Label == "typed-steps" && !keptTyped:
-			want = true
-		case chunk.Source == "askcontext" && chunk.Label == "step-composition" && !keptComposition:
+		if chunk.Source == "example" && keptExamples < 2 {
 			want = true
 		}
 		if !want {
@@ -285,29 +258,8 @@ func reserveComplexAuthoringChunks(chunks []Chunk, selected []Chunk, remaining i
 		if chunk.Source == "example" {
 			keptExamples++
 		}
-		if chunk.Source == "askcontext" && chunk.Label == "typed-steps" {
-			keptTyped = true
-		}
-		if chunk.Source == "askcontext" && chunk.Label == "step-composition" {
-			keptComposition = true
-		}
 	}
 	return selected, remaining, reserved, dropped
-}
-
-func RepairChunks(prompt string, validationError string) []Chunk {
-	content := askcontext.RepairGuidanceBlock(prompt, validationError)
-	if strings.TrimSpace(content) == "" {
-		return nil
-	}
-	return []Chunk{{
-		ID:      "step-repair",
-		Source:  "askcontext",
-		Label:   "step-repair",
-		Topic:   askcontext.TopicStepRepair,
-		Content: content,
-		Score:   80,
-	}}
 }
 
 func dedupeChunksByTopic(chunks []Chunk) []Chunk {
@@ -334,17 +286,6 @@ func dedupeChunksByTopic(chunks []Chunk) []Chunk {
 		out = append(out, best[topic])
 	}
 	return out
-}
-
-func typedStepsScore(route askintent.Route, prompt string) int {
-	score := 30
-	if route == askintent.RouteDraft || route == askintent.RouteRefine {
-		score += 15
-	}
-	if strings.Contains(prompt, "docker") || strings.Contains(prompt, "package") || strings.Contains(prompt, "install") || strings.Contains(prompt, "kubeadm") || strings.Contains(prompt, "air-gapped") {
-		score += 30
-	}
-	return score
 }
 
 func roleGuidanceScore(prompt string) int {
