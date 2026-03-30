@@ -120,3 +120,20 @@ func TestParsePathSupportsBracketIndexes(t *testing.T) {
 		t.Fatalf("unexpected parsed segments: %#v", segments)
 	}
 }
+
+func TestParsePathSupportsJSONPointerAndQuotedKeys(t *testing.T) {
+	segments, err := ParsePath(`/a/b~1c`)
+	if err != nil {
+		t.Fatalf("ParsePath pointer: %v", err)
+	}
+	if len(segments) != 2 || segments[0].key != "a" || segments[1].key != "b/c" {
+		t.Fatalf("unexpected pointer segments: %#v", segments)
+	}
+	segments, err = ParsePath(`a["b.c"]`)
+	if err != nil {
+		t.Fatalf("ParsePath quoted bracket: %v", err)
+	}
+	if len(segments) != 2 || segments[0].key != "a" || segments[1].key != "b.c" {
+		t.Fatalf("unexpected quoted segments: %#v", segments)
+	}
+}

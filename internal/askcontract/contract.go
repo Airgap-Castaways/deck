@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
+	"github.com/Airgap-Castaways/deck/internal/structuredpath"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
 )
 
@@ -440,17 +441,14 @@ func normalizeEditPath(rawPath string, alias string, stepID string, target map[s
 	if strings.TrimSpace(stepID) != "" && path != "" {
 		path = "steps." + strings.TrimSpace(stepID) + "." + strings.TrimPrefix(path, ".")
 	}
-	path = strings.ReplaceAll(path, "[", ".")
-	path = strings.ReplaceAll(path, "]", "")
-	if !strings.HasPrefix(path, "/") {
+	if strings.TrimSpace(path) == "" {
+		return ""
+	}
+	canonical, err := structuredpath.Canonicalize(path)
+	if err != nil {
 		return path
 	}
-	segments := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	for i := range segments {
-		segments[i] = strings.ReplaceAll(segments[i], "~1", "/")
-		segments[i] = strings.ReplaceAll(segments[i], "~0", "~")
-	}
-	return strings.Join(segments, ".")
+	return canonical
 }
 
 func firstNonEmpty(values ...string) string {

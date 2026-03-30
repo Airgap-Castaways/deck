@@ -57,7 +57,7 @@ func TestParseGenerationNormalizesEditAliases(t *testing.T) {
 		t.Fatalf("parse generation aliases: %v", err)
 	}
 	edit := resp.Documents[0].Edits[0]
-	if edit.Op != "set" || edit.RawPath != "steps.wait-step.spec.timeout" {
+	if edit.Op != "set" || edit.RawPath != "/steps/wait-step/spec/timeout" {
 		t.Fatalf("unexpected normalized edit: %#v", edit)
 	}
 }
@@ -68,7 +68,7 @@ func TestParseGenerationNormalizesTargetAliasEdit(t *testing.T) {
 		t.Fatalf("parse generation target alias: %v", err)
 	}
 	edit := resp.Documents[0].Edits[0]
-	if edit.Op != "insert" || edit.RawPath != "steps.prepare-download-packages.spec.backend.image" {
+	if edit.Op != "insert" || edit.RawPath != "/steps/prepare-download-packages/spec/backend/image" {
 		t.Fatalf("unexpected normalized target edit: %#v", edit)
 	}
 }
@@ -81,7 +81,7 @@ func TestParseGenerationNormalizesPatchActionAndTargetStepID(t *testing.T) {
 	if resp.Documents[0].Action != "edit" {
 		t.Fatalf("expected patch action to normalize to edit, got %#v", resp.Documents[0])
 	}
-	if resp.Documents[0].Edits[0].RawPath != "steps.prepare-download-packages.spec.backend.image" {
+	if resp.Documents[0].Edits[0].RawPath != "/steps/prepare-download-packages/spec/backend/image" {
 		t.Fatalf("unexpected normalized targetStepId edit: %#v", resp.Documents[0].Edits[0])
 	}
 }
@@ -101,7 +101,7 @@ func TestParseGenerationNormalizesBracketPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse generation bracket path: %v", err)
 	}
-	if resp.Documents[0].Edits[0].RawPath != "steps.3.spec.timeout" {
+	if resp.Documents[0].Edits[0].RawPath != "/steps/3/spec/timeout" {
 		t.Fatalf("expected normalized bracket path, got %#v", resp.Documents[0].Edits[0])
 	}
 }

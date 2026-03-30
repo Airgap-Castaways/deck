@@ -66,6 +66,31 @@ func TestMaterializeRefineEditsAppliesStructuredChanges(t *testing.T) {
 	}
 }
 
+func TestMaterializeRefineBracketPathEdit(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nsteps:\n  - id: first\n    kind: Command\n    spec:\n      command: [true]\n  - id: second\n    kind: Command\n    spec:\n      command: [true]\n  - id: third\n    kind: Command\n    spec:\n      command: [true]\n  - id: fourth\n    kind: Command\n    spec:\n      command: [true]\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{
+		Documents: []askcontract.GeneratedDocument{{
+			Path:   "workflows/scenarios/apply.yaml",
+			Action: "edit",
+			Edits:  []askcontract.StructuredEditAction{{Op: "set", RawPath: "steps[3].timeout", Value: "10m"}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("materialize bracket path edit: %v", err)
+	}
+	if !strings.Contains(files[0].Content, "id: fourth") || !strings.Contains(files[0].Content, "timeout: 10m") {
+		t.Fatalf("expected bracket path edit to update fourth step, got %q", files[0].Content)
+	}
+}
+
 func TestMaterializeDeleteDocument(t *testing.T) {
 	files, err := Materialize(t.TempDir(), askcontract.GenerationResponse{
 		Documents: []askcontract.GeneratedDocument{{Path: "workflows/components/old.yaml", Action: "delete"}},
@@ -124,7 +149,7 @@ func TestParseDocumentVars(t *testing.T) {
 func TestResolveStructuredEditPathFindsPhaseStepByID(t *testing.T) {
 	doc := askcontract.GeneratedDocument{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1", Phases: []askcontract.WorkflowPhase{{Name: "apply", Steps: []askcontract.WorkflowStep{{ID: "apply-runtime-ready", Kind: "WaitForService", Spec: map[string]any{"timeout": "5m"}}}}}}}
 	path := resolveStructuredEditPath("steps.apply-runtime-ready.spec.timeout", doc)
-	if path != "phases.0.steps.0.spec.timeout" {
+	if path != "/phases/0/steps/0/spec/timeout" {
 		t.Fatalf("unexpected resolved path: %q", path)
 	}
 }

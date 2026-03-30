@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 
 	"github.com/Airgap-Castaways/deck/internal/stepspec"
+	"github.com/Airgap-Castaways/deck/internal/structuredpath"
 )
 
 type Format string
@@ -105,80 +105,19 @@ type pathSegment struct {
 }
 
 func ParsePath(rawPath string) ([]pathSegment, error) {
-	if rawPath == "" {
-		return nil, fmt.Errorf("rawPath is required")
+	segments, err := structuredpath.Parse(rawPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid rawPath %q: %w", rawPath, err)
 	}
-	rawPath = normalizeBracketPath(rawPath)
-	parts := make([]string, 0)
-	var current strings.Builder
-	inQuotes := false
-	escaped := false
-	for i := 0; i < len(rawPath); i++ {
-		ch := rawPath[i]
-		switch {
-		case escaped:
-			current.WriteByte(ch)
-			escaped = false
-		case ch == '\\' && inQuotes:
-			escaped = true
-		case ch == '"':
-			inQuotes = !inQuotes
-		case ch == '.' && !inQuotes:
-			segment := strings.TrimSpace(current.String())
-			if segment == "" {
-				return nil, fmt.Errorf("invalid rawPath %q", rawPath)
-			}
-			parts = append(parts, segment)
-			current.Reset()
-		default:
-			current.WriteByte(ch)
-		}
-	}
-	if inQuotes || escaped {
-		return nil, fmt.Errorf("invalid rawPath %q", rawPath)
-	}
-	last := strings.TrimSpace(current.String())
-	if last == "" {
-		return nil, fmt.Errorf("invalid rawPath %q", rawPath)
-	}
-	parts = append(parts, last)
-	segments := make([]pathSegment, 0, len(parts))
-	for _, part := range parts {
-		if idx, err := strconv.Atoi(part); err == nil {
-			if idx < 0 {
-				return nil, fmt.Errorf("invalid negative index in rawPath %q", rawPath)
-			}
-			segments = append(segments, pathSegment{index: idx, isIndex: true})
+	out := make([]pathSegment, 0, len(segments))
+	for _, segment := range segments {
+		if segment.IsIndex {
+			out = append(out, pathSegment{index: segment.Index, isIndex: true})
 			continue
 		}
-		segments = append(segments, pathSegment{key: part})
+		out = append(out, pathSegment{key: segment.Key})
 	}
-	return segments, nil
-}
-
-func normalizeBracketPath(rawPath string) string {
-	var out strings.Builder
-	for i := 0; i < len(rawPath); i++ {
-		ch := rawPath[i]
-		if ch != '[' {
-			out.WriteByte(ch)
-			continue
-		}
-		end := strings.IndexByte(rawPath[i:], ']')
-		if end <= 0 {
-			out.WriteByte(ch)
-			continue
-		}
-		segment := strings.TrimSpace(rawPath[i+1 : i+end])
-		if segment != "" {
-			if out.Len() > 0 {
-				out.WriteByte('.')
-			}
-			out.WriteString(strings.Trim(segment, `"`))
-		}
-		i += end
-	}
-	return out.String()
+	return out, nil
 }
 
 func applyEdit(root any, path []pathSegment, edit stepspec.StructuredEdit) (any, error) {
