@@ -15,13 +15,39 @@ func TestParseInfoFallback(t *testing.T) {
 }
 
 func TestParseGeneration(t *testing.T) {
-	raw := `{"summary":"ok","files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [\"true\"]\n"}]}`
+	raw := `{"summary":"ok","documents":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","workflow":{"version":"v1alpha1","steps":[{"id":"run","kind":"Command","spec":{"command":["true"]}}]}}]}`
 	resp, err := ParseGeneration(raw)
 	if err != nil {
 		t.Fatalf("parse generation: %v", err)
 	}
-	if len(resp.Files) != 1 {
-		t.Fatalf("expected one file, got %d", len(resp.Files))
+	if len(resp.Documents) != 1 {
+		t.Fatalf("expected one document, got %d", len(resp.Documents))
+	}
+}
+
+func TestParseGenerationDocuments(t *testing.T) {
+	raw := `{"summary":"ok","documents":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","workflow":{"version":"v1alpha1","steps":[{"id":"run","kind":"Command","spec":{"command":["true"]}}]}}]}`
+	resp, err := ParseGeneration(raw)
+	if err != nil {
+		t.Fatalf("parse generation documents: %v", err)
+	}
+	if len(resp.Documents) != 1 || resp.Documents[0].Workflow == nil {
+		t.Fatalf("expected one workflow document, got %#v", resp.Documents)
+	}
+	if resp.Documents[0].Workflow.Version != "v1alpha1" {
+		t.Fatalf("unexpected workflow document: %#v", resp.Documents[0])
+	}
+}
+
+func TestParseGenerationRejectsEmptyPayload(t *testing.T) {
+	if _, err := ParseGeneration(`{"summary":"ok","review":[]}`); err == nil {
+		t.Fatalf("expected parse error for empty generation payload")
+	}
+}
+
+func TestParseGenerationRejectsLegacyFilesPayload(t *testing.T) {
+	if _, err := ParseGeneration(`{"summary":"ok","files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\n"}]}`); err == nil || !strings.Contains(err.Error(), "documents") {
+		t.Fatalf("expected legacy files payload to be rejected, got %v", err)
 	}
 }
 

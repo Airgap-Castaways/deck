@@ -152,6 +152,21 @@ func buildChatRequest(provider string, req askprovider.Request) openai.ChatCompl
 		},
 		ResponseFormat: &openai.ChatCompletionResponseFormat{Type: openai.ChatCompletionResponseFormatTypeJSONObject},
 	}
+	if len(req.ResponseSchema) > 0 {
+		name := strings.TrimSpace(req.ResponseSchemaName)
+		if name == "" {
+			name = "deck_response"
+		}
+		request.ResponseFormat = &openai.ChatCompletionResponseFormat{
+			Type: openai.ChatCompletionResponseFormatTypeJSONSchema,
+			JSONSchema: &openai.ChatCompletionResponseFormatJSONSchema{
+				Name:        name,
+				Description: "Structured deck ask response",
+				Schema:      req.ResponseSchema,
+				Strict:      true,
+			},
+		}
+	}
 	if request.Model == "" {
 		request.Model = askprovider.ProviderDefaultModel(provider)
 	}
