@@ -18,14 +18,14 @@ This is the entrypoint for deck's generated schema documentation.
 
 ## Tool Step Quick Links
 
-- [ClusterCheck](tools/cluster-check.md)
+- [Cluster Check](tools/cluster-check.md)
 - [Command](tools/command.md)
 - [Containerd](tools/containerd.md)
 - [Directory](tools/directory.md)
 - [File](tools/file.md)
-- [HostCheck](tools/host-check.md)
+- [Host Check](tools/host-check.md)
 - [Image](tools/image.md)
-- [KernelModule](tools/kernel-module.md)
+- [Kernel Module](tools/kernel-module.md)
 - [Kubeadm](tools/kubeadm.md)
 - [Package](tools/package.md)
 - [Repository](tools/repository.md)
@@ -33,5 +33,5 @@ This is the entrypoint for deck's generated schema documentation.
 - [Swap](tools/swap.md)
 - [Symlink](tools/symlink.md)
 - [Sysctl](tools/sysctl.md)
-- [SystemdUnit](tools/systemd-unit.md)
+- [Systemd Unit](tools/systemd-unit.md)
 - [Wait](tools/wait.md)

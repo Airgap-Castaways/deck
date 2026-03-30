@@ -39,12 +39,11 @@ Use this during prepare to stage files into the bundle.
 ```yaml
 kind: DownloadFile
 spec:
-
-	source:
-	  url: https://mirror.example.com/runc
-	  sha256: abc123...
-	outputPath: files/bin/runc
-	mode: "0755"
+  source:
+    url: https://mirror.example.com/runc
+    sha256: abc123...
+  outputPath: files/bin/runc
+  mode: "0755"
 ```
 
 ### Spec Fields
@@ -131,9 +130,8 @@ Use this to create or fully replace a managed file on the node.
 ```yaml
 kind: WriteFile
 spec:
-
-	path: /etc/motd
-	content: hello
+  path: /etc/motd
+  content: hello
 ```
 
 ### Spec Fields
@@ -169,11 +167,10 @@ Use this to place a prepared or local file at its final location on the node.
 ```yaml
 kind: CopyFile
 spec:
-
-	source:
-	  path: /etc/kubernetes/admin.conf
-	path: /home/vagrant/.kube/config
-	mode: "0644"
+  source:
+    path: /etc/kubernetes/admin.conf
+  path: /home/vagrant/.kube/config
+  mode: "0644"
 ```
 
 ### Spec Fields
@@ -231,11 +228,10 @@ Use this for small in-place configuration edits when full file ownership is unne
 ```yaml
 kind: EditFile
 spec:
-
-	path: /etc/containerd/config.toml
-	edits:
-	  - match: SystemdCgroup = false
-	    replaceWith: SystemdCgroup = true
+  path: /etc/containerd/config.toml
+  edits:
+    - match: SystemdCgroup = false
+      replaceWith: SystemdCgroup = true
 ```
 
 ### Spec Fields
@@ -267,12 +263,11 @@ Use this when TOML configuration should be updated without brittle string replac
 ```yaml
 kind: EditTOML
 spec:
-
-	path: /etc/containerd/config.toml
-	edits:
-	  - op: set
-	    rawPath: plugins."io.containerd.grpc.v1.cri".registry.config_path
-	    value: /etc/containerd/certs.d
+  path: /etc/containerd/config.toml
+  edits:
+    - op: set
+      rawPath: plugins."io.containerd.grpc.v1.cri".registry.config_path
+      value: /etc/containerd/certs.d
 ```
 
 ### Spec Fields
@@ -304,12 +299,11 @@ Use this for common map/list YAML updates where direct text replacement is too f
 ```yaml
 kind: EditYAML
 spec:
-
-	path: /etc/kubernetes/kubeadm-config.yaml
-	edits:
-	  - op: set
-	    rawPath: ClusterConfiguration.imageRepository
-	    value: registry.local/k8s
+  path: /etc/kubernetes/kubeadm-config.yaml
+  edits:
+    - op: set
+      rawPath: ClusterConfiguration.imageRepository
+      value: registry.local/k8s
 ```
 
 ### Spec Fields
@@ -341,12 +335,11 @@ Use this when JSON configuration should be modified by path instead of full rewr
 ```yaml
 kind: EditJSON
 spec:
-
-	path: /etc/cni/net.d/10-custom.conflist
-	edits:
-	  - op: set
-	    rawPath: plugins.0.type
-	    value: bridge
+  path: /etc/cni/net.d/10-custom.conflist
+  edits:
+    - op: set
+      rawPath: plugins.0.type
+      value: bridge
 ```
 
 ### Spec Fields
@@ -374,11 +367,10 @@ Use this when prepared tarballs or local archives should be expanded onto the no
 ```yaml
 kind: ExtractArchive
 spec:
-
-	source:
-	  path: /tmp/cni-plugins.tgz
-	path: /opt/cni/bin
-	include: [bridge, loopback]
+  source:
+    path: /tmp/cni-plugins.tgz
+  path: /opt/cni/bin
+  include: [bridge, loopback]
 ```
 
 ### Spec Fields

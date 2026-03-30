@@ -33,14 +33,13 @@ Use this when the node runtime needs a managed containerd config.toml.
 ```yaml
 kind: WriteContainerdConfig
 spec:
-
-	path: /etc/containerd/config.toml
-	createDefault: true
-	versionPolicy: preserve
-	rawSettings:
-	  - op: set
-	    rawPath: plugins."io.containerd.grpc.v1.cri".registry.config_path
-	    value: /etc/containerd/certs.d
+  path: /etc/containerd/config.toml
+  createDefault: true
+  versionPolicy: preserve
+  rawSettings:
+    - op: set
+      rawPath: plugins."io.containerd.grpc.v1.cri".registry.config_path
+      value: /etc/containerd/certs.d
 ```
 
 ### Spec Fields
@@ -73,14 +72,13 @@ Use this when containerd should resolve pulls through explicit registry host con
 ```yaml
 kind: WriteContainerdRegistryHosts
 spec:
-
-	path: /etc/containerd/certs.d
-	registryHosts:
-	  - registry: registry.k8s.io
-	    server: https://registry.k8s.io
-	    host: http://registry.local:5000
-	    capabilities: [pull, resolve]
-	    skipVerify: true
+  path: /etc/containerd/certs.d
+  registryHosts:
+    - registry: registry.k8s.io
+      server: https://registry.k8s.io
+      host: http://registry.local:5000
+      capabilities: [pull, resolve]
+      skipVerify: true
 ```
 
 ### Spec Fields

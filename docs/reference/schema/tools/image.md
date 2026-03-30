@@ -34,15 +34,14 @@ Use this during prepare to collect required images for offline use.
 ```yaml
 kind: DownloadImage
 spec:
-
-	images:
-	  - registry.k8s.io/kube-apiserver:v1.30.1
-	  - registry.example.com/platform/pause:3.9
-	auth:
-	  - registry: registry.example.com
-	    basic:
-	      username: "{{ .vars.registryUser }}"
-	      password: "{{ .vars.registryPassword }}"
+  images:
+    - registry.k8s.io/kube-apiserver:v1.30.1
+    - registry.example.com/platform/pause:3.9
+  auth:
+    - registry: registry.example.com
+      basic:
+        username: "{{ .vars.registryUser }}"
+        password: "{{ .vars.registryPassword }}"
 ```
 
 ### Spec Fields
@@ -90,11 +89,10 @@ Use this during apply before verifying or using images from an offline bundle.
 ```yaml
 kind: LoadImage
 spec:
-
-	sourceDir: images/control-plane
-	runtime: ctr
-	images:
-	  - registry.k8s.io/kube-apiserver:v1.30.1
+  sourceDir: images/control-plane
+  runtime: ctr
+  images:
+    - registry.k8s.io/kube-apiserver:v1.30.1
 ```
 
 ### Spec Fields
@@ -125,10 +123,9 @@ Use this during apply when images should already be present and only need verifi
 ```yaml
 kind: VerifyImage
 spec:
-
-	command: [ctr, -n, k8s.io, images, list, -q]
-	images:
-	  - registry.k8s.io/kube-apiserver:v1.30.1
+  command: [ctr, -n, k8s.io, images, list, -q]
+  images:
+    - registry.k8s.io/kube-apiserver:v1.30.1
 ```
 
 ### Spec Fields

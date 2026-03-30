@@ -33,12 +33,11 @@ Use this before refreshing caches or installing packages from a local mirror.
 ```yaml
 kind: ConfigureRepository
 spec:
-
-	format: deb
-	path: /etc/apt/sources.list.d/offline.list
-	repositories:
-	  - baseurl: http://repo.local/debian
-	    trusted: true
+  format: deb
+  path: /etc/apt/sources.list.d/offline.list
+  repositories:
+    - baseurl: http://repo.local/debian
+      trusted: true
 ```
 
 ### Spec Fields
@@ -74,12 +73,11 @@ Use this after writing repo definitions and before package install steps that de
 ```yaml
 kind: RefreshRepository
 spec:
-
-	manager: apt
-	clean: true
-	update: true
-	restrictToRepos:
-	  - /etc/apt/sources.list.d/offline.list
+  manager: apt
+  clean: true
+  update: true
+  restrictToRepos:
+    - /etc/apt/sources.list.d/offline.list
 ```
 
 ### Spec Fields

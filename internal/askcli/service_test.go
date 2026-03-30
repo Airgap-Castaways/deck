@@ -912,8 +912,8 @@ func testSchemaDocFamilyPageInput(t *testing.T, family string) schemadoc.PageInp
 		spec, _ := properties["spec"].(map[string]any)
 		if page.PageSlug == "" {
 			page.PageSlug = def.DocsPage
-			page.Title = def.FamilyTitle
-			page.Summary = "Reference for the `" + def.FamilyTitle + "` family of typed workflow steps."
+			page.Title = schemadoc.DisplayFamilyTitle(def.Family, "")
+			page.Summary = "Reference for the `" + page.Title + "` family of typed workflow steps."
 		}
 		page.Variants = append(page.Variants, schemadoc.VariantInput{
 			Kind:        def.Kind,

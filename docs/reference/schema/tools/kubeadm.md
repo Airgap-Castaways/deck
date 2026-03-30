@@ -35,9 +35,8 @@ Use this to bootstrap a control-plane node after host prerequisites are ready.
 ```yaml
 kind: InitKubeadm
 spec:
-
-	outputJoinFile: /tmp/deck/join.txt
-	podNetworkCIDR: 10.244.0.0/16
+  outputJoinFile: /tmp/deck/join.txt
+  podNetworkCIDR: 10.244.0.0/16
 ```
 
 ### Spec Fields
@@ -75,9 +74,8 @@ Use this after a bootstrap node has produced a valid join file or config.
 ```yaml
 kind: JoinKubeadm
 spec:
-
-	configFile: /tmp/deck/kubeadm-join.yaml
-	extraArgs: [--skip-phases=preflight]
+  configFile: /tmp/deck/kubeadm-join.yaml
+  extraArgs: [--skip-phases=preflight]
 ```
 
 ### Spec Fields
@@ -112,9 +110,8 @@ Use this to tear down an existing kubeadm-managed node safely.
 ```yaml
 kind: ResetKubeadm
 spec:
-
-	force: true
-	removePaths: [/etc/cni/net.d, /var/lib/etcd]
+  force: true
+  removePaths: [/etc/cni/net.d, /var/lib/etcd]
 ```
 
 ### Spec Fields
@@ -157,9 +154,8 @@ Use this to upgrade a local kubeadm-managed control-plane node with a typed work
 ```yaml
 kind: UpgradeKubeadm
 spec:
-
-	kubernetesVersion: v1.31.0
-	ignorePreflightErrors: [Swap]
+  kubernetesVersion: v1.31.0
+  ignorePreflightErrors: [Swap]
 ```
 
 ### Spec Fields

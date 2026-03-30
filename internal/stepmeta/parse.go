@@ -254,7 +254,7 @@ func parseCommentGroup(fset *token.FileSet, filePath string, name string, group 
 			out.hidden = true
 		case "example":
 			if value != "" {
-				out.example = value
+				out.example = normalizeExampleBlock([]string{value})
 				continue
 			}
 			block := make([]string, 0)
@@ -266,7 +266,7 @@ func parseCommentGroup(fset *token.FileSet, filePath string, name string, group 
 				i++
 				block = append(block, lines[i])
 			}
-			out.example = strings.TrimSpace(strings.Join(block, "\n"))
+			out.example = normalizeExampleBlock(block)
 		default:
 			line := 0
 			if group != nil && i < len(group.List) {
@@ -308,6 +308,106 @@ func filterEmpty(lines []string) []string {
 		out = append(out, strings.TrimSpace(line))
 	}
 	return out
+}
+
+func normalizeExampleBlock(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	trimmed := trimEmptyEdges(lines)
+	if len(trimmed) == 0 {
+		return ""
+	}
+	trimmed = dedentLines(trimmed)
+	for i := range trimmed {
+		trimmed[i] = strings.ReplaceAll(trimmed[i], "\t", "  ")
+	}
+	trimmed = removeRedundantExampleBlankLines(trimmed)
+	return strings.TrimSpace(strings.Join(trimmed, "\n"))
+}
+
+func removeRedundantExampleBlankLines(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for i := 0; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "" && i > 0 && i+1 < len(lines) {
+			prev := strings.TrimSpace(lines[i-1])
+			next := lines[i+1]
+			if strings.HasSuffix(prev, ":") && leadingIndentWidth(next) > 0 {
+				continue
+			}
+		}
+		out = append(out, lines[i])
+	}
+	return out
+}
+
+func trimEmptyEdges(lines []string) []string {
+	start := 0
+	for start < len(lines) && strings.TrimSpace(lines[start]) == "" {
+		start++
+	}
+	end := len(lines)
+	for end > start && strings.TrimSpace(lines[end-1]) == "" {
+		end--
+	}
+	return append([]string(nil), lines[start:end]...)
+}
+
+func dedentLines(lines []string) []string {
+	indent := -1
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		count := leadingIndentWidth(line)
+		if indent == -1 || count < indent {
+			indent = count
+		}
+	}
+	if indent <= 0 {
+		return append([]string(nil), lines...)
+	}
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		out[i] = trimIndentWidth(line, indent)
+	}
+	return out
+}
+
+func leadingIndentWidth(line string) int {
+	count := 0
+	for _, r := range line {
+		switch r {
+		case ' ':
+			count++
+		case '\t':
+			count += 2
+		default:
+			return count
+		}
+	}
+	return count
+}
+
+func trimIndentWidth(line string, width int) string {
+	trimmed := width
+	idx := 0
+	for idx < len(line) && trimmed > 0 {
+		switch line[idx] {
+		case ' ':
+			trimmed--
+			idx++
+		case '\t':
+			trimmed -= 2
+			idx++
+		default:
+			return line[idx:]
+		}
+	}
+	if idx >= len(line) {
+		return ""
+	}
+	return line[idx:]
 }
 
 func jsonFieldName(tag *ast.BasicLit) string {

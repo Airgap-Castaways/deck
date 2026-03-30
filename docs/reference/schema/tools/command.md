@@ -27,9 +27,8 @@ Use this only when no typed step expresses the change clearly enough.
 ```yaml
 kind: Command
 spec:
-
-	command: [systemctl, status, containerd]
-	timeout: 30s
+  command: [systemctl, status, containerd]
+  timeout: 30s
 ```
 
 ### Spec Fields

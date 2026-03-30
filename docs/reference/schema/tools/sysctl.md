@@ -27,11 +27,10 @@ Use this for kernel tunables that must survive reboot and may need immediate app
 ```yaml
 kind: Sysctl
 spec:
-
-	writeFile: /etc/sysctl.d/99-kubernetes-cri.conf
-	apply: true
-	values:
-	  net.ipv4.ip_forward: 1
+  writeFile: /etc/sysctl.d/99-kubernetes-cri.conf
+  apply: true
+  values:
+    net.ipv4.ip_forward: 1
 ```
 
 ### Spec Fields

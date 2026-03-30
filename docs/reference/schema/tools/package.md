@@ -33,20 +33,19 @@ Use this during prepare to collect package-manager content for offline installat
 ```yaml
 kind: DownloadPackage
 spec:
-
-	packages: [podman]
-	distro:
-	  family: rhel
-	  release: rocky9
-	repo:
-	  type: rpm
-	  modules:
-	    - name: container-tools
-	      stream: "4.0"
-	backend:
-	  mode: container
-	  runtime: docker
-	  image: rockylinux:9
+  packages: [podman]
+  distro:
+    family: rhel
+    release: rocky9
+  repo:
+    type: rpm
+    modules:
+      - name: container-tools
+        stream: "4.0"
+  backend:
+    mode: container
+    runtime: docker
+    image: rockylinux:9
 ```
 
 ### Spec Fields
@@ -110,11 +109,10 @@ Use this during apply to install packages from configured local or mirrored repo
 ```yaml
 kind: InstallPackage
 spec:
-
-	packages: [kubelet, kubeadm, kubectl]
-	source:
-	  type: local-repo
-	  path: /opt/deck/repos/kubernetes
+  packages: [kubelet, kubeadm, kubectl]
+  source:
+    type: local-repo
+    path: /opt/deck/repos/kubernetes
 ```
 
 ### Spec Fields

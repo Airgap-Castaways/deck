@@ -28,10 +28,9 @@ Use this when tools or runtimes expect a stable path alias.
 ```yaml
 kind: CreateSymlink
 spec:
-
-	path: /usr/bin/runc
-	target: /usr/local/sbin/runc
-	force: true
+  path: /usr/bin/runc
+  target: /usr/local/sbin/runc
+  force: true
 ```
 
 ### Spec Fields

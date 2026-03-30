@@ -108,6 +108,42 @@ func TestRenderToolPageUsesKindScopedNotesForImageAndPackageFamilies(t *testing.
 	}
 }
 
+func TestRenderToolPageNormalizesRepresentativeExamples(t *testing.T) {
+	for _, family := range []string{"package", "image", "file", "kernel-module"} {
+		rendered := string(RenderToolPage(testFamilyPageInput(t, family)))
+		if strings.Contains(rendered, "\t") {
+			t.Fatalf("expected rendered %s page to avoid tabs:\n%s", family, rendered)
+		}
+		if strings.Contains(rendered, "spec:\n\n") {
+			t.Fatalf("expected rendered %s page to avoid blank line after spec:\n%s", family, rendered)
+		}
+	}
+}
+
+func TestFamilyTitleFallbackUsesSpacedWords(t *testing.T) {
+	if got := familyTitleFallback("host-check"); got != "Host Check" {
+		t.Fatalf("unexpected host-check title: %q", got)
+	}
+	if got := familyTitleFallback("systemd-unit"); got != "Systemd Unit" {
+		t.Fatalf("unexpected systemd-unit title: %q", got)
+	}
+	if got := DisplayFamilyTitle("host-check", ""); got != "Host Check" {
+		t.Fatalf("unexpected display title: %q", got)
+	}
+}
+
+func TestRenderToolPagePreservesNoteOrder(t *testing.T) {
+	rendered := string(RenderToolPage(testFamilyPageInput(t, "package")))
+	section := sectionForKind(rendered, "DownloadPackage")
+	first := "Use `DownloadPackage` and `InstallPackage` with `ConfigureRepository` and `RefreshRepository` for a complete typed package-management flow."
+	second := "Omit `outputDir` unless you need a custom package location; deck uses `packages/` by default, or `packages/deb/<release>` and `packages/rpm/<release>` when `repo.type` is set."
+	firstIdx := strings.Index(section, first)
+	secondIdx := strings.Index(section, second)
+	if firstIdx == -1 || secondIdx == -1 || firstIdx > secondIdx {
+		t.Fatalf("expected stable note ordering in package section:\n%s", section)
+	}
+}
+
 func TestWaitForCommandUsesConcreteExample(t *testing.T) {
 	rendered := string(RenderToolPage(testFamilyPageInput(t, "wait")))
 	section := sectionForKind(rendered, "WaitForCommand")
@@ -152,8 +188,8 @@ func testFamilyPageInput(t *testing.T, family string) PageInput {
 		spec, _ := properties["spec"].(map[string]any)
 		if page.PageSlug == "" {
 			page.PageSlug = def.DocsPage
-			page.Title = def.FamilyTitle
-			page.Summary = "Reference for the `" + def.FamilyTitle + "` family of typed workflow steps."
+			page.Title = DisplayFamilyTitle(def.Family, "")
+			page.Summary = "Reference for the `" + page.Title + "` family of typed workflow steps."
 		}
 		page.Variants = append(page.Variants, VariantInput{
 			Kind:        def.Kind,

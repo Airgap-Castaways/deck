@@ -28,10 +28,9 @@ Use this after config changes that need a service lifecycle action.
 ```yaml
 kind: ManageService
 spec:
-
-	name: containerd
-	enabled: true
-	state: started
+  name: containerd
+  enabled: true
+  state: started
 ```
 
 ### Spec Fields
