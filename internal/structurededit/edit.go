@@ -170,6 +170,12 @@ func applyEdit(root any, path []pathSegment, edit stepspec.StructuredEdit) (any,
 			return nil, err
 		}
 		return setAtPath(root, path, value)
+	case "insert":
+		value, err := normalizeValue(edit.Value)
+		if err != nil {
+			return nil, err
+		}
+		return insertAtPath(root, path, value)
 	case "delete":
 		return deleteAtPath(root, path)
 	case "appendUnique":
@@ -291,6 +297,14 @@ func setAtPath(root any, path []pathSegment, value any) (any, error) {
 	return updated, nil
 }
 
+func insertAtPath(root any, path []pathSegment, value any) (any, error) {
+	updated, err := insertNode(root, path, value)
+	if err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
 func deleteAtPath(root any, path []pathSegment) (any, error) {
 	updated, found, err := deleteNode(root, path)
 	if err != nil {
@@ -380,6 +394,60 @@ func setNode(current any, path []pathSegment, value any) (any, error) {
 		return nil, err
 	}
 	holder[segment.key] = updatedChild
+	return holder, nil
+}
+
+func insertNode(current any, path []pathSegment, value any) (any, error) {
+	segment := path[0]
+	if !segment.isIndex {
+		if current == nil {
+			current = map[string]any{}
+		}
+		holder, ok := current.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("path segment must be an object key")
+		}
+		child := holder[segment.key]
+		if len(path) == 1 {
+			holder[segment.key] = value
+			return holder, nil
+		}
+		if child == nil {
+			child = newContainer(path[1])
+		}
+		updatedChild, err := insertNode(child, path[1:], value)
+		if err != nil {
+			return nil, err
+		}
+		holder[segment.key] = updatedChild
+		return holder, nil
+	}
+	holder, ok := current.([]any)
+	if !ok {
+		return nil, fmt.Errorf("path segment must be an array index")
+	}
+	if segment.index < 0 || segment.index > len(holder) {
+		return nil, fmt.Errorf("array index %d out of range", segment.index)
+	}
+	if len(path) == 1 {
+		holder = append(holder, nil)
+		copy(holder[segment.index+1:], holder[segment.index:])
+		holder[segment.index] = value
+		return holder, nil
+	}
+	if segment.index == len(holder) {
+		seed := newContainer(path[1])
+		holder = append(holder, seed)
+	}
+	child := holder[segment.index]
+	if child == nil {
+		child = newContainer(path[1])
+	}
+	updatedChild, err := insertNode(child, path[1:], value)
+	if err != nil {
+		return nil, err
+	}
+	holder[segment.index] = updatedChild
 	return holder, nil
 }
 

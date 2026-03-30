@@ -262,31 +262,34 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			generationKind = "generate"
 		}
 		generationRequest := askprovider.Request{
-			Kind:         generationKind,
-			Provider:     effective.Provider,
-			Model:        effective.Model,
-			APIKey:       effective.APIKey,
-			OAuthToken:   effective.OAuthToken,
-			AccountID:    effective.AccountID,
-			Endpoint:     effective.Endpoint,
-			SystemPrompt: generationSystemPrompt(decision.Route, decision.Target, requestText, retrieval, requirements, authoringBrief, executionModel, scaffold),
-			Prompt:       generationPrompt,
-			MaxRetries:   providerRetryCount("generate"),
-			Timeout:      askRequestTimeout("generate", attempts, generationPrompt, generationPrompt),
+			Kind:               generationKind,
+			Provider:           effective.Provider,
+			Model:              effective.Model,
+			APIKey:             effective.APIKey,
+			OAuthToken:         effective.OAuthToken,
+			AccountID:          effective.AccountID,
+			Endpoint:           effective.Endpoint,
+			SystemPrompt:       generationSystemPrompt(decision.Route, decision.Target, requestText, retrieval, requirements, authoringBrief, executionModel, scaffold),
+			Prompt:             generationPrompt,
+			ResponseSchema:     askcontract.GenerationResponseSchema(),
+			ResponseSchemaName: "deck_generation_response",
+			MaxRetries:         providerRetryCount("generate"),
+			Timeout:            askRequestTimeout("generate", attempts, generationPrompt, generationPrompt),
 		}
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "generation", SystemPrompt: generationRequest.SystemPrompt, UserPrompt: generationRequest.Prompt})
 		logger.logf("basic", "\n[ask][phase:generation:start] route=%s attempts=%d\n", decision.Route, attempts)
-		gen, lintSummary, critic, judge, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts, logger, decision, plan, authoringBrief, retrieval, planCritic)
+		gen, files, lintSummary, critic, judge, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts, logger, decision, plan, authoringBrief, retrieval, planCritic)
 		if genErr != nil {
 			return genErr
 		}
 		if askFeatureEnabled("DECK_ASK_ENABLE_POSTPROCESS") {
-			postSummary, postErr := maybePostProcessGeneration(ctx, client, generationRequest, resolvedRoot, logger, decision, plan, authoringBrief, retrieval, gen, lintSummary, critic, judge, planCritic)
+			postSummary, postErr := maybePostProcessGeneration(ctx, client, generationRequest, resolvedRoot, logger, decision, plan, authoringBrief, retrieval, gen, files, lintSummary, critic, judge, planCritic)
 			switch {
 			case postErr != nil:
 				logger.logf("debug", "[ask][phase:postprocess:skip] error=%v\n", postErr)
 			case postSummary.Applied:
 				gen = postSummary.Generation
+				files = postSummary.Files
 				lintSummary = postSummary.LintSummary
 				critic = postSummary.Critic
 				judge = postSummary.Judge
@@ -295,10 +298,10 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 				result.ReviewLines = append(result.ReviewLines, postSummary.Notes...)
 			}
 		}
-		logger.logf("basic", "[ask][phase:generation:done] files=%d lint=%s\n", len(gen.Files), lintSummary)
+		logger.logf("basic", "[ask][phase:generation:done] files=%d lint=%s\n", len(files), lintSummary)
 		result.LLMUsed = true
 		result.RetriesUsed = retriesUsed
-		result.Files = gen.Files
+		result.Files = files
 		result.Summary = gen.Summary
 		result.ReviewLines = append(result.ReviewLines, gen.Review...)
 		result.ReviewLines = append(result.ReviewLines, renderPlanCriticNotes(planCritic)...)

@@ -2,13 +2,17 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
+	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 )
 
@@ -18,14 +22,77 @@ type mockAskClient struct {
 	calls     int
 }
 
-func (m *mockAskClient) Generate(_ context.Context, _ askprovider.Request) (askprovider.Response, error) {
+func (m *mockAskClient) Generate(_ context.Context, req askprovider.Request) (askprovider.Response, error) {
 	m.calls++
 	if m.index >= len(m.responses) {
-		return askprovider.Response{Content: m.responses[len(m.responses)-1]}, nil
+		return askprovider.Response{Content: maybeConvertLegacyGenerationJSON(req.Kind, m.responses[len(m.responses)-1])}, nil
 	}
-	resp := m.responses[m.index]
+	resp := maybeConvertLegacyGenerationJSON(req.Kind, m.responses[m.index])
 	m.index++
 	return askprovider.Response{Content: resp}, nil
+}
+
+func maybeConvertLegacyGenerationJSON(kind string, raw string) string {
+	switch strings.TrimSpace(kind) {
+	case "generate", "generate-fast", "postprocess-edit", "postprocess-structural":
+		return legacyGenerationJSONToDocuments(raw)
+	default:
+		return raw
+	}
+}
+
+func legacyGenerationJSONToDocuments(raw string) string {
+	type legacyFile struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+	type legacyResponse struct {
+		Summary string       `json:"summary"`
+		Review  []string     `json:"review"`
+		Files   []legacyFile `json:"files"`
+	}
+	var legacy legacyResponse
+	if err := json.Unmarshal([]byte(raw), &legacy); err != nil || len(legacy.Files) == 0 {
+		return raw
+	}
+	resp := askcontract.GenerationResponse{Summary: legacy.Summary, Review: legacy.Review, Documents: make([]askcontract.GeneratedDocument, 0, len(legacy.Files))}
+	for _, file := range legacy.Files {
+		doc := askcontract.GeneratedDocument{Path: file.Path, Action: "replace"}
+		switch {
+		case strings.HasSuffix(file.Path, "vars.yaml"):
+			var vars map[string]any
+			if err := yaml.Unmarshal([]byte(file.Content), &vars); err != nil {
+				return raw
+			}
+			if vars == nil {
+				vars = map[string]any{}
+			}
+			doc.Kind = "vars"
+			doc.Vars = vars
+		case strings.Contains(file.Path, "/components/"):
+			var component struct {
+				Steps []askcontract.WorkflowStep `yaml:"steps"`
+			}
+			if err := yaml.Unmarshal([]byte(file.Content), &component); err != nil {
+				return raw
+			}
+			doc.Kind = "component"
+			doc.Component = &askcontract.ComponentDocument{Steps: component.Steps}
+		default:
+			var workflow askcontract.WorkflowDocument
+			if err := yaml.Unmarshal([]byte(file.Content), &workflow); err != nil {
+				return raw
+			}
+			doc.Kind = "workflow"
+			doc.Workflow = &workflow
+		}
+		resp.Documents = append(resp.Documents, doc)
+	}
+	out, err := json.Marshal(resp)
+	if err != nil {
+		return raw
+	}
+	return string(out)
 }
 
 func TestAskConfigCommands(t *testing.T) {
@@ -228,7 +295,7 @@ func TestAskRepairLoop(t *testing.T) {
 
 	originalFactory := newAskBackend
 	newAskBackend = func() askprovider.Client {
-		return &mockAskClient{responses: []string{`{"summary":"bad","files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps: ["}]}`, validAskJSON()}}
+		return &mockAskClient{responses: []string{`{"summary":"bad","documents":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","workflow":{"version":"v1alpha1","steps":[{"id":"run","kind":"Command","spec":{}}]}}]}`, validAskJSON()}}
 	}
 	defer func() { newAskBackend = originalFactory }()
 
@@ -440,7 +507,7 @@ func TestAskComplexPromptShowsJudgeFindingsAndRepairsLoosePlanJSON(t *testing.T)
 }
 
 func validAskJSON() string {
-	return `{"summary":"generated starter workflows","review":["Prefer typed steps where possible."],"files":[{"path":"workflows/vars.yaml","content":"{}\n"},{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nphases:\n  - name: collect\n    steps: []\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: install\n    imports:\n      - path: example-apply.yaml\n"},{"path":"workflows/components/example-apply.yaml","content":"steps:\n  - id: wait-runtime\n    kind: WaitForFile\n    spec:\n      path: /etc/containerd/config.toml\n      interval: 1s\n      timeout: 5s\n"}]}`
+	return `{"summary":"generated starter workflows","review":["Prefer typed steps where possible."],"documents":[{"path":"workflows/vars.yaml","kind":"vars","vars":{}},{"path":"workflows/scenarios/apply.yaml","kind":"workflow","workflow":{"version":"v1alpha1","phases":[{"name":"install","steps":[{"id":"wait-runtime","kind":"WaitForFile","spec":{"path":"/etc/containerd/config.toml","interval":"1s","timeout":"5s"}}]}]}}]}`
 }
 
 func validClassificationReview() string {

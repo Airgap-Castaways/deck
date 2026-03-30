@@ -321,7 +321,7 @@ func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.Gene
 			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "vars_required_by_checklist", Message: "validation checklist requires vars but workflows/vars.yaml was not generated", Path: "workflows/vars.yaml"})
 		}
 	}
-	if decision.Route == askintent.RouteRefine {
+	if decision.Route == askintent.RouteRefine && len(planned) > 0 {
 		for _, file := range gen.Files {
 			clean := filepath.ToSlash(strings.TrimSpace(file.Path))
 			action, ok := planned[clean]
