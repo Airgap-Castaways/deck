@@ -57,7 +57,6 @@ Release downloads are published on the GitHub Releases page. Homebrew installs a
 
 ```bash
 # Homebrew tap
-brew tap Airgap-Castaways/tap
 brew install Airgap-Castaways/tap/deck
 ```
 
