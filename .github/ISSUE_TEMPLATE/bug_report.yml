@@ -1,0 +1,47 @@
+name: Bug Report
+description: Record a defect with reproduction details and a clear done condition.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      placeholder: deck prepare does not print step progress in real time
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        deck version:
+        OS/arch:
+        mode:
+        workflow or scenario:
+    validations:
+      required: false
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      placeholder: |
+        1. Build deck
+        2. Run the command or scenario
+        3. Observe the failure
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done Criteria
+      placeholder: |
+        - `deck prepare` prints step start and finish lines to stderr
+        - logs include elapsed time
+        - related CLI tests cover the behavior
+    validations:
+      required: true

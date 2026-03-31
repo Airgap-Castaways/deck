@@ -1,0 +1,26 @@
+name: Maintenance Task
+description: Track refactors, test work, docs cleanup, CI work, or other maintenance.
+title: "task: "
+labels:
+  - maintenance
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done Criteria
+    validations:
+      required: true
