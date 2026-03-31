@@ -71,6 +71,19 @@ func TestBuildScenarioRequirementsCapturesSpecificTwoNodeOfflinePrompt(t *testin
 	}
 }
 
+func TestBuildScenarioRequirementsKeepsScenarioAndVarsTargetsForRefinePrompt(t *testing.T) {
+	prompt := "Refactor workflows/scenarios/control-plane-bootstrap.yaml to use workflows/vars.yaml for repeated values and preserve behavior."
+	req := BuildScenarioRequirements(prompt, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{HasWorkflowTree: true}, askintent.Decision{Route: askintent.RouteRefine, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/control-plane-bootstrap.yaml"}})
+	for _, want := range []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/vars.yaml"} {
+		if !containsString(req.RequiredFiles, want) {
+			t.Fatalf("expected required file %q, got %#v", want, req.RequiredFiles)
+		}
+	}
+	if req.EntryScenario != "workflows/scenarios/control-plane-bootstrap.yaml" {
+		t.Fatalf("expected scenario anchor entry, got %#v", req)
+	}
+}
+
 func TestBuildScenarioRequirementsSupportsExplicitPrepareOnlyRequest(t *testing.T) {
 	req := BuildScenarioRequirements("create a prepare workflow that downloads the runc binary into bundle storage", askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}})
 	if req.EntryScenario != "" {

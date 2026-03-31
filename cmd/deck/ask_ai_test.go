@@ -177,11 +177,11 @@ func TestAskPreviewAndWrite(t *testing.T) {
 
 	originalFactory := newAskBackend
 	newAskBackend = func() askprovider.Client {
-		return &mockAskClient{responses: []string{validAskJSON()}}
+		return &mockAskClient{responses: []string{validSpecificCreatePlanJSON(), validAskJSON(), validSpecificCreatePlanJSON(), validAskJSON()}}
 	}
 	defer func() { newAskBackend = originalFactory }()
 
-	preview, err := runWithCapturedStdout([]string{"ask", "rhel9 kubeadm cluster scenario"})
+	preview, err := runWithCapturedStdout([]string{"ask", "--create", "create a specific single-node apply workflow"})
 	if err != nil {
 		t.Fatalf("ask preview: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestAskPreviewAndWrite(t *testing.T) {
 		t.Fatalf("preview must not write workflow files")
 	}
 
-	writeOut, err := runWithCapturedStdout([]string{"ask", "--write", "rhel9 kubeadm cluster scenario"})
+	writeOut, err := runWithCapturedStdout([]string{"ask", "--create", "--write", "create a specific single-node apply workflow"})
 	if err != nil {
 		t.Fatalf("ask write: %v", err)
 	}
@@ -482,4 +482,8 @@ func testOAuthToken() string {
 
 func validPlanJSON() string {
 	return `{"version":1,"request":"create single-node cluster workflow","intent":"draft","complexity":"medium","authoringBrief":{"routeIntent":"draft","targetScope":"workspace","targetPaths":["workflows/scenarios/apply.yaml"],"modeIntent":"apply-only","connectivity":"offline","completenessTarget":"complete","topology":"single-node","nodeCount":1,"requiredCapabilities":["kubeadm-bootstrap","cluster-verification"]},"executionModel":{"verification":{"expectedNodeCount":1,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane"}},"blockers":[],"targetOutcome":"Generate workflows","assumptions":["Use v1alpha1"],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry scenario"}],"validationChecklist":["lint"]}`
+}
+
+func validSpecificCreatePlanJSON() string {
+	return `{"version":1,"request":"create a specific single-node apply workflow","intent":"draft","complexity":"simple","authoringBrief":{"routeIntent":"draft","targetScope":"workspace","targetPaths":["workflows/scenarios/apply.yaml"],"modeIntent":"apply-only","connectivity":"offline","completenessTarget":"starter","topology":"single-node","nodeCount":1,"requiredCapabilities":["cluster-verification"]},"executionModel":{"verification":{"expectedNodeCount":1,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane"}},"blockers":[],"targetOutcome":"Generate workflows","assumptions":["Use v1alpha1"],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry scenario"}],"validationChecklist":["lint"]}`
 }
