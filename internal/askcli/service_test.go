@@ -14,6 +14,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
@@ -421,6 +422,7 @@ func TestNormalizeArtifactKindsDropsPlannerNoise(t *testing.T) {
 }
 
 func TestGenerateWithValidationRetriesParseFailure(t *testing.T) {
+	enableLegacyAuthoringFallback(t)
 	client := &stubClient{responses: []string{
 		`not-json`,
 		`{"summary":"ok","review":[],"files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [\"true\"]\n"}]}`,
@@ -1123,6 +1125,22 @@ func TestGenerateWithValidationAllowsLegacyDraftFallbackWhenEnabled(t *testing.T
 	_, files, _, _, _, _, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate-fast", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: "create workflow"}, t.TempDir(), 1, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
 	if err != nil || len(files) != 1 {
 		t.Fatalf("expected legacy draft fallback to succeed when enabled, got files=%#v err=%v", files, err)
+	}
+}
+
+func TestValidatePrimaryAuthoringContractRejectsDraftDocumentsOnRetry(t *testing.T) {
+	err := validatePrimaryAuthoringContract(askintent.RouteDraft, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1"}}}}, 2)
+	if err == nil || !strings.Contains(err.Error(), "builder selection") {
+		t.Fatalf("expected draft primary contract to reject direct documents on retry, got %v", err)
+	}
+}
+
+func TestDraftSelectionRetryPromptAvoidsDocumentRepairMode(t *testing.T) {
+	prompt := draftSelectionRetryPrompt("create offline workflow", "schema invalid", []askdiagnostic.Diagnostic{{Message: "spec.runtime must be one of auto, ctr, docker, podman"}})
+	for _, want := range []string{"Return draft selection only", "Do not return documents", "spec.runtime must be one of"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("expected %q in draft retry prompt, got %q", want, prompt)
+		}
 	}
 }
 

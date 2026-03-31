@@ -9,12 +9,16 @@ import (
 )
 
 func validatePrimaryAuthoringContract(route askintent.Route, gen askcontract.GenerationResponse, attempt int) error {
+	if route == askintent.RouteDraft {
+		if legacyAuthoringFallbackEnabled() {
+			return nil
+		}
+		return validatePrimaryDraftContract(gen)
+	}
 	if attempt > 1 || legacyAuthoringFallbackEnabled() {
 		return nil
 	}
 	switch route {
-	case askintent.RouteDraft:
-		return validatePrimaryDraftContract(gen)
 	case askintent.RouteRefine:
 		return validatePrimaryRefineContract(gen)
 	default:

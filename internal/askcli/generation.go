@@ -63,8 +63,12 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 				repairDiags = append(repairDiags, askdiagnostic.FromPlanCritic(planCritic)...)
 				repairDiags = append(repairDiags, askdiagnostic.FromCritic(lastCritic)...)
 				logger.logf("debug", "\n[ask][phase:repair:diagnostics]\n%s\n", askdiagnostic.JSON(repairDiags))
-				currentSystemPrompt = strings.TrimSpace(req.SystemPrompt) + "\n\n" + documentRepairSystemPrompt(normalizedAuthoringBrief(plan, brief), plan)
-				currentPrompt = documentRepairUserPrompt(lastFiles, lastValidation, repairDiags, repairPaths)
+				if decision.Route == askintent.RouteDraft && !legacyAuthoringFallbackEnabled() {
+					currentPrompt = draftSelectionRetryPrompt(req.Prompt, lastValidation, repairDiags)
+				} else {
+					currentSystemPrompt = strings.TrimSpace(req.SystemPrompt) + "\n\n" + documentRepairSystemPrompt(normalizedAuthoringBrief(plan, brief), plan)
+					currentPrompt = documentRepairUserPrompt(lastFiles, lastValidation, repairDiags, repairPaths)
+				}
 			}
 		}
 		logger.logf("basic", "[ask][phase:generation:attempt] attempt=%d/%d\n", attempt, attempts)
@@ -195,4 +199,32 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 		}
 	}
 	return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempts - 1, fmt.Errorf("ask generation did not validate after %d attempts: %s", attempts, lastValidation)
+}
+
+func draftSelectionRetryPrompt(base string, lastValidation string, diags []askdiagnostic.Diagnostic) string {
+	b := &strings.Builder{}
+	b.WriteString(strings.TrimSpace(base))
+	b.WriteString("\n\nRetry requirements:\n")
+	b.WriteString("- Return draft selection only under selection.targets[].builders.\n")
+	b.WriteString("- Do not return documents or raw step specs.\n")
+	b.WriteString("- Do not set low-level path, runtime, repo, distro, source, or role-expression overrides when the authoring program already provides them.\n")
+	b.WriteString("- Prefer selecting the minimal recipe set and let code derive canonical fields from source-of-truth metadata.\n")
+	if strings.TrimSpace(lastValidation) != "" {
+		b.WriteString("Previous attempt failed validation/materialization: ")
+		b.WriteString(strings.TrimSpace(lastValidation))
+		b.WriteString("\n")
+	}
+	if len(diags) > 0 {
+		b.WriteString("Structured diagnostics:\n")
+		for _, diag := range diags {
+			message := strings.TrimSpace(diag.Message)
+			if message == "" {
+				continue
+			}
+			b.WriteString("- ")
+			b.WriteString(message)
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
