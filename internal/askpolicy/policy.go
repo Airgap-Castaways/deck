@@ -195,12 +195,11 @@ func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askinte
 
 func planClarificationsFromRequirements(prompt string, req ScenarioRequirements, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) []askcontract.PlanClarification {
 	facts := askauthoring.InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
-	items := append([]askcontract.PlanClarification(nil), facts.Clarifications...)
-	items = append(items, targetClarificationsFromRequirements(prompt, req, decision, workspace)...)
+	items := clarificationCandidatesFromRequirements(prompt, req, decision, workspace, facts)
 	for i := range items {
 		applyClarificationHints(&items[i], facts)
 	}
-	return items
+	return sortClarifications(dedupePlanClarifications(items))
 }
 
 func targetClarificationsFromRequirements(prompt string, req ScenarioRequirements, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) []askcontract.PlanClarification {
@@ -235,6 +234,8 @@ func targetClarificationsFromRequirements(prompt string, req ScenarioRequirement
 		ID:                 "refine.anchorPath",
 		Question:           "This refine request does not name a single workflow file to anchor the change. Which existing file should the refactor treat as the primary target?",
 		Kind:               "path",
+		Reason:             "Refine generation keeps one user-anchored file stable and may expand only into explicitly allowed companion files.",
+		Decision:           "scope",
 		Options:            options,
 		RecommendedDefault: defaultPath,
 		BlocksGeneration:   true,

@@ -121,7 +121,7 @@ func hasFatalPlanReviewIssues(plan askcontract.PlanResponse, critic askcontract.
 func fatalPlanReviewReasons(plan askcontract.PlanResponse, critic askcontract.PlanCriticResponse) []string {
 	reasons := []string{}
 	for _, finding := range normalizedPlanCriticFindings(plan, critic) {
-		if !planCriticFindingIsFatal(finding) {
+		if !planCriticFindingIsFatal(finding) && !planCriticFindingNeedsExecutionGate(finding) {
 			continue
 		}
 		if text := strings.TrimSpace(finding.Message); text != "" {
@@ -133,8 +133,19 @@ func fatalPlanReviewReasons(plan askcontract.PlanResponse, critic askcontract.Pl
 			reasons = append(reasons, item)
 		}
 	}
+	reasons = append(reasons, fatalPlanScopeReasons(plan)...)
 	reasons = append(reasons, fatalPlanGraphReasons(plan)...)
 	return dedupe(reasons)
+}
+
+func fatalPlanScopeReasons(plan askcontract.PlanResponse) []string {
+	if askintent.ParseRoute(plan.Intent) != askintent.RouteRefine {
+		return nil
+	}
+	if len(plan.AuthoringBrief.AnchorPaths) == 0 {
+		return []string{"refine generation requires at least one anchor path before execution can continue"}
+	}
+	return nil
 }
 
 func fatalPlanGraphReasons(plan askcontract.PlanResponse) []string {
@@ -258,6 +269,22 @@ func planCriticFindingIsFatal(finding askcontract.PlanCriticFinding) bool {
 		return false
 	}
 	return finding.Severity == workflowissues.SeverityBlocking
+}
+
+func planCriticFindingNeedsExecutionGate(finding askcontract.PlanCriticFinding) bool {
+	switch finding.Code {
+	case workflowissues.CodeMissingArtifactConsumer,
+		workflowissues.CodeMissingRoleSelector,
+		workflowissues.CodeAmbiguousJoinContract,
+		workflowissues.CodeArtifactContractGap,
+		workflowissues.CodeWeakVerificationStaging,
+		workflowissues.CodeRoleCardinalityGap,
+		workflowissues.CodeTopologyFidelityGap,
+		workflowissues.CodeWorkerJoinFanoutGap:
+		return true
+	default:
+		return false
+	}
 }
 
 func planCriticFindingIsRecoverable(finding askcontract.PlanCriticFinding) bool {

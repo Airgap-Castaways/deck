@@ -74,12 +74,13 @@ type StructuredEditAction struct {
 }
 
 type RefineTransformAction struct {
-	Type     string `json:"type"`
-	RawPath  string `json:"rawPath,omitempty"`
-	VarName  string `json:"varName,omitempty"`
-	VarsPath string `json:"varsPath,omitempty"`
-	Path     string `json:"path,omitempty"`
-	Value    any    `json:"value,omitempty"`
+	Type      string `json:"type"`
+	Candidate string `json:"candidate,omitempty"`
+	RawPath   string `json:"rawPath,omitempty"`
+	VarName   string `json:"varName,omitempty"`
+	VarsPath  string `json:"varsPath,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Value     any    `json:"value,omitempty"`
 }
 
 type GenerationResponse struct {
@@ -96,12 +97,18 @@ type DraftSelection struct {
 	Vars     map[string]any         `json:"vars,omitempty"`
 }
 
+type DraftBuilderSelection struct {
+	ID        string         `json:"id"`
+	Overrides map[string]any `json:"overrides,omitempty"`
+}
+
 type DraftTargetSelection struct {
-	Path   string                `json:"path"`
-	Kind   string                `json:"kind,omitempty"`
-	Phases []DraftPhaseSelection `json:"phases,omitempty"`
-	Steps  []WorkflowStep        `json:"steps,omitempty"`
-	Vars   map[string]any        `json:"vars,omitempty"`
+	Path     string                  `json:"path"`
+	Kind     string                  `json:"kind,omitempty"`
+	Builders []DraftBuilderSelection `json:"builders,omitempty"`
+	Phases   []DraftPhaseSelection   `json:"phases,omitempty"`
+	Steps    []WorkflowStep          `json:"steps,omitempty"`
+	Vars     map[string]any          `json:"vars,omitempty"`
 }
 
 type DraftPhaseSelection struct {
@@ -143,6 +150,8 @@ type PlanClarification struct {
 	ID                 string   `json:"id"`
 	Question           string   `json:"question"`
 	Kind               string   `json:"kind,omitempty"`
+	Reason             string   `json:"reason,omitempty"`
+	Decision           string   `json:"decision,omitempty"`
 	Options            []string `json:"options,omitempty"`
 	RecommendedDefault string   `json:"recommendedDefault,omitempty"`
 	Answer             string   `json:"answer,omitempty"`
@@ -151,15 +160,20 @@ type PlanClarification struct {
 }
 
 type AuthoringBrief struct {
-	RouteIntent          string   `json:"routeIntent,omitempty"`
-	TargetScope          string   `json:"targetScope,omitempty"`
-	TargetPaths          []string `json:"targetPaths,omitempty"`
-	ModeIntent           string   `json:"modeIntent,omitempty"`
-	Connectivity         string   `json:"connectivity,omitempty"`
-	CompletenessTarget   string   `json:"completenessTarget,omitempty"`
-	Topology             string   `json:"topology,omitempty"`
-	NodeCount            int      `json:"nodeCount,omitempty"`
-	RequiredCapabilities []string `json:"requiredCapabilities,omitempty"`
+	RouteIntent              string   `json:"routeIntent,omitempty"`
+	TargetScope              string   `json:"targetScope,omitempty"`
+	TargetPaths              []string `json:"targetPaths,omitempty"`
+	AnchorPaths              []string `json:"anchorPaths,omitempty"`
+	AllowedCompanionPaths    []string `json:"allowedCompanionPaths,omitempty"`
+	DisallowedExpansionPaths []string `json:"disallowedExpansionPaths,omitempty"`
+	ModeIntent               string   `json:"modeIntent,omitempty"`
+	Connectivity             string   `json:"connectivity,omitempty"`
+	CompletenessTarget       string   `json:"completenessTarget,omitempty"`
+	Topology                 string   `json:"topology,omitempty"`
+	NodeCount                int      `json:"nodeCount,omitempty"`
+	PlatformFamily           string   `json:"platformFamily,omitempty"`
+	EscapeHatchMode          string   `json:"escapeHatchMode,omitempty"`
+	RequiredCapabilities     []string `json:"requiredCapabilities,omitempty"`
 }
 
 type ExecutionModel struct {
@@ -250,7 +264,7 @@ func GenerationResponseSchema() json.RawMessage {
 	schema := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
-		"required":             []string{"summary", "review", "documents"},
+		"required":             []string{"summary", "review"},
 		"properties": map[string]any{
 			"summary": map[string]any{"type": "string"},
 			"review":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
@@ -266,8 +280,20 @@ func GenerationResponseSchema() json.RawMessage {
 							"additionalProperties": false,
 							"required":             []string{"path"},
 							"properties": map[string]any{
-								"path":   map[string]any{"type": "string"},
-								"kind":   map[string]any{"type": "string"},
+								"path": map[string]any{"type": "string"},
+								"kind": map[string]any{"type": "string"},
+								"builders": map[string]any{
+									"type": "array",
+									"items": map[string]any{
+										"type":                 "object",
+										"additionalProperties": false,
+										"required":             []string{"id"},
+										"properties": map[string]any{
+											"id":        map[string]any{"type": "string"},
+											"overrides": openObjectSchema(),
+										},
+									},
+								},
 								"steps":  openObjectSchema(),
 								"phases": openObjectSchema(),
 								"vars":   openObjectSchema(),
@@ -297,12 +323,13 @@ func GenerationResponseSchema() json.RawMessage {
 								"additionalProperties": false,
 								"required":             []string{"type"},
 								"properties": map[string]any{
-									"type":     map[string]any{"type": "string"},
-									"rawPath":  map[string]any{"type": "string"},
-									"varName":  map[string]any{"type": "string"},
-									"varsPath": map[string]any{"type": "string"},
-									"path":     map[string]any{"type": "string"},
-									"value":    map[string]any{},
+									"type":      map[string]any{"type": "string"},
+									"candidate": map[string]any{"type": "string"},
+									"rawPath":   map[string]any{"type": "string"},
+									"varName":   map[string]any{"type": "string"},
+									"varsPath":  map[string]any{"type": "string"},
+									"path":      map[string]any{"type": "string"},
+									"value":     map[string]any{},
 								},
 							},
 						},
@@ -322,6 +349,10 @@ func GenerationResponseSchema() json.RawMessage {
 					},
 				},
 			},
+		},
+		"anyOf": []any{
+			map[string]any{"required": []string{"documents"}},
+			map[string]any{"required": []string{"selection"}},
 		},
 	}
 	raw, err := json.Marshal(schema)
@@ -390,22 +421,50 @@ func ParseGeneration(raw string) (GenerationResponse, error) {
 		}
 		for j := range resp.Documents[i].Transforms {
 			resp.Documents[i].Transforms[j].Type = normalizeTransformType(resp.Documents[i].Transforms[j].Type)
+			resp.Documents[i].Transforms[j].Candidate = strings.TrimSpace(resp.Documents[i].Transforms[j].Candidate)
 			resp.Documents[i].Transforms[j].RawPath = strings.TrimSpace(resp.Documents[i].Transforms[j].RawPath)
 			resp.Documents[i].Transforms[j].VarName = strings.TrimSpace(resp.Documents[i].Transforms[j].VarName)
 			resp.Documents[i].Transforms[j].VarsPath = strings.TrimSpace(resp.Documents[i].Transforms[j].VarsPath)
 			resp.Documents[i].Transforms[j].Path = strings.TrimSpace(resp.Documents[i].Transforms[j].Path)
 		}
 	}
+	if resp.Selection != nil {
+		for i := range resp.Selection.Patterns {
+			resp.Selection.Patterns[i] = strings.TrimSpace(resp.Selection.Patterns[i])
+		}
+		for i := range resp.Selection.Targets {
+			resp.Selection.Targets[i].Path = strings.TrimSpace(resp.Selection.Targets[i].Path)
+			resp.Selection.Targets[i].Kind = normalizeDocumentKind(resp.Selection.Targets[i].Kind)
+			for j := range resp.Selection.Targets[i].Builders {
+				resp.Selection.Targets[i].Builders[j].ID = strings.TrimSpace(resp.Selection.Targets[i].Builders[j].ID)
+			}
+		}
+	}
 	if len(resp.Documents) == 0 && resp.Selection == nil {
 		return GenerationResponse{}, fmt.Errorf("generation response did not include documents or selection")
 	}
-	if len(resp.Documents) == 0 && resp.Selection != nil {
+	if len(resp.Documents) == 0 && resp.Selection != nil && !SelectionUsesBuilders(*resp.Selection) {
 		resp.Documents = compileDraftSelection(*resp.Selection)
 	}
-	if err := validateGeneratedDocuments(resp.Documents); err != nil {
-		return GenerationResponse{}, err
+	if len(resp.Documents) > 0 {
+		if err := validateGeneratedDocuments(resp.Documents); err != nil {
+			return GenerationResponse{}, err
+		}
 	}
 	return resp, nil
+}
+
+func CompileDraftSelection(selection DraftSelection) []GeneratedDocument {
+	return compileDraftSelection(selection)
+}
+
+func SelectionUsesBuilders(selection DraftSelection) bool {
+	for _, target := range selection.Targets {
+		if len(target.Builders) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func validateGeneratedDocuments(documents []GeneratedDocument) error {
@@ -679,6 +738,8 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	resp.Complexity = strings.TrimSpace(resp.Complexity)
 	resp.AuthoringBrief.RouteIntent = strings.TrimSpace(resp.AuthoringBrief.RouteIntent)
 	resp.AuthoringBrief.TargetScope = strings.TrimSpace(resp.AuthoringBrief.TargetScope)
+	resp.AuthoringBrief.PlatformFamily = strings.TrimSpace(resp.AuthoringBrief.PlatformFamily)
+	resp.AuthoringBrief.EscapeHatchMode = strings.TrimSpace(resp.AuthoringBrief.EscapeHatchMode)
 	resp.AuthoringBrief.ModeIntent = strings.TrimSpace(resp.AuthoringBrief.ModeIntent)
 	resp.AuthoringBrief.Connectivity = strings.TrimSpace(resp.AuthoringBrief.Connectivity)
 	resp.AuthoringBrief.CompletenessTarget = strings.TrimSpace(resp.AuthoringBrief.CompletenessTarget)
@@ -696,6 +757,8 @@ func ParsePlan(raw string) (PlanResponse, error) {
 		resp.Clarifications[i].ID = strings.TrimSpace(resp.Clarifications[i].ID)
 		resp.Clarifications[i].Question = strings.TrimSpace(resp.Clarifications[i].Question)
 		resp.Clarifications[i].Kind = strings.TrimSpace(resp.Clarifications[i].Kind)
+		resp.Clarifications[i].Reason = strings.TrimSpace(resp.Clarifications[i].Reason)
+		resp.Clarifications[i].Decision = strings.TrimSpace(resp.Clarifications[i].Decision)
 		resp.Clarifications[i].RecommendedDefault = strings.TrimSpace(resp.Clarifications[i].RecommendedDefault)
 		resp.Clarifications[i].Answer = strings.TrimSpace(resp.Clarifications[i].Answer)
 		for j := range resp.Clarifications[i].Options {
@@ -707,6 +770,15 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	}
 	for i := range resp.AuthoringBrief.TargetPaths {
 		resp.AuthoringBrief.TargetPaths[i] = strings.TrimSpace(resp.AuthoringBrief.TargetPaths[i])
+	}
+	for i := range resp.AuthoringBrief.AnchorPaths {
+		resp.AuthoringBrief.AnchorPaths[i] = strings.TrimSpace(resp.AuthoringBrief.AnchorPaths[i])
+	}
+	for i := range resp.AuthoringBrief.AllowedCompanionPaths {
+		resp.AuthoringBrief.AllowedCompanionPaths[i] = strings.TrimSpace(resp.AuthoringBrief.AllowedCompanionPaths[i])
+	}
+	for i := range resp.AuthoringBrief.DisallowedExpansionPaths {
+		resp.AuthoringBrief.DisallowedExpansionPaths[i] = strings.TrimSpace(resp.AuthoringBrief.DisallowedExpansionPaths[i])
 	}
 	for i := range resp.AuthoringBrief.RequiredCapabilities {
 		resp.AuthoringBrief.RequiredCapabilities[i] = strings.TrimSpace(resp.AuthoringBrief.RequiredCapabilities[i])

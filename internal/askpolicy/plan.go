@@ -38,6 +38,8 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 	plan.Clarifications = normalizeClarifications(plan.Clarifications, req, prompt, decision, workspace)
 	plan.Blockers, plan.OpenQuestions = clarificationLines(plan.Clarifications, plan.Blockers, plan.OpenQuestions)
 	plan = applyClarificationAnswers(plan)
+	plan = normalizeRefineScope(plan, prompt, workspace, decision)
+	plan.Blockers = dedupeStrings(append(plan.Blockers, coverageBoundaryBlockers(prompt, req, decision)...))
 	if strings.TrimSpace(plan.EntryScenario) == "" {
 		plan.EntryScenario = req.EntryScenario
 	}
@@ -78,6 +80,12 @@ func normalizeClarifications(items []askcontract.PlanClarification, req Scenario
 		if strings.TrimSpace(item.Kind) != "" {
 			base.Kind = strings.TrimSpace(item.Kind)
 		}
+		if strings.TrimSpace(item.Reason) != "" {
+			base.Reason = strings.TrimSpace(item.Reason)
+		}
+		if strings.TrimSpace(item.Decision) != "" {
+			base.Decision = strings.TrimSpace(item.Decision)
+		}
 		if len(item.Options) > 0 {
 			base.Options = normalizeStringList(item.Options)
 		}
@@ -110,8 +118,28 @@ func sortClarifications(items []askcontract.PlanClarification) []askcontract.Pla
 }
 
 func clarificationLines(items []askcontract.PlanClarification, existingBlockers []string, existingQuestions []string) ([]string, []string) {
-	blockers := dedupeStrings(existingBlockers)
-	questions := dedupeStrings(existingQuestions)
+	clarificationText := map[string]bool{}
+	for _, item := range items {
+		if text := strings.TrimSpace(item.Question); text != "" {
+			clarificationText[text] = true
+		}
+	}
+	blockers := []string{}
+	for _, item := range existingBlockers {
+		text := strings.TrimSpace(item)
+		if text == "" || clarificationText[text] {
+			continue
+		}
+		blockers = append(blockers, text)
+	}
+	questions := []string{}
+	for _, item := range existingQuestions {
+		text := strings.TrimSpace(item)
+		if text == "" || clarificationText[text] {
+			continue
+		}
+		questions = append(questions, text)
+	}
 	for _, item := range items {
 		if strings.TrimSpace(item.Question) == "" || strings.TrimSpace(item.Answer) != "" {
 			continue
@@ -195,14 +223,30 @@ func applyClarificationAnswers(plan askcontract.PlanResponse) askcontract.PlanRe
 			}
 		}
 	}
+	if answer := byID["refine.companionVars"]; strings.EqualFold(answer, "yes") {
+		plan.AuthoringBrief.AllowedCompanionPaths = dedupeStrings(append(plan.AuthoringBrief.AllowedCompanionPaths, "workflows/vars.yaml"))
+		plan.AuthoringBrief.TargetPaths = dedupeStrings(append(plan.AuthoringBrief.TargetPaths, "workflows/vars.yaml"))
+	}
+	if answer := byID["refine.componentPath"]; answer != "" && !strings.EqualFold(answer, "none") {
+		path := filepath.ToSlash(strings.TrimSpace(answer))
+		if askcontractPathAllowed(path) {
+			plan.AuthoringBrief.AllowedCompanionPaths = dedupeStrings(append(plan.AuthoringBrief.AllowedCompanionPaths, path))
+			plan.AuthoringBrief.TargetPaths = dedupeStrings(append(plan.AuthoringBrief.TargetPaths, path))
+		}
+	}
 	if answer := byID["cluster.implementation"]; answer != "" {
-		switch strings.TrimSpace(answer) {
-		case "kubeadm":
+		if strings.TrimSpace(answer) == "kubeadm" {
 			plan.AuthoringBrief.RequiredCapabilities = dedupeStrings(append(plan.AuthoringBrief.RequiredCapabilities, "kubeadm-bootstrap", "cluster-verification"))
 			if plan.AuthoringBrief.NodeCount > 1 || plan.AuthoringBrief.Topology == "multi-node" || plan.AuthoringBrief.Topology == "ha" {
 				plan.AuthoringBrief.RequiredCapabilities = dedupeStrings(append(plan.AuthoringBrief.RequiredCapabilities, "kubeadm-join"))
 			}
 		}
+	}
+	if answer := byID["runtime.platformFamily"]; answer != "" {
+		plan.AuthoringBrief.PlatformFamily = strings.TrimSpace(answer)
+	}
+	if answer := byID["coverage.escapeHatch"]; answer != "" {
+		plan.AuthoringBrief.EscapeHatchMode = strings.TrimSpace(answer)
 	}
 	return plan
 }
@@ -379,6 +423,18 @@ func normalizeAuthoringBrief(brief askcontract.AuthoringBrief, fallback askcontr
 		brief.TargetPaths = append([]string(nil), fallback.TargetPaths...)
 	}
 	brief.TargetPaths = normalizeAllowedPaths(brief.TargetPaths, fallback.TargetPaths)
+	brief.AnchorPaths = normalizeAllowedPaths(brief.AnchorPaths, nil)
+	brief.AllowedCompanionPaths = normalizeAllowedPaths(brief.AllowedCompanionPaths, nil)
+	brief.DisallowedExpansionPaths = normalizeAllowedPaths(brief.DisallowedExpansionPaths, nil)
+	if len(brief.AnchorPaths) == 0 && len(brief.TargetPaths) == 1 {
+		brief.AnchorPaths = append([]string(nil), brief.TargetPaths...)
+	}
+	if strings.TrimSpace(brief.PlatformFamily) != "" {
+		brief.PlatformFamily = strings.ToLower(strings.TrimSpace(brief.PlatformFamily))
+	}
+	if strings.TrimSpace(brief.EscapeHatchMode) != "" {
+		brief.EscapeHatchMode = strings.ToLower(strings.TrimSpace(brief.EscapeHatchMode))
+	}
 	brief.RequiredCapabilities = normalizeCapabilities(brief.RequiredCapabilities, fallback.RequiredCapabilities)
 	if len(brief.RequiredCapabilities) == 0 {
 		brief.RequiredCapabilities = append([]string(nil), fallback.RequiredCapabilities...)

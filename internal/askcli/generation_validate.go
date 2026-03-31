@@ -108,6 +108,18 @@ func validatePlanContract(files []askcontract.GeneratedFile, plan askcontract.Pl
 
 func allowedPlanPaths(plan askcontract.PlanResponse) map[string]bool {
 	allowed := map[string]bool{}
+	for _, path := range plan.AuthoringBrief.AnchorPaths {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path != "" {
+			allowed[path] = true
+		}
+	}
+	for _, path := range plan.AuthoringBrief.AllowedCompanionPaths {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path != "" {
+			allowed[path] = true
+		}
+	}
 	for _, path := range plan.AuthoringBrief.TargetPaths {
 		path = filepath.ToSlash(strings.TrimSpace(path))
 		if path != "" {

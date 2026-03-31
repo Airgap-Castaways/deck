@@ -37,7 +37,7 @@ func applyPlanAnswers(plan askcontract.PlanResponse, answers []string) (askcontr
 		if value == "" {
 			return plan, fmt.Errorf("clarification %q requires a non-empty answer", id)
 		}
-		if len(plan.Clarifications[idx].Options) > 0 && !containsAnswerOption(plan.Clarifications[idx].Options, value) && value != "custom" {
+		if len(plan.Clarifications[idx].Options) > 0 && strings.TrimSpace(plan.Clarifications[idx].Kind) != "path" && !containsAnswerOption(plan.Clarifications[idx].Options, value) && value != "custom" {
 			return plan, fmt.Errorf("clarification %q answer %q must match one of: %s", id, value, strings.Join(plan.Clarifications[idx].Options, ", "))
 		}
 		plan.Clarifications[idx].Answer = value

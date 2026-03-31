@@ -1,6 +1,7 @@
 package askpolicy
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
@@ -198,6 +199,63 @@ func TestNormalizePlanAddsBlockingClarificationsForAmbiguousClusterRequests(t *t
 	}
 }
 
+func TestNormalizePlanAddsRuntimePlatformClarificationForPackageRequestWithoutDistro(t *testing.T) {
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request:             "create offline package staging workflow",
+		Intent:              "draft",
+		Files:               []askcontract.PlanFile{{Path: "workflows/prepare.yaml", Action: "create"}},
+		TargetOutcome:       "generate files",
+		ValidationChecklist: []string{"lint"},
+	}, "create offline package staging workflow", askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
+	if !hasClarification(plan.Clarifications, "runtime.platformFamily") {
+		t.Fatalf("expected runtime platform clarification, got %#v", plan.Clarifications)
+	}
+}
+
+func TestNormalizePlanAddsRefineVarsCompanionClarificationWhenVarsPathIsImplicit(t *testing.T) {
+	workspace := askretrieve.WorkspaceSummary{HasWorkflowTree: true, Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/control-plane-bootstrap.yaml"}, {Path: "workflows/vars.yaml"}, {Path: "workflows/scenarios/other.yaml"}}}
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request:             "refactor control-plane bootstrap to use vars for repeated values",
+		Intent:              "refine",
+		Files:               []askcontract.PlanFile{{Path: "workflows/scenarios/control-plane-bootstrap.yaml", Action: "update"}, {Path: "workflows/scenarios/other.yaml", Action: "update"}},
+		TargetOutcome:       "refine files",
+		ValidationChecklist: []string{"lint"},
+	}, "refactor workflows/scenarios/control-plane-bootstrap.yaml to use vars for repeated values", askretrieve.RetrievalResult{}, workspace, askintent.Decision{Route: askintent.RouteRefine, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/control-plane-bootstrap.yaml"}})
+	if !hasClarification(plan.Clarifications, "refine.companionVars") {
+		t.Fatalf("expected vars companion clarification, got %#v", plan.Clarifications)
+	}
+	if plan.AuthoringBrief.AnchorPaths[0] != "workflows/scenarios/control-plane-bootstrap.yaml" {
+		t.Fatalf("expected scenario anchor path, got %#v", plan.AuthoringBrief)
+	}
+}
+
+func TestNormalizePlanTracksRefineAnchorAndCompanionScope(t *testing.T) {
+	workspace := askretrieve.WorkspaceSummary{HasWorkflowTree: true, Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/control-plane-bootstrap.yaml"}, {Path: "workflows/vars.yaml"}, {Path: "workflows/scenarios/other.yaml"}}}
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request:             "refactor scenario to use vars",
+		Intent:              "refine",
+		Files:               []askcontract.PlanFile{{Path: "workflows/scenarios/control-plane-bootstrap.yaml", Action: "update"}, {Path: "workflows/scenarios/other.yaml", Action: "update"}},
+		TargetOutcome:       "refine files",
+		ValidationChecklist: []string{"lint"},
+		AuthoringBrief: askcontract.AuthoringBrief{
+			TargetPaths:           []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/vars.yaml"},
+			AllowedCompanionPaths: []string{"workflows/vars.yaml"},
+		},
+	}, "refactor workflows/scenarios/control-plane-bootstrap.yaml to use workflows/vars.yaml for repeated values", askretrieve.RetrievalResult{}, workspace, askintent.Decision{Route: askintent.RouteRefine, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/control-plane-bootstrap.yaml"}})
+	if strings.Join(plan.AuthoringBrief.AnchorPaths, ",") != "workflows/scenarios/control-plane-bootstrap.yaml" {
+		t.Fatalf("expected refine anchor path, got %#v", plan.AuthoringBrief)
+	}
+	if strings.Join(plan.AuthoringBrief.AllowedCompanionPaths, ",") != "workflows/vars.yaml" {
+		t.Fatalf("expected vars companion path, got %#v", plan.AuthoringBrief)
+	}
+	if !containsString(plan.AuthoringBrief.DisallowedExpansionPaths, "workflows/scenarios/other.yaml") {
+		t.Fatalf("expected unrelated scenario to be disallowed, got %#v", plan.AuthoringBrief)
+	}
+	if len(plan.Files) != 2 {
+		t.Fatalf("expected refine files filtered to anchor and companion, got %#v", plan.Files)
+	}
+}
+
 func TestValidatePlanStructureAllowsRecoverableExecutionDetailGaps(t *testing.T) {
 	plan := askcontract.PlanResponse{
 		AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Topology: "multi-node", NodeCount: 3},
@@ -217,4 +275,13 @@ func TestValidatePlanStructureRejectsMissingViableEntryScenario(t *testing.T) {
 	if err := ValidatePlanStructure(plan); err == nil {
 		t.Fatalf("expected missing entry scenario to fail viability check")
 	}
+}
+
+func hasClarification(items []askcontract.PlanClarification, want string) bool {
+	for _, item := range items {
+		if item.ID == want {
+			return true
+		}
+	}
+	return false
 }
