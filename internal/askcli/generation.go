@@ -35,7 +35,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			repairPaths = repairTargetFiles(lastFiles, validationDiags, taintedFiles)
 			repairPaths = restrictRepairTargetsToPlan(repairPaths, plan)
 			repairDiags = append([]askdiagnostic.Diagnostic{}, validationDiags...)
-			if repairedFiles, autoNotes, autoApplied, autoErr := askrepair.TryAutoRepair(root, lastFiles, repairDiags, repairPaths); autoErr == nil && autoApplied {
+			if repairedFiles, autoNotes, autoApplied, autoErr := askrepair.TryAutoRepairWithProgram(root, lastFiles, repairDiags, repairPaths, plan.AuthoringProgram); autoErr == nil && autoApplied {
 				autoGen := askcontract.GenerationResponse{Summary: "generated workflows after automatic repair", Review: autoNotes, Files: append([]askcontract.GeneratedFile(nil), repairedFiles...)}
 				lintSummary, critic, validateErr := validateGeneration(ctx, root, autoGen, repairedFiles, decision, plan, brief, retrieval)
 				lastFiles = repairedFiles
@@ -96,6 +96,21 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			if attempt < attempts {
 				continue
 			}
+			if len(lastFiles) > 0 && len(repairDiags) > 0 {
+				if repairedFiles, autoNotes, autoApplied, autoErr := askrepair.TryAutoRepairWithProgram(root, lastFiles, repairDiags, repairPaths, plan.AuthoringProgram); autoErr == nil && autoApplied {
+					autoGen := askcontract.GenerationResponse{Summary: "generated workflows after automatic repair", Review: autoNotes, Files: append([]askcontract.GeneratedFile(nil), repairedFiles...)}
+					lintSummary, critic, validateErr := validateGeneration(ctx, root, autoGen, repairedFiles, decision, plan, brief, retrieval)
+					if validateErr == nil {
+						judge, judgeErr := maybeJudgeGeneration(ctx, client, req, autoGen, repairedFiles, lintSummary, critic, plan, brief, logger)
+						if judgeErr == nil {
+							lastJudge = judge
+							critic = mergeJudgeIntoCritic(critic, judge, true)
+						}
+						logger.logf("debug", "[ask][phase:repair:auto-from-parse] applied=%d\n", len(autoNotes))
+						return autoGen, repairedFiles, lintSummary, critic, lastJudge, attempt - 1, nil
+					}
+				}
+			}
 			return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
 		}
 		if err := validatePrimaryAuthoringContract(decision.Route, gen, attempt); err != nil {
@@ -112,6 +127,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 				return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, err
 			}
 		}
+		gen.Program = &plan.AuthoringProgram
 		files, err := askir.MaterializeWithBase(root, lastFiles, gen)
 		if err != nil {
 			lastValidation = err.Error()
@@ -157,6 +173,26 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 	}
 	if lastValidation == "" {
 		lastValidation = "generation failed without a parseable response"
+	}
+	if len(lastFiles) > 0 && lastValidation != "" {
+		validationDiags := askdiagnostic.FromValidationError(lastValidationErr, lastValidation, bundle)
+		repairPaths := repairTargetFiles(lastFiles, validationDiags, taintedFiles)
+		repairPaths = restrictRepairTargetsToPlan(repairPaths, plan)
+		if repairedFiles, autoNotes, autoApplied, autoErr := askrepair.TryAutoRepairWithProgram(root, lastFiles, validationDiags, repairPaths, plan.AuthoringProgram); autoErr == nil && autoApplied {
+			autoGen := askcontract.GenerationResponse{Summary: "generated workflows after automatic repair", Review: autoNotes, Files: append([]askcontract.GeneratedFile(nil), repairedFiles...)}
+			lintSummary, critic, validateErr := validateGeneration(ctx, root, autoGen, repairedFiles, decision, plan, brief, retrieval)
+			if validateErr == nil {
+				judge, judgeErr := maybeJudgeGeneration(ctx, client, req, autoGen, repairedFiles, lintSummary, critic, plan, brief, logger)
+				if judgeErr == nil {
+					lastJudge = judge
+					critic = mergeJudgeIntoCritic(critic, judge, true)
+				}
+				logger.logf("debug", "[ask][phase:repair:auto-final] applied=%d\n", len(autoNotes))
+				return autoGen, repairedFiles, lintSummary, critic, lastJudge, attempts - 1, nil
+			}
+			lastValidation = validateErr.Error()
+			lastCritic = critic
+		}
 	}
 	return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempts - 1, fmt.Errorf("ask generation did not validate after %d attempts: %s", attempts, lastValidation)
 }

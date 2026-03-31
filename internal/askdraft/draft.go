@@ -1,13 +1,13 @@
 package askdraft
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 )
 
@@ -21,62 +21,33 @@ type Candidate struct {
 	OptionalOverrides []string
 }
 
-type sharedContext struct {
-	PackageList       []string
-	ImageList         []string
-	DistroFamily      string
-	DistroRelease     string
-	RepoType          string
-	PackageOutputDir  string
-	ImageOutputDir    string
-	JoinFile          string
-	PodCIDR           string
-	NodeCount         int
-	ControlPlaneReady int
-	RoleSelectorVar   string
-}
-
 func Candidates(plan askcontract.PlanResponse, brief askcontract.AuthoringBrief) []Candidate {
+	catalog := askcatalog.Current()
+	paths := candidateTargetPaths(plan)
 	items := []Candidate{}
-	allowed := map[string]bool{}
-	for _, path := range append([]string{}, plan.AuthoringBrief.TargetPaths...) {
-		clean := filepath.ToSlash(strings.TrimSpace(path))
-		if clean != "" {
-			allowed[clean] = true
-		}
-	}
-	for _, file := range plan.Files {
-		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if clean != "" {
-			allowed[clean] = true
-		}
-	}
-	if allowed["workflows/prepare.yaml"] {
-		if hasCapability(brief.RequiredCapabilities, "prepare-artifacts") || hasCapability(brief.RequiredCapabilities, "package-staging") {
-			items = append(items, Candidate{ID: "prepare.download-package", Path: "workflows/prepare.yaml", Phase: "packages", StepKind: "DownloadPackage", Summary: "Stage offline packages with typed package download schema.", RequiredOverrides: []string{"packages", "distroFamily", "distroRelease"}, OptionalOverrides: []string{"repoType", "backendRuntime", "backendImage", "outputDir", "timeout"}})
-		}
-		if hasCapability(brief.RequiredCapabilities, "image-staging") {
-			items = append(items, Candidate{ID: "prepare.download-image", Path: "workflows/prepare.yaml", Phase: "images", StepKind: "DownloadImage", Summary: "Stage offline image archives with typed image download schema.", RequiredOverrides: []string{"images"}, OptionalOverrides: []string{"outputDir", "backendEngine", "timeout"}})
-		}
-	}
-	for path := range allowed {
-		if path != "workflows/prepare.yaml" && !strings.HasPrefix(path, "workflows/scenarios/") {
+	for _, path := range paths {
+		role := targetRole(path)
+		if role == "" {
 			continue
 		}
-		if hasCapability(brief.RequiredCapabilities, "package-staging") || hasCapability(brief.RequiredCapabilities, "prepare-artifacts") {
-			items = append(items, Candidate{ID: "apply.install-package", Path: path, Phase: "install-packages", StepKind: "InstallPackage", Summary: "Install packages from the local offline repository output.", RequiredOverrides: []string{}, OptionalOverrides: []string{"packages", "sourcePath", "timeout"}})
-		}
-		if hasCapability(brief.RequiredCapabilities, "image-staging") {
-			items = append(items, Candidate{ID: "apply.load-image", Path: path, Phase: "load-images", StepKind: "LoadImage", Summary: "Load prepared image archives into the local runtime.", RequiredOverrides: []string{}, OptionalOverrides: []string{"images", "sourceDir", "runtime", "timeout"}})
-		}
-		if hasCapability(brief.RequiredCapabilities, "kubeadm-bootstrap") {
-			items = append(items, Candidate{ID: "apply.init-kubeadm", Path: path, Phase: "bootstrap", StepKind: "InitKubeadm", Summary: "Bootstrap a control-plane node with typed kubeadm init fields.", RequiredOverrides: []string{}, OptionalOverrides: []string{"joinFile", "podCIDR", "kubernetesVersion", "criSocket", "whenRole", "timeout"}})
-		}
-		if hasCapability(brief.RequiredCapabilities, "kubeadm-join") {
-			items = append(items, Candidate{ID: "apply.join-kubeadm", Path: path, Phase: "join", StepKind: "JoinKubeadm", Summary: "Join worker nodes with a typed kubeadm join step.", RequiredOverrides: []string{}, OptionalOverrides: []string{"joinFile", "whenRole", "timeout"}})
-		}
-		if hasCapability(brief.RequiredCapabilities, "cluster-verification") {
-			items = append(items, Candidate{ID: "apply.check-cluster", Path: path, Phase: "verify", StepKind: "CheckCluster", Summary: "Verify cluster readiness with typed node expectations.", RequiredOverrides: []string{}, OptionalOverrides: []string{"nodeCount", "readyCount", "controlPlaneReady", "interval", "timeout", "whenRole"}})
+		for _, step := range catalog.StepKinds() {
+			if !containsString(step.AllowedRoles, role) {
+				continue
+			}
+			for _, builder := range step.Builders {
+				if !builderAllowed(builder, brief.RequiredCapabilities) {
+					continue
+				}
+				items = append(items, Candidate{
+					ID:                builder.ID,
+					Path:              path,
+					Phase:             builder.Phase,
+					StepKind:          builder.StepKind,
+					Summary:           firstNonEmpty(builder.Summary, step.Summary),
+					RequiredOverrides: builder.RequiredOverrideKeys(),
+					OptionalOverrides: builder.OptionalOverrideKeys(),
+				})
+			}
 		}
 	}
 	return dedupeCandidates(items)
@@ -90,7 +61,7 @@ func PromptBlock(plan askcontract.PlanResponse, brief askcontract.AuthoringBrief
 	b := &strings.Builder{}
 	b.WriteString("Draft builder candidates:\n")
 	b.WriteString("- Select builder ids under selection.targets[].builders and set only documented override keys; do not author raw step.spec payloads.\n")
-	b.WriteString("- Code assembles the workflow documents from these candidates, fills safe defaults, and rejects unsupported override keys.\n")
+	b.WriteString("- Code assembles the workflow documents from these candidates, fills defaults from the authoring program and source-of-truth metadata, and rejects unsupported override keys.\n")
 	for _, candidate := range candidates {
 		b.WriteString("- id: ")
 		b.WriteString(candidate.ID)
@@ -118,8 +89,18 @@ func PromptBlock(plan askcontract.PlanResponse, brief askcontract.AuthoringBrief
 }
 
 func Compile(selection askcontract.DraftSelection) ([]askcontract.GeneratedDocument, error) {
-	ctx := inferSharedContext(selection)
+	return CompileWithProgram(askcontract.AuthoringProgram{}, selection)
+}
+
+func CompileWithProgram(program askcontract.AuthoringProgram, selection askcontract.DraftSelection) ([]askcontract.GeneratedDocument, error) {
+	catalog := askcatalog.Current()
 	documents := make([]askcontract.GeneratedDocument, 0, len(selection.Targets)+1)
+	selectionVars := cloneMap(selection.Vars)
+	for _, target := range selection.Targets {
+		if documentKind(target.Path, target.Kind) == "vars" {
+			selectionVars = mergedVars(selectionVars, target.Vars)
+		}
+	}
 	for _, target := range selection.Targets {
 		path := filepath.ToSlash(strings.TrimSpace(target.Path))
 		if path == "" {
@@ -135,7 +116,7 @@ func Compile(selection askcontract.DraftSelection) ([]askcontract.GeneratedDocum
 			if len(target.Builders) == 0 {
 				continue
 			}
-			workflow, err := buildWorkflowTarget(path, target, ctx)
+			workflow, err := buildWorkflowTarget(catalog, path, target, program, mergedVars(selectionVars, target.Vars))
 			if err != nil {
 				return nil, err
 			}
@@ -151,11 +132,18 @@ func Compile(selection askcontract.DraftSelection) ([]askcontract.GeneratedDocum
 	return documents, nil
 }
 
-func buildWorkflowTarget(path string, target askcontract.DraftTargetSelection, ctx sharedContext) (*askcontract.WorkflowDocument, error) {
+func buildWorkflowTarget(catalog askcatalog.Catalog, path string, target askcontract.DraftTargetSelection, program askcontract.AuthoringProgram, variables map[string]any) (*askcontract.WorkflowDocument, error) {
 	workflow := &askcontract.WorkflowDocument{Version: "v1alpha1", Vars: cloneMap(target.Vars)}
 	phaseIndex := map[string]int{}
 	for _, selected := range target.Builders {
-		phase, step, err := buildStep(path, selected, ctx)
+		builder, ok := catalog.LookupBuilder(strings.TrimSpace(selected.ID))
+		if !ok {
+			return nil, fmt.Errorf("unsupported draft builder %q for %s", selected.ID, path)
+		}
+		if err := validateOverrideKeys(builder, selected.Overrides); err != nil {
+			return nil, err
+		}
+		phase, step, err := buildStep(builder, selected.Overrides, program, variables)
 		if err != nil {
 			return nil, err
 		}
@@ -170,277 +158,225 @@ func buildWorkflowTarget(path string, target askcontract.DraftTargetSelection, c
 	return workflow, nil
 }
 
-func buildStep(path string, selected askcontract.DraftBuilderSelection, ctx sharedContext) (string, askcontract.WorkflowStep, error) {
-	path = filepath.ToSlash(strings.TrimSpace(path))
-	overrides := selected.Overrides
-	if err := validateOverrideKeys(strings.TrimSpace(selected.ID), overrides); err != nil {
+func buildStep(builder askcatalog.Builder, overrides map[string]any, program askcontract.AuthoringProgram, variables map[string]any) (string, askcontract.WorkflowStep, error) {
+	resolved, err := resolveBindings(builder, overrides, program, variables)
+	if err != nil {
 		return "", askcontract.WorkflowStep{}, err
 	}
-	switch strings.TrimSpace(selected.ID) {
-	case "prepare.download-package":
-		packages := firstStringList(ctx.PackageList, stringListOverride(overrides, "packages"))
-		if len(packages) == 0 {
-			return "", askcontract.WorkflowStep{}, fmt.Errorf("builder %s requires override packages", selected.ID)
-		}
-		family := firstString(stringOverride(overrides, "distroFamily"), ctx.DistroFamily)
-		release := firstString(stringOverride(overrides, "distroRelease"), ctx.DistroRelease)
-		if family == "" || release == "" {
-			return "", askcontract.WorkflowStep{}, fmt.Errorf("builder %s requires overrides distroFamily and distroRelease", selected.ID)
-		}
-		repoType := firstString(stringOverride(overrides, "repoType"), ctx.RepoType, defaultRepoType(family))
-		outputDir := firstString(stringOverride(overrides, "outputDir"), ctx.PackageOutputDir, defaultPackageOutputDir(family, release, repoType))
-		step := map[string]any{
-			"packages": packages,
-			"distro": map[string]any{
-				"family":  family,
-				"release": release,
-			},
-			"repo": map[string]any{
-				"type":     repoType,
-				"generate": true,
-			},
-			"backend": map[string]any{
-				"mode":    "container",
-				"runtime": firstString(stringOverride(overrides, "backendRuntime"), "auto"),
-				"image":   firstString(stringOverride(overrides, "backendImage"), defaultBackendImage(family, release)),
-			},
-			"outputDir": outputDir,
-			"timeout":   firstString(stringOverride(overrides, "timeout"), "30m"),
-		}
-		return "packages", workflowStep("prepare-download-packages", "DownloadPackage", "", step), nil
-	case "prepare.download-image":
-		images := firstStringList(ctx.ImageList, stringListOverride(overrides, "images"))
-		if len(images) == 0 {
-			return "", askcontract.WorkflowStep{}, fmt.Errorf("builder %s requires override images", selected.ID)
-		}
-		step := map[string]any{
-			"images": images,
-			"backend": map[string]any{
-				"engine": firstString(stringOverride(overrides, "backendEngine"), "go-containerregistry"),
-			},
-			"outputDir": firstString(stringOverride(overrides, "outputDir"), ctx.ImageOutputDir, "images/control-plane"),
-			"timeout":   firstString(stringOverride(overrides, "timeout"), "10m"),
-		}
-		return "images", workflowStep("prepare-download-images", "DownloadImage", "", step), nil
-	case "apply.install-package":
-		step := map[string]any{
-			"packages": firstStringList(stringListOverride(overrides, "packages"), ctx.PackageList),
-			"source": map[string]any{
-				"type": "local-repo",
-				"path": firstString(stringOverride(overrides, "sourcePath"), ctx.PackageOutputDir, defaultPackageOutputDir(ctx.DistroFamily, ctx.DistroRelease, defaultRepoType(ctx.DistroFamily))),
-			},
-			"timeout": firstString(stringOverride(overrides, "timeout"), "20m"),
-		}
-		return "install-packages", workflowStep("apply-install-packages", "InstallPackage", "", step), nil
-	case "apply.load-image":
-		step := map[string]any{
-			"images":    firstStringList(stringListOverride(overrides, "images"), ctx.ImageList),
-			"sourceDir": firstString(stringOverride(overrides, "sourceDir"), ctx.ImageOutputDir, "images/control-plane"),
-			"runtime":   firstString(stringOverride(overrides, "runtime"), "ctr"),
-			"timeout":   firstString(stringOverride(overrides, "timeout"), "10m"),
-		}
-		return "load-images", workflowStep("apply-load-images", "LoadImage", "", step), nil
-	case "apply.init-kubeadm":
-		joinFile := firstString(stringOverride(overrides, "joinFile"), ctx.JoinFile, "/tmp/deck/join.txt")
-		step := map[string]any{
-			"outputJoinFile": joinFile,
-			"podNetworkCIDR": firstString(stringOverride(overrides, "podCIDR"), ctx.PodCIDR, "10.244.0.0/16"),
-			"timeout":        firstString(stringOverride(overrides, "timeout"), "20m"),
-		}
-		if value := stringOverride(overrides, "kubernetesVersion"); value != "" {
-			step["kubernetesVersion"] = value
-		}
-		if value := stringOverride(overrides, "criSocket"); value != "" {
-			step["criSocket"] = value
-		}
-		return "bootstrap", workflowStep("apply-init-control-plane", "InitKubeadm", firstString(stringOverride(overrides, "whenRole"), defaultRoleWhen(ctx, "control-plane")), step), nil
-	case "apply.join-kubeadm":
-		step := map[string]any{
-			"joinFile": firstString(stringOverride(overrides, "joinFile"), ctx.JoinFile, "/tmp/deck/join.txt"),
-			"timeout":  firstString(stringOverride(overrides, "timeout"), "15m"),
-		}
-		return "join", workflowStep("apply-join-worker", "JoinKubeadm", firstString(stringOverride(overrides, "whenRole"), defaultRoleWhen(ctx, "worker")), step), nil
-	case "apply.check-cluster":
-		total := firstInt(intOverride(overrides, "nodeCount"), ctx.NodeCount, 1)
-		ready := firstInt(intOverride(overrides, "readyCount"), total)
-		controlPlaneReady := firstInt(intOverride(overrides, "controlPlaneReady"), ctx.ControlPlaneReady, 1)
-		step := map[string]any{
-			"interval": firstString(stringOverride(overrides, "interval"), "5s"),
-			"timeout":  firstString(stringOverride(overrides, "timeout"), defaultCheckTimeout(total)),
-			"nodes": map[string]any{
-				"total":             total,
-				"ready":             ready,
-				"controlPlaneReady": controlPlaneReady,
-			},
-		}
-		return "verify", workflowStep("apply-check-cluster", "CheckCluster", firstString(stringOverride(overrides, "whenRole"), defaultRoleWhen(ctx, "control-plane")), step), nil
-	default:
-		return "", askcontract.WorkflowStep{}, fmt.Errorf("unsupported draft builder %q for %s", selected.ID, path)
-	}
-}
-
-func validateOverrideKeys(builderID string, overrides map[string]any) error {
-	allowed := allowedOverrideKeys(builderID)
-	for key := range overrides {
-		if !allowed[strings.TrimSpace(key)] {
-			return fmt.Errorf("draft builder %s does not support override %q", builderID, key)
-		}
-	}
-	return nil
-}
-
-func allowedOverrideKeys(builderID string) map[string]bool {
-	keys := map[string][]string{
-		"prepare.download-package": {"packages", "distroFamily", "distroRelease", "repoType", "backendRuntime", "backendImage", "outputDir", "timeout"},
-		"prepare.download-image":   {"images", "outputDir", "backendEngine", "timeout"},
-		"apply.install-package":    {"packages", "sourcePath", "timeout"},
-		"apply.load-image":         {"images", "sourceDir", "runtime", "timeout"},
-		"apply.init-kubeadm":       {"joinFile", "podCIDR", "kubernetesVersion", "criSocket", "whenRole", "timeout"},
-		"apply.join-kubeadm":       {"joinFile", "whenRole", "timeout"},
-		"apply.check-cluster":      {"nodeCount", "readyCount", "controlPlaneReady", "interval", "timeout", "whenRole"},
-	}
-	allowed := map[string]bool{}
-	for _, key := range keys[builderID] {
-		allowed[key] = true
-	}
-	return allowed
-}
-
-func inferSharedContext(selection askcontract.DraftSelection) sharedContext {
-	ctx := sharedContext{RoleSelectorVar: "role"}
-	for _, target := range selection.Targets {
-		for _, builder := range target.Builders {
-			switch builder.ID {
-			case "prepare.download-package":
-				ctx.PackageList = firstStringList(ctx.PackageList, stringListOverride(builder.Overrides, "packages"))
-				ctx.DistroFamily = firstString(ctx.DistroFamily, stringOverride(builder.Overrides, "distroFamily"))
-				ctx.DistroRelease = firstString(ctx.DistroRelease, stringOverride(builder.Overrides, "distroRelease"))
-				ctx.RepoType = firstString(ctx.RepoType, stringOverride(builder.Overrides, "repoType"))
-				ctx.PackageOutputDir = firstString(ctx.PackageOutputDir, stringOverride(builder.Overrides, "outputDir"))
-			case "prepare.download-image":
-				ctx.ImageList = firstStringList(ctx.ImageList, stringListOverride(builder.Overrides, "images"))
-				ctx.ImageOutputDir = firstString(ctx.ImageOutputDir, stringOverride(builder.Overrides, "outputDir"))
-			case "apply.init-kubeadm":
-				ctx.JoinFile = firstString(ctx.JoinFile, stringOverride(builder.Overrides, "joinFile"))
-				ctx.PodCIDR = firstString(ctx.PodCIDR, stringOverride(builder.Overrides, "podCIDR"))
-			case "apply.join-kubeadm":
-				ctx.JoinFile = firstString(ctx.JoinFile, stringOverride(builder.Overrides, "joinFile"))
-			case "apply.check-cluster":
-				ctx.NodeCount = firstInt(ctx.NodeCount, intOverride(builder.Overrides, "nodeCount"))
-				ctx.ControlPlaneReady = firstInt(ctx.ControlPlaneReady, intOverride(builder.Overrides, "controlPlaneReady"))
+	step := askcontract.WorkflowStep{ID: firstNonEmpty(builder.DefaultStepID, sanitizeStepID(builder.ID)), Kind: builder.StepKind, Spec: map[string]any{}}
+	for _, path := range resolved.order {
+		value := resolved.values[path]
+		switch path {
+		case "when":
+			text := strings.TrimSpace(fmt.Sprint(value))
+			if text != "" && text != "nil" && text != "<nil>" && !strings.Contains(text, "vars.nil") {
+				step.When = text
 			}
+		case "id":
+			text := strings.TrimSpace(fmt.Sprint(value))
+			if text != "" {
+				step.ID = text
+			}
+		default:
+			if !strings.HasPrefix(path, "spec.") {
+				continue
+			}
+			setPath(step.Spec, strings.TrimPrefix(path, "spec."), value)
 		}
 	}
-	return ctx
+	return firstNonEmpty(builder.Phase, "main"), step, nil
 }
 
-func workflowStep(id string, kind string, when string, spec any) askcontract.WorkflowStep {
-	step := askcontract.WorkflowStep{ID: id, Kind: kind, Spec: specMap(spec)}
-	if strings.TrimSpace(when) != "" {
-		step.When = strings.TrimSpace(when)
-	}
-	return step
+type bindingResolution struct {
+	values map[string]any
+	order  []string
 }
 
-func specMap(value any) map[string]any {
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return map[string]any{}
+func resolveBindings(builder askcatalog.Builder, overrides map[string]any, program askcontract.AuthoringProgram, variables map[string]any) (bindingResolution, error) {
+	values := map[string]any{}
+	order := []string{}
+	required := map[string]bool{}
+	seenPath := map[string]bool{}
+	for _, binding := range builder.Bindings {
+		path := strings.TrimSpace(binding.Path)
+		if path == "" {
+			continue
+		}
+		if !seenPath[path] {
+			seenPath[path] = true
+			order = append(order, path)
+		}
+		if binding.Required {
+			required[path] = true
+		}
+		if _, ok := values[path]; ok {
+			continue
+		}
+		if value, ok := resolveBindingValue(strings.TrimSpace(binding.From), overrides, program, variables); ok {
+			values[path] = canonicalizeBindingValue(binding, value, program)
+		}
 	}
-	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return map[string]any{}
+	for path := range required {
+		if _, ok := values[path]; !ok {
+			return bindingResolution{}, fmt.Errorf("draft builder %s requires %s", builder.ID, path)
+		}
 	}
-	return out
+	return bindingResolution{values: values, order: order}, nil
 }
 
-func documentKind(path string, kind string) string {
-	clean := filepath.ToSlash(strings.TrimSpace(path))
-	if strings.TrimSpace(kind) != "" {
-		return strings.ToLower(strings.TrimSpace(kind))
-	}
-	if clean == "workflows/vars.yaml" {
-		return "vars"
-	}
-	if strings.HasPrefix(clean, "workflows/components/") {
-		return "component"
-	}
-	return "workflow"
-}
-
-func defaultRepoType(family string) string {
-	switch strings.ToLower(strings.TrimSpace(family)) {
-	case "debian":
-		return "deb-flat"
+func resolveBindingValue(source string, overrides map[string]any, program askcontract.AuthoringProgram, variables map[string]any) (any, bool) {
+	switch {
+	case strings.HasPrefix(source, "override:"):
+		key := strings.TrimPrefix(source, "override:")
+		value, ok := overrides[key]
+		if !ok || value == nil {
+			return nil, false
+		}
+		if strings.TrimSpace(key) == "whenRole" {
+			if normalized, ok := normalizeWhenRoleOverride(value, program); ok {
+				return normalized, true
+			}
+			return nil, false
+		}
+		return normalizeOverrideValue(value, variables), true
+	case strings.HasPrefix(source, "program:"):
+		return program.Value(strings.TrimPrefix(source, "program:"))
+	case strings.HasPrefix(source, "derive:"):
+		return deriveValue(strings.TrimPrefix(source, "derive:"), overrides, program)
+	case strings.HasPrefix(source, "const:"):
+		return parseConst(strings.TrimPrefix(source, "const:")), true
 	default:
-		return "rpm"
+		return nil, false
 	}
 }
 
-func defaultPackageOutputDir(family string, release string, repoType string) string {
-	family = strings.ToLower(strings.TrimSpace(family))
-	release = strings.TrimSpace(release)
-	repoType = strings.ToLower(strings.TrimSpace(repoType))
-	if release == "" {
-		return "packages/"
+func normalizeWhenRoleOverride(value any, program askcontract.AuthoringProgram) (any, bool) {
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" || text == "<nil>" || text == "nil" {
+		return nil, false
 	}
-	if repoType == "deb-flat" || family == "debian" {
-		return filepath.ToSlash(filepath.Join("packages", "deb", release))
+	if strings.Contains(text, "==") || strings.HasPrefix(text, "vars.") || strings.HasPrefix(text, "runtime.") {
+		return text, true
 	}
-	return filepath.ToSlash(filepath.Join("packages", "rpm", release))
+	return roleWhen(program, text)
 }
 
-func defaultBackendImage(family string, release string) string {
-	family = strings.ToLower(strings.TrimSpace(family))
-	release = strings.TrimSpace(release)
-	if family == "debian" {
-		return "ubuntu:22.04"
+func deriveValue(name string, overrides map[string]any, program askcontract.AuthoringProgram) (any, bool) {
+	switch strings.TrimSpace(name) {
+	case "platform.repoType":
+		family := firstNonEmpty(stringOverride(overrides, "distroFamily"), stringValue(program, "platform.family"))
+		if strings.EqualFold(family, "debian") {
+			return "deb-flat", true
+		}
+		return "rpm", true
+	case "platform.backendImage":
+		family := firstNonEmpty(stringOverride(overrides, "distroFamily"), stringValue(program, "platform.family"))
+		if strings.EqualFold(family, "debian") {
+			return "ubuntu:22.04", true
+		}
+		return "rockylinux:9", true
+	case "artifacts.packageOutputDir":
+		family := firstNonEmpty(stringOverride(overrides, "distroFamily"), stringValue(program, "platform.family"))
+		release := firstNonEmpty(stringOverride(overrides, "distroRelease"), stringValue(program, "platform.release"))
+		repoType := firstNonEmpty(stringOverride(overrides, "repoType"), stringValue(program, "platform.repoType"))
+		if strings.EqualFold(family, "debian") || strings.EqualFold(repoType, "deb-flat") {
+			if release == "" {
+				return "packages/", true
+			}
+			return filepath.ToSlash(filepath.Join("packages", "deb", release)), true
+		}
+		if release == "" {
+			return "packages/", true
+		}
+		return filepath.ToSlash(filepath.Join("packages", "rpm", release)), true
+	case "artifacts.imageOutputDir":
+		return "images/control-plane", true
+	case "cluster.joinFile":
+		return "/tmp/deck/join.txt", true
+	case "cluster.podCIDR":
+		return "10.244.0.0/16", true
+	case "cluster.roleWhen.control-plane":
+		return roleWhen(program, "control-plane")
+	case "cluster.roleWhen.worker":
+		return roleWhen(program, "worker")
+	case "verification.expectedReadyCount":
+		if value := intOverride(overrides, "readyCount"); value > 0 {
+			return value, true
+		}
+		if value, ok := intValue(program, "verification.expectedReadyCount"); ok {
+			return value, true
+		}
+		if value := intOverride(overrides, "nodeCount"); value > 0 {
+			return value, true
+		}
+		if value, ok := intValue(program, "verification.expectedNodeCount"); ok {
+			return value, true
+		}
+	case "verification.expectedControlPlaneReady":
+		if value := intOverride(overrides, "controlPlaneReady"); value > 0 {
+			return value, true
+		}
+		if value, ok := intValue(program, "verification.expectedControlPlaneReady"); ok {
+			return value, true
+		}
+		if count, ok := intValue(program, "cluster.controlPlaneCount"); ok && count > 0 {
+			return count, true
+		}
+		return 1, true
+	case "verification.interval":
+		return "5s", true
+	case "verification.timeout":
+		if count, ok := intValue(program, "verification.expectedNodeCount"); ok && count > 1 {
+			return "10m", true
+		}
+		if count := intOverride(overrides, "nodeCount"); count > 1 {
+			return "10m", true
+		}
+		return "5m", true
+	case "verification.roleWhen":
+		role := stringValue(program, "verification.finalVerificationRole")
+		if strings.TrimSpace(role) == "" || strings.TrimSpace(role) == "local" {
+			return "", false
+		}
+		return roleWhen(program, role)
 	}
-	if release == "9" || strings.Contains(strings.ToLower(release), "rhel9") || strings.Contains(strings.ToLower(release), "rocky9") {
-		return "rockylinux:9"
-	}
-	return "rockylinux:9"
+	return nil, false
 }
 
-func defaultRoleWhen(ctx sharedContext, role string) string {
-	if ctx.NodeCount <= 1 {
-		return ""
+func roleWhen(program askcontract.AuthoringProgram, role string) (any, bool) {
+	selector := stringValue(program, "cluster.roleSelector")
+	controlPlaneCount, _ := intValue(program, "cluster.controlPlaneCount")
+	workerCount, _ := intValue(program, "cluster.workerCount")
+	if selector == "" || selector == "nil" || selector == "<nil>" || controlPlaneCount+workerCount <= 1 {
+		return "", false
 	}
-	return fmt.Sprintf("vars.%s == %q", ctx.RoleSelectorVar, role)
+	return `vars.` + selector + ` == "` + strings.TrimSpace(role) + `"`, true
 }
 
-func defaultCheckTimeout(total int) string {
-	if total > 1 {
-		return "10m"
-	}
-	return "5m"
-}
-
-func firstString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
+func stringValue(program askcontract.AuthoringProgram, path string) string {
+	if value, ok := program.Value(path); ok {
+		if text, ok := value.(string); ok {
+			return strings.TrimSpace(text)
 		}
 	}
 	return ""
 }
 
-func firstStringList(values ...[]string) []string {
-	for _, value := range values {
-		if len(value) > 0 {
-			return append([]string(nil), value...)
-		}
+func intValue(program askcontract.AuthoringProgram, path string) (int, bool) {
+	value, ok := program.Value(path)
+	if !ok || value == nil {
+		return 0, false
 	}
-	return nil
-}
-
-func firstInt(values ...int) int {
-	for _, value := range values {
-		if value > 0 {
-			return value
-		}
+	switch typed := value.(type) {
+	case int:
+		return typed, typed > 0
+	case int64:
+		return int(typed), typed > 0
+	case float64:
+		return int(typed), typed > 0
+	default:
+		return 0, false
 	}
-	return 0
 }
 
 func stringOverride(overrides map[string]any, key string) string {
@@ -448,39 +384,10 @@ func stringOverride(overrides map[string]any, key string) string {
 		return ""
 	}
 	value, ok := overrides[key]
-	if !ok {
+	if !ok || value == nil {
 		return ""
 	}
 	return strings.TrimSpace(fmt.Sprint(value))
-}
-
-func stringListOverride(overrides map[string]any, key string) []string {
-	if len(overrides) == 0 {
-		return nil
-	}
-	value, ok := overrides[key]
-	if !ok || value == nil {
-		return nil
-	}
-	switch typed := value.(type) {
-	case []string:
-		return dedupeStrings(typed)
-	case []any:
-		out := make([]string, 0, len(typed))
-		for _, item := range typed {
-			text := strings.TrimSpace(fmt.Sprint(item))
-			if text != "" {
-				out = append(out, text)
-			}
-		}
-		return dedupeStrings(out)
-	default:
-		text := strings.TrimSpace(fmt.Sprint(value))
-		if text == "" {
-			return nil
-		}
-		return []string{text}
-	}
 }
 
 func intOverride(overrides map[string]any, key string) int {
@@ -507,6 +414,207 @@ func intOverride(overrides map[string]any, key string) int {
 	}
 }
 
+func validateOverrideKeys(builder askcatalog.Builder, overrides map[string]any) error {
+	allowed := map[string]bool{}
+	for _, key := range builder.OverrideKeys() {
+		allowed[key] = true
+	}
+	for key := range overrides {
+		if !allowed[strings.TrimSpace(key)] {
+			return fmt.Errorf("draft builder %s does not support override %q", builder.ID, key)
+		}
+	}
+	return nil
+}
+
+func candidateTargetPaths(plan askcontract.PlanResponse) []string {
+	allowed := map[string]bool{}
+	for _, path := range plan.AuthoringBrief.TargetPaths {
+		clean := filepath.ToSlash(strings.TrimSpace(path))
+		if clean != "" {
+			allowed[clean] = true
+		}
+	}
+	for _, file := range plan.Files {
+		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
+		if clean != "" {
+			allowed[clean] = true
+		}
+	}
+	out := make([]string, 0, len(allowed))
+	for path := range allowed {
+		out = append(out, path)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func targetRole(path string) string {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	switch {
+	case path == "workflows/prepare.yaml":
+		return "prepare"
+	case strings.HasPrefix(path, "workflows/scenarios/"):
+		return "apply"
+	default:
+		return ""
+	}
+}
+
+func builderAllowed(builder askcatalog.Builder, capabilities []string) bool {
+	if len(builder.RequiresCapabilities) == 0 {
+		return true
+	}
+	for _, capability := range builder.RequiresCapabilities {
+		if containsString(capabilities, capability) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeOverrideValue(value any, variables map[string]any) any {
+	switch typed := value.(type) {
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text := strings.TrimSpace(fmt.Sprint(item))
+			if text != "" {
+				out = append(out, text)
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+		return nil
+	case []string:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text := strings.TrimSpace(item)
+			if text != "" {
+				out = append(out, text)
+			}
+		}
+		return out
+	case string:
+		if resolved, ok := resolveVarReference(typed, variables); ok {
+			return resolved
+		}
+		return strings.TrimSpace(typed)
+	default:
+		return value
+	}
+}
+
+func canonicalizeBindingValue(binding askcatalog.Binding, value any, program askcontract.AuthoringProgram) any {
+	semantic := strings.TrimSpace(binding.Semantic)
+	text, isString := value.(string)
+	if !isString {
+		return value
+	}
+	text = strings.TrimSpace(text)
+	switch semantic {
+	case "package-output-dir":
+		if strings.HasPrefix(text, "packages/") || text == "packages/" {
+			return text
+		}
+		if canonical, ok := deriveValue("artifacts.packageOutputDir", nil, program); ok {
+			return canonical
+		}
+	case "image-output-dir":
+		if strings.HasPrefix(text, "images/") || text == "images/" {
+			return text
+		}
+		if canonical, ok := deriveValue("artifacts.imageOutputDir", nil, program); ok {
+			return canonical
+		}
+	case "package-repo-type":
+		if text == "rpm" || text == "deb-flat" {
+			return text
+		}
+		if canonical, ok := deriveValue("platform.repoType", nil, program); ok {
+			return canonical
+		}
+	}
+	return value
+}
+
+func resolveVarReference(value string, variables map[string]any) (any, bool) {
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, "{{") || !strings.HasSuffix(value, "}}") {
+		return nil, false
+	}
+	inner := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(value, "{{"), "}}"))
+	inner = strings.TrimSpace(strings.TrimPrefix(inner, "."))
+	if !strings.HasPrefix(inner, "vars.") {
+		return nil, false
+	}
+	key := strings.TrimSpace(strings.TrimPrefix(inner, "vars."))
+	resolved, ok := variables[key]
+	if !ok {
+		return nil, false
+	}
+	return cloneValue(resolved), true
+}
+
+func parseConst(value string) any {
+	value = strings.TrimSpace(value)
+	if value == "true" {
+		return true
+	}
+	if value == "false" {
+		return false
+	}
+	if n, err := strconv.Atoi(value); err == nil {
+		return n
+	}
+	return value
+}
+
+func setPath(root map[string]any, path string, value any) {
+	parts := strings.Split(strings.TrimSpace(path), ".")
+	current := root
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		if i == len(parts)-1 {
+			current[part] = value
+			return
+		}
+		next, _ := current[part].(map[string]any)
+		if next == nil {
+			next = map[string]any{}
+			current[part] = next
+		}
+		current = next
+	}
+}
+
+func sanitizeStepID(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.ReplaceAll(value, ".", "-")
+	value = strings.ReplaceAll(value, "_", "-")
+	if value == "" {
+		return "step"
+	}
+	return value
+}
+
+func documentKind(path string, kind string) string {
+	clean := filepath.ToSlash(strings.TrimSpace(path))
+	if strings.TrimSpace(kind) != "" {
+		return strings.ToLower(strings.TrimSpace(kind))
+	}
+	if clean == "workflows/vars.yaml" {
+		return "vars"
+	}
+	if strings.HasPrefix(clean, "workflows/components/") {
+		return "component"
+	}
+	return "workflow"
+}
+
 func hasVarsTarget(targets []askcontract.DraftTargetSelection) bool {
 	for _, target := range targets {
 		if documentKind(target.Path, target.Kind) == "vars" {
@@ -522,28 +630,69 @@ func cloneMap(input map[string]any) map[string]any {
 	}
 	out := make(map[string]any, len(input))
 	for key, value := range input {
-		out[key] = value
+		out[key] = cloneValue(value)
 	}
 	return out
 }
 
-func hasCapability(values []string, want string) bool {
+func mergedVars(base map[string]any, overlay map[string]any) map[string]any {
+	out := cloneMap(base)
+	if out == nil {
+		out = map[string]any{}
+	}
+	for key, value := range overlay {
+		out[key] = cloneValue(value)
+	}
+	return out
+}
+
+func cloneValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneMap(typed)
+	case []any:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, cloneValue(item))
+		}
+		return out
+	case []string:
+		out := make([]string, 0, len(typed))
+		out = append(out, typed...)
+		return out
+	default:
+		return value
+	}
+}
+
+func containsString(values []string, want string) bool {
+	want = strings.TrimSpace(want)
 	for _, value := range values {
-		if strings.TrimSpace(value) == strings.TrimSpace(want) {
+		if strings.TrimSpace(value) == want {
 			return true
 		}
 	}
 	return false
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
 func dedupeCandidates(items []Candidate) []Candidate {
 	seen := map[string]bool{}
 	out := make([]Candidate, 0, len(items))
 	for _, item := range items {
-		if seen[item.ID+"|"+item.Path] {
+		key := item.ID + "|" + item.Path
+		if seen[key] {
 			continue
 		}
-		seen[item.ID+"|"+item.Path] = true
+		seen[key] = true
 		out = append(out, item)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -552,19 +701,5 @@ func dedupeCandidates(items []Candidate) []Candidate {
 		}
 		return out[i].Path < out[j].Path
 	})
-	return out
-}
-
-func dedupeStrings(values []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" || seen[value] {
-			continue
-		}
-		seen[value] = true
-		out = append(out, value)
-	}
 	return out
 }

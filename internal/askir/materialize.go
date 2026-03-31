@@ -18,7 +18,7 @@ func MaterializeWithBase(root string, base []askcontract.GeneratedFile, gen askc
 	if gen.Selection != nil {
 		switch {
 		case askcontract.SelectionUsesBuilders(*gen.Selection):
-			docs, err := askdraft.Compile(*gen.Selection)
+			docs, err := askdraft.CompileWithProgram(derefProgram(gen.Program), *gen.Selection)
 			if err != nil {
 				return nil, err
 			}
@@ -52,6 +52,13 @@ func MaterializeWithBase(root string, base []askcontract.GeneratedFile, gen askc
 		}
 	}
 	return materialized, nil
+}
+
+func derefProgram(program *askcontract.AuthoringProgram) askcontract.AuthoringProgram {
+	if program == nil {
+		return askcontract.AuthoringProgram{}
+	}
+	return *program
 }
 
 func materializeDocument(root string, baseContent map[string]string, doc askcontract.GeneratedDocument) ([]askcontract.GeneratedFile, error) {

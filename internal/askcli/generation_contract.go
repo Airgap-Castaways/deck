@@ -64,7 +64,7 @@ func validatePrimaryRefineContract(gen askcontract.GenerationResponse) error {
 				return fmt.Errorf("refine primary path edit documents must include transform candidate ids")
 			}
 			for _, transform := range doc.Transforms {
-				if strings.TrimSpace(transform.Candidate) == "" {
+				if strings.TrimSpace(transform.Candidate) == "" && !refineAllowsRawCompanionTransform(doc, transform) {
 					return fmt.Errorf("refine primary path must use transform candidate ids instead of raw transform payloads")
 				}
 			}
@@ -73,6 +73,18 @@ func validatePrimaryRefineContract(gen askcontract.GenerationResponse) error {
 		}
 	}
 	return nil
+}
+
+func refineAllowsRawCompanionTransform(doc askcontract.GeneratedDocument, transform askcontract.RefineTransformAction) bool {
+	if strings.TrimSpace(doc.Path) != "workflows/vars.yaml" {
+		return false
+	}
+	switch strings.TrimSpace(transform.Type) {
+	case "set-field", "delete-field":
+		return strings.TrimSpace(transform.RawPath) != "" || strings.TrimSpace(transform.Path) != ""
+	default:
+		return false
+	}
 }
 
 func inferredContractAction(doc askcontract.GeneratedDocument) string {

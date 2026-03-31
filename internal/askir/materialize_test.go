@@ -188,6 +188,25 @@ func TestMaterializeRefineCandidateSetFieldTransform(t *testing.T) {
 	}
 }
 
+func TestMaterializeRefineVarsEditCreatesMissingVarsFile(t *testing.T) {
+	root := t.TempDir()
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/vars.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:  "set-field",
+			Path:  "vars.joinFilePath",
+			Value: "/tmp/deck/join.txt",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize vars edit: %v", err)
+	}
+	if len(files) != 1 || !strings.Contains(files[0].Content, "joinFilePath: /tmp/deck/join.txt") {
+		t.Fatalf("expected missing vars file to be created via edit transform, got %#v", files)
+	}
+}
+
 func TestMaterializeRefineDeleteFieldTransform(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
