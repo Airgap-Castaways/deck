@@ -211,30 +211,13 @@ func resolveLocalRuntimeBinaryPath(dir string, target runtimeBinaryTarget) (stri
 }
 
 func fetchReleaseRuntimeBinary(ctx context.Context, version string, target runtimeBinaryTarget) ([]byte, error) {
-	version = strings.TrimSpace(version)
-	if version == "" {
+	v := strings.TrimPrefix(strings.TrimSpace(version), "v")
+	if v == "" {
 		return nil, fmt.Errorf("release version is required")
 	}
-	versions := []string{version}
-	trimmed := strings.TrimPrefix(version, "v")
-	if trimmed != version {
-		versions = append(versions, trimmed)
-	} else {
-		versions = append(versions, "v"+version)
-	}
-	var lastErr error
-	for _, archiveVersion := range versions {
-		url := fmt.Sprintf("https://github.com/Airgap-Castaways/deck/releases/download/%s/deck_%s_%s_%s.tar.gz", version, archiveVersion, target.OS, target.Arch)
-		raw, err := downloadArchiveDeckBinary(ctx, url)
-		if err == nil {
-			return raw, nil
-		}
-		lastErr = err
-	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf("release runtime binary not found")
-	}
-	return nil, lastErr
+
+	url := fmt.Sprintf("https://github.com/Airgap-Castaways/deck/releases/download/v%s/deck_%s_%s_%s.tar.gz", v, v, target.OS, target.Arch)
+	return downloadArchiveDeckBinary(ctx, url)
 }
 
 func downloadArchiveDeckBinary(ctx context.Context, url string) ([]byte, error) {
