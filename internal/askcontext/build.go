@@ -2,16 +2,15 @@ package askcontext
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/schemadoc"
 	"github.com/Airgap-Castaways/deck/internal/schemafacts"
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
 	"github.com/Airgap-Castaways/deck/internal/validate"
-	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 	deckschemas "github.com/Airgap-Castaways/deck/schemas"
@@ -182,237 +181,90 @@ func workflowRequiredFields() []string {
 }
 
 func AllowedGeneratedPathPatterns() []string {
-	return []string{"workflows/prepare.yaml", "workflows/scenarios/*.yaml", "workflows/components/*.yaml", "workflows/vars.yaml"}
+	return workspacepaths.AllowedAuthoringPathPatterns()
 }
 
 func AllowedGeneratedPath(path string) bool {
-	clean := filepath.ToSlash(strings.TrimSpace(path))
-	if clean == "" || strings.Contains(clean, "..") {
-		return false
-	}
-	return clean == "workflows/prepare.yaml" || strings.HasPrefix(clean, "workflows/scenarios/") || strings.HasPrefix(clean, "workflows/components/") || clean == "workflows/vars.yaml"
+	return workspacepaths.IsAllowedAuthoringPath(path)
 }
 
 func buildStepKinds() []StepKindContext {
-	defs := workflowexec.BuiltInTypeDefinitions()
-	out := make([]StepKindContext, 0, len(defs))
-	for _, def := range defs {
-		entry, ok, err := stepmeta.LookupCatalogEntry(def.Step.Kind)
-		if err != nil || !ok {
-			continue
-		}
-		workflowMeta := stepmeta.ProjectWorkflow(entry, def.Step.Category, def.Step.ToolSchemaGenerator)
-		meta := schemadoc.ToolMetaForDefinition(def.Step)
-		facts := schemaFactsForKind(def.Step.Kind)
+	catalog := askcatalog.Current()
+	out := make([]StepKindContext, 0, len(catalog.StepKinds()))
+	for _, step := range catalog.StepKinds() {
 		ctx := StepKindContext{
-			Kind:                workflowMeta.Kind,
-			Category:            workflowMeta.Category,
-			Summary:             meta.Summary,
-			WhenToUse:           meta.WhenToUse,
-			SchemaFile:          workflowMeta.SchemaFile,
-			AllowedRoles:        append([]string(nil), workflowMeta.Roles...),
-			Outputs:             append([]string(nil), workflowMeta.Outputs...),
-			MinimalShape:        strings.TrimSpace(meta.Example),
-			CuratedShape:        strings.TrimSpace(meta.Example),
-			KeyFields:           buildStepKeyFields(def.Step.Kind, meta, facts),
-			SchemaRuleSummaries: append([]string(nil), facts.RuleSummaries...),
-			Notes:               append([]string(nil), meta.Notes...),
+			Kind:                     step.Kind,
+			Category:                 step.Category,
+			Summary:                  step.Summary,
+			WhenToUse:                step.WhenToUse,
+			SchemaFile:               step.SchemaFile,
+			AllowedRoles:             append([]string(nil), step.AllowedRoles...),
+			Outputs:                  append([]string(nil), step.Outputs...),
+			KeyFields:                stepFieldContexts(step),
+			SchemaRuleSummaries:      append([]string(nil), step.RuleSummaries...),
+			ValidationHints:          validationHints(step.ValidationHints),
+			Capabilities:             append([]string(nil), step.Capabilities...),
+			ProducesArtifacts:        append([]string(nil), step.Contract.ProducesArtifacts...),
+			ConsumesArtifacts:        append([]string(nil), step.Contract.ConsumesArtifacts...),
+			PublishesState:           append([]string(nil), step.Contract.PublishesState...),
+			ConsumesState:            append([]string(nil), step.Contract.ConsumesState...),
+			RoleSensitive:            step.Contract.RoleSensitive,
+			VerificationRelated:      step.Contract.VerificationRelated,
+			MatchSignals:             append([]string(nil), step.MatchSignals...),
+			AntiSignals:              append([]string(nil), step.AntiSignals...),
+			QualityRules:             qualityRules(step.QualityRules),
+			ConstrainedLiteralFields: constrainedLiteralFields(step.ConstrainedLiteralFields),
 		}
-		ctx.PromptExamples = promptExamplesFromShape(ctx.CuratedShape)
-		applyStepCatalogAskMetadata(&ctx)
-		ctx.Outputs = dedupe(ctx.Outputs)
 		out = append(out, ctx)
 	}
 	return out
 }
 
-func applyStepCatalogAskMetadata(ctx *StepKindContext) {
-	// Derived fields come from workflow contracts, schema doc metadata, and the
-	// step catalog's machine-readable ask metadata projection.
-	ctx.MatchSignals = append([]string(nil), defaultMatchSignals(ctx.Kind)...)
-	ctx.ValidationHints = append([]ValidationHint(nil), defaultValidationHints(ctx.Kind)...)
-	ctx.ConstrainedLiteralFields = append([]ConstrainedFieldHint(nil), defaultConstrainedLiteralFields(ctx.Kind)...)
-	ctx.QualityRules = append([]QualityRule(nil), defaultQualityRules(ctx.Kind)...)
-	if ask, ok := stepmetaAsk(ctx.Kind); ok && len(ask.AntiSignals) > 0 {
-		ctx.AntiSignals = append([]string(nil), ask.AntiSignals...)
-	}
-	if ask, ok := stepmetaAsk(ctx.Kind); ok && len(ask.Capabilities) > 0 {
-		ctx.Capabilities = dedupe(append([]string(nil), ask.Capabilities...))
-	}
-	if ask, ok := stepmetaAsk(ctx.Kind); ok {
-		ctx.ProducesArtifacts = dedupe(append([]string(nil), ask.ContractHints.ProducesArtifacts...))
-		ctx.ConsumesArtifacts = dedupe(append([]string(nil), ask.ContractHints.ConsumesArtifacts...))
-		ctx.PublishesState = dedupe(append([]string(nil), ask.ContractHints.PublishesState...))
-		ctx.ConsumesState = dedupe(append([]string(nil), ask.ContractHints.ConsumesState...))
-		ctx.RoleSensitive = ask.ContractHints.RoleSensitive
-		ctx.VerificationRelated = ask.ContractHints.VerificationRelated
-	}
-}
-
-func stepmetaAsk(kind string) (stepmeta.AskMetadata, bool) {
-	entry, ok, err := stepmeta.LookupCatalogEntry(kind)
-	if err != nil || !ok {
-		return stepmeta.AskMetadata{}, false
-	}
-	return stepmeta.ProjectAsk(entry), true
-}
-
-func defaultMatchSignals(kind string) []string {
-	if ask, ok := stepmetaAsk(kind); ok && len(ask.MatchSignals) > 0 {
-		return append([]string(nil), ask.MatchSignals...)
-	}
-	return nil
-}
-
-func promptExamplesFromShape(shape string) []StepExampleContext {
-	if strings.TrimSpace(shape) == "" {
-		return nil
-	}
-	return []StepExampleContext{{Purpose: "compact shape", YAML: strings.TrimSpace(shape)}}
-}
-
-func defaultValidationHints(kind string) []ValidationHint {
-	if ask, ok := stepmetaAsk(kind); ok && len(ask.ValidationHints) > 0 {
-		out := make([]ValidationHint, 0, len(ask.ValidationHints))
-		for _, hint := range ask.ValidationHints {
-			out = append(out, ValidationHint{ErrorContains: hint.ErrorContains, Fix: hint.Fix})
-		}
-		return out
-	}
-	return nil
-}
-
-func defaultQualityRules(kind string) []QualityRule {
-	if ask, ok := stepmetaAsk(kind); ok && len(ask.QualityRules) > 0 {
-		out := make([]QualityRule, 0, len(ask.QualityRules))
-		for _, rule := range ask.QualityRules {
-			out = append(out, QualityRule{Trigger: rule.Trigger, Message: rule.Message, Level: rule.Level})
-		}
-		return out
-	}
-	return nil
-}
-
-func defaultConstrainedLiteralFields(kind string) []ConstrainedFieldHint {
-	if ask, ok := stepmetaAsk(kind); ok && len(ask.ConstrainedLiteralFields) > 0 {
-		out := make([]ConstrainedFieldHint, 0, len(ask.ConstrainedLiteralFields))
-		for _, field := range ask.ConstrainedLiteralFields {
-			out = append(out, ConstrainedFieldHint{Path: field.Path, AllowedValues: append([]string(nil), field.AllowedValues...), Guidance: field.Guidance})
-		}
-		return out
-	}
-	return nil
-}
-
-func buildStepKeyFields(kind string, meta schemadoc.ToolMetadata, facts schemafacts.DocumentFacts) []StepFieldContext {
-	fieldRequirements := map[string]string{}
-	for _, field := range facts.Fields {
-		if strings.HasPrefix(field.Path, "spec") {
-			fieldRequirements[field.Path] = string(field.Requirement)
-		}
-	}
-	keys := stepmetaKeyFields(kind)
+func stepFieldContexts(step askcatalog.Step) []StepFieldContext {
+	keys := append([]string(nil), step.KeyFields...)
 	if len(keys) == 0 {
-		keys = deriveKeyFields(meta, fieldRequirements)
+		for path, field := range step.Fields {
+			if field.Requirement == schemafacts.RequirementRequired {
+				keys = append(keys, path)
+			}
+		}
+		sort.Strings(keys)
+		if len(keys) > 5 {
+			keys = keys[:5]
+		}
 	}
 	out := make([]StepFieldContext, 0, len(keys))
 	for _, key := range keys {
-		field, ok := meta.FieldDocs[key]
+		field, ok := step.Fields[key]
 		if !ok {
 			continue
 		}
-		requirement := fieldRequirements[key]
-		if requirement == "" {
-			requirement = "optional"
-		}
-		out = append(out, StepFieldContext{Path: key, Description: field.Description, Example: field.Example, Requirement: requirement})
+		out = append(out, StepFieldContext{Path: key, Description: field.Description, Example: field.Example, Requirement: string(field.Requirement)})
 	}
 	return out
 }
 
-func deriveKeyFields(meta schemadoc.ToolMetadata, fieldRequirements map[string]string) []string {
-	type candidate struct {
-		path        string
-		requirement string
-	}
-	candidates := make([]candidate, 0, len(meta.FieldDocs))
-	for path := range meta.FieldDocs {
-		if !strings.HasPrefix(path, "spec.") {
-			continue
-		}
-		remainder := strings.TrimPrefix(path, "spec.")
-		if strings.Contains(remainder, "[]") || strings.Count(remainder, ".") > 0 {
-			continue
-		}
-		requirement := fieldRequirements[path]
-		if requirement == "" {
-			requirement = "optional"
-		}
-		candidates = append(candidates, candidate{path: path, requirement: requirement})
-	}
-	sort.Slice(candidates, func(i, j int) bool {
-		if candidates[i].requirement != candidates[j].requirement {
-			return candidates[i].requirement == "required"
-		}
-		return candidates[i].path < candidates[j].path
-	})
-	out := make([]string, 0, len(candidates))
-	for _, candidate := range candidates {
-		out = append(out, candidate.path)
-		if len(out) >= 5 {
-			break
-		}
+func validationHints(items []stepmeta.ValidationHint) []ValidationHint {
+	out := make([]ValidationHint, 0, len(items))
+	for _, item := range items {
+		out = append(out, ValidationHint{ErrorContains: item.ErrorContains, Fix: item.Fix})
 	}
 	return out
 }
 
-func stepmetaKeyFields(kind string) []string {
-	if ask, ok := stepmetaAsk(kind); ok && len(ask.KeyFields) > 0 {
-		return append([]string(nil), ask.KeyFields...)
+func qualityRules(items []stepmeta.QualityRule) []QualityRule {
+	out := make([]QualityRule, 0, len(items))
+	for _, item := range items {
+		out = append(out, QualityRule{Trigger: item.Trigger, Message: item.Message, Level: item.Level})
 	}
-	return nil
+	return out
 }
 
-func schemaFactsForKind(kind string) schemafacts.DocumentFacts {
-	var schemaFile string
-	for _, def := range workflowexec.StepDefinitions() {
-		if def.Kind == strings.TrimSpace(kind) {
-			schemaFile = strings.TrimSpace(def.SchemaFile)
-			break
-		}
+func constrainedLiteralFields(items []stepmeta.ConstrainedLiteralField) []ConstrainedFieldHint {
+	out := make([]ConstrainedFieldHint, 0, len(items))
+	for _, item := range items {
+		out = append(out, ConstrainedFieldHint{Path: item.Path, AllowedValues: append([]string(nil), item.AllowedValues...), Guidance: item.Guidance})
 	}
-	if schemaFile == "" {
-		return schemafacts.DocumentFacts{}
-	}
-	raw, err := deckschemas.ToolSchema(schemaFile)
-	if err != nil {
-		return schemafacts.DocumentFacts{}
-	}
-	var schema map[string]any
-	if err := json.Unmarshal(raw, &schema); err != nil {
-		return schemafacts.DocumentFacts{}
-	}
-	facts := schemafacts.Analyze(schema)
-	if props, _ := schema["properties"].(map[string]any); len(props) > 0 {
-		if spec, _ := props["spec"].(map[string]any); len(spec) > 0 {
-			facts.RuleSummaries = schemafacts.ExtractRules(spec, "spec")
-		}
-	}
-	return facts
-}
-
-func dedupe(values []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" || seen[value] {
-			continue
-		}
-		seen[value] = true
-		out = append(out, value)
-	}
-	sort.Strings(out)
 	return out
 }
 
