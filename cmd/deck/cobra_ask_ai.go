@@ -65,6 +65,7 @@ func newAskCommand() *cobra.Command {
 				Provider:      provider,
 				Model:         model,
 				Endpoint:      endpoint,
+				Stdin:         cmd.InOrStdin(),
 				Stdout:        cmd.OutOrStdout(),
 				Stderr:        cmd.ErrOrStderr(),
 			}, newAskBackend())
@@ -120,6 +121,7 @@ func newAskPlanCommand() *cobra.Command {
 				Provider: provider,
 				Model:    model,
 				Endpoint: endpoint,
+				Stdin:    cmd.InOrStdin(),
 				Stdout:   cmd.OutOrStdout(),
 				Stderr:   cmd.ErrOrStderr(),
 			}, newAskBackend())

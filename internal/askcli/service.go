@@ -33,6 +33,9 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	if opts.Review && (opts.Create || opts.Edit) {
 		return fmt.Errorf("--review cannot be combined with --create or --edit")
 	}
+	if opts.Stdin == nil {
+		opts.Stdin = os.Stdin
+	}
 	hooks := askhooks.Default()
 	resolvedRoot, err := filepath.Abs(strings.TrimSpace(opts.Root))
 	if err != nil {
@@ -195,8 +198,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		return fmt.Errorf("ask plan is intended for draft/refine authoring requests; got route %s. Try `deck ask %q` instead", decision.Route, strings.TrimSpace(requestText))
 	}
 
-	planRequested := opts.PlanOnly
-	planNeeded := isAuthoringRoute(decision.Route) && planRequested
+	planNeeded := isAuthoringRoute(decision.Route) && resumedPlan == nil
 	var plan askcontract.PlanResponse
 	var planCritic askcontract.PlanCriticResponse
 	if resumedPlan != nil && opts.PlanOnly {
@@ -210,6 +212,14 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		}
 		result.PlanMarkdown = planMDPath
 		result.PlanJSON = planJSONPath
+		updatedPlan, aborted, clarifyErr := maybeClarifyPlanInteractively(resolvedRoot, opts, &result, requestText, plan, askcontract.PlanCriticResponse{})
+		if clarifyErr != nil {
+			return clarifyErr
+		}
+		plan = updatedPlan
+		if aborted {
+			return render(opts.Stdout, opts.Stderr, result)
+		}
 		result.Summary = "updated plan artifact"
 		if hasFatalPlanReviewIssues(plan, askcontract.PlanCriticResponse{}) {
 			result.Termination = "plan-awaiting-clarification"
@@ -255,6 +265,14 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		planMarkdownFinal := renderPlanMarkdown(plan, planMDPath)
 		if updateErr := os.WriteFile(filepath.Join(resolvedRoot, filepath.FromSlash(planMDPath)), []byte(planMarkdownFinal+"\n"), 0o600); updateErr == nil {
 			_ = os.WriteFile(filepath.Join(filepath.Dir(filepath.Join(resolvedRoot, filepath.FromSlash(planMDPath))), "latest.md"), []byte(planMarkdownFinal+"\n"), 0o600)
+		}
+		updatedPlan, aborted, clarifyErr := maybeClarifyPlanInteractively(resolvedRoot, opts, &result, requestText, plan, planCritic)
+		if clarifyErr != nil {
+			return clarifyErr
+		}
+		plan = updatedPlan
+		if aborted {
+			return render(opts.Stdout, opts.Stderr, result)
 		}
 		if opts.PlanOnly {
 			result.Summary = "generated plan artifact"
@@ -312,6 +330,14 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		result.Plan = &plan
 		result.PlanJSON = resumedPlanJSON
 		result.PlanMarkdown = strings.TrimSuffix(resumedPlanJSON, ".json") + ".md"
+		updatedPlan, aborted, clarifyErr := maybeClarifyPlanInteractively(resolvedRoot, opts, &result, requestText, plan, askcontract.PlanCriticResponse{})
+		if clarifyErr != nil {
+			return clarifyErr
+		}
+		plan = updatedPlan
+		if aborted {
+			return render(opts.Stdout, opts.Stderr, result)
+		}
 		if hasFatalPlanReviewIssues(plan, askcontract.PlanCriticResponse{}) {
 			result.Summary = "saved plan still requires clarification"
 			result.Termination = "plan-awaiting-clarification"
@@ -479,4 +505,36 @@ func resumedPlanDecision(plan askcontract.PlanResponse) askintent.Decision {
 	decision.Reason = "saved plan artifact"
 	decision.Target = planTarget(plan, askintent.Target{Kind: plan.AuthoringBrief.TargetScope, Path: plan.EntryScenario})
 	return decision
+}
+
+func maybeClarifyPlanInteractively(root string, opts Options, result *runResult, requestText string, plan askcontract.PlanResponse, planCritic askcontract.PlanCriticResponse) (askcontract.PlanResponse, bool, error) {
+	if !hasBlockingClarifications(plan) {
+		return plan, false, nil
+	}
+	if !interactiveSessionProbe(opts.Stdin, opts.Stdout) {
+		return plan, false, nil
+	}
+	updatedPlan, aborted, err := runInteractiveClarifications(opts.Stdin, opts.Stdout, plan)
+	if err != nil {
+		return plan, false, err
+	}
+	planMD := renderPlanMarkdown(updatedPlan, result.PlanMarkdown)
+	planMDPath, planJSONPath, saveErr := savePlanArtifact(root, opts, updatedPlan, planMD)
+	if saveErr != nil {
+		return updatedPlan, false, saveErr
+	}
+	result.Plan = &updatedPlan
+	result.PlanMarkdown = planMDPath
+	result.PlanJSON = planJSONPath
+	result.ReviewLines = append(result.ReviewLines, renderPlanNotes(updatedPlan)...)
+	result.ReviewLines = append(result.ReviewLines, renderPlanCriticNotes(planCritic)...)
+	if aborted {
+		result.Summary = "saved plan after interactive clarification exit"
+		result.Termination = "plan-clarification-aborted"
+		result.FallbackNote = "clarification stopped; resume later from the saved plan artifact"
+		if err := askstate.Save(root, askstate.Context{LastMode: "plan", LastRoute: string(result.Route), LastPrompt: strings.TrimSpace(requestText), LastFiles: filePathsFromPlan(updatedPlan), LastLLMUsed: true, LastClassifierLLM: result.ClassifierLLM, LastTermination: result.Termination}, requestText, resultToMarkdown(*result)); err != nil {
+			return updatedPlan, false, err
+		}
+	}
+	return updatedPlan, aborted, nil
 }

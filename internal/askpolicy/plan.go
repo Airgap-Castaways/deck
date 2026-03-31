@@ -35,7 +35,7 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 	if len(plan.ComponentRecommendation) == 0 {
 		plan.ComponentRecommendation = append([]string(nil), req.ComponentAdvisories...)
 	}
-	plan.Clarifications = normalizeClarifications(plan.Clarifications, req, prompt)
+	plan.Clarifications = normalizeClarifications(plan.Clarifications, req, prompt, decision, workspace)
 	plan.Blockers, plan.OpenQuestions = clarificationLines(plan.Clarifications, plan.Blockers, plan.OpenQuestions)
 	plan = applyClarificationAnswers(plan)
 	if strings.TrimSpace(plan.EntryScenario) == "" {
@@ -59,9 +59,9 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 	return plan
 }
 
-func normalizeClarifications(items []askcontract.PlanClarification, req ScenarioRequirements, prompt string) []askcontract.PlanClarification {
+func normalizeClarifications(items []askcontract.PlanClarification, req ScenarioRequirements, prompt string, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) []askcontract.PlanClarification {
 	facts := askauthoring.InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
-	defaults := planClarificationsFromRequirements(prompt, req)
+	defaults := planClarificationsFromRequirements(prompt, req, decision, workspace)
 	byID := map[string]askcontract.PlanClarification{}
 	for _, item := range defaults {
 		byID[strings.TrimSpace(item.ID)] = item
@@ -169,6 +169,30 @@ func applyClarificationAnswers(plan askcontract.PlanResponse) askcontract.PlanRe
 				plan.ExecutionModel.Verification.ExpectedNodeCount = plan.AuthoringBrief.NodeCount
 			}
 			plan.ExecutionModel.Verification.ExpectedControlPlaneReady = maxInt(plan.ExecutionModel.Verification.ExpectedControlPlaneReady, 1)
+		}
+	}
+	if answer := byID["refine.anchorPath"]; answer != "" {
+		path := filepath.ToSlash(strings.TrimSpace(answer))
+		paths := []string{path}
+		if !containsString(paths, "workflows/vars.yaml") {
+			for _, existing := range plan.AuthoringBrief.TargetPaths {
+				if filepath.ToSlash(strings.TrimSpace(existing)) == "workflows/vars.yaml" {
+					paths = append(paths, "workflows/vars.yaml")
+				}
+			}
+		}
+		plan.AuthoringBrief.TargetPaths = dedupeStrings(paths)
+		switch {
+		case path == "workflows/vars.yaml":
+			plan.AuthoringBrief.TargetScope = "vars"
+		case strings.HasPrefix(path, "workflows/components/"):
+			plan.AuthoringBrief.TargetScope = "component"
+		case strings.HasPrefix(path, "workflows/scenarios/") || path == "workflows/prepare.yaml":
+			if len(plan.AuthoringBrief.TargetPaths) > 1 {
+				plan.AuthoringBrief.TargetScope = "workspace"
+			} else {
+				plan.AuthoringBrief.TargetScope = "scenario"
+			}
 		}
 	}
 	return plan

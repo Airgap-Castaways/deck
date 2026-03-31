@@ -77,11 +77,13 @@ For `draft` and `refine`, `deck ask` derives authoring requirements from the req
 - whether the target looks like a prepare flow, apply flow, or a split prepare/apply workflow
 - how strict the generated output needs to be to satisfy the request
 
-Non-authoring routes do not go through this stage because they return an answer rather than candidate files.
+Non-authoring routes do not go through this stage because they return an answer rather than candidate files. Authoring routes now always build an internal plan first, even when you do not run `deck ask plan` explicitly.
 
 ### Step 5: Select a scaffold and generate
 
-For authoring routes, `deck ask` chooses a validated starter shape before generation. Instead of inventing file topology from scratch, it starts from a scaffold that matches deck's expected workspace layout.
+For authoring routes, `deck ask` first builds and reviews a plan. If required details are still missing, it asks clarification questions before generation starts. In an interactive terminal, these clarification questions happen inline. In non-interactive environments, `deck ask` saves a plan artifact and tells you how to resume.
+
+Once the plan is strong enough, `deck ask` chooses a validated starter shape before generation. Instead of inventing file topology from scratch, it starts from a scaffold that matches deck's expected workspace layout.
 
 That scaffold may point generation toward canonical paths such as `workflows/prepare.yaml`, `workflows/scenarios/`, `workflows/components/`, and `workflows/vars.yaml`.
 
@@ -116,7 +118,7 @@ In practice, this means `deck ask` is not just a raw prompt wrapper. It uses dec
 
 `deck ask plan` uses the same general understanding stages at the front of the pipeline: normalize the request, classify it, gather context, and derive requirements. Instead of immediately trying to return final workflow files, it writes a reusable implementation plan under `./.deck/plan/`.
 
-That plan can then be fed back into the main authoring flow with `--from`, which gives you a safer path for large or ambiguous requests.
+That plan can then be fed back into the main authoring flow with `--from`, which gives you a safer path for large or ambiguous requests. If you quit an interactive clarification session, `deck ask` saves the current plan and prints resume guidance.
 
 ## Configure provider and model
 

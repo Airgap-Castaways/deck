@@ -1,6 +1,10 @@
 package askintent
 
-import "strings"
+import (
+	"path/filepath"
+	"regexp"
+	"strings"
+)
 
 type Route string
 
@@ -112,6 +116,18 @@ func ParseRoute(value string) Route {
 }
 
 func inferTarget(prompt string) Target {
+	paths := ExtractWorkflowPaths(prompt)
+	if len(paths) > 0 {
+		path := paths[0]
+		switch {
+		case path == "workflows/vars.yaml":
+			return Target{Kind: "vars", Path: path}
+		case strings.HasPrefix(path, "workflows/components/"):
+			return Target{Kind: "component", Path: path, Name: strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))}
+		case path == "workflows/prepare.yaml" || strings.HasPrefix(path, "workflows/scenarios/"):
+			return Target{Kind: "scenario", Path: path, Name: strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))}
+		}
+	}
 	if strings.Contains(prompt, "prepare and apply") || (strings.Contains(prompt, "prepare") && strings.Contains(prompt, "apply")) {
 		return Target{Kind: "workspace"}
 	}
@@ -128,4 +144,24 @@ func inferTarget(prompt string) Target {
 		return Target{Kind: "vars", Path: "workflows/vars.yaml"}
 	}
 	return Target{Kind: "workspace"}
+}
+
+var workflowPathPattern = regexp.MustCompile(`workflows/(?:prepare\.ya?ml|vars\.ya?ml|scenarios/[A-Za-z0-9._/-]+\.ya?ml|components/[A-Za-z0-9._/-]+\.ya?ml)`) //nolint:gochecknoglobals
+
+func ExtractWorkflowPaths(prompt string) []string {
+	matches := workflowPathPattern.FindAllString(strings.TrimSpace(prompt), -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(matches))
+	for _, match := range matches {
+		match = filepath.ToSlash(strings.TrimSpace(match))
+		if match == "" || seen[match] {
+			continue
+		}
+		seen[match] = true
+		out = append(out, match)
+	}
+	return out
 }

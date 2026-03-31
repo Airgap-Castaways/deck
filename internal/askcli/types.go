@@ -29,6 +29,7 @@ type Options struct {
 	Provider      string
 	Model         string
 	Endpoint      string
+	Stdin         io.Reader
 	Stdout        io.Writer
 	Stderr        io.Writer
 }

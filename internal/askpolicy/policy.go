@@ -127,6 +127,12 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 	if strings.Contains(strings.ToLower(prompt), "vars") || len(req.VarsAdvisories) > 0 {
 		req.RequiredFiles = append(req.RequiredFiles, "workflows/vars.yaml")
 	}
+	for _, path := range askintent.ExtractWorkflowPaths(prompt) {
+		req.RequiredFiles = append(req.RequiredFiles, path)
+		if strings.HasPrefix(path, "workflows/scenarios/") || path == "workflows/prepare.yaml" {
+			req.EntryScenario = path
+		}
+	}
 	if workspace.HasWorkflowTree && decision.Route == askintent.RouteRefine {
 		// retain known required files for refine if prepare already exists
 		if workspace.HasPrepare && !containsString(req.RequiredFiles, "workflows/prepare.yaml") && needsPrepare {
@@ -180,20 +186,60 @@ func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askinte
 		ComponentRecommendation: append([]string(nil), req.ComponentAdvisories...),
 		TargetOutcome:           "Generate valid workflow files for the request.",
 		Assumptions:             []string{"Use v1alpha1 workflow schema", "Prefer typed steps where possible"},
-		Clarifications:          planClarificationsFromRequirements(prompt, req),
+		Clarifications:          planClarificationsFromRequirements(prompt, req, decision, workspace),
 		EntryScenario:           req.EntryScenario,
 		Files:                   files,
 		ValidationChecklist:     defaultValidationChecklist(req),
 	}
 }
 
-func planClarificationsFromRequirements(prompt string, req ScenarioRequirements) []askcontract.PlanClarification {
+func planClarificationsFromRequirements(prompt string, req ScenarioRequirements, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) []askcontract.PlanClarification {
 	facts := askauthoring.InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
 	items := append([]askcontract.PlanClarification(nil), facts.Clarifications...)
+	items = append(items, targetClarificationsFromRequirements(prompt, req, decision, workspace)...)
 	for i := range items {
 		applyClarificationHints(&items[i], facts)
 	}
 	return items
+}
+
+func targetClarificationsFromRequirements(prompt string, req ScenarioRequirements, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) []askcontract.PlanClarification {
+	if decision.Route != askintent.RouteRefine {
+		return nil
+	}
+	if len(askintent.ExtractWorkflowPaths(prompt)) > 0 {
+		return nil
+	}
+	options := []string{}
+	for _, file := range workspace.Files {
+		path := filepath.ToSlash(strings.TrimSpace(file.Path))
+		if path == "workflows/vars.yaml" || path == "workflows/prepare.yaml" || strings.HasPrefix(path, "workflows/scenarios/") || strings.HasPrefix(path, "workflows/components/") {
+			options = append(options, path)
+		}
+	}
+	options = dedupeStrings(options)
+	if len(options) <= 1 {
+		return nil
+	}
+	defaultPath := ""
+	for _, path := range options {
+		if strings.HasPrefix(path, "workflows/scenarios/") {
+			defaultPath = path
+			break
+		}
+	}
+	if defaultPath == "" {
+		defaultPath = options[0]
+	}
+	return []askcontract.PlanClarification{{
+		ID:                 "refine.anchorPath",
+		Question:           "This refine request does not name a single workflow file to anchor the change. Which existing file should the refactor treat as the primary target?",
+		Kind:               "path",
+		Options:            options,
+		RecommendedDefault: defaultPath,
+		BlocksGeneration:   true,
+		Affects:            []string{"authoringBrief.targetPaths", "authoringBrief.targetScope"},
+	}}
 }
 
 func applyClarificationHints(item *askcontract.PlanClarification, facts askauthoring.Facts) {
@@ -864,13 +910,16 @@ func inferModeIntent(req ScenarioRequirements) string {
 }
 
 func inferTargetScope(req ScenarioRequirements, decision askintent.Decision) string {
+	if len(briefTargetPaths(req)) > 1 {
+		return "workspace"
+	}
 	if decision.Target.Kind == "scenario" && strings.TrimSpace(decision.Target.Path) != "" && inferModeIntent(req) != "prepare+apply" {
 		return "scenario"
 	}
-	if decision.Target.Kind == "vars" {
+	if decision.Target.Kind == "vars" && len(briefTargetPaths(req)) == 1 {
 		return "vars"
 	}
-	if decision.Target.Kind == "component" {
+	if decision.Target.Kind == "component" && len(briefTargetPaths(req)) == 1 {
 		return "component"
 	}
 	if inferModeIntent(req) == "prepare+apply" || len(req.RequiredFiles) > 1 {
