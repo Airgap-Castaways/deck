@@ -30,12 +30,22 @@ type Definition struct {
 
 type AskMetadata struct {
 	Capabilities             []string
+	ContractHints            ContractHints
 	MatchSignals             []string
 	KeyFields                []string
 	ValidationHints          []ValidationHint
 	ConstrainedLiteralFields []ConstrainedLiteralField
 	QualityRules             []QualityRule
 	AntiSignals              []string
+}
+
+type ContractHints struct {
+	ProducesArtifacts   []string
+	ConsumesArtifacts   []string
+	PublishesState      []string
+	ConsumesState       []string
+	RoleSensitive       bool
+	VerificationRelated bool
 }
 
 type ValidationHint struct {
@@ -195,6 +205,10 @@ func cloneDefinition(def Definition) Definition {
 	cloned.Outputs = append([]string(nil), def.Outputs...)
 	cloned.Notes = append([]string(nil), def.Notes...)
 	cloned.Ask.Capabilities = append([]string(nil), def.Ask.Capabilities...)
+	cloned.Ask.ContractHints.ProducesArtifacts = append([]string(nil), def.Ask.ContractHints.ProducesArtifacts...)
+	cloned.Ask.ContractHints.ConsumesArtifacts = append([]string(nil), def.Ask.ContractHints.ConsumesArtifacts...)
+	cloned.Ask.ContractHints.PublishesState = append([]string(nil), def.Ask.ContractHints.PublishesState...)
+	cloned.Ask.ContractHints.ConsumesState = append([]string(nil), def.Ask.ContractHints.ConsumesState...)
 	cloned.Ask.MatchSignals = append([]string(nil), def.Ask.MatchSignals...)
 	cloned.Ask.KeyFields = append([]string(nil), def.Ask.KeyFields...)
 	cloned.Ask.AntiSignals = append([]string(nil), def.Ask.AntiSignals...)

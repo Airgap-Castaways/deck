@@ -28,9 +28,6 @@ func needsComplexPlanner(prompt string, workspace askretrieve.WorkspaceSummary, 
 		return false
 	}
 	lower := strings.ToLower(strings.TrimSpace(prompt))
-	if isGenericKubeadmStarter(lower) {
-		return false
-	}
 	tokens := []string{"air-gapped", "airgapped", "prepare", "component", "components", "vars", "orchestration", "cluster"}
 	hits := 0
 	for _, token := range tokens {
@@ -50,16 +47,6 @@ func needsComplexPlanner(prompt string, workspace askretrieve.WorkspaceSummary, 
 	return false
 }
 
-func isGenericKubeadmStarter(prompt string) bool {
-	if !strings.Contains(prompt, "kubeadm") {
-		return false
-	}
-	if explicitClusterTopology(prompt) {
-		return false
-	}
-	return true
-}
-
 func explicitClusterTopology(prompt string) bool {
 	tokens := []string{"multi-node", "3-node", "ha", "high-availability", "high availability", "worker", "workers", "join", "control-plane", "control plane"}
 	for _, token := range tokens {
@@ -75,7 +62,7 @@ func planSystemPrompt(decision askintent.Decision, retrieval askretrieve.Retriev
 	bundle := askknowledge.Current()
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask planner. Return strict JSON only.\n")
-	b.WriteString("JSON shape: {\"version\":number,\"request\":string,\"intent\":string,\"complexity\":string,\"authoringBrief\":{\"routeIntent\":string,\"targetScope\":string,\"targetPaths\":[],\"modeIntent\":string,\"connectivity\":string,\"completenessTarget\":string,\"topology\":string,\"nodeCount\":number,\"requiredCapabilities\":[]},\"executionModel\":{\"artifactContracts\":[{\"kind\":string,\"producerPath\":string,\"consumerPath\":string,\"description\":string}],\"sharedStateContracts\":[{\"name\":string,\"producerPath\":string,\"consumerPaths\":[],\"availabilityModel\":string,\"description\":string}],\"roleExecution\":{\"roleSelector\":string,\"controlPlaneFlow\":string,\"workerFlow\":string,\"perNodeInvocation\":boolean},\"verification\":{\"bootstrapPhase\":string,\"finalPhase\":string,\"expectedNodeCount\":number,\"expectedControlPlaneReady\":number},\"applyAssumptions\":[]},\"offlineAssumption\":string,\"needsPrepare\":boolean,\"artifactKinds\":[],\"varsRecommendation\":[],\"componentRecommendation\":[],\"blockers\":[],\"targetOutcome\":string,\"assumptions\":[],\"openQuestions\":[],\"entryScenario\":string,\"files\":[{\"path\":string,\"kind\":string,\"action\":string,\"purpose\":string}],\"validationChecklist\":[]}.\n")
+	b.WriteString("JSON shape: {\"version\":number,\"request\":string,\"intent\":string,\"complexity\":string,\"authoringBrief\":{\"routeIntent\":string,\"targetScope\":string,\"targetPaths\":[],\"modeIntent\":string,\"connectivity\":string,\"completenessTarget\":string,\"topology\":string,\"nodeCount\":number,\"requiredCapabilities\":[]},\"executionModel\":{\"artifactContracts\":[{\"kind\":string,\"producerPath\":string,\"consumerPath\":string,\"description\":string}],\"sharedStateContracts\":[{\"name\":string,\"producerPath\":string,\"consumerPaths\":[],\"availabilityModel\":string,\"description\":string}],\"roleExecution\":{\"roleSelector\":string,\"controlPlaneFlow\":string,\"workerFlow\":string,\"perNodeInvocation\":boolean},\"verification\":{\"bootstrapPhase\":string,\"finalPhase\":string,\"expectedNodeCount\":number,\"expectedControlPlaneReady\":number},\"applyAssumptions\":[]},\"offlineAssumption\":string,\"needsPrepare\":boolean,\"artifactKinds\":[],\"varsRecommendation\":[],\"componentRecommendation\":[],\"blockers\":[],\"targetOutcome\":string,\"assumptions\":[],\"openQuestions\":[],\"clarifications\":[{\"id\":string,\"question\":string,\"kind\":string,\"options\":[],\"recommendedDefault\":string,\"answer\":string,\"blocksGeneration\":boolean,\"affects\":[]}],\"entryScenario\":string,\"files\":[{\"path\":string,\"kind\":string,\"action\":string,\"purpose\":string}],\"validationChecklist\":[]}.\n")
 	b.WriteString("Canonical authoringBrief values: targetScope=(workspace|scenario|vars|component), modeIntent=(prepare+apply|prepare-only|apply-only|workspace), completenessTarget=(starter|complete|refine), topology=(single-node|multi-node|ha|unspecified), requiredCapabilities should be short kebab-case strings.\n")
 	b.WriteString("Canonical executionModel values: artifactContracts.kind=(package|image|repository-setup), sharedStateContracts.availabilityModel=(published-for-worker-consumption|local-only), roleExecution.roleSelector should be a short selector like vars.role.\n")
 	b.WriteString(bundle.WorkflowPromptBlock())
@@ -84,7 +71,7 @@ func planSystemPrompt(decision askintent.Decision, retrieval askretrieve.Retriev
 	b.WriteString("\n")
 	b.WriteString(askpolicy.RequirementsPromptBlock(requirements))
 	b.WriteString("\n")
-	b.WriteString("Use blockers only for missing information that should stop generation safely.\n")
+	b.WriteString("Use blockers only for missing information that should stop generation safely. Put unresolved machine-readable clarification items into clarifications and mirror them into blockers or openQuestions when helpful.\n")
 	b.WriteString("Intent route: ")
 	b.WriteString(string(decision.Route))
 	b.WriteString("\n")
@@ -218,6 +205,40 @@ func renderPlanMarkdown(plan askcontract.PlanResponse, mdPath string) string {
 			b.WriteString("\n")
 		}
 	}
+	b.WriteString("\n## Clarifications\n")
+	if len(plan.Clarifications) == 0 {
+		b.WriteString("- None\n")
+	} else {
+		for _, item := range plan.Clarifications {
+			status := "resolved"
+			if strings.TrimSpace(item.Answer) == "" {
+				status = "unresolved"
+			}
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(item.ID))
+			b.WriteString(" [")
+			b.WriteString(status)
+			b.WriteString("]")
+			if item.BlocksGeneration {
+				b.WriteString(" blocking")
+			}
+			b.WriteString(": ")
+			b.WriteString(strings.TrimSpace(item.Question))
+			if len(item.Options) > 0 {
+				b.WriteString(" options=")
+				b.WriteString(strings.Join(item.Options, ", "))
+			}
+			if strings.TrimSpace(item.RecommendedDefault) != "" {
+				b.WriteString(" default=")
+				b.WriteString(strings.TrimSpace(item.RecommendedDefault))
+			}
+			if strings.TrimSpace(item.Answer) != "" {
+				b.WriteString(" answer=")
+				b.WriteString(strings.TrimSpace(item.Answer))
+			}
+			b.WriteString("\n")
+		}
+	}
 	b.WriteString("\n## Planned files\n")
 	for _, file := range plan.Files {
 		b.WriteString("- ")
@@ -295,6 +316,11 @@ func renderPlanMarkdown(plan askcontract.PlanResponse, mdPath string) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n## Next commands\n")
+	if hasBlockingClarifications(plan) {
+		b.WriteString("deck ask plan --from ")
+		b.WriteString(strings.TrimSuffix(mdPath, filepath.Ext(mdPath)))
+		b.WriteString(".json --answer clarification.id=value\n")
+	}
 	b.WriteString("deck ask --from ")
 	b.WriteString(mdPath)
 	b.WriteString(" \"implement this plan\"\n")
@@ -309,6 +335,15 @@ func isExecutionModelEmpty(model askcontract.ExecutionModel) bool {
 		len(model.SharedStateContracts) == 0 &&
 		strings.TrimSpace(model.RoleExecution.RoleSelector) == "" &&
 		len(model.ApplyAssumptions) == 0
+}
+
+func hasBlockingClarifications(plan askcontract.PlanResponse) bool {
+	for _, item := range plan.Clarifications {
+		if item.BlocksGeneration && strings.TrimSpace(item.Answer) == "" {
+			return true
+		}
+	}
+	return false
 }
 
 func planChunk(plan askcontract.PlanResponse) askretrieve.Chunk {
@@ -404,7 +439,7 @@ func projectContextChunk(root string) askretrieve.Chunk {
 }
 
 func renderPlanNotes(plan askcontract.PlanResponse) []string {
-	lines := make([]string, 0, len(plan.Assumptions)+len(plan.Blockers)+len(plan.OpenQuestions))
+	lines := make([]string, 0, len(plan.Assumptions)+len(plan.Blockers)+len(plan.OpenQuestions)+len(plan.Clarifications))
 	for _, assumption := range plan.Assumptions {
 		if strings.TrimSpace(assumption) != "" {
 			lines = append(lines, "assumption: "+strings.TrimSpace(assumption))
@@ -419,6 +454,16 @@ func renderPlanNotes(plan askcontract.PlanResponse) []string {
 		if strings.TrimSpace(question) != "" {
 			lines = append(lines, "open question: "+strings.TrimSpace(question))
 		}
+	}
+	for _, item := range plan.Clarifications {
+		if strings.TrimSpace(item.Question) == "" {
+			continue
+		}
+		prefix := "clarification needed"
+		if strings.TrimSpace(item.Answer) != "" {
+			prefix = "clarification answered"
+		}
+		lines = append(lines, prefix+": "+strings.TrimSpace(item.ID)+" - "+strings.TrimSpace(item.Question))
 	}
 	return lines
 }

@@ -239,6 +239,14 @@ func applyStepCatalogAskMetadata(ctx *StepKindContext) {
 	if ask, ok := stepmetaAsk(ctx.Kind); ok && len(ask.Capabilities) > 0 {
 		ctx.Capabilities = dedupe(append([]string(nil), ask.Capabilities...))
 	}
+	if ask, ok := stepmetaAsk(ctx.Kind); ok {
+		ctx.ProducesArtifacts = dedupe(append([]string(nil), ask.ContractHints.ProducesArtifacts...))
+		ctx.ConsumesArtifacts = dedupe(append([]string(nil), ask.ContractHints.ConsumesArtifacts...))
+		ctx.PublishesState = dedupe(append([]string(nil), ask.ContractHints.PublishesState...))
+		ctx.ConsumesState = dedupe(append([]string(nil), ask.ContractHints.ConsumesState...))
+		ctx.RoleSensitive = ask.ContractHints.RoleSensitive
+		ctx.VerificationRelated = ask.ContractHints.VerificationRelated
+	}
 }
 
 func stepmetaAsk(kind string) (stepmeta.AskMetadata, bool) {

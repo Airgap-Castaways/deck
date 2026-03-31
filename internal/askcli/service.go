@@ -35,6 +35,25 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	if err != nil {
 		return err
 	}
+	var resumedPlan *askcontract.PlanResponse
+	var resumedPlanJSON string
+	if isPlanArtifactInput(strings.TrimSpace(opts.FromPath)) {
+		loadedPlan, planJSONPath, loadErr := loadPlanArtifact(resolvedRoot, strings.TrimSpace(opts.FromPath))
+		if loadErr != nil {
+			return loadErr
+		}
+		if len(opts.Answers) > 0 {
+			loadedPlan, loadErr = applyPlanAnswers(loadedPlan, opts.Answers)
+			if loadErr != nil {
+				return loadErr
+			}
+		}
+		resumedPlan = &loadedPlan
+		resumedPlanJSON = planJSONPath
+	}
+	if len(opts.Answers) > 0 && resumedPlan == nil {
+		return fmt.Errorf("--answer requires --from pointing to a saved plan artifact")
+	}
 	requestText = strings.TrimSpace(hooks.PreClassify(requestText))
 	if requestText == "" && !opts.Review {
 		return fmt.Errorf("ask request is required")
@@ -159,6 +178,31 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	planNeeded := isAuthoringRoute(decision.Route) && planRequested
 	var plan askcontract.PlanResponse
 	var planCritic askcontract.PlanCriticResponse
+	if resumedPlan != nil && opts.PlanOnly {
+		plan = *resumedPlan
+		result.Plan = &plan
+		result.PlanJSON = resumedPlanJSON
+		planMD := renderPlanMarkdown(plan, strings.TrimSuffix(resumedPlanJSON, ".json")+".md")
+		planMDPath, planJSONPath, saveErr := savePlanArtifact(resolvedRoot, opts, plan, planMD)
+		if saveErr != nil {
+			return saveErr
+		}
+		result.PlanMarkdown = planMDPath
+		result.PlanJSON = planJSONPath
+		result.Summary = "updated plan artifact"
+		if hasFatalPlanReviewIssues(plan, askcontract.PlanCriticResponse{}) {
+			result.Termination = "plan-awaiting-clarification"
+			result.FallbackNote = "plan updated but still requires clarification before generation"
+		} else {
+			result.Termination = "plan-resumed"
+			result.FallbackNote = "plan updated from saved artifact"
+		}
+		result.ReviewLines = append(result.ReviewLines, renderPlanNotes(plan)...)
+		if err := askstate.Save(resolvedRoot, askstate.Context{LastMode: "plan", LastRoute: string(result.Route), LastPrompt: strings.TrimSpace(requestText), LastFiles: filePathsFromPlan(plan), LastLLMUsed: false, LastClassifierLLM: result.ClassifierLLM, LastTermination: result.Termination}, requestText, resultToMarkdown(result)); err != nil {
+			return err
+		}
+		return render(opts.Stdout, opts.Stderr, result)
+	}
 	if planNeeded {
 		if !canUseLLM(effective) {
 			return fmt.Errorf("route %s requires model access; configure provider credentials first", decision.Route)
@@ -242,6 +286,30 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		result.Chunks = retrieval.Chunks
 		result.DroppedChunks = retrieval.Dropped
 		logger.logf("debug", "[ask][phase:retrieve:second-pass] chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
+	} else if resumedPlan != nil {
+		plan = *resumedPlan
+		result.Plan = &plan
+		result.PlanJSON = resumedPlanJSON
+		result.PlanMarkdown = strings.TrimSuffix(resumedPlanJSON, ".json") + ".md"
+		if hasFatalPlanReviewIssues(plan, askcontract.PlanCriticResponse{}) {
+			result.Summary = "saved plan still requires clarification"
+			result.Termination = "plan-awaiting-clarification"
+			result.FallbackNote = "apply --answer to the saved plan artifact before generation"
+			result.ReviewLines = append(result.ReviewLines, renderPlanNotes(plan)...)
+			if err := askstate.Save(resolvedRoot, askstate.Context{LastMode: "plan", LastRoute: string(result.Route), LastPrompt: strings.TrimSpace(requestText), LastFiles: filePathsFromPlan(plan), LastLLMUsed: false, LastClassifierLLM: result.ClassifierLLM, LastTermination: result.Termination}, requestText, resultToMarkdown(result)); err != nil {
+				return err
+			}
+			return render(opts.Stdout, opts.Stderr, result)
+		}
+		secondPassExternal := append([]askretrieve.Chunk{}, externalChunks...)
+		secondPassExternal = append(secondPassExternal, repoMapChunk(workspace), planChunk(plan))
+		secondPassExternal = append(secondPassExternal, planWorkspaceChunks(plan, workspace)...)
+		decision.Target = planTarget(plan, decision.Target)
+		retrieval = askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, secondPassExternal)
+		requirements = askpolicy.MergeRequirementsWithPlan(askpolicy.BuildScenarioRequirements(requestText, retrieval, workspace, decision), plan)
+		authoringBrief = plan.AuthoringBrief
+		result.Chunks = retrieval.Chunks
+		result.DroppedChunks = retrieval.Dropped
 	}
 
 	switch decision.Route {

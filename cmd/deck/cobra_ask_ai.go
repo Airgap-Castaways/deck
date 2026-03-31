@@ -19,6 +19,7 @@ var newAskBackend = func() askprovider.Client {
 
 func newAskCommand() *cobra.Command {
 	var fromPath string
+	var answers []string
 	var write bool
 	var review bool
 	var planName string
@@ -44,6 +45,7 @@ func newAskCommand() *cobra.Command {
 				Root:          ".",
 				Prompt:        request,
 				FromPath:      fromPath,
+				Answers:       append([]string(nil), answers...),
 				PlanName:      planName,
 				PlanDir:       planDir,
 				Write:         write,
@@ -58,6 +60,7 @@ func newAskCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&fromPath, "from", "", "load additional request details from a text or markdown file")
+	cmd.Flags().StringArrayVar(&answers, "answer", nil, "apply plan clarification answers as key=value when resuming from a plan artifact")
 	cmd.Flags().BoolVar(&write, "write", false, "write generated workflow changes into the current workspace")
 	cmd.Flags().BoolVar(&review, "review", false, "review the current workspace without writing files")
 	cmd.Flags().IntVar(&maxIterations, "max-iterations", 0, "max repair attempts for draft/refine routes (0 uses route default)")
@@ -75,6 +78,7 @@ func newAskCommand() *cobra.Command {
 
 func newAskPlanCommand() *cobra.Command {
 	var fromPath string
+	var answers []string
 	var planName string
 	var planDir string
 	var provider string
@@ -96,6 +100,7 @@ func newAskPlanCommand() *cobra.Command {
 				Root:     ".",
 				Prompt:   request,
 				FromPath: fromPath,
+				Answers:  append([]string(nil), answers...),
 				PlanOnly: true,
 				PlanName: planName,
 				PlanDir:  planDir,
@@ -108,6 +113,7 @@ func newAskPlanCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&fromPath, "from", "", "load additional request details from a text or markdown file")
+	cmd.Flags().StringArrayVar(&answers, "answer", nil, "apply plan clarification answers as key=value when resuming from a saved plan artifact")
 	cmd.Flags().StringVar(&planName, "plan-name", "", "optional plan artifact name")
 	cmd.Flags().StringVar(&planDir, "plan-dir", ".deck/plan", "directory for ask plan artifacts")
 	cmd.Flags().StringVar(&provider, "provider", "", "override the configured ask provider for this run")

@@ -17,6 +17,7 @@ type Options struct {
 	Root          string
 	Prompt        string
 	FromPath      string
+	Answers       []string
 	PlanOnly      bool
 	PlanName      string
 	PlanDir       string

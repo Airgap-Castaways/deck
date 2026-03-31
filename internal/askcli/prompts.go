@@ -620,6 +620,10 @@ func postProcessCriticUserPrompt(plan askcontract.PlanResponse, files []askcontr
 	b.WriteString("Planned request: ")
 	b.WriteString(strings.TrimSpace(plan.Request))
 	b.WriteString("\n")
+	if summary := generatedDocumentSummaryBlock(files); strings.TrimSpace(summary) != "" {
+		b.WriteString(summary)
+		b.WriteString("\n")
+	}
 	if advisory := planAdvisoryPromptBlock(plan, planCritic); strings.TrimSpace(advisory) != "" {
 		b.WriteString(advisory)
 		b.WriteString("\n")
@@ -717,6 +721,10 @@ func structuralCleanupEditUserPrompt(files []askcontract.GeneratedFile, findings
 
 func postProcessEditUserPrompt(files []askcontract.GeneratedFile, findings askcontract.PostProcessResponse, planCritic askcontract.PlanCriticResponse) string {
 	b := &strings.Builder{}
+	if summary := generatedDocumentSummaryBlock(files); strings.TrimSpace(summary) != "" {
+		b.WriteString(summary)
+		b.WriteString("\n")
+	}
 	if advisory := planAdvisoryPromptBlock(askcontract.PlanResponse{}, planCritic); strings.TrimSpace(advisory) != "" {
 		b.WriteString(advisory)
 		b.WriteString("\n")
@@ -772,6 +780,10 @@ func judgeUserPrompt(files []askcontract.GeneratedFile, lintSummary string, crit
 	b.WriteString("Local validation summary: ")
 	b.WriteString(strings.TrimSpace(lintSummary))
 	b.WriteString("\n")
+	if summary := generatedDocumentSummaryBlock(files); strings.TrimSpace(summary) != "" {
+		b.WriteString(summary)
+		b.WriteString("\n")
+	}
 	if len(critic.Advisory) > 0 {
 		b.WriteString("Local semantic advisory:\n")
 		for _, item := range critic.Advisory {
@@ -791,6 +803,59 @@ func judgeUserPrompt(files []askcontract.GeneratedFile, lintSummary string, crit
 		}
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func generatedDocumentSummaryBlock(files []askcontract.GeneratedFile) string {
+	documents := make([]askcontract.GeneratedDocument, 0, len(files))
+	for _, file := range files {
+		if file.Delete {
+			continue
+		}
+		doc, err := askir.ParseDocument(file.Path, []byte(file.Content))
+		if err != nil {
+			continue
+		}
+		documents = append(documents, doc)
+	}
+	if len(documents) == 0 {
+		return ""
+	}
+	b := &strings.Builder{}
+	b.WriteString("Parsed document summaries:\n")
+	for _, summary := range askir.Summaries(documents) {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(summary))
+		b.WriteString("\n")
+	}
+	for _, doc := range documents {
+		if doc.Workflow == nil {
+			continue
+		}
+		b.WriteString("- structure ")
+		b.WriteString(strings.TrimSpace(doc.Path))
+		b.WriteString(": ")
+		b.WriteString(structuralWorkflowSummary(*doc.Workflow))
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func structuralWorkflowSummary(doc askcontract.WorkflowDocument) string {
+	kinds := []string{}
+	for _, step := range doc.Steps {
+		if strings.TrimSpace(step.Kind) != "" {
+			kinds = append(kinds, strings.TrimSpace(step.Kind))
+		}
+	}
+	for _, phase := range doc.Phases {
+		for _, step := range phase.Steps {
+			if strings.TrimSpace(step.Kind) != "" {
+				kinds = append(kinds, strings.TrimSpace(step.Kind))
+			}
+		}
+	}
+	kinds = dedupe(kinds)
+	return fmt.Sprintf("phases=%d topLevelSteps=%d kinds=%s", len(doc.Phases), len(doc.Steps), strings.Join(kinds, ", "))
 }
 
 func infoPrompts(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult, prompt string) (string, string) {

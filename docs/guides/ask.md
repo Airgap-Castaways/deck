@@ -200,11 +200,13 @@ deck ask plan "air-gapped rhel9 kubeadm cluster with prepare/apply split"
 Plan artifacts are written under `./.deck/plan/` by default. A common follow-up flow is:
 
 ```bash
+deck ask plan --from .deck/plan/latest.json --answer topology.kind=multi-node
+deck ask plan --from .deck/plan/latest.json --answer topology.roleModel=1cp-2workers
 deck ask --from .deck/plan/latest.md "implement this plan"
 deck ask --write --from .deck/plan/latest.md "implement this plan"
 ```
 
-When the request still has blockers, `deck ask` may stop after planning instead of writing weak workflow output.
+When the request still has blockers or unresolved clarifications, `deck ask` may stop after planning instead of writing weak workflow output. Resume from the saved plan artifact with `--answer key=value` until the blocking clarifications are resolved.
 
 ## Workspace and files
 

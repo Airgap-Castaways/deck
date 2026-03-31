@@ -3,8 +3,11 @@ package askpolicy
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/Airgap-Castaways/deck/internal/askauthoring"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
@@ -32,6 +35,9 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 	if len(plan.ComponentRecommendation) == 0 {
 		plan.ComponentRecommendation = append([]string(nil), req.ComponentAdvisories...)
 	}
+	plan.Clarifications = normalizeClarifications(plan.Clarifications, req, prompt)
+	plan.Blockers, plan.OpenQuestions = clarificationLines(plan.Clarifications, plan.Blockers, plan.OpenQuestions)
+	plan = applyClarificationAnswers(plan)
 	if strings.TrimSpace(plan.EntryScenario) == "" {
 		plan.EntryScenario = req.EntryScenario
 	}
@@ -51,6 +57,128 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 		plan.ComponentRecommendation = nil
 	}
 	return plan
+}
+
+func normalizeClarifications(items []askcontract.PlanClarification, req ScenarioRequirements, prompt string) []askcontract.PlanClarification {
+	facts := askauthoring.InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
+	defaults := planClarificationsFromRequirements(prompt, req)
+	byID := map[string]askcontract.PlanClarification{}
+	for _, item := range defaults {
+		byID[strings.TrimSpace(item.ID)] = item
+	}
+	for _, item := range items {
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			continue
+		}
+		base := byID[id]
+		if strings.TrimSpace(item.Question) != "" {
+			base.Question = strings.TrimSpace(item.Question)
+		}
+		if strings.TrimSpace(item.Kind) != "" {
+			base.Kind = strings.TrimSpace(item.Kind)
+		}
+		if len(item.Options) > 0 {
+			base.Options = normalizeStringList(item.Options)
+		}
+		if strings.TrimSpace(item.RecommendedDefault) != "" {
+			base.RecommendedDefault = strings.TrimSpace(item.RecommendedDefault)
+		}
+		if strings.TrimSpace(item.Answer) != "" {
+			base.Answer = strings.TrimSpace(item.Answer)
+		}
+		if len(item.Affects) > 0 {
+			base.Affects = normalizeStringList(item.Affects)
+		}
+		if item.BlocksGeneration {
+			base.BlocksGeneration = true
+		}
+		applyClarificationHints(&base, facts)
+		byID[id] = base
+	}
+	out := make([]askcontract.PlanClarification, 0, len(byID))
+	for _, item := range byID {
+		out = append(out, item)
+	}
+	return sortClarifications(out)
+}
+
+func sortClarifications(items []askcontract.PlanClarification) []askcontract.PlanClarification {
+	out := append([]askcontract.PlanClarification(nil), items...)
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+func clarificationLines(items []askcontract.PlanClarification, existingBlockers []string, existingQuestions []string) ([]string, []string) {
+	blockers := dedupeStrings(existingBlockers)
+	questions := dedupeStrings(existingQuestions)
+	for _, item := range items {
+		if strings.TrimSpace(item.Question) == "" || strings.TrimSpace(item.Answer) != "" {
+			continue
+		}
+		if item.BlocksGeneration {
+			blockers = append(blockers, item.Question)
+		} else {
+			questions = append(questions, item.Question)
+		}
+	}
+	return dedupeStrings(blockers), dedupeStrings(questions)
+}
+
+func applyClarificationAnswers(plan askcontract.PlanResponse) askcontract.PlanResponse {
+	byID := map[string]string{}
+	for _, item := range plan.Clarifications {
+		if id := strings.TrimSpace(item.ID); id != "" && strings.TrimSpace(item.Answer) != "" {
+			byID[id] = strings.TrimSpace(item.Answer)
+		}
+	}
+	if answer := byID["topology.kind"]; answer != "" {
+		plan.AuthoringBrief.Topology = strings.TrimSpace(answer)
+	}
+	if answer := byID["topology.nodeCount"]; answer != "" {
+		if n, err := strconv.Atoi(answer); err == nil && n > 0 {
+			plan.AuthoringBrief.NodeCount = n
+			if plan.ExecutionModel.Verification.ExpectedNodeCount <= 0 {
+				plan.ExecutionModel.Verification.ExpectedNodeCount = n
+			}
+		}
+	}
+	if answer := byID["topology.roleModel"]; answer != "" {
+		plan.ExecutionModel.RoleExecution.PerNodeInvocation = true
+		if strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) == "" {
+			plan.ExecutionModel.RoleExecution.RoleSelector = "vars.role"
+		}
+		switch strings.TrimSpace(answer) {
+		case "3cp-ha":
+			if plan.AuthoringBrief.NodeCount < 3 {
+				plan.AuthoringBrief.NodeCount = 3
+			}
+			plan.AuthoringBrief.Topology = "ha"
+			if plan.ExecutionModel.Verification.ExpectedNodeCount <= 0 {
+				plan.ExecutionModel.Verification.ExpectedNodeCount = plan.AuthoringBrief.NodeCount
+			}
+			plan.ExecutionModel.Verification.ExpectedControlPlaneReady = maxInt(plan.ExecutionModel.Verification.ExpectedControlPlaneReady, plan.AuthoringBrief.NodeCount)
+		case "1cp-2workers":
+			if plan.AuthoringBrief.NodeCount < 3 {
+				plan.AuthoringBrief.NodeCount = 3
+			}
+			if plan.AuthoringBrief.Topology == "unspecified" {
+				plan.AuthoringBrief.Topology = "multi-node"
+			}
+			if plan.ExecutionModel.Verification.ExpectedNodeCount <= 0 {
+				plan.ExecutionModel.Verification.ExpectedNodeCount = plan.AuthoringBrief.NodeCount
+			}
+			plan.ExecutionModel.Verification.ExpectedControlPlaneReady = maxInt(plan.ExecutionModel.Verification.ExpectedControlPlaneReady, 1)
+		}
+	}
+	return plan
+}
+
+func maxInt(current int, candidate int) int {
+	if candidate > current {
+		return candidate
+	}
+	return current
 }
 
 func normalizeExecutionModel(model askcontract.ExecutionModel, fallback askcontract.ExecutionModel) askcontract.ExecutionModel {

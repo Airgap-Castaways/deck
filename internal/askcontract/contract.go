@@ -87,24 +87,36 @@ type PlanFile struct {
 }
 
 type PlanResponse struct {
-	Version                 int            `json:"version"`
-	Request                 string         `json:"request"`
-	Intent                  string         `json:"intent"`
-	Complexity              string         `json:"complexity"`
-	AuthoringBrief          AuthoringBrief `json:"authoringBrief,omitempty"`
-	ExecutionModel          ExecutionModel `json:"executionModel,omitempty"`
-	OfflineAssumption       string         `json:"offlineAssumption,omitempty"`
-	NeedsPrepare            bool           `json:"needsPrepare,omitempty"`
-	ArtifactKinds           []string       `json:"artifactKinds,omitempty"`
-	VarsRecommendation      []string       `json:"varsRecommendation,omitempty"`
-	ComponentRecommendation []string       `json:"componentRecommendation,omitempty"`
-	Blockers                []string       `json:"blockers"`
-	TargetOutcome           string         `json:"targetOutcome"`
-	Assumptions             []string       `json:"assumptions"`
-	OpenQuestions           []string       `json:"openQuestions"`
-	EntryScenario           string         `json:"entryScenario"`
-	Files                   []PlanFile     `json:"files"`
-	ValidationChecklist     []string       `json:"validationChecklist"`
+	Version                 int                 `json:"version"`
+	Request                 string              `json:"request"`
+	Intent                  string              `json:"intent"`
+	Complexity              string              `json:"complexity"`
+	AuthoringBrief          AuthoringBrief      `json:"authoringBrief,omitempty"`
+	ExecutionModel          ExecutionModel      `json:"executionModel,omitempty"`
+	OfflineAssumption       string              `json:"offlineAssumption,omitempty"`
+	NeedsPrepare            bool                `json:"needsPrepare,omitempty"`
+	ArtifactKinds           []string            `json:"artifactKinds,omitempty"`
+	VarsRecommendation      []string            `json:"varsRecommendation,omitempty"`
+	ComponentRecommendation []string            `json:"componentRecommendation,omitempty"`
+	Blockers                []string            `json:"blockers"`
+	TargetOutcome           string              `json:"targetOutcome"`
+	Assumptions             []string            `json:"assumptions"`
+	OpenQuestions           []string            `json:"openQuestions"`
+	Clarifications          []PlanClarification `json:"clarifications,omitempty"`
+	EntryScenario           string              `json:"entryScenario"`
+	Files                   []PlanFile          `json:"files"`
+	ValidationChecklist     []string            `json:"validationChecklist"`
+}
+
+type PlanClarification struct {
+	ID                 string   `json:"id"`
+	Question           string   `json:"question"`
+	Kind               string   `json:"kind,omitempty"`
+	Options            []string `json:"options,omitempty"`
+	RecommendedDefault string   `json:"recommendedDefault,omitempty"`
+	Answer             string   `json:"answer,omitempty"`
+	BlocksGeneration   bool     `json:"blocksGeneration,omitempty"`
+	Affects            []string `json:"affects,omitempty"`
 }
 
 type AuthoringBrief struct {
@@ -535,6 +547,19 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	resp.OfflineAssumption = strings.TrimSpace(resp.OfflineAssumption)
 	resp.TargetOutcome = strings.TrimSpace(resp.TargetOutcome)
 	resp.EntryScenario = strings.TrimSpace(resp.EntryScenario)
+	for i := range resp.Clarifications {
+		resp.Clarifications[i].ID = strings.TrimSpace(resp.Clarifications[i].ID)
+		resp.Clarifications[i].Question = strings.TrimSpace(resp.Clarifications[i].Question)
+		resp.Clarifications[i].Kind = strings.TrimSpace(resp.Clarifications[i].Kind)
+		resp.Clarifications[i].RecommendedDefault = strings.TrimSpace(resp.Clarifications[i].RecommendedDefault)
+		resp.Clarifications[i].Answer = strings.TrimSpace(resp.Clarifications[i].Answer)
+		for j := range resp.Clarifications[i].Options {
+			resp.Clarifications[i].Options[j] = strings.TrimSpace(resp.Clarifications[i].Options[j])
+		}
+		for j := range resp.Clarifications[i].Affects {
+			resp.Clarifications[i].Affects[j] = strings.TrimSpace(resp.Clarifications[i].Affects[j])
+		}
+	}
 	for i := range resp.AuthoringBrief.TargetPaths {
 		resp.AuthoringBrief.TargetPaths[i] = strings.TrimSpace(resp.AuthoringBrief.TargetPaths[i])
 	}
@@ -567,6 +592,19 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	}
 	if len(resp.Files) == 0 {
 		return PlanResponse{}, fmt.Errorf("plan response is missing files")
+	}
+	seenClarifications := map[string]bool{}
+	for _, item := range resp.Clarifications {
+		if item.ID == "" {
+			return PlanResponse{}, fmt.Errorf("plan response has clarification with empty id")
+		}
+		if item.Question == "" {
+			return PlanResponse{}, fmt.Errorf("plan response clarification %q is missing question", item.ID)
+		}
+		if seenClarifications[item.ID] {
+			return PlanResponse{}, fmt.Errorf("plan response has duplicate clarification id %q", item.ID)
+		}
+		seenClarifications[item.ID] = true
 	}
 	for i := range resp.Files {
 		resp.Files[i].Path = strings.TrimSpace(resp.Files[i].Path)
