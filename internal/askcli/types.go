@@ -22,6 +22,8 @@ type Options struct {
 	PlanName      string
 	PlanDir       string
 	Write         bool
+	Create        bool
+	Edit          bool
 	Review        bool
 	MaxIterations int
 	Provider      string

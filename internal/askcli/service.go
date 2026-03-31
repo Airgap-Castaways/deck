@@ -2,6 +2,7 @@ package askcli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +26,12 @@ import (
 func Execute(ctx context.Context, opts Options, client askprovider.Client) error {
 	if client == nil {
 		return fmt.Errorf("ask backend is not configured")
+	}
+	if opts.Create && opts.Edit {
+		return fmt.Errorf("--create and --edit are mutually exclusive")
+	}
+	if opts.Review && (opts.Create || opts.Edit) {
+		return fmt.Errorf("--review cannot be combined with --create or --edit")
 	}
 	hooks := askhooks.Default()
 	resolvedRoot, err := filepath.Abs(strings.TrimSpace(opts.Root))
@@ -69,11 +76,16 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	heuristic := hooks.PostClassify(askintent.Classify(askintent.Input{
 		Prompt:          requestText,
 		WriteFlag:       opts.Write,
+		CreateFlag:      opts.Create,
+		EditFlag:        opts.Edit,
 		ReviewFlag:      opts.Review,
 		HasWorkflowTree: workspace.HasWorkflowTree,
 		HasPrepare:      workspace.HasPrepare,
 		HasApply:        workspace.HasApply,
 	}))
+	if resumedPlan != nil && !opts.PlanOnly {
+		heuristic = resumedPlanDecision(*resumedPlan)
+	}
 	effective, err := askconfig.ResolveEffective(askconfig.Settings{Provider: opts.Provider, Model: opts.Model, Endpoint: opts.Endpoint})
 	if err != nil {
 		return err
@@ -104,7 +116,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	classifierSystem := classifierSystemPrompt()
 	classifierUser := classifierUserPrompt(requestText, opts.Review, workspace)
 	switch {
-	case canUseLLM(effective) && (!isAuthoringRoute(heuristic.Route) || askFeatureEnabled("DECK_ASK_ENABLE_LLM_CLASSIFIER")):
+	case canUseLLM(effective) && resumedPlan == nil && !askintent.IsHardOverride(heuristic):
 		logger.logf("debug", "\n[ask][phase:classify:start] provider=%s model=%s\n", effective.Provider, effective.Model)
 		classified, classifyErr := classifyWithLLM(ctx, client, effective, classifierSystem, classifierUser, logger)
 		if classifyErr == nil {
@@ -112,12 +124,21 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			classifierLLM = true
 			logger.logf("basic", "[ask][phase:classify:done] route=%s confidence=%.2f reason=%s\n", decision.Route, decision.Confidence, decision.Reason)
 		} else {
-			logger.logf("debug", "[ask][phase:classify:fallback] error=%v\n", classifyErr)
+			var cErr classifierError
+			if ok := errors.As(classifyErr, &cErr); ok && cErr.kind == classifierErrorSemantic {
+				decision = askintent.Decision{Route: askintent.RouteClarify, Confidence: 0.0, Reason: "classifier could not determine a safe route", Target: heuristic.Target, AllowGeneration: false, AllowRetry: false, RequiresLint: false, LLMPolicy: askintent.LLMOptional}
+				logger.logf("debug", "[ask][phase:classify:clarify] error=%v\n", classifyErr)
+				break
+			}
+			return classifyErr
 		}
 	case canUseLLM(effective):
-		logger.logf("debug", "[ask][phase:classify:skip] reason=heuristic-authoring-default\n")
+		logger.logf("debug", "[ask][phase:classify:skip] reason=hard-override-or-resumed-plan\n")
 	default:
-		logger.logf("debug", "[ask][phase:classify:skip] reason=no-llm-credentials\n")
+		if !askintent.IsHardOverride(heuristic) {
+			return fmt.Errorf("ask classifier requires model access; use --create, --edit, or --review, or configure provider credentials")
+		}
+		logger.logf("debug", "[ask][phase:classify:skip] reason=no-llm-required-for-hard-override\n")
 	}
 	decision = applyWriteOverride(decision, heuristic, opts.Write, logger)
 	if decision.Route == askintent.RouteRefine && !workspace.HasWorkflowTree {
@@ -396,7 +417,9 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			result.LocalFindings = askreview.Workspace(resolvedRoot)
 			result.ReviewLines = append(result.ReviewLines, findingsToLines(result.LocalFindings)...)
 		}
-		if canUseLLM(effective) {
+		if decision.Route == askintent.RouteClarify {
+			applyLocalFallback(&result, resolvedRoot, workspace, requestText)
+		} else if canUseLLM(effective) {
 			systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, requestText)
 			result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
 			logger.logf("basic", "\n[ask][phase:answer:start] route=%s\n", decision.Route)
@@ -447,4 +470,13 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 
 	return render(opts.Stdout, opts.Stderr, result)
+}
+
+func resumedPlanDecision(plan askcontract.PlanResponse) askintent.Decision {
+	route := askintent.ParseRoute(plan.Intent)
+	decision := routeDefaults(route)
+	decision.Confidence = 1.0
+	decision.Reason = "saved plan artifact"
+	decision.Target = planTarget(plan, askintent.Target{Kind: plan.AuthoringBrief.TargetScope, Path: plan.EntryScenario})
+	return decision
 }

@@ -24,6 +24,8 @@ const (
 type Input struct {
 	Prompt          string
 	WriteFlag       bool
+	CreateFlag      bool
+	EditFlag        bool
 	ReviewFlag      bool
 	HasWorkflowTree bool
 	HasPrepare      bool
@@ -60,6 +62,12 @@ func Classify(input Input) Decision {
 			LLMPolicy:       LLMOptional,
 		}
 	}
+	if input.CreateFlag {
+		return Decision{Route: RouteDraft, Confidence: 1.0, Reason: "explicit --create flag", Target: inferTarget(strings.TrimSpace(strings.ToLower(input.Prompt))), AllowGeneration: true, AllowRetry: true, RequiresLint: true, LLMPolicy: LLMRequired}
+	}
+	if input.EditFlag {
+		return Decision{Route: RouteRefine, Confidence: 1.0, Reason: "explicit --edit flag", Target: inferTarget(strings.TrimSpace(strings.ToLower(input.Prompt))), AllowGeneration: true, AllowRetry: true, RequiresLint: true, LLMPolicy: LLMRequired}
+	}
 	prompt := strings.TrimSpace(strings.ToLower(input.Prompt))
 	if prompt == "" {
 		return clarify("empty prompt")
@@ -68,43 +76,16 @@ func Classify(input Input) Decision {
 	if len(words) <= 2 && len(prompt) <= 12 {
 		return clarify("low-information prompt")
 	}
-	if stronglyAuthoringPrompt(prompt) {
-		if input.HasWorkflowTree && !explicitCreateIntent(prompt) {
-			return Decision{Route: RouteRefine, Confidence: 0.84, Reason: "strong authoring intent", Target: inferTarget(prompt), AllowGeneration: true, AllowRetry: true, RequiresLint: true, LLMPolicy: LLMRequired}
-		}
-		return Decision{Route: RouteDraft, Confidence: 0.9, Reason: "strong authoring intent", Target: inferTarget(prompt), AllowGeneration: true, AllowRetry: true, RequiresLint: true, LLMPolicy: LLMRequired}
+	return Decision{Route: RouteClarify, Confidence: 0.0, Reason: "classifier required", Target: inferTarget(prompt), AllowGeneration: false, AllowRetry: false, RequiresLint: false, LLMPolicy: LLMOptional}
+}
+
+func IsHardOverride(decision Decision) bool {
+	switch strings.TrimSpace(decision.Reason) {
+	case "explicit --review flag", "explicit --create flag", "explicit --edit flag", "empty prompt", "low-information prompt":
+		return true
+	default:
+		return false
 	}
-	if hasAny(prompt, reviewTokens) {
-		return Decision{Route: RouteReview, Confidence: 0.9, Reason: "review intent tokens", Target: inferTarget(prompt), AllowGeneration: false, AllowRetry: false, RequiresLint: false, LLMPolicy: LLMOptional}
-	}
-	if hasAny(prompt, explainTokens) {
-		return Decision{Route: RouteExplain, Confidence: 0.85, Reason: "explain intent tokens", Target: inferTarget(prompt), AllowGeneration: false, AllowRetry: false, RequiresLint: false, LLMPolicy: LLMOptional}
-	}
-	if hasAny(prompt, questionTokens) {
-		return Decision{Route: RouteQuestion, Confidence: 0.8, Reason: "question intent tokens", Target: inferTarget(prompt), AllowGeneration: false, AllowRetry: false, RequiresLint: false, LLMPolicy: LLMOptional}
-	}
-	if hasAny(prompt, refineTokens) {
-		if input.HasWorkflowTree || input.HasPrepare || input.HasApply {
-			return Decision{Route: RouteRefine, Confidence: 0.86, Reason: "refinement tokens with existing workflow", Target: inferTarget(prompt), AllowGeneration: true, AllowRetry: true, RequiresLint: true, LLMPolicy: LLMRequired}
-		}
-		return Decision{Route: RouteDraft, Confidence: 0.72, Reason: "refinement tokens without existing workflow", Target: inferTarget(prompt), AllowGeneration: true, AllowRetry: true, RequiresLint: true, LLMPolicy: LLMRequired}
-	}
-	if hasAny(prompt, draftTokens) {
-		if input.HasWorkflowTree && !explicitCreateIntent(prompt) {
-			return Decision{Route: RouteRefine, Confidence: 0.7, Reason: "authoring tokens with existing workflow", Target: inferTarget(prompt), AllowGeneration: true, AllowRetry: true, RequiresLint: true, LLMPolicy: LLMRequired}
-		}
-		return Decision{Route: RouteDraft, Confidence: 0.86, Reason: "authoring tokens", Target: inferTarget(prompt), AllowGeneration: true, AllowRetry: true, RequiresLint: true, LLMPolicy: LLMRequired}
-	}
-	if input.WriteFlag {
-		if input.HasWorkflowTree {
-			return Decision{Route: RouteRefine, Confidence: 0.76, Reason: "explicit --write flag with existing workflow", Target: inferTarget(prompt), AllowGeneration: true, AllowRetry: true, RequiresLint: true, LLMPolicy: LLMRequired}
-		}
-		return Decision{Route: RouteDraft, Confidence: 0.76, Reason: "explicit --write flag", Target: inferTarget(prompt), AllowGeneration: true, AllowRetry: true, RequiresLint: true, LLMPolicy: LLMRequired}
-	}
-	if input.HasWorkflowTree {
-		return Decision{Route: RouteExplain, Confidence: 0.52, Reason: "default to explain for ambiguous prompt", Target: Target{Kind: "workspace"}, AllowGeneration: false, AllowRetry: false, RequiresLint: false, LLMPolicy: LLMOptional}
-	}
-	return clarify("ambiguous prompt")
 }
 
 func clarify(reason string) Decision {
@@ -148,37 +129,3 @@ func inferTarget(prompt string) Target {
 	}
 	return Target{Kind: "workspace"}
 }
-
-func stronglyAuthoringPrompt(prompt string) bool {
-	if !hasAny(prompt, draftTokens) {
-		return false
-	}
-	authoringNouns := []string{"workflow", "workflows", "scenario", "scenarios", "prepare", "apply", "component", "components", "vars"}
-	for _, noun := range authoringNouns {
-		if strings.Contains(prompt, noun) {
-			return true
-		}
-	}
-	return false
-}
-
-func explicitCreateIntent(prompt string) bool {
-	return hasAny(prompt, []string{"create", "generate", "write", "new workflow", "new scenario", "작성", "생성"})
-}
-
-func hasAny(prompt string, tokens []string) bool {
-	for _, token := range tokens {
-		if strings.Contains(prompt, token) {
-			return true
-		}
-	}
-	return false
-}
-
-var (
-	reviewTokens   = []string{"review", "audit", "check", "검토", "리뷰", "점검"}
-	explainTokens  = []string{"explain", "what does", "summary", "구조", "설명", "파악"}
-	questionTokens = []string{"what", "how", "why", "help", "usage", "무엇", "어떻게", "왜"}
-	refineTokens   = []string{"refine", "fix", "improve", "update", "change", "convert", "수정", "개선", "고쳐", "repair"}
-	draftTokens    = []string{"draft", "generate", "create", "write", "scenario", "workflow", "작성", "생성", "시나리오"}
-)

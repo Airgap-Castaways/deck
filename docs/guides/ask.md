@@ -41,13 +41,13 @@ flowchart LR
 
 ### Step 1: Normalize the request
 
-`deck ask` starts by normalizing the input request and loading the current workspace. This includes the prompt text, optional `--from` content, saved ask config, and whether the workspace already has files such as `workflows/prepare.yaml`, `workflows/scenarios/apply.yaml`, or `workflows/vars.yaml`.
+`deck ask` starts by normalizing the input request and loading the current workspace. This includes the prompt text, optional `--from` content, saved ask config, explicit route flags such as `--review`, `--create`, and `--edit`, and whether the workspace already has files such as `workflows/prepare.yaml`, `workflows/scenarios/apply.yaml`, or `workflows/vars.yaml`.
 
 This early inspection matters because `deck ask` behaves differently in an empty workspace than it does in an existing workflow tree.
 
 ### Step 2: Classify the request
 
-Before it decides whether to generate files, `deck ask` classifies the request into a route:
+Before it decides whether to generate files, `deck ask` classifies the request into a route. Hard overrides such as `--review`, `--create`, and `--edit` bypass classifier routing. All other normal requests go through the classifier first.
 
 - `question`: answer a direct question
 - `explain`: explain an existing file or workflow
@@ -55,7 +55,7 @@ Before it decides whether to generate files, `deck ask` classifies the request i
 - `draft`: create a new workflow or scenario
 - `refine`: modify an existing workflow
 
-This is the key branching point in the pipeline. Requests such as "what does this workflow do?" should go to explanation, not file generation. Requests such as "add containerd setup" should go to authoring.
+This is the key branching point in the pipeline. Requests such as "what does this workflow do?" should go to explanation, not file generation. Requests such as "add containerd setup" should go to authoring. If the classifier cannot safely distinguish between explain/review/create/edit, `deck ask` falls back to `clarify` and asks for a more explicit request or a route flag.
 
 ### Step 3: Retrieve deck-specific context
 
@@ -106,6 +106,7 @@ Route behavior differs at the end of the pipeline:
 
 - `question`, `explain`, and `review` return answer-oriented output and do not generate workflow files
 - `draft` and `refine` return candidate files and can write them with `--write`
+- use `--create` or `--edit` when you want to make authoring intent explicit for classifier-first routing
 - if model access is unavailable, `explain` falls back to a local structural summary and `review` falls back to local findings
 - generation routes fail fast when model output is unavailable because local validation cannot replace generation
 
@@ -172,21 +173,29 @@ deck ask --review
 Draft a new workflow:
 
 ```bash
-deck ask "create an air-gapped rhel9 single-node kubeadm workflow"
+deck ask --create "create an air-gapped rhel9 single-node kubeadm workflow"
 ```
 
 Preview generated changes and then write them:
 
 ```bash
 deck ask "add containerd configuration to the apply workflow"
-deck ask --write "add containerd configuration to the apply workflow"
+deck ask --edit --write "add containerd configuration to the apply workflow"
 ```
 
 Use a request file:
 
 ```bash
 deck ask --from ./request.md
-deck ask --write --from ./request.md
+deck ask --create --write --from ./request.md
+```
+
+If `deck ask` replies with a clarification message, either add more detail to the request or use an explicit route flag:
+
+```bash
+deck ask --create "create a two-node offline kubeadm workflow"
+deck ask --edit "refactor workflows/scenarios/apply.yaml to use workflows/vars.yaml"
+deck ask --review "review workflows/scenarios/apply.yaml for offline issues"
 ```
 
 ## Plan mode

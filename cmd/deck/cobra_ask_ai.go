@@ -21,6 +21,8 @@ func newAskCommand() *cobra.Command {
 	var fromPath string
 	var answers []string
 	var write bool
+	var create bool
+	var edit bool
 	var review bool
 	var planName string
 	var planDir string
@@ -35,12 +37,19 @@ func newAskCommand() *cobra.Command {
 		Short: spec.Root.Short,
 		Example: strings.Join([]string{
 			`  deck ask "explain what workflows/scenarios/apply.yaml does"`,
-			`  deck ask --write "create an air-gapped rhel9 single-node kubeadm workflow"`,
+			`  deck ask --create --write "create an air-gapped rhel9 single-node kubeadm workflow"`,
+			`  deck ask --edit "refactor workflows/scenarios/apply.yaml to use workflows/vars.yaml"`,
 			`  deck ask plan "create an air-gapped rhel9 single-node kubeadm workflow"`,
 		}, "\n"),
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			request := strings.TrimSpace(strings.Join(args, " "))
+			if review && (create || edit) {
+				return fmt.Errorf("--review cannot be combined with --create or --edit")
+			}
+			if create && edit {
+				return fmt.Errorf("--create and --edit are mutually exclusive")
+			}
 			return askcli.Execute(cmd.Context(), askcli.Options{
 				Root:          ".",
 				Prompt:        request,
@@ -49,6 +58,8 @@ func newAskCommand() *cobra.Command {
 				PlanName:      planName,
 				PlanDir:       planDir,
 				Write:         write,
+				Create:        create,
+				Edit:          edit,
 				Review:        review,
 				MaxIterations: maxIterations,
 				Provider:      provider,
@@ -62,6 +73,8 @@ func newAskCommand() *cobra.Command {
 	cmd.Flags().StringVar(&fromPath, "from", "", "load additional request details from a text or markdown file")
 	cmd.Flags().StringArrayVar(&answers, "answer", nil, "apply plan clarification answers as key=value when resuming from a plan artifact")
 	cmd.Flags().BoolVar(&write, "write", false, "write generated workflow changes into the current workspace")
+	cmd.Flags().BoolVar(&create, "create", false, "treat the request as new workflow authoring")
+	cmd.Flags().BoolVar(&edit, "edit", false, "treat the request as workflow refinement")
 	cmd.Flags().BoolVar(&review, "review", false, "review the current workspace without writing files")
 	cmd.Flags().IntVar(&maxIterations, "max-iterations", 0, "max repair attempts for draft/refine routes (0 uses route default)")
 	cmd.Flags().StringVar(&provider, "provider", "", "override the configured ask provider for this run")

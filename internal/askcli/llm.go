@@ -2,6 +2,7 @@ package askcli
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -13,7 +14,29 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
 
+type classifierErrorKind string
+
+const (
+	classifierErrorInfra    classifierErrorKind = "infra"
+	classifierErrorSemantic classifierErrorKind = "semantic"
+)
+
+type classifierError struct {
+	kind classifierErrorKind
+	err  error
+}
+
+func (e classifierError) Error() string {
+	if e.err == nil {
+		return string(e.kind)
+	}
+	return e.err.Error()
+}
+
+func (e classifierError) Unwrap() error { return e.err }
+
 func applyWriteOverride(decision askintent.Decision, heuristic askintent.Decision, write bool, logger askLogger) askintent.Decision {
+	_ = heuristic
 	if !write {
 		return decision
 	}
@@ -25,11 +48,7 @@ func applyWriteOverride(decision askintent.Decision, heuristic askintent.Decisio
 		decision.Reason = "write flag enables generation for authoring route"
 		return decision
 	}
-	if !decision.AllowGeneration && heuristic.AllowGeneration {
-		logger.logf("debug", "[ask][phase:classify:override] from=%s to=%s reason=write-flag\n", decision.Route, heuristic.Route)
-		decision = heuristic
-		decision.Reason = "write flag overrides non-generation classification"
-	}
+	logger.logf("debug", "[ask][phase:classify:override] route=%s reason=write-does-not-change-route\n", decision.Route)
 	return decision
 }
 
@@ -59,7 +78,7 @@ func classifyWithLLM(ctx context.Context, client askprovider.Client, cfg askconf
 	for attempt := 0; attempt < 2; attempt++ {
 		resp, err := client.Generate(ctx, request)
 		if err != nil {
-			return askintent.Decision{}, err
+			return askintent.Decision{}, classifierError{kind: classifierErrorInfra, err: err}
 		}
 		logger.response("classifier", resp.Content)
 		parsed, err = askcontract.ParseClassification(resp.Content)
@@ -67,10 +86,16 @@ func classifyWithLLM(ctx context.Context, client askprovider.Client, cfg askconf
 			break
 		}
 		if attempt == 1 {
-			return askintent.Decision{}, err
+			return askintent.Decision{}, classifierError{kind: classifierErrorSemantic, err: err}
 		}
 	}
+	if strings.TrimSpace(parsed.Route) == "" {
+		return askintent.Decision{}, classifierError{kind: classifierErrorSemantic, err: fmt.Errorf("classifier response missing route")}
+	}
 	route := askintent.ParseRoute(parsed.Route)
+	if route == askintent.RouteClarify && !strings.EqualFold(strings.TrimSpace(parsed.Route), string(askintent.RouteClarify)) {
+		return askintent.Decision{}, classifierError{kind: classifierErrorSemantic, err: fmt.Errorf("classifier returned invalid route %q", parsed.Route)}
+	}
 	decision := routeDefaults(route)
 	decision.Confidence = parsed.Confidence
 	if decision.Confidence == 0 {
@@ -82,6 +107,9 @@ func classifyWithLLM(ctx context.Context, client askprovider.Client, cfg askconf
 	decision.Target = askintent.Target{Kind: parsed.Target.Kind, Path: parsed.Target.Path, Name: parsed.Target.Name}
 	if decision.Target.Kind == "" {
 		decision.Target = askintent.Target{Kind: "workspace"}
+	}
+	if decision.Confidence > 0 && decision.Confidence < 0.45 {
+		return askintent.Decision{}, classifierError{kind: classifierErrorSemantic, err: fmt.Errorf("classifier confidence %.2f below routing threshold", decision.Confidence)}
 	}
 	if parsed.GenerationAllowed != nil && !*parsed.GenerationAllowed {
 		decision.AllowGeneration = false

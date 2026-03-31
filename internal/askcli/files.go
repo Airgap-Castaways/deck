@@ -528,6 +528,12 @@ func renderUserCommand(opts Options) string {
 	if opts.Write {
 		parts = append(parts, "--write")
 	}
+	if opts.Create {
+		parts = append(parts, "--create")
+	}
+	if opts.Edit {
+		parts = append(parts, "--edit")
+	}
 	if opts.Review {
 		parts = append(parts, "--review")
 	}

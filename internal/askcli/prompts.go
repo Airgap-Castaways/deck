@@ -26,6 +26,12 @@ func classifierSystemPrompt() string {
 		"Valid route values: clarify, question, explain, review, refine, draft.",
 		"Only choose draft/refine when user clearly asks to create or modify workflow files.",
 		"When user asks analyze/explain/summarize existing scenario, choose explain or review.",
+		"Do not treat words like workflow, scenario, prepare, or apply as authoring intent by themselves.",
+		"Prefer clarify over guessing when the user intent between explain, review, create, and edit is ambiguous.",
+		"Examples: 'Explain how workflows/scenarios/worker-join.yaml works' -> explain.",
+		"Examples: 'Review workflows/scenarios/apply.yaml for offline issues' -> review.",
+		"Examples: 'Refactor workflows/scenarios/apply.yaml to use workflows/vars.yaml' -> refine.",
+		"Examples: 'Create an air-gapped kubeadm workflow' -> draft.",
 		"Include target.kind (workspace|scenario|component|vars|unknown) and optional target.path/name when inferable.",
 		"JSON shape: {\"route\":string,\"confidence\":number,\"reason\":string,\"target\":{\"kind\":string,\"path\":string,\"name\":string},\"generationAllowed\":boolean}",
 	}, "\n")
