@@ -24,6 +24,7 @@ builds:
 
 archives:
   - id: deck-archive
+    name_template: "{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
     ids:
       - deck
     formats: [tar.gz]
