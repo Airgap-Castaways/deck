@@ -35,23 +35,6 @@ func (e classifierError) Error() string {
 
 func (e classifierError) Unwrap() error { return e.err }
 
-func applyWriteOverride(decision askintent.Decision, heuristic askintent.Decision, write bool, logger askLogger) askintent.Decision {
-	_ = heuristic
-	if !write {
-		return decision
-	}
-	if (decision.Route == askintent.RouteDraft || decision.Route == askintent.RouteRefine) && !decision.AllowGeneration {
-		logger.logf("debug", "[ask][phase:classify:override] route=%s reason=write-flag-enable-generation\n", decision.Route)
-		decision.AllowGeneration = true
-		decision.AllowRetry = true
-		decision.RequiresLint = true
-		decision.Reason = "write flag enables generation for authoring route"
-		return decision
-	}
-	logger.logf("debug", "[ask][phase:classify:override] route=%s reason=write-does-not-change-route\n", decision.Route)
-	return decision
-}
-
 func canUseLLM(cfg askconfig.EffectiveSettings) bool {
 	if !askconfig.NeedsAPIKey(cfg.Provider) {
 		return true

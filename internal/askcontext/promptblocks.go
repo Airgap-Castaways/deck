@@ -193,7 +193,7 @@ func CLIHintsBlock() string {
 	b.WriteString("Relevant CLI usage:\n")
 	b.WriteString("- ")
 	b.WriteString(manifest.CLI.Command)
-	b.WriteString(" previews by default; add --write to write files.\n")
+	b.WriteString(" writes workflow files directly for authoring routes; use --create or --edit to make authoring intent explicit.\n")
 	b.WriteString("- ")
 	b.WriteString(manifest.CLI.PlanSubcommand)
 	b.WriteString(" saves a reusable plan artifact without writing workflow files.\n")

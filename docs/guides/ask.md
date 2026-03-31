@@ -16,7 +16,7 @@ For kubeadm authoring, the most reliable starter prompt today is explicit about 
 - draft: create a new workflow or scenario shape
 - refine: modify an existing workflow
 
-By default, `deck ask` previews changes. It only writes workflow files when `--write` is present.
+Authoring routes write workflow files directly. Use `deck ask plan` when you want a saved plan artifact without applying workflow changes yet.
 
 For command-level syntax and subcommands, see [CLI Reference](../reference/cli.md).
 
@@ -34,9 +34,8 @@ flowchart LR
   F --> G[Requirements]
   G --> H[Generation]
   H --> I[Validate / repair]
-  E --> J[Preview]
-  I --> K[Preview]
-  K --> L[Write]
+  E --> J[Answer]
+  I --> K[Write files]
 ```
 
 ### Step 1: Normalize the request
@@ -100,14 +99,14 @@ If validation fails, `deck ask` can use structured diagnostics to run a repair p
 
 This validation-and-repair loop is one of the main reasons generated output is more reliable than a single unvalidated model response.
 
-### Step 7: Return a preview, write files, or fall back
+### Step 7: Write files or fall back
 
-By default, `deck ask` previews proposed changes. It only writes files when `--write` is present.
+Authoring routes now write workflow files directly once planning, generation, validation, and repair succeed. If you want to stop after planning, use `deck ask plan` and resume from the saved artifact later.
 
 Route behavior differs at the end of the pipeline:
 
 - `question`, `explain`, and `review` return answer-oriented output and do not generate workflow files
-- `draft` and `refine` return candidate files and can write them with `--write`
+- `draft` and `refine` write workflow files directly after successful validation
 - use `--create` or `--edit` when you want to make authoring intent explicit for classifier-first routing
 - if model access is unavailable, `explain` falls back to a local structural summary and `review` falls back to local findings
 - generation routes fail fast when model output is unavailable because local validation cannot replace generation
@@ -178,18 +177,17 @@ Draft a new workflow:
 deck ask --create "create an air-gapped rhel9 single-node kubeadm workflow"
 ```
 
-Preview generated changes and then write them:
+Make authoring intent explicit:
 
 ```bash
-deck ask "add containerd configuration to the apply workflow"
-deck ask --edit --write "add containerd configuration to the apply workflow"
+deck ask --edit "add containerd configuration to the apply workflow"
 ```
 
 Use a request file:
 
 ```bash
 deck ask --from ./request.md
-deck ask --create --write --from ./request.md
+deck ask --create --from ./request.md
 ```
 
 If `deck ask` replies with a clarification message, either add more detail to the request or use an explicit route flag:
@@ -214,7 +212,6 @@ Plan artifacts are written under `./.deck/plan/` by default. A common follow-up 
 deck ask plan --from .deck/plan/latest.json --answer topology.kind=multi-node
 deck ask plan --from .deck/plan/latest.json --answer topology.roleModel=1cp-2workers
 deck ask --from .deck/plan/latest.md "implement this plan"
-deck ask --write --from .deck/plan/latest.md "implement this plan"
 ```
 
 When the request still has blockers or unresolved clarifications, `deck ask` may stop after planning instead of writing weak workflow output. Resume from the saved plan artifact with `--answer key=value` until the blocking clarifications are resolved.

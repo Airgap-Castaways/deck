@@ -41,7 +41,7 @@ func buildManifest() Manifest {
 			ImportantFlags:      append([]CLIFlag(nil), cli.Flags...),
 			Examples: []string{
 				`deck ask "explain what workflows/scenarios/apply.yaml does"`,
-				`deck ask --write "create an air-gapped rhel9 single-node kubeadm workflow"`,
+				`deck ask --create "create an air-gapped rhel9 single-node kubeadm workflow"`,
 				`deck ask plan "create an air-gapped rhel9 single-node kubeadm workflow"`,
 			},
 		},

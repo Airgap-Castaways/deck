@@ -79,7 +79,6 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 	heuristic := hooks.PostClassify(askintent.Classify(askintent.Input{
 		Prompt:          requestText,
-		WriteFlag:       opts.Write,
 		CreateFlag:      opts.Create,
 		EditFlag:        opts.Edit,
 		ReviewFlag:      opts.Review,
@@ -107,7 +106,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		}
 	}
 	logger := newAskLogger(opts.Stderr, effective.LogLevel)
-	logger.logf("basic", "\n[ask][phase:request] routeCandidate=%s write=%t review=%t\n", heuristic.Route, opts.Write, opts.Review)
+	logger.logf("basic", "\n[ask][phase:request] routeCandidate=%s review=%t\n", heuristic.Route, opts.Review)
 	logger.logf("basic", "[ask][config] provider=%s model=%s endpoint=%s apiKeySource=%s oauthTokenSource=%s accountID=%t logLevel=%s\n", effective.Provider, effective.Model, effective.Endpoint, effective.APIKeySource, effective.OAuthTokenSource, strings.TrimSpace(effective.AccountID) != "", effective.LogLevel)
 	logger.logf("debug", "[ask][command] %s\n", renderUserCommand(opts))
 	if requestSource != "" {
@@ -145,7 +144,6 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		}
 		logger.logf("debug", "[ask][phase:classify:skip] reason=no-llm-required-for-hard-override\n")
 	}
-	decision = applyWriteOverride(decision, heuristic, opts.Write, logger)
 	if decision.Route == askintent.RouteRefine && !workspace.HasWorkflowTree {
 		return fmt.Errorf("cannot refine workflow files because this workspace has no workflow tree yet; run a draft generation first")
 	}
@@ -440,45 +438,64 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			result.Judge = &judge
 		}
 		result.ReviewLines = append(result.ReviewLines, critic.Advisory...)
-		if opts.Write {
-			if err := writeFiles(resolvedRoot, result.Files); err != nil {
-				return err
-			}
-			result.WroteFiles = true
+		if err := writeFiles(resolvedRoot, result.Files); err != nil {
+			return err
 		}
+		result.WroteFiles = true
 		if retriesUsed > 0 {
 			result.Termination = "generated-after-repair"
 		} else {
 			result.Termination = "generated"
 		}
 	default:
-		if decision.Route == askintent.RouteReview {
+		switch decision.Route {
+		case askintent.RouteReview:
 			result.LocalFindings = askreview.Workspace(resolvedRoot)
 			result.ReviewLines = append(result.ReviewLines, findingsToLines(result.LocalFindings)...)
-		}
-		if decision.Route == askintent.RouteClarify {
+			if canUseLLM(effective) {
+				systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, workspace, requestText)
+				result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
+				progress.status("answering %s request", phaseLabel(string(decision.Route)))
+				logger.logf("basic", "\n[ask][phase:answer:start] route=%s\n", decision.Route)
+				info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)
+				if infoErr == nil {
+					result.LLMUsed = true
+					result.Summary = info.Summary
+					result.Answer = info.Answer
+					result.ReviewLines = append(result.ReviewLines, info.Suggestions...)
+					result.ReviewLines = append(result.ReviewLines, info.Findings...)
+					result.ReviewLines = append(result.ReviewLines, info.SuggestedChange...)
+					logger.logf("basic", "[ask][phase:answer:done] route=%s\n", decision.Route)
+				} else {
+					result.ReviewLines = append(result.ReviewLines, "LLM response failed; using local fallback: "+infoErr.Error())
+					logger.logf("debug", "[ask][phase:answer:fallback] error=%v\n", infoErr)
+				}
+			}
+		case askintent.RouteClarify:
 			applyLocalFallback(&result, resolvedRoot, workspace, requestText)
-		} else if canUseLLM(effective) {
-			systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, workspace, requestText)
-			result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
-			progress.status("answering %s request", phaseLabel(string(decision.Route)))
-			logger.logf("basic", "\n[ask][phase:answer:start] route=%s\n", decision.Route)
-			info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)
-			if infoErr == nil {
-				result.LLMUsed = true
-				result.Summary = info.Summary
-				result.Answer = info.Answer
-				result.ReviewLines = append(result.ReviewLines, info.Suggestions...)
-				result.ReviewLines = append(result.ReviewLines, info.Findings...)
-				result.ReviewLines = append(result.ReviewLines, info.SuggestedChange...)
-				logger.logf("basic", "[ask][phase:answer:done] route=%s\n", decision.Route)
+		default:
+			if canUseLLM(effective) {
+				systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, workspace, requestText)
+				result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
+				progress.status("answering %s request", phaseLabel(string(decision.Route)))
+				logger.logf("basic", "\n[ask][phase:answer:start] route=%s\n", decision.Route)
+				info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)
+				if infoErr == nil {
+					result.LLMUsed = true
+					result.Summary = info.Summary
+					result.Answer = info.Answer
+					result.ReviewLines = append(result.ReviewLines, info.Suggestions...)
+					result.ReviewLines = append(result.ReviewLines, info.Findings...)
+					result.ReviewLines = append(result.ReviewLines, info.SuggestedChange...)
+					logger.logf("basic", "[ask][phase:answer:done] route=%s\n", decision.Route)
+				} else {
+					result.ReviewLines = append(result.ReviewLines, "LLM response failed; using local fallback: "+infoErr.Error())
+					logger.logf("debug", "[ask][phase:answer:fallback] error=%v\n", infoErr)
+					applyLocalFallback(&result, resolvedRoot, workspace, requestText)
+				}
 			} else {
-				result.ReviewLines = append(result.ReviewLines, "LLM response failed; using local fallback: "+infoErr.Error())
-				logger.logf("debug", "[ask][phase:answer:fallback] error=%v\n", infoErr)
 				applyLocalFallback(&result, resolvedRoot, workspace, requestText)
 			}
-		} else {
-			applyLocalFallback(&result, resolvedRoot, workspace, requestText)
 		}
 		if result.Termination == "" {
 			result.Termination = "answered"

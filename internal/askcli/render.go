@@ -95,9 +95,6 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 		if _, err := fmt.Fprintf(stdout, "- deck ask --from %s \"implement this plan\"\n", result.PlanMarkdown); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(stdout, "- deck ask --write --from %s \"implement this plan\"\n", result.PlanMarkdown); err != nil {
-			return err
-		}
 	}
 	if result.LintSummary != "" {
 		if _, err := fmt.Fprintf(stdout, "lint: %s\n", result.LintSummary); err != nil {
@@ -162,7 +159,7 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 		}
 	}
 	if len(result.Files) > 0 {
-		label := "preview"
+		label := "files"
 		if result.WroteFiles {
 			label = "wrote"
 		}

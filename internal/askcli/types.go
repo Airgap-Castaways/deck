@@ -20,7 +20,6 @@ type Options struct {
 	PlanOnly      bool
 	PlanName      string
 	PlanDir       string
-	Write         bool
 	Create        bool
 	Edit          bool
 	Review        bool

@@ -27,7 +27,6 @@ const (
 
 type Input struct {
 	Prompt          string
-	WriteFlag       bool
 	CreateFlag      bool
 	EditFlag        bool
 	ReviewFlag      bool

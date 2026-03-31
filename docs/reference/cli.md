@@ -155,7 +155,7 @@ deck ask "create an air-gapped rhel9 single-node kubeadm workflow"
 deck ask plan "air-gapped rhel9 kubeadm cluster with prepare/apply split"
 deck ask "explain what workflows/scenarios/apply.yaml does"
 deck ask --review
-deck ask --write --from ./request.md
+deck ask --create --from ./request.md
 ```
 
 Optional ask augmentation config example:
@@ -212,13 +212,13 @@ Optional ask augmentation config example:
 - `version` prints `deck <version>` by default and supports `-o json` for machine-readable metadata.
 - Prefer typed step kinds for common host changes.
 - Keep `Command` for cases where the clearer typed form does not exist yet.
-- `deck ask` previews changes by default and only writes workflow files when `--write` is present.
+- `deck ask` writes workflow files directly for authoring routes; use `deck ask plan` when you want a saved plan artifact without applying workflow changes yet.
 - `--max-iterations` applies to generation routes (`draft`/`refine`) only; non-generation routes do not run repair loops.
 
 <!-- BEGIN GENERATED:ASK_CLI_CONTEXT -->
 ## Ask CLI context
 
-- `deck ask` previews by default; add `--write` to write workflow files.
+- `deck ask` writes workflow files directly for authoring routes; use `--create` or `--edit` to make authoring intent explicit.
 - `deck ask plan` saves reusable plan artifacts under `./.deck/plan/`.
 <!-- END GENERATED:ASK_CLI_CONTEXT -->
 

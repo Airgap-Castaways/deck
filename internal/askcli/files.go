@@ -525,9 +525,6 @@ func renderUserCommand(opts Options) string {
 	if opts.PlanOnly {
 		parts = append(parts, "plan")
 	}
-	if opts.Write {
-		parts = append(parts, "--write")
-	}
 	if opts.Create {
 		parts = append(parts, "--create")
 	}
