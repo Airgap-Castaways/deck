@@ -170,6 +170,38 @@ func TestParsePlanRejectsDescriptiveEntryScenario(t *testing.T) {
 	}
 }
 
+func TestParsePlanResolvesShortEntryScenarioToPlannedPath(t *testing.T) {
+	resp, err := ParsePlan(`{"version":1,"request":"refine workflow","intent":"refine","complexity":"simple","blockers":[],"targetOutcome":"refine files","assumptions":[],"openQuestions":[],"entryScenario":"apply","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"update","purpose":"entry"},{"path":"workflows/vars.yaml","kind":"vars","action":"create","purpose":"vars"}],"validationChecklist":["lint"]}`)
+	if err != nil {
+		t.Fatalf("expected short entryScenario to resolve, got %v", err)
+	}
+	if resp.EntryScenario != "workflows/scenarios/apply.yaml" {
+		t.Fatalf("expected resolved entry scenario, got %#v", resp)
+	}
+}
+
+func TestParseGenerationNormalizesRawFieldPathFromPathKey(t *testing.T) {
+	resp, err := ParseGeneration(`{"summary":"vars transform","review":[],"documents":[{"path":"workflows/vars.yaml","action":"edit","transforms":[{"type":"set-field","path":"vars.joinFilePath","value":"/tmp/deck/join.txt"}]}]}`)
+	if err != nil {
+		t.Fatalf("parse generation: %v", err)
+	}
+	if got := resp.Documents[0].Transforms[0].RawPath; got != "vars.joinFilePath" {
+		t.Fatalf("expected path key to normalize into rawPath, got %#v", resp.Documents[0].Transforms[0])
+	}
+}
+
+func TestAuthoringProgramValueComputesRoleWhenExpressions(t *testing.T) {
+	program := AuthoringProgram{Cluster: ProgramCluster{RoleSelector: "role", ControlPlaneCount: 1, WorkerCount: 1}, Verification: ProgramVerification{FinalVerificationRole: "control-plane", ExpectedNodeCount: 2, ExpectedReadyCount: 2, ExpectedControlPlaneReady: 1}}
+	value, ok := program.Value("cluster.roleWhen.worker")
+	if !ok || value != `vars.role == "worker"` {
+		t.Fatalf("expected worker role expression, got %v ok=%t", value, ok)
+	}
+	value, ok = program.Value("verification.roleWhen")
+	if !ok || value != `vars.role == "control-plane"` {
+		t.Fatalf("expected verification role expression, got %v ok=%t", value, ok)
+	}
+}
+
 func TestParsePlanRejectsEntryScenarioMissingFromFiles(t *testing.T) {
 	_, err := ParsePlan(`{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/components/base.yaml","kind":"component","action":"create","purpose":"support"}],"validationChecklist":["lint"]}`)
 	if err == nil {

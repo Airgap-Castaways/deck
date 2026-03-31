@@ -178,6 +178,7 @@ func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askinte
 		Intent:                  string(decision.Route),
 		Complexity:              inferRequestComplexity(prompt, req),
 		AuthoringBrief:          BriefFromRequirements(req, decision),
+		AuthoringProgram:        normalizeAuthoringProgram(askcontract.AuthoringProgram{}, BriefFromRequirements(req, decision), ExecutionModelFromRequirements(req), prompt),
 		ExecutionModel:          ExecutionModelFromRequirements(req),
 		OfflineAssumption:       req.Connectivity,
 		NeedsPrepare:            req.NeedsPrepare,
@@ -448,6 +449,9 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 	}
 	if generationViolatesVerificationExpectations(gen.Files, executionModel.Verification) {
 		findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_verification_mismatch", Message: fmt.Sprintf("generated CheckCluster expectations do not match the execution model verification contract (expected nodes=%d controlPlaneReady=%d)", executionModel.Verification.ExpectedNodeCount, executionModel.Verification.ExpectedControlPlaneReady), Fix: "Align final CheckCluster node expectations with the execution model topology contract", Path: "workflows/scenarios/apply.yaml"})
+	}
+	if hasCapability(brief.RequiredCapabilities, "cluster-verification") && !hasKind(generatedWorkflowSteps(gen.Files), "CheckCluster") {
+		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_cluster_verification", Message: "request requires cluster verification but generated workflow does not include a CheckCluster step", Fix: "Use the typed CheckCluster step when the plan requires cluster verification", Path: "workflows/scenarios/apply.yaml"})
 	}
 	if req.TypedPreference && countCommands(gen.Files) > 0 {
 		alternatives := askcontext.StrongTypedAlternativesWithOptions(plan.Request, askcontext.StepGuidanceOptions{ModeIntent: plan.AuthoringBrief.ModeIntent, Topology: plan.AuthoringBrief.Topology, RequiredCapabilities: plan.AuthoringBrief.RequiredCapabilities})
@@ -1237,6 +1241,15 @@ func commandSpecLooksOnline(spec map[string]any) bool {
 func hasKind(steps []askcontract.WorkflowStep, kind string) bool {
 	for _, step := range steps {
 		if strings.EqualFold(strings.TrimSpace(step.Kind), kind) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasCapability(values []string, want string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == strings.TrimSpace(want) {
 			return true
 		}
 	}

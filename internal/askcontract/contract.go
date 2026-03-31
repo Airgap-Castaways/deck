@@ -3,11 +3,12 @@ package askcontract
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 
-	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/structuredpath"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type GeneratedFile struct {
@@ -89,6 +90,7 @@ type GenerationResponse struct {
 	Files     []GeneratedFile     `json:"-"`
 	Documents []GeneratedDocument `json:"documents,omitempty"`
 	Selection *DraftSelection     `json:"selection,omitempty"`
+	Program   *AuthoringProgram   `json:"-"`
 }
 
 type DraftSelection struct {
@@ -130,6 +132,7 @@ type PlanResponse struct {
 	Intent                  string              `json:"intent"`
 	Complexity              string              `json:"complexity"`
 	AuthoringBrief          AuthoringBrief      `json:"authoringBrief,omitempty"`
+	AuthoringProgram        AuthoringProgram    `json:"authoringProgram,omitempty"`
 	ExecutionModel          ExecutionModel      `json:"executionModel,omitempty"`
 	OfflineAssumption       string              `json:"offlineAssumption,omitempty"`
 	NeedsPrepare            bool                `json:"needsPrepare,omitempty"`
@@ -174,6 +177,116 @@ type AuthoringBrief struct {
 	PlatformFamily           string   `json:"platformFamily,omitempty"`
 	EscapeHatchMode          string   `json:"escapeHatchMode,omitempty"`
 	RequiredCapabilities     []string `json:"requiredCapabilities,omitempty"`
+}
+
+type AuthoringProgram struct {
+	Platform     ProgramPlatform     `json:"platform,omitempty"`
+	Artifacts    ProgramArtifacts    `json:"artifacts,omitempty"`
+	Cluster      ProgramCluster      `json:"cluster,omitempty"`
+	Verification ProgramVerification `json:"verification,omitempty"`
+}
+
+type ProgramPlatform struct {
+	Family       string `json:"family,omitempty"`
+	Release      string `json:"release,omitempty"`
+	RepoType     string `json:"repoType,omitempty"`
+	BackendImage string `json:"backendImage,omitempty"`
+}
+
+type ProgramArtifacts struct {
+	Packages         []string `json:"packages,omitempty"`
+	Images           []string `json:"images,omitempty"`
+	PackageOutputDir string   `json:"packageOutputDir,omitempty"`
+	ImageOutputDir   string   `json:"imageOutputDir,omitempty"`
+}
+
+type ProgramCluster struct {
+	JoinFile          string `json:"joinFile,omitempty"`
+	PodCIDR           string `json:"podCIDR,omitempty"`
+	KubernetesVersion string `json:"kubernetesVersion,omitempty"`
+	CriSocket         string `json:"criSocket,omitempty"`
+	RoleSelector      string `json:"roleSelector,omitempty"`
+	ControlPlaneCount int    `json:"controlPlaneCount,omitempty"`
+	WorkerCount       int    `json:"workerCount,omitempty"`
+}
+
+type ProgramVerification struct {
+	ExpectedNodeCount         int    `json:"expectedNodeCount,omitempty"`
+	ExpectedReadyCount        int    `json:"expectedReadyCount,omitempty"`
+	ExpectedControlPlaneReady int    `json:"expectedControlPlaneReady,omitempty"`
+	FinalVerificationRole     string `json:"finalVerificationRole,omitempty"`
+	Interval                  string `json:"interval,omitempty"`
+	Timeout                   string `json:"timeout,omitempty"`
+}
+
+func (p AuthoringProgram) Value(path string) (any, bool) {
+	switch strings.TrimSpace(path) {
+	case "platform.family":
+		return strings.TrimSpace(p.Platform.Family), strings.TrimSpace(p.Platform.Family) != ""
+	case "platform.release":
+		return strings.TrimSpace(p.Platform.Release), strings.TrimSpace(p.Platform.Release) != ""
+	case "platform.repoType":
+		return strings.TrimSpace(p.Platform.RepoType), strings.TrimSpace(p.Platform.RepoType) != ""
+	case "platform.backendImage":
+		return strings.TrimSpace(p.Platform.BackendImage), strings.TrimSpace(p.Platform.BackendImage) != ""
+	case "artifacts.packages":
+		return append([]string(nil), p.Artifacts.Packages...), len(p.Artifacts.Packages) > 0
+	case "artifacts.images":
+		return append([]string(nil), p.Artifacts.Images...), len(p.Artifacts.Images) > 0
+	case "artifacts.packageOutputDir":
+		return strings.TrimSpace(p.Artifacts.PackageOutputDir), strings.TrimSpace(p.Artifacts.PackageOutputDir) != ""
+	case "artifacts.imageOutputDir":
+		return strings.TrimSpace(p.Artifacts.ImageOutputDir), strings.TrimSpace(p.Artifacts.ImageOutputDir) != ""
+	case "cluster.joinFile":
+		return strings.TrimSpace(p.Cluster.JoinFile), strings.TrimSpace(p.Cluster.JoinFile) != ""
+	case "cluster.podCIDR":
+		return strings.TrimSpace(p.Cluster.PodCIDR), strings.TrimSpace(p.Cluster.PodCIDR) != ""
+	case "cluster.kubernetesVersion":
+		return strings.TrimSpace(p.Cluster.KubernetesVersion), strings.TrimSpace(p.Cluster.KubernetesVersion) != ""
+	case "cluster.criSocket":
+		return strings.TrimSpace(p.Cluster.CriSocket), strings.TrimSpace(p.Cluster.CriSocket) != ""
+	case "cluster.roleSelector":
+		return strings.TrimSpace(p.Cluster.RoleSelector), strings.TrimSpace(p.Cluster.RoleSelector) != ""
+	case "cluster.controlPlaneCount":
+		return p.Cluster.ControlPlaneCount, p.Cluster.ControlPlaneCount > 0
+	case "cluster.workerCount":
+		return p.Cluster.WorkerCount, p.Cluster.WorkerCount > 0
+	case "verification.expectedNodeCount":
+		return p.Verification.ExpectedNodeCount, p.Verification.ExpectedNodeCount > 0
+	case "verification.expectedReadyCount":
+		return p.Verification.ExpectedReadyCount, p.Verification.ExpectedReadyCount > 0
+	case "verification.expectedControlPlaneReady":
+		return p.Verification.ExpectedControlPlaneReady, p.Verification.ExpectedControlPlaneReady > 0
+	case "verification.finalVerificationRole":
+		return strings.TrimSpace(p.Verification.FinalVerificationRole), strings.TrimSpace(p.Verification.FinalVerificationRole) != ""
+	case "verification.interval":
+		return strings.TrimSpace(p.Verification.Interval), strings.TrimSpace(p.Verification.Interval) != ""
+	case "verification.timeout":
+		return strings.TrimSpace(p.Verification.Timeout), strings.TrimSpace(p.Verification.Timeout) != ""
+	case "cluster.roleWhen.control-plane":
+		return roleWhenExpression(p.Cluster.RoleSelector, p.Cluster.ControlPlaneCount, p.Cluster.WorkerCount, "control-plane")
+	case "cluster.roleWhen.worker":
+		return roleWhenExpression(p.Cluster.RoleSelector, p.Cluster.ControlPlaneCount, p.Cluster.WorkerCount, "worker")
+	case "verification.roleWhen":
+		role := strings.TrimSpace(p.Verification.FinalVerificationRole)
+		if role == "" || role == "local" {
+			return "", false
+		}
+		return roleWhenExpression(p.Cluster.RoleSelector, p.Cluster.ControlPlaneCount, p.Cluster.WorkerCount, role)
+	default:
+		return nil, false
+	}
+}
+
+func roleWhenExpression(selector string, controlPlaneCount int, workerCount int, role string) (string, bool) {
+	selector = strings.TrimSpace(selector)
+	if selector == "" || selector == "nil" || selector == "<nil>" || (controlPlaneCount+workerCount) <= 1 {
+		return "", false
+	}
+	if strings.TrimSpace(role) == "" {
+		return "", false
+	}
+	return "vars." + selector + ` == "` + strings.TrimSpace(role) + `"`, true
 }
 
 type ExecutionModel struct {
@@ -426,6 +539,9 @@ func ParseGeneration(raw string) (GenerationResponse, error) {
 			resp.Documents[i].Transforms[j].VarName = strings.TrimSpace(resp.Documents[i].Transforms[j].VarName)
 			resp.Documents[i].Transforms[j].VarsPath = strings.TrimSpace(resp.Documents[i].Transforms[j].VarsPath)
 			resp.Documents[i].Transforms[j].Path = strings.TrimSpace(resp.Documents[i].Transforms[j].Path)
+			if resp.Documents[i].Transforms[j].RawPath == "" && resp.Documents[i].Transforms[j].Type != "extract-component" {
+				resp.Documents[i].Transforms[j].RawPath = resp.Documents[i].Transforms[j].Path
+			}
 		}
 	}
 	if resp.Selection != nil {
@@ -750,6 +866,20 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	resp.ExecutionModel.Verification.BootstrapPhase = strings.TrimSpace(resp.ExecutionModel.Verification.BootstrapPhase)
 	resp.ExecutionModel.Verification.FinalPhase = strings.TrimSpace(resp.ExecutionModel.Verification.FinalPhase)
 	resp.ExecutionModel.Verification.FinalVerificationRole = strings.TrimSpace(resp.ExecutionModel.Verification.FinalVerificationRole)
+	resp.AuthoringProgram.Platform.Family = strings.TrimSpace(resp.AuthoringProgram.Platform.Family)
+	resp.AuthoringProgram.Platform.Release = strings.TrimSpace(resp.AuthoringProgram.Platform.Release)
+	resp.AuthoringProgram.Platform.RepoType = strings.TrimSpace(resp.AuthoringProgram.Platform.RepoType)
+	resp.AuthoringProgram.Platform.BackendImage = strings.TrimSpace(resp.AuthoringProgram.Platform.BackendImage)
+	resp.AuthoringProgram.Artifacts.PackageOutputDir = strings.TrimSpace(resp.AuthoringProgram.Artifacts.PackageOutputDir)
+	resp.AuthoringProgram.Artifacts.ImageOutputDir = strings.TrimSpace(resp.AuthoringProgram.Artifacts.ImageOutputDir)
+	resp.AuthoringProgram.Cluster.JoinFile = strings.TrimSpace(resp.AuthoringProgram.Cluster.JoinFile)
+	resp.AuthoringProgram.Cluster.PodCIDR = strings.TrimSpace(resp.AuthoringProgram.Cluster.PodCIDR)
+	resp.AuthoringProgram.Cluster.KubernetesVersion = strings.TrimSpace(resp.AuthoringProgram.Cluster.KubernetesVersion)
+	resp.AuthoringProgram.Cluster.CriSocket = strings.TrimSpace(resp.AuthoringProgram.Cluster.CriSocket)
+	resp.AuthoringProgram.Cluster.RoleSelector = strings.TrimSpace(resp.AuthoringProgram.Cluster.RoleSelector)
+	resp.AuthoringProgram.Verification.FinalVerificationRole = strings.TrimSpace(resp.AuthoringProgram.Verification.FinalVerificationRole)
+	resp.AuthoringProgram.Verification.Interval = strings.TrimSpace(resp.AuthoringProgram.Verification.Interval)
+	resp.AuthoringProgram.Verification.Timeout = strings.TrimSpace(resp.AuthoringProgram.Verification.Timeout)
 	resp.OfflineAssumption = strings.TrimSpace(resp.OfflineAssumption)
 	resp.TargetOutcome = strings.TrimSpace(resp.TargetOutcome)
 	resp.EntryScenario = strings.TrimSpace(resp.EntryScenario)
@@ -782,6 +912,12 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	}
 	for i := range resp.AuthoringBrief.RequiredCapabilities {
 		resp.AuthoringBrief.RequiredCapabilities[i] = strings.TrimSpace(resp.AuthoringBrief.RequiredCapabilities[i])
+	}
+	for i := range resp.AuthoringProgram.Artifacts.Packages {
+		resp.AuthoringProgram.Artifacts.Packages[i] = strings.TrimSpace(resp.AuthoringProgram.Artifacts.Packages[i])
+	}
+	for i := range resp.AuthoringProgram.Artifacts.Images {
+		resp.AuthoringProgram.Artifacts.Images[i] = strings.TrimSpace(resp.AuthoringProgram.Artifacts.Images[i])
 	}
 	for i := range resp.ExecutionModel.ArtifactContracts {
 		resp.ExecutionModel.ArtifactContracts[i].Kind = strings.TrimSpace(resp.ExecutionModel.ArtifactContracts[i].Kind)
@@ -842,12 +978,15 @@ func ParsePlan(raw string) (PlanResponse, error) {
 		case "create":
 			// keep as-is
 		}
-		if !askcontext.AllowedGeneratedPath(resp.Files[i].Path) {
+		if !workspacepaths.IsAllowedAuthoringPath(resp.Files[i].Path) {
 			return PlanResponse{}, fmt.Errorf("plan response has file outside allowed ask paths: %s", resp.Files[i].Path)
 		}
 	}
 	if resp.EntryScenario != "" {
-		if !askcontext.AllowedGeneratedPath(resp.EntryScenario) || !strings.HasPrefix(resp.EntryScenario, "workflows/scenarios/") {
+		if resolved := resolvePlannedEntryScenario(resp.EntryScenario, resp.Files); resolved != "" {
+			resp.EntryScenario = resolved
+		}
+		if !workspacepaths.IsAllowedAuthoringPath(resp.EntryScenario) || !strings.HasPrefix(resp.EntryScenario, "workflows/scenarios/") {
 			return PlanResponse{}, fmt.Errorf("plan response entryScenario must be a scenario path under workflows/scenarios/: %s", resp.EntryScenario)
 		}
 		matched := false
@@ -862,6 +1001,28 @@ func ParsePlan(raw string) (PlanResponse, error) {
 		}
 	}
 	return resp, nil
+}
+
+func resolvePlannedEntryScenario(entry string, files []PlanFile) string {
+	entry = filepath.ToSlash(strings.TrimSpace(entry))
+	if strings.HasPrefix(entry, "workflows/scenarios/") {
+		return entry
+	}
+	matches := []string{}
+	for _, file := range files {
+		path := filepath.ToSlash(strings.TrimSpace(file.Path))
+		if !strings.HasPrefix(path, "workflows/scenarios/") {
+			continue
+		}
+		base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		if entry == path || entry == filepath.Base(path) || entry == base {
+			matches = append(matches, path)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0]
+	}
+	return ""
 }
 
 func ParseJudge(raw string) (JudgeResponse, error) {

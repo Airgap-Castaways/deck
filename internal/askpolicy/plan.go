@@ -3,6 +3,7 @@ package askpolicy
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,9 +17,9 @@ import (
 func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) askcontract.PlanResponse {
 	req := BuildScenarioRequirements(prompt, retrieval, workspace, decision)
 	fallbackBrief := BriefFromRequirements(req, decision)
-	fallbackExecutionModel := ExecutionModelFromRequirements(req)
 	plan.AuthoringBrief = normalizeAuthoringBrief(plan.AuthoringBrief, fallbackBrief)
-	plan.ExecutionModel = normalizeExecutionModel(plan.ExecutionModel, fallbackExecutionModel)
+	fallbackExecutionModel := ExecutionModelFromRequirements(req)
+	plan.ExecutionModel = normalizeExecutionModel(plan.ExecutionModel, fallbackExecutionModel, plan.AuthoringBrief)
 	if strings.TrimSpace(plan.OfflineAssumption) == "" {
 		plan.OfflineAssumption = req.Connectivity
 	}
@@ -39,10 +40,9 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 	plan.Blockers, plan.OpenQuestions = clarificationLines(plan.Clarifications, plan.Blockers, plan.OpenQuestions)
 	plan = applyClarificationAnswers(plan)
 	plan = normalizeRefineScope(plan, prompt, workspace, decision)
+	plan.AuthoringProgram = normalizeAuthoringProgram(plan.AuthoringProgram, plan.AuthoringBrief, plan.ExecutionModel, prompt)
 	plan.Blockers = dedupeStrings(append(plan.Blockers, coverageBoundaryBlockers(prompt, req, decision)...))
-	if strings.TrimSpace(plan.EntryScenario) == "" {
-		plan.EntryScenario = req.EntryScenario
-	}
+	plan.EntryScenario = normalizeEntryScenario(plan.EntryScenario, req, plan.Files, plan.AuthoringBrief, decision)
 	for i := range plan.Files {
 		plan.Files[i].Action = normalizePlannedAction(plan.Files[i].Action, plan.Files[i].Path)
 	}
@@ -258,7 +258,7 @@ func maxInt(current int, candidate int) int {
 	return current
 }
 
-func normalizeExecutionModel(model askcontract.ExecutionModel, fallback askcontract.ExecutionModel) askcontract.ExecutionModel {
+func normalizeExecutionModel(model askcontract.ExecutionModel, fallback askcontract.ExecutionModel, brief askcontract.AuthoringBrief) askcontract.ExecutionModel {
 	model.ArtifactContracts = normalizeArtifactContracts(model.ArtifactContracts, fallback.ArtifactContracts)
 	model.SharedStateContracts = normalizeSharedStateContracts(model.SharedStateContracts, fallback.SharedStateContracts)
 	if strings.TrimSpace(model.RoleExecution.RoleSelector) == "" {
@@ -293,7 +293,290 @@ func normalizeExecutionModel(model askcontract.ExecutionModel, fallback askcontr
 	} else {
 		model.ApplyAssumptions = dedupeStrings(append(normalizeStringList(model.ApplyAssumptions), fallback.ApplyAssumptions...))
 	}
+	model = normalizeExecutionModelGuardrails(model, brief)
 	return model
+}
+
+func normalizeExecutionModelGuardrails(model askcontract.ExecutionModel, brief askcontract.AuthoringBrief) askcontract.ExecutionModel {
+	if brief.NodeCount > 0 && model.Verification.ExpectedNodeCount <= 0 {
+		model.Verification.ExpectedNodeCount = brief.NodeCount
+	}
+	if briefIsVerificationOnly(brief) {
+		model.RoleExecution.RoleSelector = ""
+		model.RoleExecution.ControlPlaneFlow = ""
+		model.RoleExecution.WorkerFlow = ""
+		model.RoleExecution.PerNodeInvocation = false
+		model.Verification.FinalVerificationRole = "local"
+		if model.Verification.ExpectedControlPlaneReady <= 0 && brief.NodeCount > 0 {
+			model.Verification.ExpectedControlPlaneReady = minInt(brief.NodeCount, 1)
+		}
+		return model
+	}
+	if !briefNeedsWorkerRole(brief) {
+		model.RoleExecution.WorkerFlow = ""
+		model.RoleExecution.PerNodeInvocation = false
+	}
+	if !briefNeedsRoleSelector(brief) {
+		model.RoleExecution.RoleSelector = ""
+	}
+	if brief.Topology == "single-node" && model.Verification.ExpectedControlPlaneReady <= 0 && hasBriefCapability(brief, "cluster-verification") {
+		model.Verification.ExpectedControlPlaneReady = 1
+	}
+	return model
+}
+
+func normalizeEntryScenario(current string, req ScenarioRequirements, files []askcontract.PlanFile, brief askcontract.AuthoringBrief, decision askintent.Decision) string {
+	candidates := []string{}
+	if clean := filepath.ToSlash(strings.TrimSpace(current)); strings.HasPrefix(clean, "workflows/scenarios/") {
+		candidates = append(candidates, clean)
+	}
+	if clean := filepath.ToSlash(strings.TrimSpace(decision.Target.Path)); strings.HasPrefix(clean, "workflows/scenarios/") {
+		candidates = append(candidates, clean)
+	}
+	if clean := filepath.ToSlash(strings.TrimSpace(req.EntryScenario)); strings.HasPrefix(clean, "workflows/scenarios/") {
+		candidates = append(candidates, clean)
+	}
+	for _, path := range brief.AnchorPaths {
+		clean := filepath.ToSlash(strings.TrimSpace(path))
+		if strings.HasPrefix(clean, "workflows/scenarios/") {
+			candidates = append(candidates, clean)
+		}
+	}
+	for _, path := range brief.TargetPaths {
+		clean := filepath.ToSlash(strings.TrimSpace(path))
+		if strings.HasPrefix(clean, "workflows/scenarios/") {
+			candidates = append(candidates, clean)
+		}
+	}
+	for _, file := range files {
+		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
+		if strings.HasPrefix(clean, "workflows/scenarios/") {
+			candidates = append(candidates, clean)
+		}
+	}
+	for _, candidate := range dedupeStrings(candidates) {
+		return candidate
+	}
+	return ""
+}
+
+func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askcontract.AuthoringBrief, execution askcontract.ExecutionModel, prompt string) askcontract.AuthoringProgram {
+	family, release := inferPlatformFromPrompt(prompt)
+	if strings.TrimSpace(program.Platform.Family) == "" {
+		if strings.TrimSpace(brief.PlatformFamily) != "" {
+			program.Platform.Family = strings.TrimSpace(brief.PlatformFamily)
+		} else {
+			program.Platform.Family = family
+		}
+	}
+	if strings.TrimSpace(program.Platform.Release) == "" {
+		program.Platform.Release = release
+	}
+	if strings.TrimSpace(program.Platform.RepoType) == "" {
+		program.Platform.RepoType = defaultRepoType(program.Platform.Family)
+	}
+	if strings.TrimSpace(program.Platform.BackendImage) == "" {
+		program.Platform.BackendImage = defaultBackendImage(program.Platform.Family, program.Platform.Release)
+	}
+	if strings.TrimSpace(program.Artifacts.PackageOutputDir) == "" {
+		program.Artifacts.PackageOutputDir = defaultPackageOutputDir(program.Platform.Family, program.Platform.Release, program.Platform.RepoType)
+	}
+	if strings.TrimSpace(program.Artifacts.ImageOutputDir) == "" {
+		program.Artifacts.ImageOutputDir = "images/control-plane"
+	}
+	if strings.TrimSpace(program.Cluster.JoinFile) == "" {
+		program.Cluster.JoinFile = "/tmp/deck/join.txt"
+	}
+	if strings.TrimSpace(program.Cluster.PodCIDR) == "" {
+		program.Cluster.PodCIDR = "10.244.0.0/16"
+	}
+	program.Cluster.RoleSelector = normalizeRoleSelector(firstNonEmpty(strings.TrimSpace(program.Cluster.RoleSelector), strings.TrimSpace(execution.RoleExecution.RoleSelector)))
+	if program.Cluster.ControlPlaneCount <= 0 {
+		program.Cluster.ControlPlaneCount = inferControlPlaneCount(brief, execution)
+	}
+	if program.Cluster.WorkerCount < 0 {
+		program.Cluster.WorkerCount = 0
+	}
+	if program.Cluster.WorkerCount == 0 {
+		program.Cluster.WorkerCount = inferWorkerCount(brief, execution, program.Cluster.ControlPlaneCount)
+	}
+	if program.Verification.ExpectedNodeCount <= 0 {
+		program.Verification.ExpectedNodeCount = execution.Verification.ExpectedNodeCount
+	}
+	if program.Verification.ExpectedNodeCount <= 0 {
+		program.Verification.ExpectedNodeCount = maxInt(brief.NodeCount, program.Cluster.ControlPlaneCount+program.Cluster.WorkerCount)
+	}
+	if program.Verification.ExpectedControlPlaneReady <= 0 {
+		program.Verification.ExpectedControlPlaneReady = execution.Verification.ExpectedControlPlaneReady
+	}
+	if program.Verification.ExpectedControlPlaneReady <= 0 {
+		program.Verification.ExpectedControlPlaneReady = maxInt(1, program.Cluster.ControlPlaneCount)
+	}
+	if program.Verification.ExpectedReadyCount <= 0 {
+		program.Verification.ExpectedReadyCount = program.Verification.ExpectedNodeCount
+	}
+	if strings.TrimSpace(program.Verification.FinalVerificationRole) == "" {
+		program.Verification.FinalVerificationRole = strings.TrimSpace(execution.Verification.FinalVerificationRole)
+	}
+	if strings.TrimSpace(program.Verification.FinalVerificationRole) == "" {
+		if program.Verification.ExpectedNodeCount > 1 {
+			program.Verification.FinalVerificationRole = "control-plane"
+		} else {
+			program.Verification.FinalVerificationRole = "local"
+		}
+	}
+	if strings.TrimSpace(program.Verification.Interval) == "" {
+		program.Verification.Interval = "5s"
+	}
+	if strings.TrimSpace(program.Verification.Timeout) == "" {
+		if program.Verification.ExpectedNodeCount > 1 {
+			program.Verification.Timeout = "10m"
+		} else {
+			program.Verification.Timeout = "5m"
+		}
+	}
+	return program
+}
+
+func inferPlatformFromPrompt(prompt string) (string, string) {
+	lower := strings.ToLower(strings.TrimSpace(prompt))
+	patterns := []struct {
+		family string
+		regex  *regexp.Regexp
+	}{
+		{family: "rhel", regex: regexp.MustCompile(`rhel\s*([0-9]+(?:\.[0-9]+)?)`)},
+		{family: "rocky", regex: regexp.MustCompile(`rocky\s*([0-9]+(?:\.[0-9]+)?)`)},
+		{family: "debian", regex: regexp.MustCompile(`debian\s*([0-9]+(?:\.[0-9]+)?)`)},
+		{family: "ubuntu", regex: regexp.MustCompile(`ubuntu\s*([0-9]+(?:\.[0-9]+)?)`)},
+	}
+	for _, pattern := range patterns {
+		if matches := pattern.regex.FindStringSubmatch(lower); len(matches) == 2 {
+			family := pattern.family
+			if family == "rocky" {
+				family = "rhel"
+			}
+			return family, strings.TrimSpace(matches[1])
+		}
+	}
+	for _, item := range []struct{ token, family string }{{"rhel", "rhel"}, {"rocky", "rhel"}, {"debian", "debian"}, {"ubuntu", "debian"}} {
+		if strings.Contains(lower, item.token) {
+			return item.family, ""
+		}
+	}
+	return "", ""
+}
+
+func defaultRepoType(family string) string {
+	if strings.EqualFold(strings.TrimSpace(family), "debian") {
+		return "deb-flat"
+	}
+	return "rpm"
+}
+
+func defaultBackendImage(family string, release string) string {
+	if strings.EqualFold(strings.TrimSpace(family), "debian") {
+		return "ubuntu:22.04"
+	}
+	_ = release
+	return "rockylinux:9"
+}
+
+func defaultPackageOutputDir(family string, release string, repoType string) string {
+	family = strings.ToLower(strings.TrimSpace(family))
+	release = strings.TrimSpace(release)
+	repoType = strings.ToLower(strings.TrimSpace(repoType))
+	if release == "" {
+		return "packages/"
+	}
+	if repoType == "deb-flat" || family == "debian" {
+		return filepath.ToSlash(filepath.Join("packages", "deb", release))
+	}
+	return filepath.ToSlash(filepath.Join("packages", "rpm", release))
+}
+
+func normalizeRoleSelector(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "nil" || value == "<nil>" {
+		return ""
+	}
+	value = strings.TrimPrefix(value, "vars.")
+	if value == "nil" || value == "<nil>" {
+		return ""
+	}
+	return value
+}
+
+func inferControlPlaneCount(brief askcontract.AuthoringBrief, execution askcontract.ExecutionModel) int {
+	if brief.Topology == "ha" {
+		if execution.Verification.ExpectedControlPlaneReady > 0 {
+			return execution.Verification.ExpectedControlPlaneReady
+		}
+		if brief.NodeCount > 0 {
+			return brief.NodeCount
+		}
+		return 3
+	}
+	if execution.Verification.ExpectedControlPlaneReady > 0 {
+		return execution.Verification.ExpectedControlPlaneReady
+	}
+	return 1
+}
+
+func inferWorkerCount(brief askcontract.AuthoringBrief, execution askcontract.ExecutionModel, controlPlaneCount int) int {
+	total := maxInt(brief.NodeCount, execution.Verification.ExpectedNodeCount)
+	if total <= controlPlaneCount {
+		return 0
+	}
+	return total - controlPlaneCount
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func briefNeedsWorkerRole(brief askcontract.AuthoringBrief) bool {
+	if brief.Topology == "multi-node" || brief.Topology == "ha" || brief.NodeCount > 1 {
+		return true
+	}
+	return hasBriefCapability(brief, "kubeadm-join")
+}
+
+func briefNeedsRoleSelector(brief askcontract.AuthoringBrief) bool {
+	return briefNeedsWorkerRole(brief)
+}
+
+func briefIsVerificationOnly(brief askcontract.AuthoringBrief) bool {
+	if len(brief.RequiredCapabilities) != 1 {
+		return false
+	}
+	return strings.TrimSpace(brief.RequiredCapabilities[0]) == "cluster-verification"
+}
+
+func hasBriefCapability(brief askcontract.AuthoringBrief, want string) bool {
+	for _, capability := range brief.RequiredCapabilities {
+		if strings.TrimSpace(capability) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func minInt(values ...int) int {
+	best := 0
+	for _, value := range values {
+		if value <= 0 {
+			continue
+		}
+		if best == 0 || value < best {
+			best = value
+		}
+	}
+	return best
 }
 
 func isCanonicalVerificationRole(value string) bool {
@@ -471,6 +754,9 @@ func normalizeCapabilities(values []string, fallback []string) []string {
 		value = strings.ToLower(strings.TrimSpace(value))
 		value = strings.ReplaceAll(value, "_", "-")
 		value = strings.ReplaceAll(value, " ", "-")
+		if value == "check-cluster" {
+			value = "cluster-verification"
+		}
 		if value == "" || strings.ContainsAny(value, ":/()") || !allowed[value] {
 			continue
 		}
@@ -525,7 +811,8 @@ func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.Gene
 	generated := generatedMap(gen.Files)
 	planned := map[string]string{}
 	for _, file := range plan.Files {
-		planned[filepath.ToSlash(strings.TrimSpace(file.Path))] = strings.ToLower(strings.TrimSpace(file.Action))
+		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
+		planned[clean] = normalizePlannedAction(file.Action, clean)
 	}
 	for path := range planned {
 		if _, ok := generated[path]; !ok {
@@ -584,6 +871,15 @@ func ValidatePlanStructure(plan askcontract.PlanResponse) error {
 			return fmt.Errorf("plan response multi-node topology requires executionModel.verification.expectedNodeCount")
 		}
 	}
+	if hasBriefCapability(plan.AuthoringBrief, "package-staging") && strings.TrimSpace(plan.AuthoringProgram.Platform.Family) == "" {
+		return fmt.Errorf("plan response package authoring requires authoringProgram.platform.family")
+	}
+	if hasBriefCapability(plan.AuthoringBrief, "cluster-verification") && plan.AuthoringProgram.Verification.ExpectedNodeCount <= 0 {
+		return fmt.Errorf("plan response cluster verification requires authoringProgram.verification.expectedNodeCount")
+	}
+	if hasBriefCapability(plan.AuthoringBrief, "kubeadm-bootstrap") && strings.TrimSpace(plan.AuthoringProgram.Cluster.JoinFile) == "" {
+		return fmt.Errorf("plan response kubeadm authoring requires authoringProgram.cluster.joinFile")
+	}
 	return nil
 }
 
@@ -605,7 +901,7 @@ func normalizePlannedAction(action string, path string) string {
 		return action
 	case "add":
 		return "create"
-	case "modify", "create-or-modify", "create-or-update":
+	case "modify", "create-or-modify", "create-or-update", "createorupdate", "createormodify":
 		if strings.HasPrefix(strings.TrimSpace(path), "workflows/") {
 			return "update"
 		}

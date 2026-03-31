@@ -381,6 +381,20 @@ func TestHasFatalPlanReviewIssuesBlocksStructuredExecutionContractGaps(t *testin
 	}
 }
 
+func TestHasFatalPlanReviewIssuesAllowsSimpleSingleNodeVerificationPlan(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		Intent:         "draft",
+		AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "apply-only", Topology: "single-node", NodeCount: 1, RequiredCapabilities: []string{"cluster-verification"}},
+		EntryScenario:  "workflows/scenarios/apply.yaml",
+		Files:          []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml"}},
+		ExecutionModel: askcontract.ExecutionModel{Verification: askcontract.VerificationStrategy{ExpectedNodeCount: 1, ExpectedControlPlaneReady: 1, FinalVerificationRole: "local"}},
+	}
+	critic := askcontract.PlanCriticResponse{Findings: []askcontract.PlanCriticFinding{{Code: workflowissues.CodeRoleCardinalityGap, Severity: workflowissues.SeverityMissingContract, Message: "single-node role cardinality is not explicit"}, {Code: workflowissues.CodeWeakVerificationStaging, Severity: workflowissues.SeverityAdvisory, Message: "single CheckCluster-only flow is weakly staged"}}}
+	if hasFatalPlanReviewIssues(plan, critic) {
+		t.Fatalf("expected simple single-node verification plan to continue past recoverable critic findings")
+	}
+}
+
 func TestBuildPlanWithReviewFallsBackOnPlannerFailure(t *testing.T) {
 	client := &stubClient{responses: []string{"not-json"}}
 	req := askpolicy.BuildScenarioRequirements("create an air-gapped rhel9 3-node kubeadm workflow", askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
@@ -1109,6 +1123,13 @@ func TestGenerateWithValidationAllowsLegacyDraftFallbackWhenEnabled(t *testing.T
 	_, files, _, _, _, _, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate-fast", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: "create workflow"}, t.TempDir(), 1, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
 	if err != nil || len(files) != 1 {
 		t.Fatalf("expected legacy draft fallback to succeed when enabled, got files=%#v err=%v", files, err)
+	}
+}
+
+func TestValidatePrimaryRefineContractAllowsRawVarsCompanionTransform(t *testing.T) {
+	err := validatePrimaryRefineContract(askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "set-field", Candidate: "set-field|workflows/scenarios/apply.yaml|steps[0].spec.outputJoinFile", Value: "{{ .vars.joinFilePath }}"}}}, {Path: "workflows/vars.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "set-field", Path: "vars.joinFilePath", Value: "/tmp/deck/join.txt"}}}}})
+	if err != nil {
+		t.Fatalf("expected raw vars companion transform to be allowed, got %v", err)
 	}
 }
 

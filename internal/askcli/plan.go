@@ -62,9 +62,10 @@ func planSystemPrompt(decision askintent.Decision, retrieval askretrieve.Retriev
 	bundle := askknowledge.Current()
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask planner. Return strict JSON only.\n")
-	b.WriteString("JSON shape: {\"version\":number,\"request\":string,\"intent\":string,\"complexity\":string,\"authoringBrief\":{\"routeIntent\":string,\"targetScope\":string,\"targetPaths\":[],\"anchorPaths\":[],\"allowedCompanionPaths\":[],\"disallowedExpansionPaths\":[],\"modeIntent\":string,\"connectivity\":string,\"completenessTarget\":string,\"topology\":string,\"nodeCount\":number,\"platformFamily\":string,\"escapeHatchMode\":string,\"requiredCapabilities\":[]},\"executionModel\":{\"artifactContracts\":[{\"kind\":string,\"producerPath\":string,\"consumerPath\":string,\"description\":string}],\"sharedStateContracts\":[{\"name\":string,\"producerPath\":string,\"consumerPaths\":[],\"availabilityModel\":string,\"description\":string}],\"roleExecution\":{\"roleSelector\":string,\"controlPlaneFlow\":string,\"workerFlow\":string,\"perNodeInvocation\":boolean},\"verification\":{\"bootstrapPhase\":string,\"finalPhase\":string,\"expectedNodeCount\":number,\"expectedControlPlaneReady\":number},\"applyAssumptions\":[]},\"offlineAssumption\":string,\"needsPrepare\":boolean,\"artifactKinds\":[],\"varsRecommendation\":[],\"componentRecommendation\":[],\"blockers\":[],\"targetOutcome\":string,\"assumptions\":[],\"openQuestions\":[],\"clarifications\":[{\"id\":string,\"question\":string,\"kind\":string,\"reason\":string,\"decision\":string,\"options\":[],\"recommendedDefault\":string,\"answer\":string,\"blocksGeneration\":boolean,\"affects\":[]}],\"entryScenario\":string,\"files\":[{\"path\":string,\"kind\":string,\"action\":string,\"purpose\":string}],\"validationChecklist\":[]}.\n")
+	b.WriteString("JSON shape: {\"version\":number,\"request\":string,\"intent\":string,\"complexity\":string,\"authoringBrief\":{\"routeIntent\":string,\"targetScope\":string,\"targetPaths\":[],\"anchorPaths\":[],\"allowedCompanionPaths\":[],\"disallowedExpansionPaths\":[],\"modeIntent\":string,\"connectivity\":string,\"completenessTarget\":string,\"topology\":string,\"nodeCount\":number,\"platformFamily\":string,\"escapeHatchMode\":string,\"requiredCapabilities\":[]},\"authoringProgram\":{\"platform\":{\"family\":string,\"release\":string,\"repoType\":string,\"backendImage\":string},\"artifacts\":{\"packages\":[],\"images\":[],\"packageOutputDir\":string,\"imageOutputDir\":string},\"cluster\":{\"joinFile\":string,\"podCIDR\":string,\"kubernetesVersion\":string,\"criSocket\":string,\"roleSelector\":string,\"controlPlaneCount\":number,\"workerCount\":number},\"verification\":{\"expectedNodeCount\":number,\"expectedReadyCount\":number,\"expectedControlPlaneReady\":number,\"finalVerificationRole\":string,\"interval\":string,\"timeout\":string}},\"executionModel\":{\"artifactContracts\":[{\"kind\":string,\"producerPath\":string,\"consumerPath\":string,\"description\":string}],\"sharedStateContracts\":[{\"name\":string,\"producerPath\":string,\"consumerPaths\":[],\"availabilityModel\":string,\"description\":string}],\"roleExecution\":{\"roleSelector\":string,\"controlPlaneFlow\":string,\"workerFlow\":string,\"perNodeInvocation\":boolean},\"verification\":{\"bootstrapPhase\":string,\"finalPhase\":string,\"expectedNodeCount\":number,\"expectedControlPlaneReady\":number},\"applyAssumptions\":[]},\"offlineAssumption\":string,\"needsPrepare\":boolean,\"artifactKinds\":[],\"varsRecommendation\":[],\"componentRecommendation\":[],\"blockers\":[],\"targetOutcome\":string,\"assumptions\":[],\"openQuestions\":[],\"clarifications\":[{\"id\":string,\"question\":string,\"kind\":string,\"reason\":string,\"decision\":string,\"options\":[],\"recommendedDefault\":string,\"answer\":string,\"blocksGeneration\":boolean,\"affects\":[]}],\"entryScenario\":string,\"files\":[{\"path\":string,\"kind\":string,\"action\":string,\"purpose\":string}],\"validationChecklist\":[]}.\n")
 	b.WriteString("Canonical authoringBrief values: targetScope=(workspace|scenario|vars|component), modeIntent=(prepare+apply|prepare-only|apply-only|workspace), completenessTarget=(starter|complete|refine), topology=(single-node|multi-node|ha|unspecified), platformFamily=(rhel|debian|custom), escapeHatchMode=(typed-only|experimental-freeform), requiredCapabilities should be short kebab-case strings.\n")
 	b.WriteString("Canonical executionModel values: artifactContracts.kind=(package|image|repository-setup), sharedStateContracts.availabilityModel=(published-for-worker-consumption|local-only), roleExecution.roleSelector should be a short selector like vars.role.\n")
+	b.WriteString("Canonical authoringProgram values should translate prompt intent into executable compiler inputs rather than repeating low-level YAML shape.\n")
 	b.WriteString(bundle.WorkflowPromptBlock())
 	b.WriteString("\n")
 	b.WriteString(bundle.PolicyPromptBlock())
@@ -282,6 +283,62 @@ func renderPlanMarkdown(plan askcontract.PlanResponse, mdPath string) string {
 			b.WriteString("\n")
 		}
 	}
+	b.WriteString("\n## Authoring program\n")
+	if isAuthoringProgramEmpty(plan.AuthoringProgram) {
+		b.WriteString("- None\n")
+	} else {
+		if strings.TrimSpace(plan.AuthoringProgram.Platform.Family) != "" {
+			b.WriteString("- platform family: ")
+			b.WriteString(strings.TrimSpace(plan.AuthoringProgram.Platform.Family))
+			b.WriteString("\n")
+		}
+		if strings.TrimSpace(plan.AuthoringProgram.Platform.Release) != "" {
+			b.WriteString("- platform release: ")
+			b.WriteString(strings.TrimSpace(plan.AuthoringProgram.Platform.Release))
+			b.WriteString("\n")
+		}
+		if strings.TrimSpace(plan.AuthoringProgram.Platform.RepoType) != "" {
+			b.WriteString("- repo type: ")
+			b.WriteString(strings.TrimSpace(plan.AuthoringProgram.Platform.RepoType))
+			b.WriteString("\n")
+		}
+		if len(plan.AuthoringProgram.Artifacts.Packages) > 0 {
+			b.WriteString("- packages: ")
+			b.WriteString(strings.Join(plan.AuthoringProgram.Artifacts.Packages, ", "))
+			b.WriteString("\n")
+		}
+		if len(plan.AuthoringProgram.Artifacts.Images) > 0 {
+			b.WriteString("- images: ")
+			b.WriteString(strings.Join(plan.AuthoringProgram.Artifacts.Images, ", "))
+			b.WriteString("\n")
+		}
+		if strings.TrimSpace(plan.AuthoringProgram.Artifacts.PackageOutputDir) != "" {
+			b.WriteString("- package output: ")
+			b.WriteString(strings.TrimSpace(plan.AuthoringProgram.Artifacts.PackageOutputDir))
+			b.WriteString("\n")
+		}
+		if strings.TrimSpace(plan.AuthoringProgram.Artifacts.ImageOutputDir) != "" {
+			b.WriteString("- image output: ")
+			b.WriteString(strings.TrimSpace(plan.AuthoringProgram.Artifacts.ImageOutputDir))
+			b.WriteString("\n")
+		}
+		if strings.TrimSpace(plan.AuthoringProgram.Cluster.JoinFile) != "" {
+			b.WriteString("- join file: ")
+			b.WriteString(strings.TrimSpace(plan.AuthoringProgram.Cluster.JoinFile))
+			b.WriteString("\n")
+		}
+		if strings.TrimSpace(plan.AuthoringProgram.Cluster.RoleSelector) != "" {
+			b.WriteString("- role selector: ")
+			b.WriteString(strings.TrimSpace(plan.AuthoringProgram.Cluster.RoleSelector))
+			b.WriteString("\n")
+		}
+		if plan.AuthoringProgram.Verification.ExpectedNodeCount > 0 {
+			_, _ = fmt.Fprintf(b, "- verification nodes: %d\n", plan.AuthoringProgram.Verification.ExpectedNodeCount)
+		}
+		if plan.AuthoringProgram.Verification.ExpectedControlPlaneReady > 0 {
+			_, _ = fmt.Fprintf(b, "- verification control-plane ready: %d\n", plan.AuthoringProgram.Verification.ExpectedControlPlaneReady)
+		}
+	}
 	b.WriteString("\n## Execution model\n")
 	if isExecutionModelEmpty(plan.ExecutionModel) {
 		b.WriteString("- None\n")
@@ -360,6 +417,19 @@ func isExecutionModelEmpty(model askcontract.ExecutionModel) bool {
 		len(model.SharedStateContracts) == 0 &&
 		strings.TrimSpace(model.RoleExecution.RoleSelector) == "" &&
 		len(model.ApplyAssumptions) == 0
+}
+
+func isAuthoringProgramEmpty(program askcontract.AuthoringProgram) bool {
+	return strings.TrimSpace(program.Platform.Family) == "" &&
+		strings.TrimSpace(program.Platform.Release) == "" &&
+		strings.TrimSpace(program.Platform.RepoType) == "" &&
+		len(program.Artifacts.Packages) == 0 &&
+		len(program.Artifacts.Images) == 0 &&
+		strings.TrimSpace(program.Artifacts.PackageOutputDir) == "" &&
+		strings.TrimSpace(program.Artifacts.ImageOutputDir) == "" &&
+		strings.TrimSpace(program.Cluster.JoinFile) == "" &&
+		strings.TrimSpace(program.Cluster.RoleSelector) == "" &&
+		program.Verification.ExpectedNodeCount == 0
 }
 
 func hasBlockingClarifications(plan askcontract.PlanResponse) bool {

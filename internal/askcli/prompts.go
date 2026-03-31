@@ -99,6 +99,8 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, requ
 	b.WriteString("\n")
 	b.WriteString(authoringBriefPromptBlock(brief))
 	b.WriteString("\n")
+	b.WriteString(authoringProgramPromptBlock(plan.AuthoringProgram))
+	b.WriteString("\n")
 	if len(executionModel.ArtifactContracts) > 0 || len(executionModel.SharedStateContracts) > 0 || strings.TrimSpace(executionModel.RoleExecution.RoleSelector) != "" {
 		b.WriteString(executionModelPromptBlock(executionModel))
 		b.WriteString("\n")
@@ -353,6 +355,8 @@ func documentRepairSystemPrompt(brief askcontract.AuthoringBrief, plan askcontra
 	b.WriteString("Return only revised documents when possible; unchanged rendered files will be preserved by the caller.\n")
 	b.WriteString("Every rendered workflow file must stay standalone-valid and preserve existing structure unless the validator requires a targeted change.\n")
 	b.WriteString(authoringBriefPromptBlock(brief))
+	b.WriteString("\n")
+	b.WriteString(authoringProgramPromptBlock(plan.AuthoringProgram))
 	b.WriteString("\n")
 	b.WriteString(executionModelPromptBlock(plan.ExecutionModel))
 	b.WriteString("\n")
@@ -613,6 +617,67 @@ func authoringBriefPromptBlock(brief askcontract.AuthoringBrief) string {
 	return strings.TrimSpace(b.String())
 }
 
+func authoringProgramPromptBlock(program askcontract.AuthoringProgram) string {
+	b := &strings.Builder{}
+	b.WriteString("Normalized authoring program:\n")
+	lines := 0
+	appendLine := func(label string, value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		lines++
+		b.WriteString("- ")
+		b.WriteString(label)
+		b.WriteString(": ")
+		b.WriteString(value)
+		b.WriteString("\n")
+	}
+	appendList := func(label string, values []string) {
+		values = dedupe(values)
+		if len(values) == 0 {
+			return
+		}
+		lines++
+		b.WriteString("- ")
+		b.WriteString(label)
+		b.WriteString(": ")
+		b.WriteString(strings.Join(values, ", "))
+		b.WriteString("\n")
+	}
+	appendInt := func(label string, value int) {
+		if value <= 0 {
+			return
+		}
+		appendLine(label, fmt.Sprintf("%d", value))
+	}
+	appendLine("platform family", program.Platform.Family)
+	appendLine("platform release", program.Platform.Release)
+	appendLine("platform repo type", program.Platform.RepoType)
+	appendLine("platform backend image", program.Platform.BackendImage)
+	appendList("artifact packages", program.Artifacts.Packages)
+	appendList("artifact images", program.Artifacts.Images)
+	appendLine("artifact package output", program.Artifacts.PackageOutputDir)
+	appendLine("artifact image output", program.Artifacts.ImageOutputDir)
+	appendLine("cluster join file", program.Cluster.JoinFile)
+	appendLine("cluster pod cidr", program.Cluster.PodCIDR)
+	appendLine("cluster kubernetes version", program.Cluster.KubernetesVersion)
+	appendLine("cluster cri socket", program.Cluster.CriSocket)
+	appendLine("cluster role selector", program.Cluster.RoleSelector)
+	appendInt("cluster control-plane count", program.Cluster.ControlPlaneCount)
+	appendInt("cluster worker count", program.Cluster.WorkerCount)
+	appendInt("verification expected nodes", program.Verification.ExpectedNodeCount)
+	appendInt("verification expected ready", program.Verification.ExpectedReadyCount)
+	appendInt("verification expected control-plane ready", program.Verification.ExpectedControlPlaneReady)
+	appendLine("verification final role", program.Verification.FinalVerificationRole)
+	appendLine("verification interval", program.Verification.Interval)
+	appendLine("verification timeout", program.Verification.Timeout)
+	if lines == 0 {
+		b.WriteString("- none\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
 func judgeSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanResponse) string {
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask semantic judge. Return strict JSON only.\n")
@@ -655,6 +720,8 @@ func planCriticSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.P
 	b.WriteString("Treat ambiguous join contracts, artifact detail gaps, role cardinality detail, worker synchronization detail, and verification staging weakness as advisory or missingContracts unless generation would be impossible.\n")
 	b.WriteString("When possible, mention the affected file or execution-model section directly in each finding.\n")
 	b.WriteString(authoringBriefPromptBlock(brief))
+	b.WriteString("\n")
+	b.WriteString(authoringProgramPromptBlock(plan.AuthoringProgram))
 	b.WriteString("\n")
 	return b.String()
 }
@@ -731,6 +798,8 @@ func planCriticUserPrompt(plan askcontract.PlanResponse) string {
 		b.WriteString(strings.TrimSpace(item))
 		b.WriteString("\n")
 	}
+	b.WriteString(authoringProgramPromptBlock(plan.AuthoringProgram))
+	b.WriteString("\n")
 	b.WriteString("Validation checklist:\n")
 	for _, item := range plan.ValidationChecklist {
 		b.WriteString("- ")

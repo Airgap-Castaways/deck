@@ -256,6 +256,46 @@ func TestNormalizePlanTracksRefineAnchorAndCompanionScope(t *testing.T) {
 	}
 }
 
+func TestNormalizePlanDropsSpuriousClusterClarificationsForJoinFileRefine(t *testing.T) {
+	workspace := askretrieve.WorkspaceSummary{HasWorkflowTree: true, Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/apply.yaml"}, {Path: "workflows/vars.yaml"}}}
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request:             "refactor workflows/scenarios/apply.yaml to use workflows/vars.yaml for repeated join file values",
+		Intent:              "refine",
+		Files:               []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "update"}, {Path: "workflows/vars.yaml", Action: "create"}},
+		TargetOutcome:       "refine files",
+		ValidationChecklist: []string{"lint"},
+	}, "refactor workflows/scenarios/apply.yaml to use workflows/vars.yaml for repeated join file values", askretrieve.RetrievalResult{}, workspace, askintent.Decision{Route: askintent.RouteRefine, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}})
+	for _, unwanted := range []string{"cluster.implementation", "topology.kind", "topology.roleModel"} {
+		if hasClarification(plan.Clarifications, unwanted) {
+			t.Fatalf("expected refine vars prompt to avoid %s clarification, got %#v", unwanted, plan.Clarifications)
+		}
+	}
+}
+
+func TestNormalizePlanClearsSingleNodeWorkerExecutionForVerificationOnlyDraft(t *testing.T) {
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request: "Create a single-node apply workflow that verifies the cluster with CheckCluster expecting total 1 node and controlPlaneReady 1.",
+		Intent:  "draft",
+		AuthoringBrief: askcontract.AuthoringBrief{
+			Topology:             "single-node",
+			NodeCount:            1,
+			ModeIntent:           "apply-only",
+			RequiredCapabilities: []string{"cluster-verification"},
+		},
+		ExecutionModel:      askcontract.ExecutionModel{RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role", ControlPlaneFlow: "apply", WorkerFlow: "apply", PerNodeInvocation: true}},
+		Files:               []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}},
+		EntryScenario:       "workflows/scenarios/apply.yaml",
+		TargetOutcome:       "generate files",
+		ValidationChecklist: []string{"lint"},
+	}, "Create a single-node apply workflow that verifies the cluster with CheckCluster expecting total 1 node and controlPlaneReady 1.", askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}})
+	if plan.ExecutionModel.RoleExecution.RoleSelector != "" || plan.ExecutionModel.RoleExecution.WorkerFlow != "" || plan.ExecutionModel.RoleExecution.PerNodeInvocation {
+		t.Fatalf("expected single-node verification plan to clear worker role execution, got %#v", plan.ExecutionModel.RoleExecution)
+	}
+	if plan.ExecutionModel.Verification.FinalVerificationRole != "local" {
+		t.Fatalf("expected local final verification role, got %#v", plan.ExecutionModel.Verification)
+	}
+}
+
 func TestValidatePlanStructureAllowsRecoverableExecutionDetailGaps(t *testing.T) {
 	plan := askcontract.PlanResponse{
 		AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Topology: "multi-node", NodeCount: 3},
