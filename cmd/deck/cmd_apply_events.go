@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/applycli"
@@ -11,31 +10,8 @@ import (
 )
 
 func verboseApplyStepSink() install.StepEventSink {
-	if cliVerbosity < 1 {
-		return nil
-	}
 	return func(event install.StepEvent) {
-		status := strings.TrimSpace(event.Status)
-		level := 1
-		if status == "started" {
-			level = 2
-		}
-		parts := []string{
-			fmt.Sprintf("deck: apply step=%s", strings.TrimSpace(event.StepID)),
-			fmt.Sprintf("kind=%s", strings.TrimSpace(event.Kind)),
-			fmt.Sprintf("phase=%s", displayValueOrDash(event.Phase)),
-			fmt.Sprintf("status=%s", displayValueOrDash(status)),
-		}
-		if event.Attempt > 0 {
-			parts = append(parts, fmt.Sprintf("attempt=%d", event.Attempt))
-		}
-		if strings.TrimSpace(event.Reason) != "" {
-			parts = append(parts, fmt.Sprintf("reason=%s", strings.TrimSpace(event.Reason)))
-		}
-		if strings.TrimSpace(event.Error) != "" {
-			parts = append(parts, fmt.Sprintf("error=%s", strings.TrimSpace(event.Error)))
-		}
-		_ = verbosef(level, "%s\n", strings.Join(parts, " "))
+		_ = stderrPrintf("%s\n", formatStepProgressLine("apply", event.StepID, event.Kind, event.Phase, strings.TrimSpace(event.Status), event.Attempt, event.Reason, event.Error, event.StartedAt, event.EndedAt))
 	}
 }
 

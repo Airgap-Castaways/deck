@@ -28,6 +28,7 @@ type Options struct {
 	VarOverrides      map[string]any
 	Stdout            io.Writer
 	Diagnosticf       func(level int, format string, args ...any) error
+	EventSink         prepare.StepEventSink
 	runtimeBinaryDeps runtimeBinaryDeps
 }
 
@@ -175,7 +176,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("create prepared root: %w", err)
 	}
 
-	if err := prepare.Run(ctx, prepareWorkflow, prepare.RunOptions{BundleRoot: preparedRoot.Abs(), ForceRedownload: opts.Refresh}); err != nil {
+	if err := prepare.Run(ctx, prepareWorkflow, prepare.RunOptions{BundleRoot: preparedRoot.Abs(), ForceRedownload: opts.Refresh, EventSink: opts.EventSink}); err != nil {
 		return err
 	}
 	if err := emitDiagnostic(opts, 2, "deck: prepare bundleRoot=%s\n", filepath.ToSlash(preparedRoot.Abs())); err != nil {

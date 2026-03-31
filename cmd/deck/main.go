@@ -8,14 +8,23 @@ import (
 )
 
 func main() {
-	res := execute(os.Args[1:])
-	if err := writeResult(res); err != nil {
-		fmt.Fprintf(os.Stderr, "deck: %v\n", err)
-		os.Exit(1)
+	if err := runMain(os.Args[1:]); err != nil {
+		if _, writeErr := fmt.Fprintf(os.Stderr, "Error: %v\n", err); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "deck: %v\n", writeErr)
+		}
+		os.Exit(resolveExitCode(err))
 	}
-	if res.err != nil {
-		os.Exit(res.exitCode)
-	}
+}
+
+func runMain(args []string) error {
+	root := newRootCommand()
+	setCLIWriters(os.Stdout, os.Stderr)
+	defer setCLIWriters(os.Stdout, os.Stderr)
+	root.SetOut(os.Stdout)
+	root.SetErr(os.Stderr)
+	root.SetArgs(args)
+	_, err := root.ExecuteC()
+	return err
 }
 
 func run(args []string) error {

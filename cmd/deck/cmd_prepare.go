@@ -96,5 +96,6 @@ func runPrepareWithOptions(cmd *cobra.Command, opts prepareOptions) error {
 		VarOverrides: varsAsAnyMap(opts.varOverrides),
 		Stdout:       stdoutWriter(),
 		Diagnosticf:  verbosef,
+		EventSink:    verbosePrepareStepSink(),
 	})
 }
