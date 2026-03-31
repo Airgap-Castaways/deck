@@ -56,7 +56,6 @@ deck apply
 
 ```bash
 # Homebrew tap
-brew tap Airgap-Castaways/tap
 brew install Airgap-Castaways/tap/deck
 ```
 
