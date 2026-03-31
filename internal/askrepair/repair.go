@@ -3,14 +3,20 @@ package askrepair
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
+	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
 	"github.com/Airgap-Castaways/deck/internal/askir"
 )
 
 func TryAutoRepair(root string, files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic, repairPaths []string) ([]askcontract.GeneratedFile, []string, bool, error) {
+	return TryAutoRepairWithProgram(root, files, diags, repairPaths, askcontract.AuthoringProgram{})
+}
+
+func TryAutoRepairWithProgram(root string, files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic, repairPaths []string, program askcontract.AuthoringProgram) ([]askcontract.GeneratedFile, []string, bool, error) {
 	_ = repairPaths
 	if len(files) == 0 || len(diags) == 0 {
 		return files, nil, false, nil
@@ -39,11 +45,16 @@ func TryAutoRepair(root string, files []askcontract.GeneratedFile, diags []askdi
 			if rawPath == "" {
 				continue
 			}
+			if edits, extraNotes, handled := repairInvalidFieldMigration(diag, files); handled {
+				editDocs[path] = append(editDocs[path], edits...)
+				notes = append(notes, extraNotes...)
+				continue
+			}
 			editDocs[path] = append(editDocs[path], askcontract.StructuredEditAction{Op: "delete", RawPath: rawPath})
 			notes = append(notes, fmt.Sprintf("removed unsupported field %s in %s", rawPath, path))
 		case "fill-field":
 			rawPath := repairRawPath(diag)
-			value, ok := defaultFillValue(diag, files)
+			value, ok := defaultFillValue(diag, files, program)
 			if rawPath == "" || !ok {
 				continue
 			}
@@ -54,7 +65,11 @@ func TryAutoRepair(root string, files []askcontract.GeneratedFile, diags []askdi
 			if rawPath == "" || len(diag.Allowed) == 0 {
 				continue
 			}
-			editDocs[path] = append(editDocs[path], askcontract.StructuredEditAction{Op: "set", RawPath: rawPath, Value: strings.TrimSpace(diag.Allowed[0])})
+			value := strings.TrimSpace(diag.Allowed[0])
+			if preferred, ok := defaultLiteralValue(diag, files, program); ok {
+				value = preferred
+			}
+			editDocs[path] = append(editDocs[path], askcontract.StructuredEditAction{Op: "set", RawPath: rawPath, Value: value})
 			notes = append(notes, fmt.Sprintf("set constrained literal %s in %s", rawPath, path))
 		}
 	}
@@ -114,84 +129,173 @@ func normalizeRepairPath(diag askdiagnostic.Diagnostic) string {
 	return path
 }
 
-func defaultFillValue(diag askdiagnostic.Diagnostic, files []askcontract.GeneratedFile) (any, bool) {
+func defaultFillValue(diag askdiagnostic.Diagnostic, files []askcontract.GeneratedFile, program askcontract.AuthoringProgram) (any, bool) {
 	path := normalizeRepairPath(diag)
-	switch strings.TrimSpace(diag.StepKind) {
-	case "CheckHost":
-		if path == "spec.checks" {
-			return []string{"os", "arch", "swap"}, true
+	if value, ok := bindingDefaultValue(strings.TrimSpace(diag.StepKind), path, program); ok {
+		return value, true
+	}
+	if field, ok := askcatalog.Current().LookupField(strings.TrimSpace(diag.StepKind), path); ok {
+		if parsed, ok := parseFieldDefault(field); ok {
+			return parsed, true
 		}
-	case "InitKubeadm":
-		if path == "spec.outputJoinFile" {
-			return "/tmp/deck/join.txt", true
+	}
+	if strings.TrimSpace(diag.StepKind) == "CheckHost" && path == "spec.checks" {
+		return []string{"os", "arch", "swap"}, true
+	}
+	return nil, false
+}
+
+func defaultLiteralValue(diag askdiagnostic.Diagnostic, files []askcontract.GeneratedFile, program askcontract.AuthoringProgram) (string, bool) {
+	path := normalizeRepairPath(diag)
+	if value, ok := bindingDefaultValue(strings.TrimSpace(diag.StepKind), path, program); ok {
+		if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+			return text, true
 		}
-	case "JoinKubeadm":
-		if path == "spec.joinFile" {
-			return "/tmp/deck/join.txt", true
+	}
+	if field, ok := askcatalog.Current().LookupField(strings.TrimSpace(diag.StepKind), path); ok {
+		if len(field.Enum) > 0 {
+			return strings.TrimSpace(field.Enum[0]), true
 		}
-	case "CheckCluster":
-		if path == "spec.interval" {
-			return "5s", true
-		}
-		if path == "spec.nodes.total" {
-			return 1, true
-		}
-		if path == "spec.nodes.ready" {
-			return 1, true
-		}
-		if path == "spec.nodes.controlPlaneReady" {
-			return 1, true
-		}
-	case "InstallPackage":
-		if path == "spec.source.type" {
-			return "local-repo", true
-		}
-		if path == "spec.source.path" {
-			return "packages/", true
-		}
-	case "DownloadPackage":
-		if path == "spec.repo.type" {
-			family, _ := downloadPackageDistro(files, diag)
-			if strings.EqualFold(family, "debian") {
-				return "deb-flat", true
+	}
+	return "", false
+}
+
+func bindingDefaultValue(kind string, path string, program askcontract.AuthoringProgram) (any, bool) {
+	step, ok := askcatalog.Current().LookupStep(kind)
+	if !ok {
+		return nil, false
+	}
+	for _, builder := range step.Builders {
+		for _, binding := range builder.Bindings {
+			if strings.TrimSpace(binding.Path) != strings.TrimSpace(path) {
+				continue
 			}
-			return "rpm", true
-		}
-		if path == "spec.backend.mode" {
-			return "container", true
-		}
-		if path == "spec.backend.runtime" {
-			return "auto", true
-		}
-		if path == "spec.backend.image" {
-			family, release := downloadPackageDistro(files, diag)
-			if strings.EqualFold(family, "debian") {
-				return "ubuntu:22.04", true
+			if value, ok := bindingSourceValue(strings.TrimSpace(binding.From), program); ok {
+				return value, true
 			}
-			if strings.Contains(strings.ToLower(release), "9") {
-				return "rockylinux:9", true
-			}
-			return "rockylinux:9", true
-		}
-		if path == "spec.outputDir" {
-			family, release := downloadPackageDistro(files, diag)
-			if strings.EqualFold(family, "debian") && release != "" {
-				return filepath.ToSlash(filepath.Join("packages", "deb", release)), true
-			}
-			if release != "" {
-				return filepath.ToSlash(filepath.Join("packages", "rpm", release)), true
-			}
-			return "packages/", true
 		}
 	}
 	return nil, false
 }
 
-func downloadPackageDistro(files []askcontract.GeneratedFile, diag askdiagnostic.Diagnostic) (string, string) {
+func bindingSourceValue(source string, program askcontract.AuthoringProgram) (any, bool) {
+	switch {
+	case strings.HasPrefix(source, "program:"):
+		return program.Value(strings.TrimPrefix(source, "program:"))
+	case strings.HasPrefix(source, "derive:"):
+		return deriveRepairValue(strings.TrimPrefix(source, "derive:"), program)
+	case strings.HasPrefix(source, "const:"):
+		return parseConst(strings.TrimPrefix(source, "const:")), true
+	default:
+		return nil, false
+	}
+}
+
+func deriveRepairValue(name string, program askcontract.AuthoringProgram) (any, bool) {
+	switch strings.TrimSpace(name) {
+	case "platform.repoType":
+		if strings.EqualFold(strings.TrimSpace(program.Platform.Family), "debian") {
+			return "deb-flat", true
+		}
+		return "rpm", true
+	case "platform.backendImage":
+		if strings.EqualFold(strings.TrimSpace(program.Platform.Family), "debian") {
+			return "ubuntu:22.04", true
+		}
+		return "rockylinux:9", true
+	case "artifacts.packageOutputDir":
+		family := strings.ToLower(strings.TrimSpace(program.Platform.Family))
+		release := strings.TrimSpace(program.Platform.Release)
+		repoType := strings.ToLower(strings.TrimSpace(program.Platform.RepoType))
+		if family == "debian" || repoType == "deb-flat" {
+			if release == "" {
+				return "packages/", true
+			}
+			return filepath.ToSlash(filepath.Join("packages", "deb", release)), true
+		}
+		if release == "" {
+			return "packages/", true
+		}
+		return filepath.ToSlash(filepath.Join("packages", "rpm", release)), true
+	case "artifacts.imageOutputDir":
+		return "images/control-plane", true
+	case "cluster.joinFile":
+		return "/tmp/deck/join.txt", true
+	case "cluster.podCIDR":
+		return "10.244.0.0/16", true
+	case "verification.expectedReadyCount":
+		if program.Verification.ExpectedReadyCount > 0 {
+			return program.Verification.ExpectedReadyCount, true
+		}
+		if program.Verification.ExpectedNodeCount > 0 {
+			return program.Verification.ExpectedNodeCount, true
+		}
+	case "verification.expectedControlPlaneReady":
+		if program.Verification.ExpectedControlPlaneReady > 0 {
+			return program.Verification.ExpectedControlPlaneReady, true
+		}
+		if program.Cluster.ControlPlaneCount > 0 {
+			return program.Cluster.ControlPlaneCount, true
+		}
+		return 1, true
+	case "verification.interval":
+		return "5s", true
+	case "verification.timeout":
+		if program.Verification.ExpectedNodeCount > 1 {
+			return "10m", true
+		}
+		return "5m", true
+	}
+	return nil, false
+}
+
+func parseFieldDefault(field askcatalog.Field) (any, bool) {
+	value := strings.TrimSpace(field.Default)
+	if value == "" {
+		return nil, false
+	}
+	switch field.Type {
+	case "boolean":
+		return value == "true", true
+	case "integer":
+		if n, err := strconv.Atoi(value); err == nil {
+			return n, true
+		}
+	}
+	return value, true
+}
+
+func parseConst(value string) any {
+	value = strings.TrimSpace(value)
+	if value == "true" {
+		return true
+	}
+	if value == "false" {
+		return false
+	}
+	if n, err := strconv.Atoi(value); err == nil {
+		return n
+	}
+	return value
+}
+
+func repairInvalidFieldMigration(diag askdiagnostic.Diagnostic, files []askcontract.GeneratedFile) ([]askcontract.StructuredEditAction, []string, bool) {
+	path := repairRawPath(diag)
+	if strings.TrimSpace(diag.StepKind) == "InstallPackage" && path == "steps."+strings.TrimSpace(diag.StepID)+".spec.sourcePath" {
+		value, ok := invalidFieldValue(files, diag, "sourcePath")
+		if !ok || strings.TrimSpace(value) == "" {
+			return nil, nil, false
+		}
+		return []askcontract.StructuredEditAction{{Op: "set", RawPath: "steps." + strings.TrimSpace(diag.StepID) + ".spec.source.type", Value: "local-repo"}, {Op: "set", RawPath: "steps." + strings.TrimSpace(diag.StepID) + ".spec.source.path", Value: value}, {Op: "delete", RawPath: path}}, []string{fmt.Sprintf("moved InstallPackage sourcePath into source.path in %s", diagnosticFile(diag))}, true
+	}
+	return nil, nil, false
+}
+
+func invalidFieldValue(files []askcontract.GeneratedFile, diag askdiagnostic.Diagnostic, key string) (string, bool) {
 	file := diagnosticFile(diag)
 	stepID := strings.TrimSpace(diag.StepID)
 	if file == "" || stepID == "" {
-		return "", ""
+		return "", false
 	}
 	for _, candidate := range files {
 		if filepath.ToSlash(strings.TrimSpace(candidate.Path)) != file || candidate.Delete {
@@ -205,13 +309,11 @@ func downloadPackageDistro(files []askcontract.GeneratedFile, diag askdiagnostic
 			if strings.TrimSpace(step.ID) != stepID {
 				continue
 			}
-			distro, _ := step.Spec["distro"].(map[string]any)
-			family, _ := distro["family"].(string)
-			release, _ := distro["release"].(string)
-			return strings.TrimSpace(family), strings.TrimSpace(release)
+			value, ok := step.Spec[key].(string)
+			return strings.TrimSpace(value), ok
 		}
 	}
-	return "", ""
+	return "", false
 }
 
 func renameDuplicateStepIDs(path string, files []askcontract.GeneratedFile) (askcontract.GeneratedDocument, string, bool) {

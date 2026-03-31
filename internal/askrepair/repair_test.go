@@ -31,3 +31,15 @@ func TestTryAutoRepairRenamesDuplicateStepIDs(t *testing.T) {
 		t.Fatalf("expected duplicate step ids to be renamed, got %#v", repaired)
 	}
 }
+
+func TestTryAutoRepairMigratesInstallPackageSourcePath(t *testing.T) {
+	files := []askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      sourcePath: /tmp/packages\n"}}
+	diags := []askdiagnostic.Diagnostic{{RepairOp: "remove-field", File: "workflows/scenarios/apply.yaml", StepID: "install", StepKind: "InstallPackage", Path: "spec.sourcePath", Message: "InstallPackage: Additional property sourcePath is not allowed"}}
+	repaired, _, applied, err := TryAutoRepair(t.TempDir(), files, diags, []string{"workflows/scenarios/apply.yaml"})
+	if err != nil {
+		t.Fatalf("try auto repair sourcePath migration: %v", err)
+	}
+	if !applied || len(repaired) != 1 || !strings.Contains(repaired[0].Content, "source:") || !strings.Contains(repaired[0].Content, "path: /tmp/packages") {
+		t.Fatalf("expected sourcePath migration repair, got %#v", repaired)
+	}
+}

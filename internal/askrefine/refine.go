@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 )
 
@@ -109,6 +110,7 @@ func candidatesForDocument(doc askcontract.GeneratedDocument) []Candidate {
 
 func stepFieldCandidates(path string, steps []askcontract.WorkflowStep, prefix string) []Candidate {
 	items := []Candidate{}
+	catalog := askcatalog.Current()
 	for i, step := range steps {
 		base := fmt.Sprintf("%s[%d]", prefix, i)
 		for _, field := range []struct {
@@ -124,12 +126,16 @@ func stepFieldCandidates(path string, steps []askcontract.WorkflowStep, prefix s
 			rawPath := base + "." + field.name
 			items = append(items, scalarCandidates(path, rawPath, field.name, field.value)...)
 		}
-		items = append(items, mapFieldCandidates(path, base+".spec", step.Spec)...)
+		items = append(items, mapFieldCandidatesWithCatalog(catalog, path, base+".spec", "spec", strings.TrimSpace(step.Kind), step.Spec)...)
 	}
 	return items
 }
 
 func mapFieldCandidates(path string, prefix string, values map[string]any) []Candidate {
+	return mapFieldCandidatesWithCatalog(askcatalog.Catalog{}, path, prefix, prefix, "", values)
+}
+
+func mapFieldCandidatesWithCatalog(catalog askcatalog.Catalog, path string, rawPrefix string, schemaPrefix string, kind string, values map[string]any) []Candidate {
 	items := []Candidate{}
 	keys := make([]string, 0, len(values))
 	for key := range values {
@@ -138,17 +144,36 @@ func mapFieldCandidates(path string, prefix string, values map[string]any) []Can
 	sort.Strings(keys)
 	for _, key := range keys {
 		rawPath := key
-		if strings.TrimSpace(prefix) != "" {
-			rawPath = prefix + "." + key
+		if strings.TrimSpace(rawPrefix) != "" {
+			rawPath = rawPrefix + "." + key
+		}
+		schemaPath := key
+		if strings.TrimSpace(schemaPrefix) != "" {
+			schemaPath = schemaPrefix + "." + key
 		}
 		switch typed := values[key].(type) {
 		case map[string]any:
-			items = append(items, mapFieldCandidates(path, rawPath, typed)...)
+			items = append(items, mapFieldCandidatesWithCatalog(catalog, path, rawPath, schemaPath, kind, typed)...)
 		case string:
-			items = append(items, scalarCandidates(path, rawPath, key, typed)...)
+			items = append(items, scalarCandidatesForField(catalog, kind, path, rawPath, schemaPath, key, typed)...)
 		case int, int64, float64, bool:
-			items = append(items, scalarCandidates(path, rawPath, key, fmt.Sprint(typed))...)
+			items = append(items, scalarCandidatesForField(catalog, kind, path, rawPath, schemaPath, key, fmt.Sprint(typed))...)
 		}
+	}
+	return items
+}
+
+func scalarCandidatesForField(catalog askcatalog.Catalog, kind string, path string, rawPath string, schemaPath string, leaf string, rendered string) []Candidate {
+	field, ok := catalog.LookupField(kind, schemaPath)
+	if !ok {
+		return scalarCandidates(path, rawPath, leaf, rendered)
+	}
+	items := []Candidate{{ID: candidateID("set-field", path, rawPath), Path: path, Type: "set-field", RawPath: rawPath, Summary: fmt.Sprintf("update %s (current %q)", rawPath, rendered)}}
+	if field.Requirement != "required" && field.Requirement != "conditional" {
+		items = append(items, Candidate{ID: candidateID("delete-field", path, rawPath), Path: path, Type: "delete-field", RawPath: rawPath, Summary: fmt.Sprintf("delete %s", rawPath)})
+	}
+	if !field.ConstrainedLiteral && len(field.Enum) == 0 {
+		items = append(items, Candidate{ID: candidateID("extract-var", path, rawPath), Path: path, Type: "extract-var", RawPath: rawPath, Summary: fmt.Sprintf("extract %s into workflows/vars.yaml", rawPath), SuggestedVarName: sanitizeName(leaf), SuggestedVarsPath: "workflows/vars.yaml"})
 	}
 	return items
 }

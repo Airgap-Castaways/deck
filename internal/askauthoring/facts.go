@@ -38,7 +38,9 @@ func InferFacts(prompt string, artifactKinds []string, connectivity string) Fact
 	hasHA := hasAny(lower, "high availability", "high-availability") || containsWholeToken(lower, "ha")
 	hasSingle := hasAny(lower, "single-node", "single node")
 	hasMulti := hasAny(lower, "multi-node", "multi node") || nodeCount > 1
-	hasCluster := hasAny(lower, "cluster", "kubeadm", "control-plane", "control plane", "worker", "workers", "join", "클러스터", "쿠버네티스", "클러스터링", "노드", "워커", "조인")
+	hasCluster := mentionsClusterWorkflow(lower)
+	hasJoinWorkflow := mentionsJoinWorkflow(lower)
+	verificationOnly := isVerificationOnlyClusterRequest(lower)
 
 	if hasSingle {
 		facts.Topology = "single-node"
@@ -60,6 +62,10 @@ func InferFacts(prompt string, artifactKinds []string, connectivity string) Fact
 		facts.Intents = append(facts.Intents, "kubeadm")
 		facts.Capabilities = append(facts.Capabilities, "kubeadm-bootstrap", "cluster-verification")
 	}
+	if mentionsClusterVerification(lower) {
+		facts.Intents = append(facts.Intents, "cluster-verification")
+		facts.Capabilities = append(facts.Capabilities, "cluster-verification")
+	}
 	if facts.NeedsPrepare {
 		facts.Capabilities = append(facts.Capabilities, "prepare-artifacts")
 	}
@@ -73,7 +79,7 @@ func InferFacts(prompt string, artifactKinds []string, connectivity string) Fact
 			facts.Capabilities = append(facts.Capabilities, "repository-setup")
 		}
 	}
-	if explicitRoleModel || hasAny(lower, "worker", "workers", "join") || facts.Topology == "multi-node" || facts.Topology == "ha" {
+	if explicitRoleModel || hasAny(lower, "worker", "workers") || hasJoinWorkflow || facts.Topology == "multi-node" || facts.Topology == "ha" {
 		facts.Intents = append(facts.Intents, "join")
 		facts.Capabilities = append(facts.Capabilities, "kubeadm-join")
 		facts.MultiRoleRequested = true
@@ -102,7 +108,7 @@ func InferFacts(prompt string, artifactKinds []string, connectivity string) Fact
 	if facts.Topology == "unspecified" && hasCluster {
 		facts.Ambiguities = append(facts.Ambiguities, "cluster-topology")
 	}
-	if hasCluster && !contains(facts.Intents, "kubeadm") {
+	if hasCluster && !contains(facts.Intents, "kubeadm") && !verificationOnly && clusterImplementationLikelyRelevant(lower, facts, hasJoinWorkflow) {
 		facts.Ambiguities = append(facts.Ambiguities, "cluster-implementation")
 	}
 	if (facts.Topology == "multi-node" || facts.Topology == "ha" || facts.NodeCount > 1) && !explicitRoleModel {
@@ -290,6 +296,78 @@ func hasAny(lower string, items ...string) bool {
 		if strings.Contains(lower, item) {
 			return true
 		}
+	}
+	return false
+}
+
+func mentionsClusterWorkflow(lower string) bool {
+	return hasAny(lower,
+		"cluster",
+		"kubeadm",
+		"control-plane",
+		"control plane",
+		"worker",
+		"workers",
+		"checkcluster",
+		"check-cluster",
+		"check cluster",
+		"verify cluster",
+		"cluster-verification",
+		"cluster verification",
+		"클러스터",
+		"쿠버네티스",
+		"클러스터링",
+		"노드",
+		"워커",
+	)
+}
+
+func mentionsClusterVerification(lower string) bool {
+	return hasAny(lower,
+		"checkcluster",
+		"check-cluster",
+		"check cluster",
+		"verify cluster",
+		"cluster-verification",
+		"cluster verification",
+		"cluster health",
+		"verifies the cluster",
+		"validates the cluster",
+	)
+}
+
+func mentionsJoinWorkflow(lower string) bool {
+	if hasAny(lower, "kubeadm join", "join worker", "worker join", "worker-join", "조인") {
+		return true
+	}
+	if strings.Contains(lower, "join") && hasAny(lower, "kubeadm", "cluster", "worker", "control-plane", "control plane", "node", "nodes") {
+		return true
+	}
+	return false
+}
+
+func isVerificationOnlyClusterRequest(lower string) bool {
+	if !mentionsClusterVerification(lower) {
+		return false
+	}
+	if strings.Contains(lower, "kubeadm") || mentionsJoinWorkflow(lower) {
+		return false
+	}
+	if hasAny(lower, "bootstrap", "initkubeadm", "joinkubeadm", "install package", "downloadpackage", "downloadimage", "prepare workflow") {
+		return false
+	}
+	return true
+}
+
+func clusterImplementationLikelyRelevant(lower string, facts Facts, hasJoinWorkflow bool) bool {
+	if facts.NeedsPrepare || hasJoinWorkflow || facts.MultiRoleRequested {
+		return true
+	}
+	if facts.Topology == "multi-node" || facts.Topology == "ha" {
+		return true
+	}
+	if hasAny(lower, "bootstrap", "initkubeadm", "joinkubeadm", "set up", "setup", "configure", "compose", "구성", "설치", "만들") {
+		return true
 	}
 	return false
 }

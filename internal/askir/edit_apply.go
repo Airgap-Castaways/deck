@@ -27,6 +27,8 @@ func applyDocumentEdits(root string, baseContent map[string]string, path string,
 		if os.IsNotExist(err) {
 			if existing, ok := baseContent[path]; ok {
 				raw = []byte(existing)
+			} else if filepath.ToSlash(strings.TrimSpace(path)) == "workflows/vars.yaml" {
+				raw = []byte("{}\n")
 			} else {
 				return "", nil, fmt.Errorf("read refine target %s: %w", path, err)
 			}
@@ -71,7 +73,7 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 		switch strings.TrimSpace(transform.Type) {
 		case "extract-var":
 			varsPath := strings.TrimSpace(transform.VarsPath)
-			if varsPath == "" {
+			if varsPath == "" || !strings.HasPrefix(filepath.ToSlash(varsPath), "workflows/") {
 				varsPath = "workflows/vars.yaml"
 			}
 			varName := strings.TrimSpace(transform.VarName)
@@ -108,7 +110,11 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 			}
 			extraFiles = append(extraFiles, askcontract.GeneratedFile{Path: varsPath, Content: renderedVars})
 		case "set-field":
-			rawPath := resolveStructuredEditPath(strings.TrimSpace(transform.RawPath), parsedDoc)
+			rawPathValue := strings.TrimSpace(transform.RawPath)
+			if rawPathValue == "" {
+				rawPathValue = strings.TrimSpace(transform.Path)
+			}
+			rawPath := resolveStructuredEditPath(rawPathValue, parsedDoc)
 			if rawPath == "" {
 				return "", nil, fmt.Errorf("transform set-field on %s requires rawPath", path)
 			}
@@ -118,7 +124,11 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 			}
 			content = normalizeRenderedContent(updatedTarget)
 		case "delete-field":
-			rawPath := resolveStructuredEditPath(strings.TrimSpace(transform.RawPath), parsedDoc)
+			rawPathValue := strings.TrimSpace(transform.RawPath)
+			if rawPathValue == "" {
+				rawPathValue = strings.TrimSpace(transform.Path)
+			}
+			rawPath := resolveStructuredEditPath(rawPathValue, parsedDoc)
 			if rawPath == "" {
 				return "", nil, fmt.Errorf("transform delete-field on %s requires rawPath", path)
 			}
