@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -46,6 +47,9 @@ func (b *flushBuffer) Flush() error {
 func (s *stubClient) Generate(_ context.Context, req askprovider.Request) (askprovider.Response, error) {
 	s.prompts = append(s.prompts, req)
 	defer func() { s.calls++ }()
+	if len(s.responses) == 0 {
+		return askprovider.Response{}, errors.New("no stub response configured")
+	}
 	idx := s.calls
 	if idx >= len(s.responses) {
 		idx = len(s.responses) - 1
@@ -124,13 +128,37 @@ func TestApplyWriteOverrideKeepsRefineRouteAndEnablesGeneration(t *testing.T) {
 	}
 }
 
-func TestApplyWriteOverrideFallsBackToHeuristicForNonGenerationRoute(t *testing.T) {
+func TestApplyWriteOverrideDoesNotMutateNonGenerationRoute(t *testing.T) {
 	logger := newAskLogger(io.Discard, "trace")
 	decision := askintent.Decision{Route: askintent.RouteExplain, AllowGeneration: false, Reason: "explain"}
 	heuristic := askintent.Decision{Route: askintent.RouteDraft, AllowGeneration: true, AllowRetry: true, RequiresLint: true}
 	overridden := applyWriteOverride(decision, heuristic, true, logger)
-	if overridden.Route != askintent.RouteDraft || !overridden.AllowGeneration {
-		t.Fatalf("expected heuristic generation route, got %#v", overridden)
+	if overridden.Route != askintent.RouteExplain || overridden.AllowGeneration {
+		t.Fatalf("expected explain route to stay non-generating, got %#v", overridden)
+	}
+}
+
+func TestClassifyWithLLMReturnsSemanticErrorForInvalidRoute(t *testing.T) {
+	client := &stubClient{responses: []string{`{"route":"mystery","confidence":0.9,"reason":"bad route","target":{"kind":"workspace"},"generationAllowed":false}`}}
+	_, err := classifyWithLLM(context.Background(), client, askconfig.EffectiveSettings{Settings: askconfig.Settings{Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}}, classifierSystemPrompt(), classifierUserPrompt("do something", false, askretrieve.WorkspaceSummary{}), newAskLogger(io.Discard, "trace"))
+	if err == nil {
+		t.Fatalf("expected semantic classifier error")
+	}
+	var cErr classifierError
+	if !errors.As(err, &cErr) || cErr.kind != classifierErrorSemantic {
+		t.Fatalf("expected semantic classifier error, got %v", err)
+	}
+}
+
+func TestClassifyWithLLMReturnsSemanticErrorForLowConfidence(t *testing.T) {
+	client := &stubClient{responses: []string{`{"route":"explain","confidence":0.2,"reason":"unclear","target":{"kind":"workspace"},"generationAllowed":false}`}}
+	_, err := classifyWithLLM(context.Background(), client, askconfig.EffectiveSettings{Settings: askconfig.Settings{Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}}, classifierSystemPrompt(), classifierUserPrompt("do something", false, askretrieve.WorkspaceSummary{}), newAskLogger(io.Discard, "trace"))
+	if err == nil {
+		t.Fatalf("expected low-confidence semantic classifier error")
+	}
+	var cErr classifierError
+	if !errors.As(err, &cErr) || cErr.kind != classifierErrorSemantic {
+		t.Fatalf("expected semantic classifier error, got %v", err)
 	}
 }
 

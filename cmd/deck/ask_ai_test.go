@@ -21,12 +21,36 @@ type mockAskClient struct {
 
 func (m *mockAskClient) Generate(_ context.Context, req askprovider.Request) (askprovider.Response, error) {
 	m.calls++
+	if req.Kind == "classify" {
+		if m.index < len(m.responses) && strings.Contains(strings.TrimSpace(m.responses[m.index]), `"route"`) {
+			resp := m.responses[m.index]
+			m.index++
+			return askprovider.Response{Content: resp}, nil
+		}
+		return askprovider.Response{Content: synthesizeClassification(req.Prompt)}, nil
+	}
 	if m.index >= len(m.responses) {
 		return askprovider.Response{Content: legacygen.MaybeConvert(req.Kind, m.responses[len(m.responses)-1])}, nil
 	}
 	resp := legacygen.MaybeConvert(req.Kind, m.responses[m.index])
 	m.index++
 	return askprovider.Response{Content: resp}, nil
+}
+
+func synthesizeClassification(prompt string) string {
+	lower := strings.ToLower(prompt)
+	switch {
+	case strings.Contains(lower, "review flag: true"):
+		return `{"route":"review","confidence":0.99,"reason":"explicit review flag","target":{"kind":"workspace"},"generationAllowed":false}`
+	case strings.Contains(lower, "what is this workspace"):
+		return `{"route":"question","confidence":0.9,"reason":"workspace question","target":{"kind":"workspace"},"generationAllowed":false}`
+	case strings.Contains(lower, "explain"):
+		return `{"route":"explain","confidence":0.9,"reason":"explain request","target":{"kind":"workspace"},"generationAllowed":false}`
+	case strings.Contains(lower, "refactor") || strings.Contains(lower, "repair") || strings.Contains(lower, "edit"):
+		return `{"route":"refine","confidence":0.9,"reason":"edit request","target":{"kind":"workspace"},"generationAllowed":true}`
+	default:
+		return `{"route":"draft","confidence":0.9,"reason":"create request","target":{"kind":"workspace"},"generationAllowed":true}`
+	}
 }
 
 func TestAskConfigCommands(t *testing.T) {
@@ -196,7 +220,7 @@ func TestAskClarifyDoesNotGenerate(t *testing.T) {
 	}
 	defer func() { _ = os.Chdir(oldWD) }()
 
-	client := &mockAskClient{responses: []string{`{"route":"clarify","confidence":0.9,"reason":"prompt is ambiguous","target":{"kind":"unknown"},"generationAllowed":false}`, `{"summary":"Need clarification","answer":"Please provide a concrete action for ask to perform.","suggestions":["explain workflows/scenarios/apply.yaml","review current apply scenario"]}`}}
+	client := &mockAskClient{responses: []string{}}
 	originalFactory := newAskBackend
 	newAskBackend = func() askprovider.Client {
 		return client
@@ -207,11 +231,11 @@ func TestAskClarifyDoesNotGenerate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ask clarify: %v", err)
 	}
-	if !strings.Contains(out, "clarification") && !strings.Contains(out, "Need clarification") {
+	if !strings.Contains(out, "could not safely determine") {
 		t.Fatalf("expected clarification output, got %q", out)
 	}
-	if client.calls == 0 {
-		t.Fatalf("clarify route should use llm when available")
+	if client.calls != 0 {
+		t.Fatalf("clarify route should not invoke the answer llm path")
 	}
 }
 
@@ -233,7 +257,7 @@ func TestAskRepairLoop(t *testing.T) {
 	}
 	defer func() { newAskBackend = originalFactory }()
 
-	out, err := runWithCapturedStdout([]string{"ask", "--write", "--max-iterations", "2", "repair test scenario"})
+	out, err := runWithCapturedStdout([]string{"ask", "--create", "--write", "--max-iterations", "2", "repair test scenario"})
 	if err != nil {
 		t.Fatalf("ask write with repair: %v", err)
 	}
@@ -263,7 +287,7 @@ func TestAskReviewMode(t *testing.T) {
 	}
 	defer func() { _ = os.Chdir(oldWD) }()
 
-	client := &mockAskClient{responses: []string{validClassificationReview(), `{"summary":"reviewed workspace","answer":"The apply scenario currently uses a Command step and would benefit from typed steps.","suggestions":["Replace generic Command usage with typed steps where possible."]}`}}
+	client := &mockAskClient{responses: []string{`{"summary":"reviewed workspace","answer":"The apply scenario currently uses a Command step and would benefit from typed steps.","suggestions":["Replace generic Command usage with typed steps where possible."]}`}}
 	originalFactory := newAskBackend
 	newAskBackend = func() askprovider.Client { return client }
 	defer func() { newAskBackend = originalFactory }()
@@ -275,8 +299,8 @@ func TestAskReviewMode(t *testing.T) {
 	if !strings.Contains(out, "reviewed workspace") || !strings.Contains(out, "local-findings:") {
 		t.Fatalf("unexpected review output: %q", out)
 	}
-	if client.calls == 0 {
-		t.Fatalf("review route should use llm when available")
+	if client.calls != 1 {
+		t.Fatalf("expected a single review call, got %d", client.calls)
 	}
 }
 
