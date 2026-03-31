@@ -161,6 +161,33 @@ func TestMaterializeRefineSetFieldTransform(t *testing.T) {
 	}
 }
 
+func TestMaterializeRefineCandidateSetFieldTransform(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      podNetworkCIDR: 10.244.0.0/16\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/scenarios/apply.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:      "set-field",
+			Candidate: "set-field|workflows/scenarios/apply.yaml|steps[0].spec.podNetworkCIDR",
+			Value:     "10.250.0.0/16",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize candidate set-field transform: %v", err)
+	}
+	if len(files) != 1 || !strings.Contains(files[0].Content, "10.250.0.0/16") {
+		t.Fatalf("expected candidate-driven set-field transform to update scenario, got %#v", files)
+	}
+}
+
 func TestMaterializeRefineDeleteFieldTransform(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
@@ -236,6 +263,16 @@ func TestMaterializeDeleteDocument(t *testing.T) {
 	}
 	if len(files) != 1 || !files[0].Delete {
 		t.Fatalf("expected delete file, got %#v", files)
+	}
+}
+
+func TestMaterializeCompilesBuilderSelection(t *testing.T) {
+	files, err := Materialize(t.TempDir(), askcontract.GenerationResponse{Selection: &askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm", Overrides: map[string]any{"joinFile": "/tmp/deck/join.txt"}}, {ID: "apply.check-cluster", Overrides: map[string]any{"nodeCount": 1}}}}}}})
+	if err != nil {
+		t.Fatalf("materialize builder selection: %v", err)
+	}
+	if len(files) != 1 || !strings.Contains(files[0].Content, "kind: InitKubeadm") || !strings.Contains(files[0].Content, "kind: CheckCluster") {
+		t.Fatalf("expected builder selection to render typed workflow content, got %#v", files)
 	}
 }
 

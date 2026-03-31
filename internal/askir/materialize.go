@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askdraft"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
@@ -14,6 +15,18 @@ func Materialize(root string, gen askcontract.GenerationResponse) ([]askcontract
 }
 
 func MaterializeWithBase(root string, base []askcontract.GeneratedFile, gen askcontract.GenerationResponse) ([]askcontract.GeneratedFile, error) {
+	if gen.Selection != nil {
+		switch {
+		case askcontract.SelectionUsesBuilders(*gen.Selection):
+			docs, err := askdraft.Compile(*gen.Selection)
+			if err != nil {
+				return nil, err
+			}
+			gen.Documents = append(gen.Documents, docs...)
+		case len(gen.Documents) == 0:
+			gen.Documents = askcontract.CompileDraftSelection(*gen.Selection)
+		}
+	}
 	if len(gen.Documents) == 0 {
 		return nil, nil
 	}

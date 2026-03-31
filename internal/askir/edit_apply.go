@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askrefine"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
 	"github.com/Airgap-Castaways/deck/internal/stepspec"
 	"github.com/Airgap-Castaways/deck/internal/structurededit"
@@ -62,6 +63,11 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 	extraFiles := []askcontract.GeneratedFile{}
 	content := string(raw)
 	for _, transform := range transforms {
+		resolved, err := askrefine.ResolveCandidate(parsedDoc, transform)
+		if err != nil {
+			return "", nil, err
+		}
+		transform = resolved
 		switch strings.TrimSpace(transform.Type) {
 		case "extract-var":
 			varsPath := strings.TrimSpace(transform.VarsPath)
