@@ -537,15 +537,6 @@ func generationAppearsToHandleJoinState(files []askcontract.GeneratedFile) bool 
 			}
 		}
 	}
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		if strings.Contains(content, "outputjoinfile") && strings.Contains(content, "joinfile") {
-			return true
-		}
-		if strings.Contains(content, "joinfilepath") || strings.Contains(content, "publish") && strings.Contains(content, "join") {
-			return true
-		}
-	}
 	return false
 }
 
@@ -563,15 +554,6 @@ func generationAppearsToHandleSharedState(files []askcontract.GeneratedFile, con
 					return true
 				}
 			}
-		}
-	}
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		if producerPath != "" && strings.Contains(content, producerPath) {
-			return true
-		}
-		if name != "" && strings.Contains(content, name) {
-			return true
 		}
 	}
 	if name == "join-file" {
@@ -592,16 +574,19 @@ func generationAppearsToPublishJoinState(files []askcontract.GeneratedFile, prod
 			}
 		}
 	}
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		if strings.Contains(content, "kind: copyfile") && strings.Contains(content, "join") {
-			return true
-		}
-		if strings.Contains(content, "kind: ensuredirectory") && strings.Contains(content, "join") {
-			return true
-		}
-		if producerPath != "" && strings.Contains(content, producerPath) && strings.Contains(content, "outputjoinfile") {
-			return true
+	for _, step := range generatedWorkflowSteps(files) {
+		if strings.EqualFold(step.Kind, "CopyFile") || strings.EqualFold(step.Kind, "EnsureDirectory") || strings.EqualFold(step.Kind, "WriteFile") {
+			for _, field := range []string{"path", "targetPath", "sourcePath"} {
+				if value, ok := stringSpec(step.Spec, field); ok {
+					lower := strings.ToLower(strings.TrimSpace(value))
+					if producerPath != "" && lower == producerPath {
+						return true
+					}
+					if strings.Contains(lower, "join") {
+						return true
+					}
+				}
+			}
 		}
 	}
 	return false
@@ -623,15 +608,6 @@ func generationAppearsToPublishSharedState(files []askcontract.GeneratedFile, co
 			}
 		}
 	}
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		if strings.Contains(content, "kind: copyfile") && ((name != "" && strings.Contains(content, name)) || (producerPath != "" && strings.Contains(content, producerPath))) {
-			return true
-		}
-		if strings.Contains(content, "kind: writefile") && ((name != "" && strings.Contains(content, name)) || (producerPath != "" && strings.Contains(content, producerPath))) {
-			return true
-		}
-	}
 	return false
 }
 
@@ -645,22 +621,6 @@ func generationViolatesFinalVerificationRole(files []askcontract.GeneratedFile, 
 			continue
 		}
 		if strings.Contains(strings.ToLower(strings.TrimSpace(step.When)), strings.ToLower(role)) {
-			return false
-		}
-	}
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		idx := strings.LastIndex(content, "kind: checkcluster")
-		if idx == -1 {
-			continue
-		}
-		windowStart := strings.LastIndex(content[:idx], "- id:")
-		if windowStart == -1 {
-			windowStart = 0
-		}
-		window := content[windowStart : idx+len("kind: checkcluster")]
-		expected := fmt.Sprintf(`when: .vars.role == "%s"`, role)
-		if strings.Contains(window, expected) {
 			return false
 		}
 	}
@@ -681,17 +641,6 @@ func generationViolatesVerificationExpectations(files []askcontract.GeneratedFil
 			return false
 		}
 	}
-	expectedNodes := fmt.Sprintf("total: %d", verification.ExpectedNodeCount)
-	expectedCP := fmt.Sprintf("controlplaneready: %d", verification.ExpectedControlPlaneReady)
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		if !strings.Contains(content, "kind: checkcluster") {
-			continue
-		}
-		if strings.Contains(content, expectedNodes) && strings.Contains(content, expectedCP) {
-			return false
-		}
-	}
 	return true
 }
 
@@ -702,11 +651,6 @@ func generationAppearsRoleAware(files []askcontract.GeneratedFile, roleSelector 
 	}
 	for _, step := range generatedWorkflowSteps(files) {
 		if strings.Contains(strings.ToLower(strings.TrimSpace(step.When)), selector) {
-			return true
-		}
-	}
-	for _, file := range files {
-		if strings.Contains(strings.ToLower(file.Content), selector) {
 			return true
 		}
 	}
@@ -1217,12 +1161,21 @@ func inferVarsAdvisories(files []askcontract.GeneratedFile) []string {
 
 func inferComponentAdvisories(files []askcontract.GeneratedFile) []string {
 	sequenceCounts := map[string]int{}
-	for _, file := range files {
+	for _, doc := range generatedWorkflowDocs(files) {
 		kinds := []string{}
-		for _, line := range strings.Split(file.Content, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "kind: ") {
-				kinds = append(kinds, strings.TrimSpace(strings.TrimPrefix(trimmed, "kind: ")))
+		if doc.Workflow == nil {
+			continue
+		}
+		for _, step := range doc.Workflow.Steps {
+			if strings.TrimSpace(step.Kind) != "" {
+				kinds = append(kinds, strings.TrimSpace(step.Kind))
+			}
+		}
+		for _, phase := range doc.Workflow.Phases {
+			for _, step := range phase.Steps {
+				if strings.TrimSpace(step.Kind) != "" {
+					kinds = append(kinds, strings.TrimSpace(step.Kind))
+				}
 			}
 		}
 		if len(kinds) >= 2 {
@@ -1250,13 +1203,12 @@ func scenarioAppearsIncomplete(req ScenarioRequirements, files []askcontract.Gen
 	steps := generatedWorkflowSteps(files)
 	hasInit := hasKind(steps, "InitKubeadm") || hasKind(steps, "UpgradeKubeadm")
 	hasCheck := hasKind(steps, "CheckCluster")
-	combined := strings.ToLower(combinedWorkflowContent(files))
 	for _, intent := range req.ScenarioIntent {
 		if intent == "kubeadm" {
-			if !hasInit && !strings.Contains(combined, "initkubeadm") && !strings.Contains(combined, "upgradekubeadm") {
+			if !hasInit {
 				return true
 			}
-			if !hasCheck && !strings.Contains(combined, "checkcluster") {
+			if !hasCheck {
 				return true
 			}
 		}
@@ -1290,17 +1242,6 @@ func hasKind(steps []askcontract.WorkflowStep, kind string) bool {
 	return false
 }
 
-func combinedWorkflowContent(files []askcontract.GeneratedFile) string {
-	b := &strings.Builder{}
-	for _, file := range files {
-		b.WriteString("\n")
-		b.WriteString(filepath.ToSlash(strings.TrimSpace(file.Path)))
-		b.WriteString("\n")
-		b.WriteString(file.Content)
-	}
-	return b.String()
-}
-
 func hasGeneratedComponents(files []askcontract.GeneratedFile) bool {
 	for _, file := range files {
 		if strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(file.Path)), "workflows/components/") {
@@ -1308,6 +1249,21 @@ func hasGeneratedComponents(files []askcontract.GeneratedFile) bool {
 		}
 	}
 	return false
+}
+
+func generatedWorkflowDocs(files []askcontract.GeneratedFile) []askcontract.GeneratedDocument {
+	out := []askcontract.GeneratedDocument{}
+	for _, file := range files {
+		if file.Delete {
+			continue
+		}
+		doc, err := askir.ParseDocument(file.Path, []byte(file.Content))
+		if err != nil {
+			continue
+		}
+		out = append(out, doc)
+	}
+	return out
 }
 
 func containsString(values []string, want string) bool {

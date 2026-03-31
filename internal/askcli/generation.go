@@ -17,6 +17,7 @@ import (
 func generateWithValidation(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, attempts int, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult, planCritic askcontract.PlanCriticResponse) (askcontract.GenerationResponse, []askcontract.GeneratedFile, string, askcontract.CriticResponse, askcontract.JudgeResponse, int, error) {
 	_ = planCritic
 	var lastValidation string
+	var lastValidationErr error
 	var lastCritic askcontract.CriticResponse
 	var lastJudge askcontract.JudgeResponse
 	var lastFiles []askcontract.GeneratedFile
@@ -25,19 +26,22 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 	for attempt := 1; attempt <= attempts; attempt++ {
 		currentPrompt := req.Prompt
 		currentSystemPrompt := req.SystemPrompt
+		var repairDiags []askdiagnostic.Diagnostic
+		var repairPaths []string
 		if attempt > 1 && lastValidation != "" {
-			validationDiags := askdiagnostic.FromValidationError(lastValidation, bundle)
+			validationDiags := askdiagnostic.FromValidationError(lastValidationErr, lastValidation, bundle)
 			markTaintedFiles(taintedFiles, validationDiags)
-			repairPaths := repairTargetFiles(lastFiles, validationDiags, taintedFiles)
-			diags := append([]askdiagnostic.Diagnostic{}, validationDiags...)
+			repairPaths = repairTargetFiles(lastFiles, validationDiags, taintedFiles)
+			repairPaths = restrictRepairTargetsToPlan(repairPaths, plan)
+			repairDiags = append([]askdiagnostic.Diagnostic{}, validationDiags...)
 			if isGenerationParseFailure(lastValidation) {
 				currentPrompt = jsonResponseRetryPrompt(req.Prompt, lastValidation, decision.Route)
 			} else {
-				diags = append(diags, askdiagnostic.FromPlanCritic(planCritic)...)
-				diags = append(diags, askdiagnostic.FromCritic(lastCritic)...)
-				logger.logf("debug", "\n[ask][phase:repair:diagnostics]\n%s\n", askdiagnostic.JSON(diags))
+				repairDiags = append(repairDiags, askdiagnostic.FromPlanCritic(planCritic)...)
+				repairDiags = append(repairDiags, askdiagnostic.FromCritic(lastCritic)...)
+				logger.logf("debug", "\n[ask][phase:repair:diagnostics]\n%s\n", askdiagnostic.JSON(repairDiags))
 				currentSystemPrompt = strings.TrimSpace(req.SystemPrompt) + "\n\n" + documentRepairSystemPrompt(normalizedAuthoringBrief(plan, brief), plan)
-				currentPrompt = documentRepairUserPrompt(lastFiles, lastValidation, diags, repairPaths)
+				currentPrompt = documentRepairUserPrompt(lastFiles, lastValidation, repairDiags, repairPaths)
 			}
 		}
 		logger.logf("basic", "[ask][phase:generation:attempt] attempt=%d/%d\n", attempt, attempts)
@@ -55,12 +59,14 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			Timeout:      askRequestTimeout(req.Kind, attempts, currentSystemPrompt, currentPrompt),
 		})
 		if err != nil {
+			lastValidationErr = err
 			return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, err
 		}
 		logger.response("generation", resp.Content)
 		gen, err := askcontract.ParseGeneration(resp.Content)
 		if err != nil {
 			lastValidation = err.Error()
+			lastValidationErr = err
 			logger.logf("debug", "[ask][phase:generation:parse-error] error=%s\n", lastValidation)
 			if !repairableValidationError(lastValidation) {
 				return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation stopped without repair: %s", lastValidation)
@@ -70,9 +76,20 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			}
 			return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
 		}
+		if attempt > 1 {
+			if err := validateRepairDocumentStrategy(gen.Documents, repairDiags, repairPaths, decision.Route); err != nil {
+				lastValidation = err.Error()
+				lastValidationErr = err
+				if attempt < attempts {
+					continue
+				}
+				return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, err
+			}
+		}
 		files, err := askir.MaterializeWithBase(root, lastFiles, gen)
 		if err != nil {
 			lastValidation = err.Error()
+			lastValidationErr = err
 			logger.logf("debug", "[ask][phase:generation:materialize-error] error=%s\n", lastValidation)
 			if attempt < attempts {
 				continue
@@ -95,6 +112,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 				critic = mergeJudgeIntoCritic(critic, judge, attempt == attempts)
 				if len(judge.Blocking) > 0 && attempt < attempts {
 					lastValidation = "semantic judge requested revision: " + strings.Join(judge.Blocking, "; ")
+					lastValidationErr = nil
 					lastCritic = critic
 					logger.logf("debug", "[ask][phase:judge:retry] blocking=%d\n", len(judge.Blocking))
 					continue
@@ -105,6 +123,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			return gen, files, lintSummary, critic, lastJudge, attempt - 1, nil
 		}
 		lastValidation = err.Error()
+		lastValidationErr = err
 		logger.logf("debug", "[ask][phase:generation:validation-error] error=%s\n", lastValidation)
 		if !repairableValidationError(lastValidation) {
 			return askcontract.GenerationResponse{}, nil, lastValidation, critic, lastJudge, attempt - 1, fmt.Errorf("ask generation stopped without repair: %s", lastValidation)

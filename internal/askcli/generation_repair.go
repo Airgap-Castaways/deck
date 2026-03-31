@@ -1,6 +1,7 @@
 package askcli
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -31,6 +32,39 @@ func jsonResponseRetryPrompt(basePrompt string, validation string, route askinte
 	b.WriteString("Previous parse error:\n")
 	b.WriteString(strings.TrimSpace(validation))
 	return strings.TrimSpace(b.String())
+}
+
+func validateRepairDocumentStrategy(documents []askcontract.GeneratedDocument, diags []askdiagnostic.Diagnostic, repairPaths []string, route askintent.Route) error {
+	if route != askintent.RouteRefine || len(diags) == 0 {
+		return nil
+	}
+	narrowByFile := map[string]bool{}
+	for _, diag := range diags {
+		op := strings.TrimSpace(diag.RepairOp)
+		if op == "fill-field" || op == "remove-field" || op == "fix-literal" || op == "rename-step" {
+			path := strings.TrimSpace(diag.File)
+			if path == "" {
+				path = strings.TrimSpace(diag.Path)
+			}
+			if path != "" {
+				narrowByFile[path] = true
+			}
+		}
+	}
+	for _, doc := range documents {
+		path := filepath.ToSlash(strings.TrimSpace(doc.Path))
+		action := strings.TrimSpace(doc.Action)
+		if action == "" {
+			action = "replace"
+		}
+		if !stringSliceContains(repairPaths, path) || !narrowByFile[path] {
+			continue
+		}
+		if action == "replace" && len(doc.Edits) == 0 && len(doc.Transforms) == 0 {
+			return fmt.Errorf("repair response for %s must use structured edits or transforms for narrow validator issues", path)
+		}
+	}
+	return nil
 }
 
 func targetedRepairPromptBlock(prevFiles []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic, repairPaths []string) string {
@@ -190,6 +224,24 @@ func repairTargetFiles(prevFiles []askcontract.GeneratedFile, diags []askdiagnos
 	return targets
 }
 
+func restrictRepairTargetsToPlan(paths []string, plan askcontract.PlanResponse) []string {
+	allowed := allowedPlanPaths(plan)
+	if len(allowed) == 0 {
+		return paths
+	}
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path != "" && allowed[path] {
+			out = append(out, path)
+		}
+	}
+	if len(out) == 0 {
+		return paths
+	}
+	return dedupe(out)
+}
+
 func markTaintedFiles(tainted map[string]bool, diags []askdiagnostic.Diagnostic) {
 	for _, path := range diagnosticFiles(diags) {
 		tainted[path] = true
@@ -199,9 +251,9 @@ func markTaintedFiles(tainted map[string]bool, diags []askdiagnostic.Diagnostic)
 func diagnosticFiles(diags []askdiagnostic.Diagnostic) []string {
 	paths := []string{}
 	for _, diag := range diags {
-		path := strings.TrimSpace(diag.Path)
+		path := strings.TrimSpace(diag.File)
 		if path == "" {
-			path = strings.TrimSpace(diag.File)
+			path = strings.TrimSpace(diag.Path)
 		}
 		if path == "" {
 			path = diagnosticMessageFile(diag.Message)
@@ -224,9 +276,9 @@ func mapKeys(items map[string]bool) []string {
 func affectedFilesFromDiagnostics(prevFiles []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic) []string {
 	affected := map[string]bool{}
 	for _, diag := range diags {
-		path := strings.TrimSpace(diag.Path)
+		path := strings.TrimSpace(diag.File)
 		if path == "" {
-			path = strings.TrimSpace(diag.File)
+			path = strings.TrimSpace(diag.Path)
 		}
 		if path != "" {
 			affected[path] = true

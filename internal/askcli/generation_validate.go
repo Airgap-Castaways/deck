@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
@@ -44,11 +45,122 @@ func validateGeneration(ctx context.Context, root string, gen askcontract.Genera
 		validated = append(validated, files...)
 	}
 	validated = dedupe(validated)
+	contractCritic := validatePlanContract(files, plan, decision)
+	if len(contractCritic.Blocking) > 0 {
+		return "", contractCritic, fmt.Errorf("plan contract validation failed: %s", strings.Join(contractCritic.Blocking, "; "))
+	}
 	critic := semanticCritic(gen, decision, plan, normalizedAuthoringBrief(plan, brief), retrieval)
+	critic = mergeContractCritic(critic, contractCritic)
 	if len(critic.Blocking) > 0 {
 		return "", critic, fmt.Errorf("semantic validation failed: %s", strings.Join(critic.Blocking, "; "))
 	}
 	return fmt.Sprintf("lint ok (%d yaml files, %d scenario entrypoints)", directValidated, len(validated)), critic, nil
+}
+
+func validatePlanContract(files []askcontract.GeneratedFile, plan askcontract.PlanResponse, decision askintent.Decision) askcontract.CriticResponse {
+	critic := askcontract.CriticResponse{}
+	generated := map[string]bool{}
+	for _, file := range files {
+		if file.Delete {
+			continue
+		}
+		generated[filepath.ToSlash(strings.TrimSpace(file.Path))] = true
+	}
+	allowed := allowedPlanPaths(plan)
+	for path := range generated {
+		if len(allowed) > 0 && !allowed[path] {
+			critic.Blocking = append(critic.Blocking, fmt.Sprintf("generated file %s is outside the clarified plan target paths", path))
+			critic.CoverageGaps = append(critic.CoverageGaps, path)
+			critic.RequiredFixes = append(critic.RequiredFixes, "Restrict generation to the clarified plan target paths and planned files")
+		}
+	}
+	if decision.Route == askintent.RouteDraft {
+		for _, path := range requiredDraftPaths(plan) {
+			if !generated[path] {
+				critic.Blocking = append(critic.Blocking, fmt.Sprintf("planned file %s was not generated", path))
+				critic.MissingFiles = append(critic.MissingFiles, path)
+			}
+		}
+	}
+	entry := filepath.ToSlash(strings.TrimSpace(plan.EntryScenario))
+	if entry != "" && requiresEntryScenario(plan) && !generated[entry] {
+		critic.Blocking = append(critic.Blocking, fmt.Sprintf("planned entry scenario %s was not generated", entry))
+		critic.MissingFiles = append(critic.MissingFiles, entry)
+	}
+	for _, contract := range plan.ExecutionModel.ArtifactContracts {
+		producer := filepath.ToSlash(strings.TrimSpace(contract.ProducerPath))
+		consumer := filepath.ToSlash(strings.TrimSpace(contract.ConsumerPath))
+		if producer != "" && !generated[producer] && allowed[producer] {
+			critic.Blocking = append(critic.Blocking, fmt.Sprintf("artifact producer %s for %s contract was not generated", producer, contract.Kind))
+			critic.MissingFiles = append(critic.MissingFiles, producer)
+		}
+		if consumer != "" && !generated[consumer] && allowed[consumer] {
+			critic.Blocking = append(critic.Blocking, fmt.Sprintf("artifact consumer %s for %s contract was not generated", consumer, contract.Kind))
+			critic.MissingFiles = append(critic.MissingFiles, consumer)
+		}
+	}
+	critic.Blocking = dedupe(critic.Blocking)
+	critic.MissingFiles = dedupe(critic.MissingFiles)
+	critic.CoverageGaps = dedupe(critic.CoverageGaps)
+	critic.RequiredFixes = dedupe(critic.RequiredFixes)
+	return critic
+}
+
+func allowedPlanPaths(plan askcontract.PlanResponse) map[string]bool {
+	allowed := map[string]bool{}
+	for _, path := range plan.AuthoringBrief.TargetPaths {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path != "" {
+			allowed[path] = true
+		}
+	}
+	for _, file := range plan.Files {
+		path := filepath.ToSlash(strings.TrimSpace(file.Path))
+		if path != "" {
+			allowed[path] = true
+		}
+	}
+	if path := filepath.ToSlash(strings.TrimSpace(plan.EntryScenario)); path != "" {
+		allowed[path] = true
+	}
+	return allowed
+}
+
+func requiredDraftPaths(plan askcontract.PlanResponse) []string {
+	required := []string{}
+	for _, file := range plan.Files {
+		path := filepath.ToSlash(strings.TrimSpace(file.Path))
+		action := strings.ToLower(strings.TrimSpace(file.Action))
+		if path == "" {
+			continue
+		}
+		if action == "create" || action == "replace" || action == "update" {
+			required = append(required, path)
+		}
+	}
+	if plan.NeedsPrepare {
+		required = append(required, "workflows/prepare.yaml")
+	}
+	if requiresEntryScenario(plan) && strings.TrimSpace(plan.EntryScenario) != "" {
+		required = append(required, filepath.ToSlash(strings.TrimSpace(plan.EntryScenario)))
+	}
+	return dedupe(required)
+}
+
+func requiresEntryScenario(plan askcontract.PlanResponse) bool {
+	scope := strings.TrimSpace(plan.AuthoringBrief.TargetScope)
+	mode := strings.TrimSpace(plan.AuthoringBrief.ModeIntent)
+	return scope == "scenario" || scope == "workspace" || mode == "prepare+apply" || mode == "apply-only"
+}
+
+func mergeContractCritic(base askcontract.CriticResponse, extra askcontract.CriticResponse) askcontract.CriticResponse {
+	base.Blocking = dedupe(append(base.Blocking, extra.Blocking...))
+	base.Advisory = dedupe(append(base.Advisory, extra.Advisory...))
+	base.MissingFiles = dedupe(append(base.MissingFiles, extra.MissingFiles...))
+	base.InvalidImports = dedupe(append(base.InvalidImports, extra.InvalidImports...))
+	base.CoverageGaps = dedupe(append(base.CoverageGaps, extra.CoverageGaps...))
+	base.RequiredFixes = dedupe(append(base.RequiredFixes, extra.RequiredFixes...))
+	return base
 }
 
 func requiredFixesForValidation(message string) []string {
