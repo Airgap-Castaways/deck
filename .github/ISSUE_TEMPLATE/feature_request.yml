@@ -1,0 +1,30 @@
+name: Feature Request
+description: Propose a new capability or product behavior.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Change
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done Criteria
+      placeholder: |
+        - new flag or workflow behavior is implemented
+        - docs are updated if user-facing
+        - tests cover the expected path
+    validations:
+      required: true
