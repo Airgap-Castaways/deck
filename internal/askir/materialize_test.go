@@ -286,7 +286,7 @@ func TestMaterializeDeleteDocument(t *testing.T) {
 }
 
 func TestMaterializeCompilesBuilderSelection(t *testing.T) {
-	files, err := Materialize(t.TempDir(), askcontract.GenerationResponse{Selection: &askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm", Overrides: map[string]any{"joinFile": "/tmp/deck/join.txt"}}, {ID: "apply.check-cluster", Overrides: map[string]any{"nodeCount": 1}}}}}}})
+	files, err := Materialize(t.TempDir(), askcontract.GenerationResponse{Program: &askcontract.AuthoringProgram{Cluster: askcontract.ProgramCluster{JoinFile: "/tmp/deck/join.txt", ControlPlaneCount: 1}, Verification: askcontract.ProgramVerification{ExpectedNodeCount: 1, ExpectedReadyCount: 1, ExpectedControlPlaneReady: 1}}, Selection: &askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm", Overrides: map[string]any{}}, {ID: "apply.check-cluster", Overrides: map[string]any{}}}}}}})
 	if err != nil {
 		t.Fatalf("materialize builder selection: %v", err)
 	}

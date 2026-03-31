@@ -420,11 +420,35 @@ func validateOverrideKeys(builder askcatalog.Builder, overrides map[string]any) 
 		allowed[key] = true
 	}
 	for key := range overrides {
-		if !allowed[strings.TrimSpace(key)] {
+		clean := strings.TrimSpace(key)
+		if !allowed[clean] && !deprecatedOverrideAllowed(builder.ID, clean) {
 			return fmt.Errorf("draft builder %s does not support override %q", builder.ID, key)
 		}
 	}
 	return nil
+}
+
+func deprecatedOverrideAllowed(builderID string, key string) bool {
+	for _, item := range []string{"backend", "distro", "id", "kind", "repo", "source", "spec", "when"} {
+		if strings.TrimSpace(item) == strings.TrimSpace(key) {
+			return true
+		}
+	}
+	allowed := map[string][]string{
+		"prepare.download-package": {"backendImage", "backendRuntime", "distroFamily", "distroRelease", "outputDir", "packages", "repoType"},
+		"prepare.download-image":   {"backendEngine", "images", "outputDir"},
+		"apply.install-package":    {"packages", "sourcePath"},
+		"apply.load-image":         {"images", "runtime", "sourceDir"},
+		"apply.init-kubeadm":       {"criSocket", "imageRepository", "joinFile", "kubernetesVersion", "podCIDR", "whenRole"},
+		"apply.join-kubeadm":       {"joinFile", "whenRole"},
+		"apply.check-cluster":      {"controlPlaneReady", "interval", "nodeCount", "readyCount", "timeout", "whenRole"},
+	}
+	for _, item := range allowed[strings.TrimSpace(builderID)] {
+		if strings.TrimSpace(item) == strings.TrimSpace(key) {
+			return true
+		}
+	}
+	return false
 }
 
 func candidateTargetPaths(plan askcontract.PlanResponse) []string {
