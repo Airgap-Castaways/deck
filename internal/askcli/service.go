@@ -37,6 +37,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		opts.Stdin = os.Stdin
 	}
 	hooks := askhooks.Default()
+	progress := newAskProgress(opts.Stdout)
 	resolvedRoot, err := filepath.Abs(strings.TrimSpace(opts.Root))
 	if err != nil {
 		return fmt.Errorf("resolve workspace root: %w", err)
@@ -120,6 +121,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	classifierUser := classifierUserPrompt(requestText, opts.Review, workspace)
 	switch {
 	case canUseLLM(effective) && resumedPlan == nil && !askintent.IsHardOverride(heuristic):
+		progress.status("classifying request")
 		logger.logf("debug", "\n[ask][phase:classify:start] provider=%s model=%s\n", effective.Provider, effective.Model)
 		classified, classifyErr := classifyWithLLM(ctx, client, effective, classifierSystem, classifierUser, logger)
 		if classifyErr == nil {
@@ -179,6 +181,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "classifier", SystemPrompt: classifierSystem, UserPrompt: classifierUser})
 	}
 
+	progress.status("loading workspace context")
 	logger.logf("debug", "\n[ask][phase:augment:start] mcp=%t lsp=%t\n", effective.MCP.Enabled, effective.LSP.Enabled)
 	for _, event := range result.AugmentEvents {
 		prefix := "augment"
@@ -202,6 +205,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	var plan askcontract.PlanResponse
 	var planCritic askcontract.PlanCriticResponse
 	if resumedPlan != nil && opts.PlanOnly {
+		progress.status("resuming saved plan")
 		plan = *resumedPlan
 		result.Plan = &plan
 		result.PlanJSON = resumedPlanJSON
@@ -238,6 +242,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		if !canUseLLM(effective) {
 			return fmt.Errorf("route %s requires model access; configure provider credentials first", decision.Route)
 		}
+		progress.status("planning authoring workflow")
 		logger.logf("basic", "\n[ask][phase:plan:start] route=%s\n", decision.Route)
 		cfg := askconfigSettings{provider: effective.Provider, model: effective.Model, apiKey: effective.APIKey, oauthToken: effective.OAuthToken, accountID: effective.AccountID, endpoint: effective.Endpoint}
 		planned, reviewedCritic, usedFallback, planErr := buildPlanWithReview(ctx, client, cfg, decision, retrieval, requestText, workspace, requirements, logger)
@@ -265,6 +270,9 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		planMarkdownFinal := renderPlanMarkdown(plan, planMDPath)
 		if updateErr := os.WriteFile(filepath.Join(resolvedRoot, filepath.FromSlash(planMDPath)), []byte(planMarkdownFinal+"\n"), 0o600); updateErr == nil {
 			_ = os.WriteFile(filepath.Join(filepath.Dir(filepath.Join(resolvedRoot, filepath.FromSlash(planMDPath))), "latest.md"), []byte(planMarkdownFinal+"\n"), 0o600)
+		}
+		if hasBlockingClarifications(plan) {
+			progress.status("waiting for clarification")
 		}
 		updatedPlan, aborted, clarifyErr := maybeClarifyPlanInteractively(resolvedRoot, opts, &result, requestText, plan, planCritic)
 		if clarifyErr != nil {
@@ -326,10 +334,14 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		result.DroppedChunks = retrieval.Dropped
 		logger.logf("debug", "[ask][phase:retrieve:second-pass] chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
 	} else if resumedPlan != nil {
+		progress.status("resuming saved plan")
 		plan = *resumedPlan
 		result.Plan = &plan
 		result.PlanJSON = resumedPlanJSON
 		result.PlanMarkdown = strings.TrimSuffix(resumedPlanJSON, ".json") + ".md"
+		if hasBlockingClarifications(plan) {
+			progress.status("waiting for clarification")
+		}
 		updatedPlan, aborted, clarifyErr := maybeClarifyPlanInteractively(resolvedRoot, opts, &result, requestText, plan, askcontract.PlanCriticResponse{})
 		if clarifyErr != nil {
 			return clarifyErr
@@ -392,6 +404,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			Timeout:            askRequestTimeout("generate", attempts, generationPrompt, generationPrompt),
 		}
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "generation", SystemPrompt: generationRequest.SystemPrompt, UserPrompt: generationRequest.Prompt})
+		progress.status("generating workflow output")
 		logger.logf("basic", "\n[ask][phase:generation:start] route=%s attempts=%d\n", decision.Route, attempts)
 		gen, files, lintSummary, critic, judge, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts, logger, decision, plan, authoringBrief, retrieval, planCritic)
 		if genErr != nil {
@@ -448,6 +461,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		} else if canUseLLM(effective) {
 			systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, workspace, requestText)
 			result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
+			progress.status("answering %s request", phaseLabel(string(decision.Route)))
 			logger.logf("basic", "\n[ask][phase:answer:start] route=%s\n", decision.Route)
 			info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)
 			if infoErr == nil {

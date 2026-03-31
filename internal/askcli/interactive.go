@@ -74,12 +74,14 @@ func promptClarification(reader *bufio.Reader, stdout io.Writer, item askcontrac
 	if _, err := fmt.Fprintf(stdout, "clarify: %s\n", strings.TrimSpace(item.Question)); err != nil {
 		return "", false, err
 	}
+	flushOutput(stdout)
 	if len(item.Options) > 0 {
 		for i, option := range item.Options {
 			if _, err := fmt.Fprintf(stdout, "%d) %s\n", i+1, strings.TrimSpace(option)); err != nil {
 				return "", false, err
 			}
 		}
+		flushOutput(stdout)
 	}
 	prompt := "answer"
 	if strings.TrimSpace(item.RecommendedDefault) != "" {
@@ -89,6 +91,7 @@ func promptClarification(reader *bufio.Reader, stdout io.Writer, item askcontrac
 	if _, err := io.WriteString(stdout, prompt); err != nil {
 		return "", false, err
 	}
+	flushOutput(stdout)
 	input, err := reader.ReadString('\n')
 	if err != nil && err != io.EOF {
 		return "", false, err

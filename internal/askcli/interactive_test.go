@@ -1,6 +1,7 @@
 package askcli
 
 import (
+	"bufio"
 	"bytes"
 	"strings"
 	"testing"
@@ -8,8 +9,18 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 )
 
+type flushCapture struct {
+	bytes.Buffer
+	flushes int
+}
+
+func (f *flushCapture) Flush() error {
+	f.flushes++
+	return nil
+}
+
 func TestRunInteractiveClarificationsUsesDefaultsAndAnswers(t *testing.T) {
-	plan := askcontract.PlanResponse{Request: "create cluster workflow", Intent: "draft", Clarifications: []askcontract.PlanClarification{
+	plan := askcontract.PlanResponse{Request: "create workflow", Intent: "draft", Clarifications: []askcontract.PlanClarification{
 		{ID: "topology.kind", Question: "Choose topology", Options: []string{"single-node", "multi-node"}, RecommendedDefault: "multi-node", BlocksGeneration: true},
 	}}
 	stdin := strings.NewReader("\n")
@@ -40,5 +51,20 @@ func TestRunInteractiveClarificationsCanAbort(t *testing.T) {
 	}
 	if updated.Clarifications[0].Answer != "" {
 		t.Fatalf("expected unanswered clarification after abort, got %#v", updated.Clarifications)
+	}
+}
+
+func TestPromptClarificationFlushesOutput(t *testing.T) {
+	reader := strings.NewReader("1\n")
+	stdout := &flushCapture{}
+	_, aborted, err := promptClarification(bufio.NewReader(reader), stdout, askcontract.PlanClarification{ID: "topology.kind", Question: "Choose topology", Options: []string{"single-node", "multi-node"}, RecommendedDefault: "single-node", BlocksGeneration: true})
+	if err != nil {
+		t.Fatalf("promptClarification: %v", err)
+	}
+	if aborted {
+		t.Fatalf("expected answered clarification")
+	}
+	if stdout.flushes == 0 {
+		t.Fatalf("expected prompt output to flush")
 	}
 }
