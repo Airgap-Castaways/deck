@@ -289,6 +289,22 @@ func TestHasFatalPlanReviewIssuesAllowsRecoverableMissingContracts(t *testing.T)
 	}
 }
 
+func TestHasFatalPlanReviewIssuesRequiresSharedStateContractGraph(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		Request:           "create three-node kubeadm workflow with workers",
+		OfflineAssumption: "offline",
+		AuthoringBrief:    askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Topology: "multi-node", RequiredCapabilities: []string{"kubeadm-bootstrap", "kubeadm-join"}},
+		EntryScenario:     "workflows/scenarios/apply.yaml",
+		Files:             []askcontract.PlanFile{{Path: "workflows/prepare.yaml"}, {Path: "workflows/scenarios/apply.yaml"}},
+		ExecutionModel:    askcontract.ExecutionModel{ArtifactContracts: []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}}},
+		NeedsPrepare:      true,
+		ArtifactKinds:     []string{"package"},
+	}
+	if !hasFatalPlanReviewIssues(plan, askcontract.PlanCriticResponse{}) {
+		t.Fatalf("expected missing shared-state graph to be fatal")
+	}
+}
+
 func TestHasFatalPlanReviewIssuesIgnoresRecoverablePlannerBlockers(t *testing.T) {
 	plan := askcontract.PlanResponse{
 		AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Topology: "multi-node"},
@@ -560,6 +576,61 @@ func TestGenerateWithValidationKeepsFinalJudgeBlockingAsAdvisory(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("expected %q in final advisory, got %#v", want, critic)
 		}
+	}
+}
+
+func TestGenerateWithValidationSucceedsForSpecificOfflineTwoNodePrompt(t *testing.T) {
+	prompt := "Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker. Generate both workflows/prepare.yaml and workflows/scenarios/apply.yaml. In prepare, stage kubeadm kubelet kubectl cri-tools containerd packages and Kubernetes control-plane images using typed steps only. In apply, use vars.role with allowed values control-plane and worker, bootstrap the control-plane with InitKubeadm writing /tmp/deck/join.txt, join the worker with JoinKubeadm using that same file, and run final CheckCluster only on the control-plane expecting total 2 nodes and controlPlaneReady 1. Do not use remote downloads during apply. Use workflows/vars.yaml if values repeat, and use workflows/components/ only if needed."
+	client := &stubClient{responses: []string{`{"summary":"specific two-node draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: prepare-download-kubernetes-packages\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm, kubelet, kubectl, cri-tools, containerd]\n      distro:\n        family: rhel\n        release: \"9\"\n      repo:\n        type: rpm\n        generate: true\n      backend:\n        mode: container\n        runtime: auto\n        image: rockylinux:9\n      outputDir: packages/rpm/rhel9\n  - id: prepare-download-control-plane-images\n    kind: DownloadImage\n    spec:\n      images: [registry.k8s.io/kube-apiserver:v1.30.0, registry.k8s.io/kube-controller-manager:v1.30.0, registry.k8s.io/kube-scheduler:v1.30.0, registry.k8s.io/etcd:3.5.12-0, registry.k8s.io/pause:3.9]\n      outputDir: images/control-plane\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: install-packages\n    steps:\n      - id: apply-install-kubernetes-packages\n        kind: InstallPackage\n        spec:\n          packages: [kubeadm, kubelet, kubectl, cri-tools, containerd]\n          source:\n            type: local-repo\n            path: packages/rpm/rhel9\n  - name: bootstrap\n    steps:\n      - id: apply-init-control-plane\n        when: vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: \"{{ .vars.joinFile }}\"\n          podNetworkCIDR: \"{{ .vars.podCIDR }}\"\n  - name: join\n    steps:\n      - id: apply-join-worker\n        when: vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: \"{{ .vars.joinFile }}\"\n  - name: verify\n    steps:\n      - id: apply-verify-cluster\n        when: vars.role == \"control-plane\"\n        kind: CheckCluster\n        spec:\n          timeout: 10m\n          interval: 5s\n          nodes:\n            total: 2\n            ready: 2\n            controlPlaneReady: 1\n          reports:\n            nodesPath: /tmp/deck/reports/two-node-cluster.txt\n"},{"path":"workflows/vars.yaml","content":"clusterName: two-node-offline\nrole: control-plane\njoinFile: /tmp/deck/join.txt\npodCIDR: 10.244.0.0/16\n"}]}`}}
+	plan := askcontract.PlanResponse{
+		Request:       prompt,
+		NeedsPrepare:  true,
+		ArtifactKinds: []string{"package", "image"},
+		AuthoringBrief: askcontract.AuthoringBrief{
+			RouteIntent:          "draft offline two-node kubeadm prepare+apply workflows",
+			TargetScope:          "workspace",
+			ModeIntent:           "prepare+apply",
+			Connectivity:         "offline",
+			CompletenessTarget:   "complete",
+			Topology:             "multi-node",
+			NodeCount:            2,
+			RequiredCapabilities: []string{"prepare-artifacts", "package-staging", "image-staging", "kubeadm-bootstrap", "kubeadm-join", "cluster-verification"},
+		},
+		ExecutionModel: askcontract.ExecutionModel{
+			ArtifactContracts:    []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}, {Kind: "image", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}},
+			SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "local-only"}},
+			RoleExecution:        askcontract.RoleExecutionModel{RoleSelector: "vars.role", PerNodeInvocation: true, ControlPlaneFlow: "install -> bootstrap -> verify", WorkerFlow: "install -> join"},
+			Verification:         askcontract.VerificationStrategy{FinalVerificationRole: "control-plane", ExpectedNodeCount: 2, ExpectedControlPlaneReady: 1},
+			ApplyAssumptions:     []string{"apply consumes local artifacts and avoids remote downloads"},
+		},
+	}
+	_, files, _, critic, _, retries, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: prompt}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
+	if err != nil {
+		t.Fatalf("generateWithValidation: %v", err)
+	}
+	if retries != 0 {
+		t.Fatalf("expected first-pass success for specific prompt, got %d retries", retries)
+	}
+	if len(critic.Blocking) != 0 {
+		t.Fatalf("expected no blocking critic issues, got %#v", critic)
+	}
+	if len(files) != 3 {
+		t.Fatalf("expected prepare/apply/vars files, got %#v", files)
+	}
+	byPath := map[string]string{}
+	for _, file := range files {
+		byPath[file.Path] = file.Content
+	}
+	for _, want := range []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml", "workflows/vars.yaml"} {
+		if _, ok := byPath[want]; !ok {
+			t.Fatalf("expected generated file %q, got %#v", want, byPath)
+		}
+	}
+	if !strings.Contains(byPath["workflows/prepare.yaml"], "kind: DownloadPackage") || !strings.Contains(byPath["workflows/prepare.yaml"], "kind: DownloadImage") {
+		t.Fatalf("expected typed prepare staging steps, got %q", byPath["workflows/prepare.yaml"])
+	}
+	if !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "kind: CheckCluster") || !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "total: 2") {
+		t.Fatalf("expected explicit final verification contract, got %q", byPath["workflows/scenarios/apply.yaml"])
 	}
 }
 
@@ -1044,6 +1115,77 @@ func TestLoadRequestTextFallsBackToPlanMarkdown(t *testing.T) {
 	}
 	if text != "freeform markdown" {
 		t.Fatalf("unexpected text: %q", text)
+	}
+}
+
+func TestLoadPlanArtifactFromMarkdownResolvesJSON(t *testing.T) {
+	root := t.TempDir()
+	planDir := filepath.Join(root, ".deck", "plan")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatalf("mkdir plan dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "sample.md"), []byte("markdown"), 0o600); err != nil {
+		t.Fatalf("write markdown: %v", err)
+	}
+	json := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"clarifications":[{"id":"topology.kind","question":"pick topology","kind":"enum","options":["single-node","multi-node"],"blocksGeneration":true}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	if err := os.WriteFile(filepath.Join(planDir, "sample.json"), []byte(json), 0o600); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+	plan, relJSON, err := loadPlanArtifact(root, ".deck/plan/sample.md")
+	if err != nil {
+		t.Fatalf("load plan artifact: %v", err)
+	}
+	if relJSON != ".deck/plan/sample.json" {
+		t.Fatalf("unexpected json path: %s", relJSON)
+	}
+	if len(plan.Clarifications) != 1 || plan.Clarifications[0].ID != "topology.kind" {
+		t.Fatalf("unexpected clarifications: %#v", plan.Clarifications)
+	}
+}
+
+func TestApplyPlanAnswersNormalizesClarificationState(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		Version:        1,
+		Request:        "create 3-node kubeadm workflow",
+		Intent:         "draft",
+		Complexity:     "complex",
+		TargetOutcome:  "generate files",
+		Files:          []askcontract.PlanFile{{Path: "workflows/prepare.yaml", Kind: "workflow", Action: "create", Purpose: "prepare"}, {Path: "workflows/scenarios/apply.yaml", Kind: "scenario", Action: "create", Purpose: "apply"}},
+		Clarifications: []askcontract.PlanClarification{{ID: "topology.roleModel", Question: "pick role model", Kind: "enum", Options: []string{"1cp-2workers", "3cp-ha"}, BlocksGeneration: true}},
+	}
+	updated, err := applyPlanAnswers(plan, []string{"topology.roleModel=1cp-2workers"})
+	if err != nil {
+		t.Fatalf("apply plan answers: %v", err)
+	}
+	if updated.Clarifications[0].Answer != "1cp-2workers" {
+		t.Fatalf("expected stored answer, got %#v", updated.Clarifications)
+	}
+	if updated.AuthoringBrief.NodeCount != 3 || updated.ExecutionModel.RoleExecution.RoleSelector != "vars.role" {
+		t.Fatalf("expected normalized role-aware plan, got %#v %#v", updated.AuthoringBrief, updated.ExecutionModel)
+	}
+}
+
+func TestExecutePlanResumeStopsWhenClarificationsRemain(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "test-key")
+	root := t.TempDir()
+	planDir := filepath.Join(root, ".deck", "plan")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatalf("mkdir plan dir: %v", err)
+	}
+	json := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"clarifications":[{"id":"topology.kind","question":"pick topology","kind":"enum","options":["single-node","multi-node"],"blocksGeneration":true}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	if err := os.WriteFile(filepath.Join(planDir, "latest.json"), []byte(json), 0o600); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "latest.md"), []byte("md"), 0o600); err != nil {
+		t.Fatalf("write md: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	client := &stubClient{responses: []string{}}
+	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdout: stdout, Stderr: io.Discard}, client); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "saved plan still requires clarification") {
+		t.Fatalf("expected clarification stop, got %q", stdout.String())
 	}
 }
 

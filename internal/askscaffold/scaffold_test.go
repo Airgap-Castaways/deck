@@ -11,7 +11,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
 
-func TestBuildSelectsKubeadmStarterScaffold(t *testing.T) {
+func TestBuildSelectsBootstrapScaffold(t *testing.T) {
 	scaffold := Build(
 		askpolicy.ScenarioRequirements{ScenarioIntent: []string{"kubeadm"}, NeedsPrepare: true, ArtifactKinds: []string{"package", "image"}},
 		askretrieve.WorkspaceSummary{},
@@ -19,7 +19,7 @@ func TestBuildSelectsKubeadmStarterScaffold(t *testing.T) {
 		askcontract.PlanResponse{Request: "create kubeadm workflow"},
 		askknowledge.Current(),
 	)
-	if scaffold.Family != FamilyKubeadm {
+	if scaffold.Family != FamilyBootstrap {
 		t.Fatalf("expected kubeadm scaffold, got %#v", scaffold)
 	}
 	if !strings.Contains(PromptBlock(scaffold), "DownloadPackage") || !strings.Contains(PromptBlock(scaffold), "InitKubeadm") {
@@ -43,7 +43,7 @@ func TestBuildSelectsRefineScaffoldForRefineRoute(t *testing.T) {
 	}
 }
 
-func TestBuildSelectsMultiNodeKubeadmScaffold(t *testing.T) {
+func TestBuildSelectsRoleAwareScaffold(t *testing.T) {
 	scaffold := Build(
 		askpolicy.ScenarioRequirements{ScenarioIntent: []string{"kubeadm", "multi-node", "join"}, NeedsPrepare: true, ArtifactKinds: []string{"package", "image"}},
 		askretrieve.WorkspaceSummary{},
@@ -51,7 +51,7 @@ func TestBuildSelectsMultiNodeKubeadmScaffold(t *testing.T) {
 		askcontract.PlanResponse{Request: "create 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{Topology: "multi-node", NodeCount: 3}},
 		askknowledge.Current(),
 	)
-	if scaffold.Family != FamilyKubeadmMulti {
+	if scaffold.Family != FamilyRoleAware {
 		t.Fatalf("expected multi-node kubeadm scaffold, got %#v", scaffold)
 	}
 	prompt := PromptBlock(scaffold)
