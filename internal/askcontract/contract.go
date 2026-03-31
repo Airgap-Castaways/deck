@@ -17,13 +17,14 @@ type GeneratedFile struct {
 }
 
 type GeneratedDocument struct {
-	Path      string                 `json:"path"`
-	Kind      string                 `json:"kind,omitempty"`
-	Action    string                 `json:"action,omitempty"`
-	Workflow  *WorkflowDocument      `json:"workflow,omitempty"`
-	Component *ComponentDocument     `json:"component,omitempty"`
-	Vars      map[string]any         `json:"vars,omitempty"`
-	Edits     []StructuredEditAction `json:"edits,omitempty"`
+	Path       string                  `json:"path"`
+	Kind       string                  `json:"kind,omitempty"`
+	Action     string                  `json:"action,omitempty"`
+	Workflow   *WorkflowDocument       `json:"workflow,omitempty"`
+	Component  *ComponentDocument      `json:"component,omitempty"`
+	Vars       map[string]any          `json:"vars,omitempty"`
+	Edits      []StructuredEditAction  `json:"edits,omitempty"`
+	Transforms []RefineTransformAction `json:"transforms,omitempty"`
 }
 
 type WorkflowDocument struct {
@@ -72,11 +73,41 @@ type StructuredEditAction struct {
 	Value        any            `json:"value,omitempty"`
 }
 
+type RefineTransformAction struct {
+	Type     string `json:"type"`
+	RawPath  string `json:"rawPath,omitempty"`
+	VarName  string `json:"varName,omitempty"`
+	VarsPath string `json:"varsPath,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Value    any    `json:"value,omitempty"`
+}
+
 type GenerationResponse struct {
 	Summary   string              `json:"summary"`
 	Review    []string            `json:"review"`
 	Files     []GeneratedFile     `json:"-"`
 	Documents []GeneratedDocument `json:"documents,omitempty"`
+	Selection *DraftSelection     `json:"selection,omitempty"`
+}
+
+type DraftSelection struct {
+	Patterns []string               `json:"patterns,omitempty"`
+	Targets  []DraftTargetSelection `json:"targets,omitempty"`
+	Vars     map[string]any         `json:"vars,omitempty"`
+}
+
+type DraftTargetSelection struct {
+	Path   string                `json:"path"`
+	Kind   string                `json:"kind,omitempty"`
+	Phases []DraftPhaseSelection `json:"phases,omitempty"`
+	Steps  []WorkflowStep        `json:"steps,omitempty"`
+	Vars   map[string]any        `json:"vars,omitempty"`
+}
+
+type DraftPhaseSelection struct {
+	Name    string         `json:"name"`
+	Imports []PhaseImport  `json:"imports,omitempty"`
+	Steps   []WorkflowStep `json:"steps,omitempty"`
 }
 
 type PlanFile struct {
@@ -223,6 +254,28 @@ func GenerationResponseSchema() json.RawMessage {
 		"properties": map[string]any{
 			"summary": map[string]any{"type": "string"},
 			"review":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"selection": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"patterns": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"vars":     openObjectSchema(),
+					"targets": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type":                 "object",
+							"additionalProperties": false,
+							"required":             []string{"path"},
+							"properties": map[string]any{
+								"path":   map[string]any{"type": "string"},
+								"kind":   map[string]any{"type": "string"},
+								"steps":  openObjectSchema(),
+								"phases": openObjectSchema(),
+								"vars":   openObjectSchema(),
+							},
+						},
+					},
+				},
+			},
 			"documents": map[string]any{
 				"type":     "array",
 				"minItems": 1,
@@ -237,6 +290,22 @@ func GenerationResponseSchema() json.RawMessage {
 						"workflow":  openObjectSchema(),
 						"component": openObjectSchema(),
 						"vars":      openObjectSchema(),
+						"transforms": map[string]any{
+							"type": "array",
+							"items": map[string]any{
+								"type":                 "object",
+								"additionalProperties": false,
+								"required":             []string{"type"},
+								"properties": map[string]any{
+									"type":     map[string]any{"type": "string"},
+									"rawPath":  map[string]any{"type": "string"},
+									"varName":  map[string]any{"type": "string"},
+									"varsPath": map[string]any{"type": "string"},
+									"path":     map[string]any{"type": "string"},
+									"value":    map[string]any{},
+								},
+							},
+						},
 						"edits": map[string]any{
 							"type": "array",
 							"items": map[string]any{
@@ -305,7 +374,7 @@ func ParseGeneration(raw string) (GenerationResponse, error) {
 		resp.Documents[i].Path = strings.TrimSpace(resp.Documents[i].Path)
 		resp.Documents[i].Kind = normalizeDocumentKind(resp.Documents[i].Kind)
 		resp.Documents[i].Action = normalizeDocumentAction(resp.Documents[i].Action)
-		if resp.Documents[i].Action == "edit" && len(resp.Documents[i].Edits) == 0 && (resp.Documents[i].Workflow != nil || resp.Documents[i].Component != nil || resp.Documents[i].Vars != nil) {
+		if resp.Documents[i].Action == "edit" && len(resp.Documents[i].Edits) == 0 && len(resp.Documents[i].Transforms) == 0 && (resp.Documents[i].Workflow != nil || resp.Documents[i].Component != nil || resp.Documents[i].Vars != nil) {
 			resp.Documents[i].Action = "replace"
 		}
 		if strings.EqualFold(resp.Documents[i].Kind, "vars") && resp.Documents[i].Vars == nil {
@@ -319,9 +388,19 @@ func ParseGeneration(raw string) (GenerationResponse, error) {
 			resp.Documents[i].Edits[j].TargetStepID = ""
 			resp.Documents[i].Edits[j].Target = nil
 		}
+		for j := range resp.Documents[i].Transforms {
+			resp.Documents[i].Transforms[j].Type = normalizeTransformType(resp.Documents[i].Transforms[j].Type)
+			resp.Documents[i].Transforms[j].RawPath = strings.TrimSpace(resp.Documents[i].Transforms[j].RawPath)
+			resp.Documents[i].Transforms[j].VarName = strings.TrimSpace(resp.Documents[i].Transforms[j].VarName)
+			resp.Documents[i].Transforms[j].VarsPath = strings.TrimSpace(resp.Documents[i].Transforms[j].VarsPath)
+			resp.Documents[i].Transforms[j].Path = strings.TrimSpace(resp.Documents[i].Transforms[j].Path)
+		}
 	}
-	if len(resp.Documents) == 0 {
-		return GenerationResponse{}, fmt.Errorf("generation response did not include documents")
+	if len(resp.Documents) == 0 && resp.Selection == nil {
+		return GenerationResponse{}, fmt.Errorf("generation response did not include documents or selection")
+	}
+	if len(resp.Documents) == 0 && resp.Selection != nil {
+		resp.Documents = compileDraftSelection(*resp.Selection)
 	}
 	if err := validateGeneratedDocuments(resp.Documents); err != nil {
 		return GenerationResponse{}, err
@@ -346,14 +425,14 @@ func validateGeneratedDocuments(documents []GeneratedDocument) error {
 				return fmt.Errorf("generated document %s delete action must not include content or edits", doc.Path)
 			}
 		case "edit":
-			if len(doc.Edits) == 0 && (doc.Workflow != nil || doc.Component != nil || doc.Vars != nil) {
+			if len(doc.Edits) == 0 && len(doc.Transforms) == 0 && (doc.Workflow != nil || doc.Component != nil || doc.Vars != nil) {
 				action = "replace"
 			}
-			if action == "edit" && len(doc.Edits) == 0 {
-				return fmt.Errorf("generated document %s edit action must include edits", doc.Path)
+			if action == "edit" && len(doc.Edits) == 0 && len(doc.Transforms) == 0 {
+				return fmt.Errorf("generated document %s edit action must include edits or transforms", doc.Path)
 			}
-			if action == "edit" && (doc.Workflow != nil || doc.Component != nil || doc.Vars != nil) {
-				return fmt.Errorf("generated document %s edit action must not include replacement content", doc.Path)
+			if action == "edit" && (doc.Workflow != nil || doc.Component != nil || doc.Vars != nil) && len(doc.Transforms) == 0 {
+				return fmt.Errorf("generated document %s edit action must not include replacement content without transforms", doc.Path)
 			}
 			if action != "replace" {
 				continue
@@ -397,6 +476,56 @@ func inferredDocumentAction(doc GeneratedDocument) string {
 	return "preserve"
 }
 
+func compileDraftSelection(selection DraftSelection) []GeneratedDocument {
+	documents := make([]GeneratedDocument, 0, len(selection.Targets)+1)
+	for _, target := range selection.Targets {
+		path := strings.TrimSpace(target.Path)
+		if path == "" {
+			continue
+		}
+		kind := normalizeDocumentKind(target.Kind)
+		switch kind {
+		case "vars":
+			documents = append(documents, GeneratedDocument{Path: path, Kind: "vars", Vars: cloneMap(target.Vars)})
+		case "component":
+			documents = append(documents, GeneratedDocument{Path: path, Kind: "component", Component: &ComponentDocument{Steps: append([]WorkflowStep(nil), target.Steps...)}})
+		default:
+			workflow := &WorkflowDocument{Version: "v1alpha1", Vars: cloneMap(target.Vars), Steps: append([]WorkflowStep(nil), target.Steps...)}
+			if len(target.Phases) > 0 {
+				workflow.Phases = make([]WorkflowPhase, 0, len(target.Phases))
+				for _, phase := range target.Phases {
+					workflow.Phases = append(workflow.Phases, WorkflowPhase{Name: strings.TrimSpace(phase.Name), Imports: append([]PhaseImport(nil), phase.Imports...), Steps: append([]WorkflowStep(nil), phase.Steps...)})
+				}
+			}
+			documents = append(documents, GeneratedDocument{Path: path, Kind: "workflow", Workflow: workflow})
+		}
+	}
+	if len(selection.Vars) > 0 && !selectionHasVarsTarget(selection) {
+		documents = append(documents, GeneratedDocument{Path: "workflows/vars.yaml", Kind: "vars", Vars: cloneMap(selection.Vars)})
+	}
+	return documents
+}
+
+func selectionHasVarsTarget(selection DraftSelection) bool {
+	for _, target := range selection.Targets {
+		if normalizeDocumentKind(target.Kind) == "vars" || strings.TrimSpace(target.Path) == "workflows/vars.yaml" {
+			return true
+		}
+	}
+	return false
+}
+
+func cloneMap(input map[string]any) map[string]any {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(input))
+	for key, value := range input {
+		out[key] = value
+	}
+	return out
+}
+
 func normalizeDocumentKind(kind string) string {
 	trimmed := strings.ToLower(strings.TrimSpace(kind))
 	switch trimmed {
@@ -430,6 +559,22 @@ func normalizeDocumentAction(action string) string {
 		return "edit"
 	case "noop", "skip":
 		return "preserve"
+	default:
+		return trimmed
+	}
+}
+
+func normalizeTransformType(kind string) string {
+	trimmed := strings.ToLower(strings.TrimSpace(kind))
+	switch trimmed {
+	case "extract_var", "extract-vars", "extractvar":
+		return "extract-var"
+	case "set_field", "set-field", "update-field", "update_field":
+		return "set-field"
+	case "delete_field", "delete-field", "remove-field", "remove_field":
+		return "delete-field"
+	case "extract_component", "extract-component", "extractcomponent":
+		return "extract-component"
 	default:
 		return trimmed
 	}

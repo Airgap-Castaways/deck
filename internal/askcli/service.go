@@ -370,7 +370,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		if len(executionModel.ArtifactContracts) == 0 && len(executionModel.SharedStateContracts) == 0 && strings.TrimSpace(executionModel.RoleExecution.RoleSelector) == "" && len(executionModel.ApplyAssumptions) == 0 {
 			executionModel = askpolicy.ExecutionModelFromRequirements(requirements)
 		}
-		generationPrompt := generationUserPrompt(workspace, state, requestText, strings.TrimSpace(opts.FromPath), decision.Route)
+		generationPrompt := generationUserPrompt(workspace, state, requestText, strings.TrimSpace(opts.FromPath), decision.Route, plan)
 		generationPrompt = appendPlanAdvisoryPrompt(generationPrompt, plan, planCritic)
 		generationKind := "generate-fast"
 		if askFeatureEnabled("DECK_ASK_ENABLE_JUDGE") {
@@ -384,7 +384,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			OAuthToken:         effective.OAuthToken,
 			AccountID:          effective.AccountID,
 			Endpoint:           effective.Endpoint,
-			SystemPrompt:       generationSystemPrompt(decision.Route, decision.Target, requestText, retrieval, requirements, authoringBrief, executionModel, scaffold),
+			SystemPrompt:       generationSystemPrompt(decision.Route, decision.Target, requestText, retrieval, requirements, plan, authoringBrief, executionModel, scaffold),
 			Prompt:             generationPrompt,
 			ResponseSchema:     askcontract.GenerationResponseSchema(),
 			ResponseSchemaName: "deck_generation_response",
@@ -446,7 +446,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		if decision.Route == askintent.RouteClarify {
 			applyLocalFallback(&result, resolvedRoot, workspace, requestText)
 		} else if canUseLLM(effective) {
-			systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, requestText)
+			systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, workspace, requestText)
 			result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
 			logger.logf("basic", "\n[ask][phase:answer:start] route=%s\n", decision.Route)
 			info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)

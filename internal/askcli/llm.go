@@ -138,7 +138,7 @@ func routeDefaults(route askintent.Route) askintent.Decision {
 }
 
 func answerWithLLM(ctx context.Context, client askprovider.Client, cfg askconfig.EffectiveSettings, decision askintent.Decision, retrieval askretrieve.RetrievalResult, prompt string, logger askLogger) (askcontract.InfoResponse, error) {
-	systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, prompt)
+	systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, askretrieve.WorkspaceSummary{}, prompt)
 	logger.prompt(string(decision.Route), systemPrompt, userPrompt)
 	resp, err := client.Generate(ctx, askprovider.Request{
 		Kind:         string(decision.Route),

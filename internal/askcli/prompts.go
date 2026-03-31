@@ -1,6 +1,7 @@
 package askcli
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -16,6 +17,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/askscaffold"
 	"github.com/Airgap-Castaways/deck/internal/askstate"
+	"github.com/Airgap-Castaways/deck/internal/validate"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
 )
 
@@ -55,7 +57,7 @@ func classifierUserPrompt(prompt string, reviewFlag bool, workspace askretrieve.
 	return b.String()
 }
 
-func generationSystemPrompt(route askintent.Route, target askintent.Target, requestText string, retrieval askretrieve.RetrievalResult, requirements askpolicy.ScenarioRequirements, brief askcontract.AuthoringBrief, executionModel askcontract.ExecutionModel, scaffold askscaffold.Scaffold) string {
+func generationSystemPrompt(route askintent.Route, target askintent.Target, requestText string, retrieval askretrieve.RetrievalResult, requirements askpolicy.ScenarioRequirements, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, executionModel askcontract.ExecutionModel, scaffold askscaffold.Scaffold) string {
 	bundle := askknowledge.Current()
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask, a workflow authoring assistant.\n")
@@ -104,8 +106,19 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, requ
 		b.WriteString(askscaffold.PromptBlock(scaffold))
 		b.WriteString("\n")
 	}
+	if route == askintent.RouteRefine {
+		if block := refineTransformPromptBlock(plan, brief); strings.TrimSpace(block) != "" {
+			b.WriteString(block)
+			b.WriteString("\n")
+		}
+	}
 	b.WriteString(bundle.PolicyPromptBlock())
 	b.WriteString("\n")
+	if route == askintent.RouteDraft {
+		b.WriteString("- For new draft generation, prefer the `selection` field over free-form document authoring when possible.\n")
+		b.WriteString("- Use `selection.patterns` to declare the intended authoring patterns, then describe target files with `selection.targets` using phases, imports, and steps.\n")
+		b.WriteString("- Keep step specs schema-oriented and rely on source-of-truth projections for required fields.\n")
+	}
 	b.WriteString("- Never place summary, description, or review fields inside workflow YAML content.\n")
 	b.WriteString("- Keep the file set minimal unless the request explicitly requires more files or the workspace already depends on them.\n")
 	b.WriteString("- For workspace-scoped complex drafts, prefer a first schema-valid inline result in `workflows/prepare.yaml` and `workflows/scenarios/apply.yaml`; extract `workflows/components/` only when reuse is explicit, the workspace already imports them, or component files are clearly required final outputs.\n")
@@ -115,11 +128,59 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, requ
 	return b.String()
 }
 
+func refineTransformPromptBlock(plan askcontract.PlanResponse, brief askcontract.AuthoringBrief) string {
+	paths := dedupe(append([]string(nil), brief.TargetPaths...))
+	if len(paths) == 0 {
+		return ""
+	}
+	b := &strings.Builder{}
+	b.WriteString("Refine transform contract:\n")
+	b.WriteString("- Treat refine as a targeted transform over existing documents, not a full workspace rewrite.\n")
+	b.WriteString("- Only touch plan-approved target paths unless the plan explicitly requires another file.\n")
+	if len(paths) > 0 {
+		b.WriteString("- Approved target paths: ")
+		b.WriteString(strings.Join(paths, ", "))
+		b.WriteString("\n")
+	}
+	b.WriteString("- Prefer structured `edit` actions for narrow changes to existing workflow or vars files.\n")
+	b.WriteString("- Prefer `transforms` with type `extract-var` for repeated literal extraction into workflows/vars.yaml when the request is about hoisting repeated values.\n")
+	b.WriteString("- Prefer `transforms` with type `set-field` or `delete-field` for narrow step field changes instead of broad document rewrites.\n")
+	b.WriteString("- Prefer `transforms` with type `extract-component` when moving inline phase steps into workflows/components/ while preserving the scenario phase layout.\n")
+	b.WriteString("- Use `replace` only when a local edit is not practical after preserving existing structure.\n")
+	if promptContainsTrimmed(paths, "workflows/vars.yaml") {
+		b.WriteString("- When extracting repeated values into workflows/vars.yaml, update the scenario file and vars file together as one transform.\n")
+	}
+	if len(paths) > 1 {
+		b.WriteString("- Keep cross-file transforms coordinated: do not update one target path while silently dropping required companion edits in another approved target path.\n")
+	}
+	for _, advisory := range dedupe(append([]string{}, plan.VarsRecommendation...)) {
+		b.WriteString("- vars advisory: ")
+		b.WriteString(strings.TrimSpace(advisory))
+		b.WriteString("\n")
+	}
+	for _, advisory := range dedupe(append([]string{}, plan.ComponentRecommendation...)) {
+		b.WriteString("- component advisory: ")
+		b.WriteString(strings.TrimSpace(advisory))
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func promptContainsTrimmed(values []string, want string) bool {
+	want = strings.TrimSpace(want)
+	for _, value := range values {
+		if strings.TrimSpace(value) == want {
+			return true
+		}
+	}
+	return false
+}
+
 func generationResponseShapeRule(route askintent.Route) string {
 	if route == askintent.RouteRefine {
-		return "JSON shape: {\"summary\":string,\"review\":[]string,\"documents\":[{\"path\":string,\"kind\":string,\"action\":string,\"workflow\":object?,\"component\":object?,\"vars\":object?,\"edits\":[]object?}]}. Use actions preserve|replace|create|edit|delete."
+		return "JSON shape: {\"summary\":string,\"review\":[]string,\"documents\":[{\"path\":string,\"kind\":string,\"action\":string,\"workflow\":object?,\"component\":object?,\"vars\":object?,\"edits\":[]object?,\"transforms\":[]object?}]}. Use actions preserve|replace|create|edit|delete."
 	}
-	return "JSON shape: {\"summary\":string,\"review\":[]string,\"documents\":[{\"path\":string,\"kind\":string,\"workflow\":object?,\"component\":object?,\"vars\":object?}]}."
+	return "JSON shape: {\"summary\":string,\"review\":[]string,\"documents\":[{\"path\":string,\"kind\":string,\"workflow\":object?,\"component\":object?,\"vars\":object?}],\"selection\":{\"patterns\":[]string,\"targets\":[{\"path\":string,\"kind\":string,\"phases\":[]object,\"steps\":[]object,\"vars\":object}],\"vars\":object}}. Prefer `selection` for new draft generation and let the caller compile it."
 }
 
 func compactRelevantSchemaPromptBlock(requestText string, target askintent.Target, requirements askpolicy.ScenarioRequirements, brief askcontract.AuthoringBrief) string {
@@ -274,6 +335,7 @@ func documentRepairSystemPrompt(brief askcontract.AuthoringBrief, plan askcontra
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask document repair assistant. Return strict JSON only using the document generation response shape.\n")
 	b.WriteString("JSON shape: {\"summary\":string,\"review\":[]string,\"documents\":[{\"path\":string,\"kind\":string,\"action\":string,\"workflow\":object?,\"component\":object?,\"vars\":object?,\"edits\":[]object?}]}. documents must contain at least one revised document.\n")
+	b.WriteString("Refine repair may use structured transforms when a code-owned operation is more reliable than open-ended edits. Supported transforms: {type: extract-var, rawPath: string, varName: string, varsPath?: string, value: any}, {type: set-field, rawPath: string, value: any}, {type: delete-field, rawPath: string}, {type: extract-component, rawPath: string, path: string}.\n")
 	b.WriteString("Repair document structure and schema issues with the smallest possible edits. Do not redesign the workflow unless a validator message explicitly requires it.\n")
 	b.WriteString("Keep preserve-if-valid documents byte-for-byte identical after rendering. Revise only documents implicated by the parse or schema error when possible.\n")
 	b.WriteString("Return only revised documents when possible; unchanged rendered files will be preserved by the caller.\n")
@@ -290,16 +352,71 @@ func documentRepairUserPrompt(prevFiles []askcontract.GeneratedFile, validation 
 	b.WriteString("Repair these generated documents without redesigning them. Return only the revised documents if possible.\n")
 	b.WriteString("Do not introduce new step kinds, new workflow files, or new execution contracts unless the validator error explicitly requires them.\n")
 	b.WriteString("Focus only on the affected file paths named by the validator.\n")
-	b.WriteString("Validator summary:\n")
-	b.WriteString(summarizeValidationError(validation))
-	b.WriteString("\nRaw validator error:\n")
-	b.WriteString(strings.TrimSpace(validation))
-	b.WriteString("\n")
+	if len(diags) == 0 {
+		b.WriteString("Validator summary:\n")
+		b.WriteString(summarizeValidationError(validation))
+		b.WriteString("\nRaw validator error:\n")
+		b.WriteString(strings.TrimSpace(validation))
+		b.WriteString("\n")
+	} else {
+		b.WriteString("Structured validator findings:\n")
+		for _, diag := range diags {
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(diag.Message))
+			if strings.TrimSpace(diag.Path) != "" {
+				b.WriteString(" path=")
+				b.WriteString(strings.TrimSpace(diag.Path))
+			}
+			if strings.TrimSpace(diag.RepairOp) != "" {
+				b.WriteString(" op=")
+				b.WriteString(strings.TrimSpace(diag.RepairOp))
+			}
+			b.WriteString("\n")
+		}
+	}
 	b.WriteString(askdiagnostic.RepairPromptBlock(diags))
+	b.WriteString("\n")
+	b.WriteString(repairOperationPromptBlock(diags))
 	b.WriteString("\n")
 	b.WriteString(documentStructureRepairPromptBlock(prevFiles, validation, repairPaths))
 	b.WriteString("\n")
 	b.WriteString(targetedRepairPromptBlock(prevFiles, diags, repairPaths))
+	return strings.TrimSpace(b.String())
+}
+
+func repairOperationPromptBlock(diags []askdiagnostic.Diagnostic) string {
+	ops := map[string][]string{}
+	for _, diag := range diags {
+		op := strings.TrimSpace(diag.RepairOp)
+		if op == "" {
+			continue
+		}
+		detail := strings.TrimSpace(diag.Path)
+		if detail == "" {
+			detail = strings.TrimSpace(diag.Message)
+		}
+		if strings.TrimSpace(diag.StepKind) != "" {
+			detail = strings.TrimSpace(diag.StepKind) + " " + detail
+		}
+		ops[op] = append(ops[op], detail)
+	}
+	if len(ops) == 0 {
+		return ""
+	}
+	order := []string{"fill-field", "remove-field", "fix-literal", "rename-step", "repair-structure", "review-diagnostic"}
+	b := &strings.Builder{}
+	b.WriteString("Suggested repair operations:\n")
+	for _, op := range order {
+		items := dedupe(ops[op])
+		if len(items) == 0 {
+			continue
+		}
+		b.WriteString("- ")
+		b.WriteString(op)
+		b.WriteString(": ")
+		b.WriteString(strings.Join(items, ", "))
+		b.WriteString("\n")
+	}
 	return strings.TrimSpace(b.String())
 }
 
@@ -864,12 +981,12 @@ func structuralWorkflowSummary(doc askcontract.WorkflowDocument) string {
 	return fmt.Sprintf("phases=%d topLevelSteps=%d kinds=%s", len(doc.Phases), len(doc.Steps), strings.Join(kinds, ", "))
 }
 
-func infoPrompts(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult, prompt string) (string, string) {
+func infoPrompts(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, prompt string) (string, string) {
 	switch route {
 	case askintent.RouteExplain:
 		return explainSystemPrompt(target, retrieval), explainUserPrompt(prompt, target)
 	case askintent.RouteReview:
-		return reviewSystemPrompt(target, retrieval), reviewUserPrompt(prompt, target)
+		return reviewSystemPrompt(target, retrieval, workspace), reviewUserPrompt(prompt, target)
 	case askintent.RouteQuestion:
 		return questionSystemPrompt(target, retrieval), questionUserPrompt(prompt, target)
 	default:
@@ -877,7 +994,7 @@ func infoPrompts(route askintent.Route, target askintent.Target, retrieval askre
 	}
 }
 
-func generationUserPrompt(workspace askretrieve.WorkspaceSummary, state askstate.Context, prompt string, fromLabel string, route askintent.Route) string {
+func generationUserPrompt(workspace askretrieve.WorkspaceSummary, state askstate.Context, prompt string, fromLabel string, route askintent.Route, plan askcontract.PlanResponse) string {
 	b := &strings.Builder{}
 	b.WriteString("Workspace root: ")
 	b.WriteString(workspace.Root)
@@ -908,6 +1025,14 @@ func generationUserPrompt(workspace askretrieve.WorkspaceSummary, state askstate
 	if route == askintent.RouteRefine {
 		b.WriteString("For refine requests, prefer structured `edit` actions for narrow in-place changes to existing YAML documents.\n")
 		b.WriteString("Use `replace` only when a local edit is not practical, `delete` only when removal is explicit, and `preserve` when a planned file should remain untouched.\n")
+		if len(plan.AuthoringBrief.TargetPaths) > 0 {
+			b.WriteString("Clarified refine target paths:\n")
+			for _, path := range dedupe(plan.AuthoringBrief.TargetPaths) {
+				b.WriteString("- ")
+				b.WriteString(strings.TrimSpace(path))
+				b.WriteString("\n")
+			}
+		}
 		if summaries := currentWorkspaceDocumentSummaries(workspace); len(summaries) > 0 {
 			b.WriteString("Current parsed workspace documents:\n")
 			for _, summary := range summaries {
@@ -977,6 +1102,10 @@ func explainSystemPrompt(target askintent.Target, retrieval askretrieve.Retrieva
 	b.WriteString("You are deck ask explaining an existing deck workspace file or workflow.\n")
 	b.WriteString("Explain what the target does, how it fits into the workflow, and call out imports, phases, major step kinds, and Command usage when present.\n")
 	b.WriteString("Do not give a shallow file count summary.\n")
+	if block := retrievalDocumentSummaryBlock(retrieval); strings.TrimSpace(block) != "" {
+		b.WriteString(block)
+		b.WriteString("\n")
+	}
 	b.WriteString("Return strict JSON with shape {\"summary\":string,\"answer\":string,\"suggestions\":[]string}.\n")
 	if target.Path != "" {
 		b.WriteString("Target path: ")
@@ -987,11 +1116,19 @@ func explainSystemPrompt(target askintent.Target, retrieval askretrieve.Retrieva
 	return b.String()
 }
 
-func reviewSystemPrompt(target askintent.Target, retrieval askretrieve.RetrievalResult) string {
+func reviewSystemPrompt(target askintent.Target, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary) string {
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask reviewing an existing deck workspace.\n")
 	b.WriteString("Use the retrieved evidence and any local findings to produce a scoped review with practical concerns and suggested changes.\n")
 	b.WriteString("Narrate the findings instead of only repeating raw warnings.\n")
+	if block := retrievalDocumentSummaryBlock(retrieval); strings.TrimSpace(block) != "" {
+		b.WriteString(block)
+		b.WriteString("\n")
+	}
+	if block := workspaceStructuredIssuePromptBlock(workspace, target); strings.TrimSpace(block) != "" {
+		b.WriteString(block)
+		b.WriteString("\n")
+	}
 	b.WriteString("Return strict JSON with shape {\"summary\":string,\"answer\":string,\"findings\":[]string,\"suggestedChanges\":[]string}.\n")
 	if target.Path != "" {
 		b.WriteString("Target path: ")
@@ -1000,6 +1137,70 @@ func reviewSystemPrompt(target askintent.Target, retrieval askretrieve.Retrieval
 	}
 	b.WriteString(askretrieve.BuildChunkText(retrieval))
 	return b.String()
+}
+
+func workspaceStructuredIssuePromptBlock(workspace askretrieve.WorkspaceSummary, target askintent.Target) string {
+	issues := []validate.Issue{}
+	for _, file := range workspace.Files {
+		path := filepath.ToSlash(strings.TrimSpace(file.Path))
+		if path == "" || !strings.HasPrefix(path, "workflows/") {
+			continue
+		}
+		if target.Path != "" && path != filepath.ToSlash(strings.TrimSpace(target.Path)) {
+			continue
+		}
+		err := validate.Bytes(path, []byte(file.Content))
+		var validationErr *validate.ValidationError
+		if !errors.As(err, &validationErr) {
+			continue
+		}
+		issues = append(issues, validationErr.ValidationIssues()...)
+	}
+	if len(issues) == 0 {
+		return ""
+	}
+	b := &strings.Builder{}
+	b.WriteString("Structured validation issues:\n")
+	for _, diag := range askdiagnostic.FromValidationIssues(issues) {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(diag.Message))
+		if strings.TrimSpace(diag.Path) != "" {
+			b.WriteString(" path=")
+			b.WriteString(strings.TrimSpace(diag.Path))
+		}
+		if strings.TrimSpace(diag.SuggestedFix) != "" {
+			b.WriteString(" fix=")
+			b.WriteString(strings.TrimSpace(diag.SuggestedFix))
+		}
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func retrievalDocumentSummaryBlock(retrieval askretrieve.RetrievalResult) string {
+	documents := make([]askcontract.GeneratedDocument, 0, len(retrieval.Chunks))
+	for _, chunk := range retrieval.Chunks {
+		path := strings.TrimSpace(chunk.Label)
+		if path == "" || !strings.HasPrefix(filepath.ToSlash(path), "workflows/") {
+			continue
+		}
+		doc, err := askir.ParseDocument(path, []byte(chunk.Content))
+		if err != nil {
+			continue
+		}
+		documents = append(documents, doc)
+	}
+	if len(documents) == 0 {
+		return ""
+	}
+	b := &strings.Builder{}
+	b.WriteString("Parsed workflow summaries:\n")
+	for _, summary := range askir.Summaries(documents) {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(summary))
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func infoUserPrompt(prompt string, route askintent.Route, target askintent.Target) string {
