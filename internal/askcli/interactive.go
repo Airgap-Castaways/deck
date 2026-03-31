@@ -12,24 +12,27 @@ import (
 
 var interactiveSessionProbe = isInteractiveSession
 
+type fileDescriptor interface{ Fd() uintptr }
+
 func isInteractiveSession(stdin io.Reader, stdout io.Writer) bool {
-	in, ok := stdin.(*os.File)
-	if !ok {
-		return false
-	}
-	out, ok := stdout.(*os.File)
-	if !ok {
-		return false
-	}
-	inInfo, err := in.Stat()
-	if err != nil || inInfo.Mode()&os.ModeCharDevice == 0 {
-		return false
-	}
-	outInfo, err := out.Stat()
-	if err != nil || outInfo.Mode()&os.ModeCharDevice == 0 {
+	inFD, ok := stdin.(fileDescriptor)
+	_ = stdout
+	if !ok || !isCharDevice(inFD.Fd(), "stdin") {
 		return false
 	}
 	return true
+}
+
+func isCharDevice(fd uintptr, name string) bool {
+	file := os.NewFile(fd, name)
+	if file == nil {
+		return false
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
 
 func runInteractiveClarifications(stdin io.Reader, stdout io.Writer, plan askcontract.PlanResponse) (askcontract.PlanResponse, bool, error) {

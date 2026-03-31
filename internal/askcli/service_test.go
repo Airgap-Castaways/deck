@@ -1209,11 +1209,75 @@ func TestExecutePlanResumeStopsWhenClarificationsRemain(t *testing.T) {
 	}
 	stdout := &bytes.Buffer{}
 	client := &stubClient{responses: []string{}}
-	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdout: stdout, Stderr: io.Discard}, client); err != nil {
+	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader(""), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "saved plan still requires clarification") {
 		t.Fatalf("expected clarification stop, got %q", stdout.String())
+	}
+}
+
+func TestExecutePlanResumeInteractiveClarificationCanQuit(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "test-key")
+	root := t.TempDir()
+	planDir := filepath.Join(root, ".deck", "plan")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatalf("mkdir plan dir: %v", err)
+	}
+	json := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"clarifications":[{"id":"topology.kind","question":"pick topology","kind":"enum","options":["single-node","multi-node"],"recommendedDefault":"single-node","blocksGeneration":true}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	if err := os.WriteFile(filepath.Join(planDir, "latest.json"), []byte(json), 0o600); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "latest.md"), []byte("md"), 0o600); err != nil {
+		t.Fatalf("write md: %v", err)
+	}
+	originalProbe := interactiveSessionProbe
+	interactiveSessionProbe = func(io.Reader, io.Writer) bool { return true }
+	defer func() { interactiveSessionProbe = originalProbe }()
+	stdout := &bytes.Buffer{}
+	client := &stubClient{responses: []string{}}
+	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader("q\n"), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "saved plan after interactive clarification exit") {
+		t.Fatalf("expected interactive quit output, got %q", stdout.String())
+	}
+	stored, _, err := loadPlanArtifact(root, ".deck/plan/latest.json")
+	if err != nil {
+		t.Fatalf("load plan artifact: %v", err)
+	}
+	if stored.Clarifications[0].Answer != "" {
+		t.Fatalf("expected unanswered clarification after quit, got %#v", stored.Clarifications)
+	}
+}
+
+func TestExecutePlanResumeInteractiveClarificationCanContinue(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "test-key")
+	root := t.TempDir()
+	planDir := filepath.Join(root, ".deck", "plan")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatalf("mkdir plan dir: %v", err)
+	}
+	json := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"clarifications":[{"id":"topology.kind","question":"pick topology","kind":"enum","options":["single-node","multi-node"],"recommendedDefault":"single-node","blocksGeneration":true}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	if err := os.WriteFile(filepath.Join(planDir, "latest.json"), []byte(json), 0o600); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "latest.md"), []byte("md"), 0o600); err != nil {
+		t.Fatalf("write md: %v", err)
+	}
+	originalProbe := interactiveSessionProbe
+	interactiveSessionProbe = func(io.Reader, io.Writer) bool { return true }
+	defer func() { interactiveSessionProbe = originalProbe }()
+	stdout := &bytes.Buffer{}
+	client := &stubClient{responses: []string{`{"summary":"generated starter workflows","review":[],"files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: wait-runtime\n    kind: WaitForFile\n    spec:\n      path: /etc/containerd/config.toml\n      interval: 1s\n      timeout: 5s\n"}]}`}}
+	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader("2\n"), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "preview:") {
+		t.Fatalf("expected generation preview after answering clarification, got %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "workflows/scenarios/apply.yaml") {
+		t.Fatalf("expected generated scenario output after clarification, got %q", stdout.String())
 	}
 }
 
