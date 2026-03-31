@@ -11,6 +11,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askir"
 	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
+	"github.com/Airgap-Castaways/deck/internal/askrepair"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
 
@@ -34,6 +35,28 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			repairPaths = repairTargetFiles(lastFiles, validationDiags, taintedFiles)
 			repairPaths = restrictRepairTargetsToPlan(repairPaths, plan)
 			repairDiags = append([]askdiagnostic.Diagnostic{}, validationDiags...)
+			if repairedFiles, autoNotes, autoApplied, autoErr := askrepair.TryAutoRepair(root, lastFiles, repairDiags, repairPaths); autoErr == nil && autoApplied {
+				autoGen := askcontract.GenerationResponse{Summary: "generated workflows after automatic repair", Review: autoNotes, Files: append([]askcontract.GeneratedFile(nil), repairedFiles...)}
+				lintSummary, critic, validateErr := validateGeneration(ctx, root, autoGen, repairedFiles, decision, plan, brief, retrieval)
+				lastFiles = repairedFiles
+				lastCritic = critic
+				if validateErr == nil {
+					judge, judgeErr := maybeJudgeGeneration(ctx, client, req, autoGen, repairedFiles, lintSummary, critic, plan, brief, logger)
+					if judgeErr == nil {
+						lastJudge = judge
+						critic = mergeJudgeIntoCritic(critic, judge, attempt == attempts)
+						if len(judge.Blocking) > 0 && attempt < attempts {
+							lastValidation = "semantic judge requested revision: " + strings.Join(judge.Blocking, "; ")
+							lastValidationErr = nil
+							lastCritic = critic
+							continue
+						}
+					}
+					logger.logf("debug", "[ask][phase:repair:auto] applied=%d\n", len(autoNotes))
+					return autoGen, repairedFiles, lintSummary, critic, lastJudge, attempt - 1, nil
+				}
+				lastValidation = validateErr.Error()
+			}
 			if isGenerationParseFailure(lastValidation) {
 				currentPrompt = jsonResponseRetryPrompt(req.Prompt, lastValidation, decision.Route)
 			} else {
@@ -59,7 +82,6 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			Timeout:      askRequestTimeout(req.Kind, attempts, currentSystemPrompt, currentPrompt),
 		})
 		if err != nil {
-			lastValidationErr = err
 			return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, err
 		}
 		logger.response("generation", resp.Content)
@@ -75,6 +97,10 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 				continue
 			}
 			return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
+		}
+		if err := validatePrimaryAuthoringContract(decision.Route, gen, attempt); err != nil {
+			lastValidation = err.Error()
+			return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation stopped without repair: %s", lastValidation)
 		}
 		if attempt > 1 {
 			if err := validateRepairDocumentStrategy(gen.Documents, repairDiags, repairPaths, decision.Route); err != nil {
