@@ -195,6 +195,15 @@ func applyClarificationAnswers(plan askcontract.PlanResponse) askcontract.PlanRe
 			}
 		}
 	}
+	if answer := byID["cluster.implementation"]; answer != "" {
+		switch strings.TrimSpace(answer) {
+		case "kubeadm":
+			plan.AuthoringBrief.RequiredCapabilities = dedupeStrings(append(plan.AuthoringBrief.RequiredCapabilities, "kubeadm-bootstrap", "cluster-verification"))
+			if plan.AuthoringBrief.NodeCount > 1 || plan.AuthoringBrief.Topology == "multi-node" || plan.AuthoringBrief.Topology == "ha" {
+				plan.AuthoringBrief.RequiredCapabilities = dedupeStrings(append(plan.AuthoringBrief.RequiredCapabilities, "kubeadm-join"))
+			}
+		}
+	}
 	return plan
 }
 

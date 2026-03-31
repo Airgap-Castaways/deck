@@ -38,7 +38,7 @@ func InferFacts(prompt string, artifactKinds []string, connectivity string) Fact
 	hasHA := hasAny(lower, "high availability", "high-availability") || containsWholeToken(lower, "ha")
 	hasSingle := hasAny(lower, "single-node", "single node")
 	hasMulti := hasAny(lower, "multi-node", "multi node") || nodeCount > 1
-	hasCluster := hasAny(lower, "cluster", "kubeadm", "control-plane", "control plane", "worker", "workers", "join")
+	hasCluster := hasAny(lower, "cluster", "kubeadm", "control-plane", "control plane", "worker", "workers", "join", "클러스터", "쿠버네티스", "클러스터링", "노드", "워커", "조인")
 
 	if hasSingle {
 		facts.Topology = "single-node"
@@ -101,6 +101,9 @@ func InferFacts(prompt string, artifactKinds []string, connectivity string) Fact
 
 	if facts.Topology == "unspecified" && hasCluster {
 		facts.Ambiguities = append(facts.Ambiguities, "cluster-topology")
+	}
+	if hasCluster && !contains(facts.Intents, "kubeadm") {
+		facts.Ambiguities = append(facts.Ambiguities, "cluster-implementation")
 	}
 	if (facts.Topology == "multi-node" || facts.Topology == "ha" || facts.NodeCount > 1) && !explicitRoleModel {
 		facts.Ambiguities = append(facts.Ambiguities, "role-model")
@@ -169,12 +172,20 @@ func detectNodeCount(lower string) (int, bool) {
 			}
 		}
 	}
+	for _, field := range strings.FieldsFunc(lower, func(r rune) bool { return r < '0' || r > '9' }) {
+		if field == "" {
+			continue
+		}
+		if n, err := strconv.Atoi(field); err == nil && n > 0 && strings.Contains(lower, field+" 노드") {
+			return n, true
+		}
+	}
 	return 0, false
 }
 
 func detectRoleCounts(lower string, nodeCount int) (int, int, bool) {
-	cp := extractCountNear(lower, []string{"control-plane", "control plane", "control-planes", "control planes"})
-	workers := extractCountNear(lower, []string{"worker", "workers"})
+	cp := extractCountNear(lower, []string{"control-plane", "control plane", "control-planes", "control planes", "컨트롤플레인"})
+	workers := extractCountNear(lower, []string{"worker", "workers", "워커"})
 	if cp == 0 && workers == 0 {
 		return 0, 0, false
 	}
@@ -250,6 +261,17 @@ func buildClarifications(f Facts) []askcontract.PlanClarification {
 			RecommendedDefault: "3",
 			BlocksGeneration:   true,
 			Affects:            []string{"authoringBrief.nodeCount", "executionModel.verification.expectedNodeCount"},
+		})
+	}
+	if contains(f.Ambiguities, "cluster-implementation") {
+		items = append(items, askcontract.PlanClarification{
+			ID:                 "cluster.implementation",
+			Question:           "The request implies a Kubernetes cluster workflow, but the bootstrap implementation is not explicit. Which implementation should the plan use?",
+			Kind:               "enum",
+			Options:            []string{"kubeadm", "custom"},
+			RecommendedDefault: "kubeadm",
+			BlocksGeneration:   true,
+			Affects:            []string{"authoringBrief.requiredCapabilities", "executionModel"},
 		})
 	}
 	return items
