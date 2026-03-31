@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -598,6 +599,41 @@ phases:
 
 		if err := File(path); err == nil {
 			t.Fatalf("expected duplicate step id error")
+		} else {
+			var validationErr *ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("expected structured validation error, got %T", err)
+			}
+			if len(validationErr.ValidationIssues()) == 0 || validationErr.ValidationIssues()[0].Code != "duplicate_step_id" {
+				t.Fatalf("expected duplicate step issues, got %#v", validationErr.ValidationIssues())
+			}
+		}
+	})
+
+	t.Run("schema error exposes structured issues", func(t *testing.T) {
+		err := Bytes("workflows/prepare.yaml", []byte(`version: v1alpha1
+steps:
+  - id: prepare-stage-packages
+    apiVersion: deck/v1alpha1
+    kind: DownloadPackage
+    spec:
+      packages: [kubeadm]
+      backend:
+        mode: container
+`))
+		if err == nil {
+			t.Fatalf("expected schema error")
+		}
+		var validationErr *ValidationError
+		if !errors.As(err, &validationErr) {
+			t.Fatalf("expected structured validation error, got %T", err)
+		}
+		issues := validationErr.ValidationIssues()
+		if len(issues) == 0 {
+			t.Fatalf("expected structured issues")
+		}
+		if issues[0].Code == "" || issues[0].Severity == "" {
+			t.Fatalf("expected populated issue fields, got %#v", issues[0])
 		}
 	})
 
