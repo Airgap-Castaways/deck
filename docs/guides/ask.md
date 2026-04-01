@@ -70,7 +70,14 @@ After routing, `deck ask` gathers the context needed for that request. The retri
 
 This is where `deck ask` becomes more than a generic model wrapper. It does not rely only on the user's sentence. It combines the sentence with deck's workflow rules and with the actual workspace contents.
 
-For authoring, that context includes projected source-of-truth information about typed steps, fields, and canonical workflow paths. Those facts come from deck's schema and step metadata layers rather than from a separate ask-only schema.
+For authoring, that context includes projected source-of-truth information about typed steps, fields, canonical workflow paths, builder behavior, plan rules, and repair constraints. Those facts come from deck's schema, step metadata, and validation layers rather than from a separate ask-only schema.
+
+When a request needs upstream product facts such as current install steps, compatibility notes, version-specific guidance, or troubleshooting details, `deck ask` also builds an evidence plan before retrieval. That evidence plan decides whether external docs are required, optional, or unnecessary.
+
+The key boundary is:
+
+- local repo grounding is authoritative for deck workflow validity and ask behavior
+- external docs are only for upstream product behavior and recency
 
 ### Step 4: Build the authoring plan
 
@@ -86,6 +93,8 @@ For `draft` and `refine`, `deck ask` turns the request and retrieved context int
 Non-authoring routes do not go through this stage because they return an answer rather than candidate files. Authoring routes now always build an internal plan first, even when you do not run `deck ask plan` explicitly.
 
 Part of that plan is an authoring program: normalized platform, artifact, cluster, and verification facts that code can later use when assembling workflow steps. This is how details such as node counts, role selectors, join-file paths, output directories, and verification expectations stay consistent across generation and repair.
+
+If the evidence plan says a freshness-sensitive authoring request requires upstream docs and those docs cannot be fetched, `deck ask` stops instead of inventing stale install or version facts.
 
 ### Step 5: Clarify or continue
 
@@ -133,6 +142,30 @@ Route behavior differs at the end of the pipeline:
 
 In practice, this means `deck ask` is not just a raw prompt wrapper. It uses deck-specific routing, clarification, planning, constrained selection, compilation, validation, and repair to keep output aligned with the product.
 
+## External docs evidence
+
+`deck ask` does not treat MCP as a generic open-ended tool channel. It uses built-in provider ids and provider-owned adapters.
+
+Current built-in providers are:
+
+- `context7`: library and API documentation lookup
+- `web-search`: upstream web search for install, compatibility, version, and troubleshooting context
+
+The config shape still uses `ask.mcp.servers[]`, but the meaning has changed:
+
+- `name` selects a built-in provider id
+- `command` and `args` optionally override that provider's transport
+- `web-server` is a legacy alias for `web-search`
+
+`deck ask` uses these providers only when the evidence plan calls for them. Typical cases include:
+
+- versioned or release-sensitive requests such as Kubernetes `1.37`
+- install or upgrade guidance
+- compatibility or prerequisite questions
+- troubleshooting or error-driven requests
+
+Local deck source-of-truth still comes from the repo, not from external docs. External docs do not override deck path rules, schema constraints, typed step validity, or repair behavior.
+
 ### How `plan` fits into the pipeline
 
 `deck ask plan` uses the same general understanding stages at the front of the pipeline: normalize the request, classify it, gather context, build the execution plan, and surface any blocking clarifications. Instead of immediately trying to return final workflow files, it writes a reusable implementation plan under `./.deck/plan/`.
@@ -170,6 +203,57 @@ Supported providers currently include:
 - `gemini`
 
 You can also override `provider`, `model`, and `endpoint` per command instead of saving them globally.
+
+## Configure external evidence providers
+
+Inspect the effective provider setup:
+
+```bash
+deck ask config show
+```
+
+Probe provider health and capability support:
+
+```bash
+deck ask config health
+```
+
+Example config using built-in providers:
+
+```json
+{
+  "ask": {
+    "provider": "openai",
+    "model": "gpt-5.4",
+    "mcp": {
+      "enabled": true,
+      "servers": [
+        { "name": "context7" },
+        { "name": "web-search" }
+      ]
+    }
+  }
+}
+```
+
+Optional transport override example:
+
+```json
+{
+  "ask": {
+    "mcp": {
+      "enabled": true,
+      "servers": [
+        {
+          "name": "context7",
+          "command": "npx",
+          "args": ["-y", "@upstash/context7-mcp@latest"]
+        }
+      ]
+    }
+  }
+}
+```
 
 ## Common usage patterns
 
@@ -259,10 +343,20 @@ deck ask config set --log-level trace
 
 This is the quickest way to inspect how `deck ask` classified the request and what context it passed into the model.
 
+For external evidence setup, `deck ask config health` is the quickest way to distinguish:
+
+- transport start failures
+- MCP initialize failures
+- tool-list mismatches
+- missing required provider capabilities
+
+If a freshness-sensitive authoring request fails because required external evidence is unavailable, fix the provider configuration first and rerun the request. Non-authoring routes surface that limitation in the answer instead of guessing.
+
 ## Current limitations
 
 - `deck ask` is experimental.
 - It depends on model access for authoring routes.
 - If model access is unavailable, `explain` falls back to a local structural summary and `review` falls back to local findings.
 - Generation routes fail fast when model output is unavailable because local validation cannot replace generation.
+- Freshness-sensitive authoring requests may also fail fast when required external docs evidence is unavailable.
 - `--max-iterations` only applies to generation routes such as `draft` and `refine`.
