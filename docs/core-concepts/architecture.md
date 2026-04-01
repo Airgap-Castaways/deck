@@ -202,6 +202,21 @@ This is intentionally a pipeline rather than three independently maintained desc
 
 Some documentation metadata is layered on top so examples and field descriptions stay useful, but the structural contract should still flow from the typed Go model into schema and then into docs.
 
+## Ask authoring architecture
+
+`deck ask` follows the same source-of-truth direction. It is not meant to be a parallel workflow-definition system.
+
+For authoring routes, the intended shape is route classification first, clarify when blocking ambiguity remains, then model-selects and code-builds. In practice, that means:
+
+- code classifies whether the request is question, explain, review, draft, refine, or clarify
+- code builds an execution plan from workspace context and schema-derived authoring facts
+- code normalizes stable execution details into an authoring program
+- the model selects among constrained builder or transform candidates
+- code compiles or transforms workflow documents
+- code validates and repairs before writing files
+
+The important architectural boundary is that ask may project canonical facts for prompting and assembly, but it should not own a second copy of step validity, field enums, or workspace path rules.
+
 ## Site-local helper model
 
 When a site needs a shared local source inside the air gap, `deck server` can expose prepared bundle content and audit what it serves. That helper remains secondary to the core local execution path.
@@ -260,6 +275,7 @@ The code layout roughly follows these boundaries:
 
 - `cmd/`: CLI entrypoints
 - `internal/config` and `internal/workflowexec`: workflow contracts, decoding, and execution rules
+- `internal/ask*`: routed AI-assisted question, review, planning, draft, refine, compile, and repair flow
 - `internal/prepare` and `internal/preparecli`: connected-side preparation logic
 - `internal/install`: target-side host mutation and apply behavior
 - `internal/bundle`: bundle collection, import, merge, and verify logic

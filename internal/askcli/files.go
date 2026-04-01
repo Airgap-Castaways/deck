@@ -26,6 +26,14 @@ import (
 
 const maxPlanSlugLength = 48
 
+func isPlanArtifactInput(fromPath string) bool {
+	fromPath = filepath.ToSlash(strings.ToLower(strings.TrimSpace(fromPath)))
+	if fromPath == "" {
+		return false
+	}
+	return strings.Contains(fromPath, ".deck/plan/") && (strings.HasSuffix(fromPath, ".md") || strings.HasSuffix(fromPath, ".json"))
+}
+
 func validateGeneratedPath(path string) error { /* split helper below */
 	clean := filepath.ToSlash(strings.TrimSpace(path))
 	if clean == "" {
@@ -317,16 +325,11 @@ func loadRequestText(root string, prompt string, fromPath string) (string, strin
 	}
 	fromText := strings.TrimSpace(string(raw))
 	source := "file"
-	if strings.HasPrefix(filepath.ToSlash(rel), ".deck/plan/") && strings.HasSuffix(strings.ToLower(resolved), ".md") {
-		jsonPath := strings.TrimSuffix(resolved, filepath.Ext(resolved)) + ".json"
-		jsonRaw, jsonErr := os.ReadFile(jsonPath) //nolint:gosec
-		if jsonErr == nil {
-			var plan askcontract.PlanResponse
-			if err := json.Unmarshal(jsonRaw, &plan); err == nil {
-				fromText = buildPlanSourceText(plan)
-				source = "plan-json"
-			}
-		} else {
+	if strings.HasPrefix(filepath.ToSlash(rel), ".deck/plan/") && (strings.HasSuffix(strings.ToLower(resolved), ".md") || strings.HasSuffix(strings.ToLower(resolved), ".json")) {
+		if plan, _, planErr := loadPlanArtifact(root, fromPath); planErr == nil {
+			fromText = buildPlanSourceText(plan)
+			source = "plan-json"
+		} else if strings.HasSuffix(strings.ToLower(resolved), ".md") {
 			source = "plan-markdown"
 		}
 	}
@@ -363,7 +366,61 @@ func buildPlanSourceText(plan askcontract.PlanResponse) string {
 			b.WriteString("\n")
 		}
 	}
+	if len(plan.Clarifications) > 0 {
+		b.WriteString("Clarifications:\n")
+		for _, item := range plan.Clarifications {
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(item.ID))
+			b.WriteString(": ")
+			b.WriteString(strings.TrimSpace(item.Question))
+			if strings.TrimSpace(item.Answer) != "" {
+				b.WriteString(" (answer: ")
+				b.WriteString(strings.TrimSpace(item.Answer))
+				b.WriteString(")")
+			}
+			b.WriteString("\n")
+		}
+	}
 	return strings.TrimSpace(b.String())
+}
+
+func loadPlanArtifact(root string, fromPath string) (askcontract.PlanResponse, string, error) {
+	fromPath = strings.TrimSpace(fromPath)
+	if fromPath == "" {
+		return askcontract.PlanResponse{}, "", fmt.Errorf("plan artifact path is empty")
+	}
+	candidate := fromPath
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(root, candidate)
+	}
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil {
+		return askcontract.PlanResponse{}, "", fmt.Errorf("resolve plan artifact: %w", err)
+	}
+	resolved, err := fsutil.ResolveUnder(root, strings.Split(filepath.ToSlash(rel), "/")...)
+	if err != nil {
+		return askcontract.PlanResponse{}, "", fmt.Errorf("resolve plan artifact: %w", err)
+	}
+	jsonPath := resolved
+	if strings.HasSuffix(strings.ToLower(resolved), ".md") {
+		jsonPath = strings.TrimSuffix(resolved, filepath.Ext(resolved)) + ".json"
+	}
+	if !strings.HasSuffix(strings.ToLower(jsonPath), ".json") {
+		return askcontract.PlanResponse{}, "", fmt.Errorf("plan artifact must point to a .json or .md file")
+	}
+	raw, err := os.ReadFile(jsonPath) //nolint:gosec
+	if err != nil {
+		return askcontract.PlanResponse{}, "", fmt.Errorf("read plan json artifact: %w", err)
+	}
+	plan, err := askcontract.ParsePlan(string(raw))
+	if err != nil {
+		return askcontract.PlanResponse{}, "", err
+	}
+	relJSON, err := filepath.Rel(root, jsonPath)
+	if err != nil {
+		relJSON = jsonPath
+	}
+	return plan, filepath.ToSlash(relJSON), nil
 }
 
 func resolvePlanDir(root string, requested string) (string, error) {
@@ -468,8 +525,11 @@ func renderUserCommand(opts Options) string {
 	if opts.PlanOnly {
 		parts = append(parts, "plan")
 	}
-	if opts.Write {
-		parts = append(parts, "--write")
+	if opts.Create {
+		parts = append(parts, "--create")
+	}
+	if opts.Edit {
+		parts = append(parts, "--edit")
 	}
 	if opts.Review {
 		parts = append(parts, "--review")

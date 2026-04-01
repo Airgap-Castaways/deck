@@ -23,7 +23,7 @@ type postProcessSummary struct {
 }
 
 func maybePostProcessGeneration(ctx context.Context, client askprovider.Client, req askprovider.Request, root string, logger askLogger, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult, gen askcontract.GenerationResponse, files []askcontract.GeneratedFile, lintSummary string, critic askcontract.CriticResponse, judge askcontract.JudgeResponse, planCritic askcontract.PlanCriticResponse) (postProcessSummary, error) {
-	if !shouldAutoPostProcess(brief, judge, files) {
+	if !shouldAutoPostProcess(plan, brief, critic, judge, files) {
 		return postProcessSummary{}, fmt.Errorf("post-process not needed")
 	}
 	findings, err := critiquePostProcess(ctx, client, req, plan, brief, files, judge, critic, planCritic, logger)
@@ -76,27 +76,57 @@ func maybePostProcessGeneration(ctx context.Context, client askprovider.Client, 
 	return postProcessSummary{Applied: true, Generation: edited, Files: editedFiles, LintSummary: newLint, Critic: newCritic, Judge: newJudge, Notes: append([]string{"post-process: applied targeted operational refinement"}, notes...)}, nil
 }
 
-func shouldAutoPostProcess(brief askcontract.AuthoringBrief, judge askcontract.JudgeResponse, files []askcontract.GeneratedFile) bool {
-	if len(files) < 2 {
+func shouldAutoPostProcess(plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, critic askcontract.CriticResponse, judge askcontract.JudgeResponse, files []askcontract.GeneratedFile) bool {
+	if len(files) == 0 {
 		return false
 	}
 	if strings.TrimSpace(brief.CompletenessTarget) != "complete" {
 		return false
 	}
-	if strings.TrimSpace(brief.ModeIntent) != "prepare+apply" {
+	if strings.TrimSpace(brief.ModeIntent) == "apply-only" && len(files) < 2 {
 		return false
 	}
-	topology := strings.TrimSpace(brief.Topology)
-	if topology != "multi-node" && topology != "ha" {
-		return false
+	if structuralGapSignals(plan, files) > 0 {
+		return true
 	}
-	text := strings.ToLower(strings.Join(append(append([]string{}, judge.Advisory...), judge.Blocking...), " "))
-	for _, token := range []string{"worker", "verification", "join", "artifact", "handoff", "kubeconfig", "runtime", "publish"} {
-		if strings.Contains(text, token) {
-			return true
-		}
+	if len(critic.RequiredFixes) > 0 || len(critic.Blocking) > 0 || len(judge.Blocking) > 0 {
+		return true
+	}
+	if strings.TrimSpace(brief.ModeIntent) == "prepare+apply" && len(files) >= 2 {
+		return true
 	}
 	return false
+}
+
+func structuralGapSignals(plan askcontract.PlanResponse, files []askcontract.GeneratedFile) int {
+	score := 0
+	parsed := strings.ToLower(generatedDocumentSummaryBlock(files))
+	for _, contract := range plan.ExecutionModel.ArtifactContracts {
+		if !strings.Contains(parsed, structuralContractMatchToken(contract.Kind)) {
+			score++
+		}
+	}
+	if plan.ExecutionModel.RoleExecution.PerNodeInvocation && !strings.Contains(parsed, strings.ToLower(strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector))) {
+		score++
+	}
+	if plan.ExecutionModel.Verification.ExpectedNodeCount > 0 && !strings.Contains(parsed, "checkcluster") {
+		score++
+	}
+	return score
+}
+
+func structuralContractMatchToken(kind string) string {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	switch kind {
+	case "package":
+		return "downloadpackage"
+	case "image":
+		return "downloadimage"
+	case "repository-setup", "repository-mirror":
+		return "configurerepository"
+	default:
+		return kind
+	}
 }
 
 func critiquePostProcess(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, files []askcontract.GeneratedFile, judge askcontract.JudgeResponse, critic askcontract.CriticResponse, planCritic askcontract.PlanCriticResponse, logger askLogger) (askcontract.PostProcessResponse, error) {

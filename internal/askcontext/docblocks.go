@@ -27,7 +27,7 @@ func CLIDocBlock() string {
 	b.WriteString("## Ask CLI context\n\n")
 	b.WriteString("- `")
 	b.WriteString(Current().CLI.Command)
-	b.WriteString("` previews by default; add `--write` to write workflow files.\n")
+	b.WriteString("` writes workflow files directly for authoring routes; use `--create` or `--edit` to make authoring intent explicit.\n")
 	b.WriteString("- `")
 	b.WriteString(Current().CLI.PlanSubcommand)
 	b.WriteString("` saves reusable plan artifacts under `./.deck/plan/`.\n")

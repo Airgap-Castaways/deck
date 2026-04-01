@@ -95,7 +95,7 @@ func TestManifestCLIParity(t *testing.T) {
 	for _, flag := range manifest.CLI.ImportantFlags {
 		flagNames = append(flagNames, flag.Name)
 	}
-	for _, want := range []string{"--write", "--from", "--plan-name", "--plan-dir"} {
+	for _, want := range []string{"--create", "--edit", "--review", "--from", "--plan-name", "--plan-dir"} {
 		if !containsString(flagNames, want) {
 			t.Fatalf("missing cli flag %s", want)
 		}

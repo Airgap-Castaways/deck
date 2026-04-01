@@ -3,11 +3,12 @@ package askcontract
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 
-	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/structuredpath"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type GeneratedFile struct {
@@ -17,13 +18,14 @@ type GeneratedFile struct {
 }
 
 type GeneratedDocument struct {
-	Path      string                 `json:"path"`
-	Kind      string                 `json:"kind,omitempty"`
-	Action    string                 `json:"action,omitempty"`
-	Workflow  *WorkflowDocument      `json:"workflow,omitempty"`
-	Component *ComponentDocument     `json:"component,omitempty"`
-	Vars      map[string]any         `json:"vars,omitempty"`
-	Edits     []StructuredEditAction `json:"edits,omitempty"`
+	Path       string                  `json:"path"`
+	Kind       string                  `json:"kind,omitempty"`
+	Action     string                  `json:"action,omitempty"`
+	Workflow   *WorkflowDocument       `json:"workflow,omitempty"`
+	Component  *ComponentDocument      `json:"component,omitempty"`
+	Vars       map[string]any          `json:"vars,omitempty"`
+	Edits      []StructuredEditAction  `json:"edits,omitempty"`
+	Transforms []RefineTransformAction `json:"transforms,omitempty"`
 }
 
 type WorkflowDocument struct {
@@ -72,11 +74,49 @@ type StructuredEditAction struct {
 	Value        any            `json:"value,omitempty"`
 }
 
+type RefineTransformAction struct {
+	Type      string `json:"type"`
+	Candidate string `json:"candidate,omitempty"`
+	RawPath   string `json:"rawPath,omitempty"`
+	VarName   string `json:"varName,omitempty"`
+	VarsPath  string `json:"varsPath,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Value     any    `json:"value,omitempty"`
+}
+
 type GenerationResponse struct {
 	Summary   string              `json:"summary"`
 	Review    []string            `json:"review"`
 	Files     []GeneratedFile     `json:"-"`
 	Documents []GeneratedDocument `json:"documents,omitempty"`
+	Selection *DraftSelection     `json:"selection,omitempty"`
+	Program   *AuthoringProgram   `json:"-"`
+}
+
+type DraftSelection struct {
+	Patterns []string               `json:"patterns,omitempty"`
+	Targets  []DraftTargetSelection `json:"targets,omitempty"`
+	Vars     map[string]any         `json:"vars,omitempty"`
+}
+
+type DraftBuilderSelection struct {
+	ID        string         `json:"id"`
+	Overrides map[string]any `json:"overrides,omitempty"`
+}
+
+type DraftTargetSelection struct {
+	Path     string                  `json:"path"`
+	Kind     string                  `json:"kind,omitempty"`
+	Builders []DraftBuilderSelection `json:"builders,omitempty"`
+	Phases   []DraftPhaseSelection   `json:"phases,omitempty"`
+	Steps    []WorkflowStep          `json:"steps,omitempty"`
+	Vars     map[string]any          `json:"vars,omitempty"`
+}
+
+type DraftPhaseSelection struct {
+	Name    string         `json:"name"`
+	Imports []PhaseImport  `json:"imports,omitempty"`
+	Steps   []WorkflowStep `json:"steps,omitempty"`
 }
 
 type PlanFile struct {
@@ -87,36 +127,166 @@ type PlanFile struct {
 }
 
 type PlanResponse struct {
-	Version                 int            `json:"version"`
-	Request                 string         `json:"request"`
-	Intent                  string         `json:"intent"`
-	Complexity              string         `json:"complexity"`
-	AuthoringBrief          AuthoringBrief `json:"authoringBrief,omitempty"`
-	ExecutionModel          ExecutionModel `json:"executionModel,omitempty"`
-	OfflineAssumption       string         `json:"offlineAssumption,omitempty"`
-	NeedsPrepare            bool           `json:"needsPrepare,omitempty"`
-	ArtifactKinds           []string       `json:"artifactKinds,omitempty"`
-	VarsRecommendation      []string       `json:"varsRecommendation,omitempty"`
-	ComponentRecommendation []string       `json:"componentRecommendation,omitempty"`
-	Blockers                []string       `json:"blockers"`
-	TargetOutcome           string         `json:"targetOutcome"`
-	Assumptions             []string       `json:"assumptions"`
-	OpenQuestions           []string       `json:"openQuestions"`
-	EntryScenario           string         `json:"entryScenario"`
-	Files                   []PlanFile     `json:"files"`
-	ValidationChecklist     []string       `json:"validationChecklist"`
+	Version                 int                 `json:"version"`
+	Request                 string              `json:"request"`
+	Intent                  string              `json:"intent"`
+	Complexity              string              `json:"complexity"`
+	AuthoringBrief          AuthoringBrief      `json:"authoringBrief,omitempty"`
+	AuthoringProgram        AuthoringProgram    `json:"authoringProgram,omitempty"`
+	ExecutionModel          ExecutionModel      `json:"executionModel,omitempty"`
+	OfflineAssumption       string              `json:"offlineAssumption,omitempty"`
+	NeedsPrepare            bool                `json:"needsPrepare,omitempty"`
+	ArtifactKinds           []string            `json:"artifactKinds,omitempty"`
+	VarsRecommendation      []string            `json:"varsRecommendation,omitempty"`
+	ComponentRecommendation []string            `json:"componentRecommendation,omitempty"`
+	Blockers                []string            `json:"blockers"`
+	TargetOutcome           string              `json:"targetOutcome"`
+	Assumptions             []string            `json:"assumptions"`
+	OpenQuestions           []string            `json:"openQuestions"`
+	Clarifications          []PlanClarification `json:"clarifications,omitempty"`
+	EntryScenario           string              `json:"entryScenario"`
+	Files                   []PlanFile          `json:"files"`
+	ValidationChecklist     []string            `json:"validationChecklist"`
+}
+
+type PlanClarification struct {
+	ID                 string   `json:"id"`
+	Question           string   `json:"question"`
+	Kind               string   `json:"kind,omitempty"`
+	Reason             string   `json:"reason,omitempty"`
+	Decision           string   `json:"decision,omitempty"`
+	Options            []string `json:"options,omitempty"`
+	RecommendedDefault string   `json:"recommendedDefault,omitempty"`
+	Answer             string   `json:"answer,omitempty"`
+	BlocksGeneration   bool     `json:"blocksGeneration,omitempty"`
+	Affects            []string `json:"affects,omitempty"`
 }
 
 type AuthoringBrief struct {
-	RouteIntent          string   `json:"routeIntent,omitempty"`
-	TargetScope          string   `json:"targetScope,omitempty"`
-	TargetPaths          []string `json:"targetPaths,omitempty"`
-	ModeIntent           string   `json:"modeIntent,omitempty"`
-	Connectivity         string   `json:"connectivity,omitempty"`
-	CompletenessTarget   string   `json:"completenessTarget,omitempty"`
-	Topology             string   `json:"topology,omitempty"`
-	NodeCount            int      `json:"nodeCount,omitempty"`
-	RequiredCapabilities []string `json:"requiredCapabilities,omitempty"`
+	RouteIntent              string   `json:"routeIntent,omitempty"`
+	TargetScope              string   `json:"targetScope,omitempty"`
+	TargetPaths              []string `json:"targetPaths,omitempty"`
+	AnchorPaths              []string `json:"anchorPaths,omitempty"`
+	AllowedCompanionPaths    []string `json:"allowedCompanionPaths,omitempty"`
+	DisallowedExpansionPaths []string `json:"disallowedExpansionPaths,omitempty"`
+	ModeIntent               string   `json:"modeIntent,omitempty"`
+	Connectivity             string   `json:"connectivity,omitempty"`
+	CompletenessTarget       string   `json:"completenessTarget,omitempty"`
+	Topology                 string   `json:"topology,omitempty"`
+	NodeCount                int      `json:"nodeCount,omitempty"`
+	PlatformFamily           string   `json:"platformFamily,omitempty"`
+	EscapeHatchMode          string   `json:"escapeHatchMode,omitempty"`
+	RequiredCapabilities     []string `json:"requiredCapabilities,omitempty"`
+}
+
+type AuthoringProgram struct {
+	Platform     ProgramPlatform     `json:"platform,omitempty"`
+	Artifacts    ProgramArtifacts    `json:"artifacts,omitempty"`
+	Cluster      ProgramCluster      `json:"cluster,omitempty"`
+	Verification ProgramVerification `json:"verification,omitempty"`
+}
+
+type ProgramPlatform struct {
+	Family       string `json:"family,omitempty"`
+	Release      string `json:"release,omitempty"`
+	RepoType     string `json:"repoType,omitempty"`
+	BackendImage string `json:"backendImage,omitempty"`
+}
+
+type ProgramArtifacts struct {
+	Packages         []string `json:"packages,omitempty"`
+	Images           []string `json:"images,omitempty"`
+	PackageOutputDir string   `json:"packageOutputDir,omitempty"`
+	ImageOutputDir   string   `json:"imageOutputDir,omitempty"`
+}
+
+type ProgramCluster struct {
+	JoinFile          string `json:"joinFile,omitempty"`
+	PodCIDR           string `json:"podCIDR,omitempty"`
+	KubernetesVersion string `json:"kubernetesVersion,omitempty"`
+	CriSocket         string `json:"criSocket,omitempty"`
+	RoleSelector      string `json:"roleSelector,omitempty"`
+	ControlPlaneCount int    `json:"controlPlaneCount,omitempty"`
+	WorkerCount       int    `json:"workerCount,omitempty"`
+}
+
+type ProgramVerification struct {
+	ExpectedNodeCount         int    `json:"expectedNodeCount,omitempty"`
+	ExpectedReadyCount        int    `json:"expectedReadyCount,omitempty"`
+	ExpectedControlPlaneReady int    `json:"expectedControlPlaneReady,omitempty"`
+	FinalVerificationRole     string `json:"finalVerificationRole,omitempty"`
+	Interval                  string `json:"interval,omitempty"`
+	Timeout                   string `json:"timeout,omitempty"`
+}
+
+func (p AuthoringProgram) Value(path string) (any, bool) {
+	switch strings.TrimSpace(path) {
+	case "platform.family":
+		return strings.TrimSpace(p.Platform.Family), strings.TrimSpace(p.Platform.Family) != ""
+	case "platform.release":
+		return strings.TrimSpace(p.Platform.Release), strings.TrimSpace(p.Platform.Release) != ""
+	case "platform.repoType":
+		return strings.TrimSpace(p.Platform.RepoType), strings.TrimSpace(p.Platform.RepoType) != ""
+	case "platform.backendImage":
+		return strings.TrimSpace(p.Platform.BackendImage), strings.TrimSpace(p.Platform.BackendImage) != ""
+	case "artifacts.packages":
+		return append([]string(nil), p.Artifacts.Packages...), len(p.Artifacts.Packages) > 0
+	case "artifacts.images":
+		return append([]string(nil), p.Artifacts.Images...), len(p.Artifacts.Images) > 0
+	case "artifacts.packageOutputDir":
+		return strings.TrimSpace(p.Artifacts.PackageOutputDir), strings.TrimSpace(p.Artifacts.PackageOutputDir) != ""
+	case "artifacts.imageOutputDir":
+		return strings.TrimSpace(p.Artifacts.ImageOutputDir), strings.TrimSpace(p.Artifacts.ImageOutputDir) != ""
+	case "cluster.joinFile":
+		return strings.TrimSpace(p.Cluster.JoinFile), strings.TrimSpace(p.Cluster.JoinFile) != ""
+	case "cluster.podCIDR":
+		return strings.TrimSpace(p.Cluster.PodCIDR), strings.TrimSpace(p.Cluster.PodCIDR) != ""
+	case "cluster.kubernetesVersion":
+		return strings.TrimSpace(p.Cluster.KubernetesVersion), strings.TrimSpace(p.Cluster.KubernetesVersion) != ""
+	case "cluster.criSocket":
+		return strings.TrimSpace(p.Cluster.CriSocket), strings.TrimSpace(p.Cluster.CriSocket) != ""
+	case "cluster.roleSelector":
+		return strings.TrimSpace(p.Cluster.RoleSelector), strings.TrimSpace(p.Cluster.RoleSelector) != ""
+	case "cluster.controlPlaneCount":
+		return p.Cluster.ControlPlaneCount, p.Cluster.ControlPlaneCount > 0
+	case "cluster.workerCount":
+		return p.Cluster.WorkerCount, p.Cluster.WorkerCount > 0
+	case "verification.expectedNodeCount":
+		return p.Verification.ExpectedNodeCount, p.Verification.ExpectedNodeCount > 0
+	case "verification.expectedReadyCount":
+		return p.Verification.ExpectedReadyCount, p.Verification.ExpectedReadyCount > 0
+	case "verification.expectedControlPlaneReady":
+		return p.Verification.ExpectedControlPlaneReady, p.Verification.ExpectedControlPlaneReady > 0
+	case "verification.finalVerificationRole":
+		return strings.TrimSpace(p.Verification.FinalVerificationRole), strings.TrimSpace(p.Verification.FinalVerificationRole) != ""
+	case "verification.interval":
+		return strings.TrimSpace(p.Verification.Interval), strings.TrimSpace(p.Verification.Interval) != ""
+	case "verification.timeout":
+		return strings.TrimSpace(p.Verification.Timeout), strings.TrimSpace(p.Verification.Timeout) != ""
+	case "cluster.roleWhen.control-plane":
+		return roleWhenExpression(p.Cluster.RoleSelector, p.Cluster.ControlPlaneCount, p.Cluster.WorkerCount, "control-plane")
+	case "cluster.roleWhen.worker":
+		return roleWhenExpression(p.Cluster.RoleSelector, p.Cluster.ControlPlaneCount, p.Cluster.WorkerCount, "worker")
+	case "verification.roleWhen":
+		role := strings.TrimSpace(p.Verification.FinalVerificationRole)
+		if role == "" || role == "local" {
+			return "", false
+		}
+		return roleWhenExpression(p.Cluster.RoleSelector, p.Cluster.ControlPlaneCount, p.Cluster.WorkerCount, role)
+	default:
+		return nil, false
+	}
+}
+
+func roleWhenExpression(selector string, controlPlaneCount int, workerCount int, role string) (string, bool) {
+	selector = strings.TrimSpace(selector)
+	if selector == "" || selector == "nil" || selector == "<nil>" || (controlPlaneCount+workerCount) <= 1 {
+		return "", false
+	}
+	if strings.TrimSpace(role) == "" {
+		return "", false
+	}
+	return "vars." + selector + ` == "` + strings.TrimSpace(role) + `"`, true
 }
 
 type ExecutionModel struct {
@@ -207,10 +377,44 @@ func GenerationResponseSchema() json.RawMessage {
 	schema := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
-		"required":             []string{"summary", "review", "documents"},
+		"required":             []string{"summary", "review"},
 		"properties": map[string]any{
 			"summary": map[string]any{"type": "string"},
 			"review":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"selection": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"patterns": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"vars":     openObjectSchema(),
+					"targets": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type":                 "object",
+							"additionalProperties": false,
+							"required":             []string{"path"},
+							"properties": map[string]any{
+								"path": map[string]any{"type": "string"},
+								"kind": map[string]any{"type": "string"},
+								"builders": map[string]any{
+									"type": "array",
+									"items": map[string]any{
+										"type":                 "object",
+										"additionalProperties": false,
+										"required":             []string{"id"},
+										"properties": map[string]any{
+											"id":        map[string]any{"type": "string"},
+											"overrides": openObjectSchema(),
+										},
+									},
+								},
+								"steps":  openObjectSchema(),
+								"phases": openObjectSchema(),
+								"vars":   openObjectSchema(),
+							},
+						},
+					},
+				},
+			},
 			"documents": map[string]any{
 				"type":     "array",
 				"minItems": 1,
@@ -225,6 +429,23 @@ func GenerationResponseSchema() json.RawMessage {
 						"workflow":  openObjectSchema(),
 						"component": openObjectSchema(),
 						"vars":      openObjectSchema(),
+						"transforms": map[string]any{
+							"type": "array",
+							"items": map[string]any{
+								"type":                 "object",
+								"additionalProperties": false,
+								"required":             []string{"type"},
+								"properties": map[string]any{
+									"type":      map[string]any{"type": "string"},
+									"candidate": map[string]any{"type": "string"},
+									"rawPath":   map[string]any{"type": "string"},
+									"varName":   map[string]any{"type": "string"},
+									"varsPath":  map[string]any{"type": "string"},
+									"path":      map[string]any{"type": "string"},
+									"value":     map[string]any{},
+								},
+							},
+						},
 						"edits": map[string]any{
 							"type": "array",
 							"items": map[string]any{
@@ -241,6 +462,10 @@ func GenerationResponseSchema() json.RawMessage {
 					},
 				},
 			},
+		},
+		"anyOf": []any{
+			map[string]any{"required": []string{"documents"}},
+			map[string]any{"required": []string{"selection"}},
 		},
 	}
 	raw, err := json.Marshal(schema)
@@ -293,7 +518,7 @@ func ParseGeneration(raw string) (GenerationResponse, error) {
 		resp.Documents[i].Path = strings.TrimSpace(resp.Documents[i].Path)
 		resp.Documents[i].Kind = normalizeDocumentKind(resp.Documents[i].Kind)
 		resp.Documents[i].Action = normalizeDocumentAction(resp.Documents[i].Action)
-		if resp.Documents[i].Action == "edit" && len(resp.Documents[i].Edits) == 0 && (resp.Documents[i].Workflow != nil || resp.Documents[i].Component != nil || resp.Documents[i].Vars != nil) {
+		if resp.Documents[i].Action == "edit" && len(resp.Documents[i].Edits) == 0 && len(resp.Documents[i].Transforms) == 0 && (resp.Documents[i].Workflow != nil || resp.Documents[i].Component != nil || resp.Documents[i].Vars != nil) {
 			resp.Documents[i].Action = "replace"
 		}
 		if strings.EqualFold(resp.Documents[i].Kind, "vars") && resp.Documents[i].Vars == nil {
@@ -307,14 +532,55 @@ func ParseGeneration(raw string) (GenerationResponse, error) {
 			resp.Documents[i].Edits[j].TargetStepID = ""
 			resp.Documents[i].Edits[j].Target = nil
 		}
+		for j := range resp.Documents[i].Transforms {
+			resp.Documents[i].Transforms[j].Type = normalizeTransformType(resp.Documents[i].Transforms[j].Type)
+			resp.Documents[i].Transforms[j].Candidate = strings.TrimSpace(resp.Documents[i].Transforms[j].Candidate)
+			resp.Documents[i].Transforms[j].RawPath = strings.TrimSpace(resp.Documents[i].Transforms[j].RawPath)
+			resp.Documents[i].Transforms[j].VarName = strings.TrimSpace(resp.Documents[i].Transforms[j].VarName)
+			resp.Documents[i].Transforms[j].VarsPath = strings.TrimSpace(resp.Documents[i].Transforms[j].VarsPath)
+			resp.Documents[i].Transforms[j].Path = strings.TrimSpace(resp.Documents[i].Transforms[j].Path)
+			if resp.Documents[i].Transforms[j].RawPath == "" && resp.Documents[i].Transforms[j].Type != "extract-component" {
+				resp.Documents[i].Transforms[j].RawPath = resp.Documents[i].Transforms[j].Path
+			}
+		}
 	}
-	if len(resp.Documents) == 0 {
-		return GenerationResponse{}, fmt.Errorf("generation response did not include documents")
+	if resp.Selection != nil {
+		for i := range resp.Selection.Patterns {
+			resp.Selection.Patterns[i] = strings.TrimSpace(resp.Selection.Patterns[i])
+		}
+		for i := range resp.Selection.Targets {
+			resp.Selection.Targets[i].Path = strings.TrimSpace(resp.Selection.Targets[i].Path)
+			resp.Selection.Targets[i].Kind = normalizeDocumentKind(resp.Selection.Targets[i].Kind)
+			for j := range resp.Selection.Targets[i].Builders {
+				resp.Selection.Targets[i].Builders[j].ID = strings.TrimSpace(resp.Selection.Targets[i].Builders[j].ID)
+			}
+		}
 	}
-	if err := validateGeneratedDocuments(resp.Documents); err != nil {
-		return GenerationResponse{}, err
+	if len(resp.Documents) == 0 && resp.Selection == nil {
+		return GenerationResponse{}, fmt.Errorf("generation response did not include documents or selection")
+	}
+	if len(resp.Documents) == 0 && resp.Selection != nil && !SelectionUsesBuilders(*resp.Selection) {
+		resp.Documents = compileDraftSelection(*resp.Selection)
+	}
+	if len(resp.Documents) > 0 {
+		if err := validateGeneratedDocuments(resp.Documents); err != nil {
+			return GenerationResponse{}, err
+		}
 	}
 	return resp, nil
+}
+
+func CompileDraftSelection(selection DraftSelection) []GeneratedDocument {
+	return compileDraftSelection(selection)
+}
+
+func SelectionUsesBuilders(selection DraftSelection) bool {
+	for _, target := range selection.Targets {
+		if len(target.Builders) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func validateGeneratedDocuments(documents []GeneratedDocument) error {
@@ -334,14 +600,14 @@ func validateGeneratedDocuments(documents []GeneratedDocument) error {
 				return fmt.Errorf("generated document %s delete action must not include content or edits", doc.Path)
 			}
 		case "edit":
-			if len(doc.Edits) == 0 && (doc.Workflow != nil || doc.Component != nil || doc.Vars != nil) {
+			if len(doc.Edits) == 0 && len(doc.Transforms) == 0 && (doc.Workflow != nil || doc.Component != nil || doc.Vars != nil) {
 				action = "replace"
 			}
-			if action == "edit" && len(doc.Edits) == 0 {
-				return fmt.Errorf("generated document %s edit action must include edits", doc.Path)
+			if action == "edit" && len(doc.Edits) == 0 && len(doc.Transforms) == 0 {
+				return fmt.Errorf("generated document %s edit action must include edits or transforms", doc.Path)
 			}
-			if action == "edit" && (doc.Workflow != nil || doc.Component != nil || doc.Vars != nil) {
-				return fmt.Errorf("generated document %s edit action must not include replacement content", doc.Path)
+			if action == "edit" && (doc.Workflow != nil || doc.Component != nil || doc.Vars != nil) && len(doc.Transforms) == 0 {
+				return fmt.Errorf("generated document %s edit action must not include replacement content without transforms", doc.Path)
 			}
 			if action != "replace" {
 				continue
@@ -385,6 +651,56 @@ func inferredDocumentAction(doc GeneratedDocument) string {
 	return "preserve"
 }
 
+func compileDraftSelection(selection DraftSelection) []GeneratedDocument {
+	documents := make([]GeneratedDocument, 0, len(selection.Targets)+1)
+	for _, target := range selection.Targets {
+		path := strings.TrimSpace(target.Path)
+		if path == "" {
+			continue
+		}
+		kind := normalizeDocumentKind(target.Kind)
+		switch kind {
+		case "vars":
+			documents = append(documents, GeneratedDocument{Path: path, Kind: "vars", Vars: cloneMap(target.Vars)})
+		case "component":
+			documents = append(documents, GeneratedDocument{Path: path, Kind: "component", Component: &ComponentDocument{Steps: append([]WorkflowStep(nil), target.Steps...)}})
+		default:
+			workflow := &WorkflowDocument{Version: "v1alpha1", Vars: cloneMap(target.Vars), Steps: append([]WorkflowStep(nil), target.Steps...)}
+			if len(target.Phases) > 0 {
+				workflow.Phases = make([]WorkflowPhase, 0, len(target.Phases))
+				for _, phase := range target.Phases {
+					workflow.Phases = append(workflow.Phases, WorkflowPhase{Name: strings.TrimSpace(phase.Name), Imports: append([]PhaseImport(nil), phase.Imports...), Steps: append([]WorkflowStep(nil), phase.Steps...)})
+				}
+			}
+			documents = append(documents, GeneratedDocument{Path: path, Kind: "workflow", Workflow: workflow})
+		}
+	}
+	if len(selection.Vars) > 0 && !selectionHasVarsTarget(selection) {
+		documents = append(documents, GeneratedDocument{Path: "workflows/vars.yaml", Kind: "vars", Vars: cloneMap(selection.Vars)})
+	}
+	return documents
+}
+
+func selectionHasVarsTarget(selection DraftSelection) bool {
+	for _, target := range selection.Targets {
+		if normalizeDocumentKind(target.Kind) == "vars" || strings.TrimSpace(target.Path) == "workflows/vars.yaml" {
+			return true
+		}
+	}
+	return false
+}
+
+func cloneMap(input map[string]any) map[string]any {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(input))
+	for key, value := range input {
+		out[key] = value
+	}
+	return out
+}
+
 func normalizeDocumentKind(kind string) string {
 	trimmed := strings.ToLower(strings.TrimSpace(kind))
 	switch trimmed {
@@ -418,6 +734,22 @@ func normalizeDocumentAction(action string) string {
 		return "edit"
 	case "noop", "skip":
 		return "preserve"
+	default:
+		return trimmed
+	}
+}
+
+func normalizeTransformType(kind string) string {
+	trimmed := strings.ToLower(strings.TrimSpace(kind))
+	switch trimmed {
+	case "extract_var", "extract-vars", "extractvar":
+		return "extract-var"
+	case "set_field", "set-field", "update-field", "update_field":
+		return "set-field"
+	case "delete_field", "delete-field", "remove-field", "remove_field":
+		return "delete-field"
+	case "extract_component", "extract-component", "extractcomponent":
+		return "extract-component"
 	default:
 		return trimmed
 	}
@@ -522,6 +854,8 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	resp.Complexity = strings.TrimSpace(resp.Complexity)
 	resp.AuthoringBrief.RouteIntent = strings.TrimSpace(resp.AuthoringBrief.RouteIntent)
 	resp.AuthoringBrief.TargetScope = strings.TrimSpace(resp.AuthoringBrief.TargetScope)
+	resp.AuthoringBrief.PlatformFamily = strings.TrimSpace(resp.AuthoringBrief.PlatformFamily)
+	resp.AuthoringBrief.EscapeHatchMode = strings.TrimSpace(resp.AuthoringBrief.EscapeHatchMode)
 	resp.AuthoringBrief.ModeIntent = strings.TrimSpace(resp.AuthoringBrief.ModeIntent)
 	resp.AuthoringBrief.Connectivity = strings.TrimSpace(resp.AuthoringBrief.Connectivity)
 	resp.AuthoringBrief.CompletenessTarget = strings.TrimSpace(resp.AuthoringBrief.CompletenessTarget)
@@ -532,14 +866,58 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	resp.ExecutionModel.Verification.BootstrapPhase = strings.TrimSpace(resp.ExecutionModel.Verification.BootstrapPhase)
 	resp.ExecutionModel.Verification.FinalPhase = strings.TrimSpace(resp.ExecutionModel.Verification.FinalPhase)
 	resp.ExecutionModel.Verification.FinalVerificationRole = strings.TrimSpace(resp.ExecutionModel.Verification.FinalVerificationRole)
+	resp.AuthoringProgram.Platform.Family = strings.TrimSpace(resp.AuthoringProgram.Platform.Family)
+	resp.AuthoringProgram.Platform.Release = strings.TrimSpace(resp.AuthoringProgram.Platform.Release)
+	resp.AuthoringProgram.Platform.RepoType = strings.TrimSpace(resp.AuthoringProgram.Platform.RepoType)
+	resp.AuthoringProgram.Platform.BackendImage = strings.TrimSpace(resp.AuthoringProgram.Platform.BackendImage)
+	resp.AuthoringProgram.Artifacts.PackageOutputDir = strings.TrimSpace(resp.AuthoringProgram.Artifacts.PackageOutputDir)
+	resp.AuthoringProgram.Artifacts.ImageOutputDir = strings.TrimSpace(resp.AuthoringProgram.Artifacts.ImageOutputDir)
+	resp.AuthoringProgram.Cluster.JoinFile = strings.TrimSpace(resp.AuthoringProgram.Cluster.JoinFile)
+	resp.AuthoringProgram.Cluster.PodCIDR = strings.TrimSpace(resp.AuthoringProgram.Cluster.PodCIDR)
+	resp.AuthoringProgram.Cluster.KubernetesVersion = strings.TrimSpace(resp.AuthoringProgram.Cluster.KubernetesVersion)
+	resp.AuthoringProgram.Cluster.CriSocket = strings.TrimSpace(resp.AuthoringProgram.Cluster.CriSocket)
+	resp.AuthoringProgram.Cluster.RoleSelector = strings.TrimSpace(resp.AuthoringProgram.Cluster.RoleSelector)
+	resp.AuthoringProgram.Verification.FinalVerificationRole = strings.TrimSpace(resp.AuthoringProgram.Verification.FinalVerificationRole)
+	resp.AuthoringProgram.Verification.Interval = strings.TrimSpace(resp.AuthoringProgram.Verification.Interval)
+	resp.AuthoringProgram.Verification.Timeout = strings.TrimSpace(resp.AuthoringProgram.Verification.Timeout)
 	resp.OfflineAssumption = strings.TrimSpace(resp.OfflineAssumption)
 	resp.TargetOutcome = strings.TrimSpace(resp.TargetOutcome)
 	resp.EntryScenario = strings.TrimSpace(resp.EntryScenario)
+	for i := range resp.Clarifications {
+		resp.Clarifications[i].ID = strings.TrimSpace(resp.Clarifications[i].ID)
+		resp.Clarifications[i].Question = strings.TrimSpace(resp.Clarifications[i].Question)
+		resp.Clarifications[i].Kind = strings.TrimSpace(resp.Clarifications[i].Kind)
+		resp.Clarifications[i].Reason = strings.TrimSpace(resp.Clarifications[i].Reason)
+		resp.Clarifications[i].Decision = strings.TrimSpace(resp.Clarifications[i].Decision)
+		resp.Clarifications[i].RecommendedDefault = strings.TrimSpace(resp.Clarifications[i].RecommendedDefault)
+		resp.Clarifications[i].Answer = strings.TrimSpace(resp.Clarifications[i].Answer)
+		for j := range resp.Clarifications[i].Options {
+			resp.Clarifications[i].Options[j] = strings.TrimSpace(resp.Clarifications[i].Options[j])
+		}
+		for j := range resp.Clarifications[i].Affects {
+			resp.Clarifications[i].Affects[j] = strings.TrimSpace(resp.Clarifications[i].Affects[j])
+		}
+	}
 	for i := range resp.AuthoringBrief.TargetPaths {
 		resp.AuthoringBrief.TargetPaths[i] = strings.TrimSpace(resp.AuthoringBrief.TargetPaths[i])
 	}
+	for i := range resp.AuthoringBrief.AnchorPaths {
+		resp.AuthoringBrief.AnchorPaths[i] = strings.TrimSpace(resp.AuthoringBrief.AnchorPaths[i])
+	}
+	for i := range resp.AuthoringBrief.AllowedCompanionPaths {
+		resp.AuthoringBrief.AllowedCompanionPaths[i] = strings.TrimSpace(resp.AuthoringBrief.AllowedCompanionPaths[i])
+	}
+	for i := range resp.AuthoringBrief.DisallowedExpansionPaths {
+		resp.AuthoringBrief.DisallowedExpansionPaths[i] = strings.TrimSpace(resp.AuthoringBrief.DisallowedExpansionPaths[i])
+	}
 	for i := range resp.AuthoringBrief.RequiredCapabilities {
 		resp.AuthoringBrief.RequiredCapabilities[i] = strings.TrimSpace(resp.AuthoringBrief.RequiredCapabilities[i])
+	}
+	for i := range resp.AuthoringProgram.Artifacts.Packages {
+		resp.AuthoringProgram.Artifacts.Packages[i] = strings.TrimSpace(resp.AuthoringProgram.Artifacts.Packages[i])
+	}
+	for i := range resp.AuthoringProgram.Artifacts.Images {
+		resp.AuthoringProgram.Artifacts.Images[i] = strings.TrimSpace(resp.AuthoringProgram.Artifacts.Images[i])
 	}
 	for i := range resp.ExecutionModel.ArtifactContracts {
 		resp.ExecutionModel.ArtifactContracts[i].Kind = strings.TrimSpace(resp.ExecutionModel.ArtifactContracts[i].Kind)
@@ -568,6 +946,19 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	if len(resp.Files) == 0 {
 		return PlanResponse{}, fmt.Errorf("plan response is missing files")
 	}
+	seenClarifications := map[string]bool{}
+	for _, item := range resp.Clarifications {
+		if item.ID == "" {
+			return PlanResponse{}, fmt.Errorf("plan response has clarification with empty id")
+		}
+		if item.Question == "" {
+			return PlanResponse{}, fmt.Errorf("plan response clarification %q is missing question", item.ID)
+		}
+		if seenClarifications[item.ID] {
+			return PlanResponse{}, fmt.Errorf("plan response has duplicate clarification id %q", item.ID)
+		}
+		seenClarifications[item.ID] = true
+	}
 	for i := range resp.Files {
 		resp.Files[i].Path = strings.TrimSpace(resp.Files[i].Path)
 		resp.Files[i].Kind = strings.TrimSpace(resp.Files[i].Kind)
@@ -587,12 +978,15 @@ func ParsePlan(raw string) (PlanResponse, error) {
 		case "create":
 			// keep as-is
 		}
-		if !askcontext.AllowedGeneratedPath(resp.Files[i].Path) {
+		if !workspacepaths.IsAllowedAuthoringPath(resp.Files[i].Path) {
 			return PlanResponse{}, fmt.Errorf("plan response has file outside allowed ask paths: %s", resp.Files[i].Path)
 		}
 	}
 	if resp.EntryScenario != "" {
-		if !askcontext.AllowedGeneratedPath(resp.EntryScenario) || !strings.HasPrefix(resp.EntryScenario, "workflows/scenarios/") {
+		if resolved := resolvePlannedEntryScenario(resp.EntryScenario, resp.Files); resolved != "" {
+			resp.EntryScenario = resolved
+		}
+		if !workspacepaths.IsAllowedAuthoringPath(resp.EntryScenario) || !strings.HasPrefix(resp.EntryScenario, "workflows/scenarios/") {
 			return PlanResponse{}, fmt.Errorf("plan response entryScenario must be a scenario path under workflows/scenarios/: %s", resp.EntryScenario)
 		}
 		matched := false
@@ -607,6 +1001,28 @@ func ParsePlan(raw string) (PlanResponse, error) {
 		}
 	}
 	return resp, nil
+}
+
+func resolvePlannedEntryScenario(entry string, files []PlanFile) string {
+	entry = filepath.ToSlash(strings.TrimSpace(entry))
+	if strings.HasPrefix(entry, "workflows/scenarios/") {
+		return entry
+	}
+	matches := []string{}
+	for _, file := range files {
+		path := filepath.ToSlash(strings.TrimSpace(file.Path))
+		if !strings.HasPrefix(path, "workflows/scenarios/") {
+			continue
+		}
+		base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		if entry == path || entry == filepath.Base(path) || entry == base {
+			matches = append(matches, path)
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0]
+	}
+	return ""
 }
 
 func ParseJudge(raw string) (JudgeResponse, error) {

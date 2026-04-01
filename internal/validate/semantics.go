@@ -43,7 +43,7 @@ func validateSemantics(name string, wf *config.Workflow) error {
 			continue
 		}
 		if seenStepID[step.ID] {
-			return fmt.Errorf("E_DUPLICATE_STEP_ID: %s", step.ID)
+			return schemaValidationError(fmt.Sprintf("E_DUPLICATE_STEP_ID: %s", step.ID), []Issue{issueForDuplicateStep(name, step.ID)})
 		}
 		seenStepID[step.ID] = true
 

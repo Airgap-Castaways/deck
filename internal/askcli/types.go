@@ -3,7 +3,6 @@ package askcli
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
@@ -17,15 +16,18 @@ type Options struct {
 	Root          string
 	Prompt        string
 	FromPath      string
+	Answers       []string
 	PlanOnly      bool
 	PlanName      string
 	PlanDir       string
-	Write         bool
+	Create        bool
+	Edit          bool
 	Review        bool
 	MaxIterations int
 	Provider      string
 	Model         string
 	Endpoint      string
+	Stdin         io.Reader
 	Stdout        io.Writer
 	Stderr        io.Writer
 }
@@ -115,17 +117,5 @@ func (l askLogger) response(label string, content string) {
 }
 
 func (l askLogger) flush() {
-	if l.writer == nil || l.writer == io.Discard {
-		return
-	}
-	if writer, ok := l.writer.(flushWriter); ok {
-		_ = writer.Flush()
-	}
-	if writer, ok := l.writer.(syncWriter); ok {
-		_ = writer.Sync()
-		return
-	}
-	if file, ok := l.writer.(*os.File); ok {
-		_ = file.Sync()
-	}
+	flushOutput(l.writer)
 }

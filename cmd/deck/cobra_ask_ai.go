@@ -19,7 +19,9 @@ var newAskBackend = func() askprovider.Client {
 
 func newAskCommand() *cobra.Command {
 	var fromPath string
-	var write bool
+	var answers []string
+	var create bool
+	var edit bool
 	var review bool
 	var planName string
 	var planDir string
@@ -34,31 +36,43 @@ func newAskCommand() *cobra.Command {
 		Short: spec.Root.Short,
 		Example: strings.Join([]string{
 			`  deck ask "explain what workflows/scenarios/apply.yaml does"`,
-			`  deck ask --write "create an air-gapped rhel9 single-node kubeadm workflow"`,
+			`  deck ask --create "create an air-gapped rhel9 single-node kubeadm workflow"`,
+			`  deck ask --edit "refactor workflows/scenarios/apply.yaml to use workflows/vars.yaml"`,
 			`  deck ask plan "create an air-gapped rhel9 single-node kubeadm workflow"`,
 		}, "\n"),
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			request := strings.TrimSpace(strings.Join(args, " "))
+			if review && (create || edit) {
+				return fmt.Errorf("--review cannot be combined with --create or --edit")
+			}
+			if create && edit {
+				return fmt.Errorf("--create and --edit are mutually exclusive")
+			}
 			return askcli.Execute(cmd.Context(), askcli.Options{
 				Root:          ".",
 				Prompt:        request,
 				FromPath:      fromPath,
+				Answers:       append([]string(nil), answers...),
 				PlanName:      planName,
 				PlanDir:       planDir,
-				Write:         write,
+				Create:        create,
+				Edit:          edit,
 				Review:        review,
 				MaxIterations: maxIterations,
 				Provider:      provider,
 				Model:         model,
 				Endpoint:      endpoint,
+				Stdin:         cmd.InOrStdin(),
 				Stdout:        cmd.OutOrStdout(),
 				Stderr:        cmd.ErrOrStderr(),
 			}, newAskBackend())
 		},
 	}
 	cmd.Flags().StringVar(&fromPath, "from", "", "load additional request details from a text or markdown file")
-	cmd.Flags().BoolVar(&write, "write", false, "write generated workflow changes into the current workspace")
+	cmd.Flags().StringArrayVar(&answers, "answer", nil, "apply plan clarification answers as key=value when resuming from a plan artifact")
+	cmd.Flags().BoolVar(&create, "create", false, "treat the request as new workflow authoring")
+	cmd.Flags().BoolVar(&edit, "edit", false, "treat the request as workflow refinement")
 	cmd.Flags().BoolVar(&review, "review", false, "review the current workspace without writing files")
 	cmd.Flags().IntVar(&maxIterations, "max-iterations", 0, "max repair attempts for draft/refine routes (0 uses route default)")
 	cmd.Flags().StringVar(&provider, "provider", "", "override the configured ask provider for this run")
@@ -75,6 +89,7 @@ func newAskCommand() *cobra.Command {
 
 func newAskPlanCommand() *cobra.Command {
 	var fromPath string
+	var answers []string
 	var planName string
 	var planDir string
 	var provider string
@@ -96,18 +111,21 @@ func newAskPlanCommand() *cobra.Command {
 				Root:     ".",
 				Prompt:   request,
 				FromPath: fromPath,
+				Answers:  append([]string(nil), answers...),
 				PlanOnly: true,
 				PlanName: planName,
 				PlanDir:  planDir,
 				Provider: provider,
 				Model:    model,
 				Endpoint: endpoint,
+				Stdin:    cmd.InOrStdin(),
 				Stdout:   cmd.OutOrStdout(),
 				Stderr:   cmd.ErrOrStderr(),
 			}, newAskBackend())
 		},
 	}
 	cmd.Flags().StringVar(&fromPath, "from", "", "load additional request details from a text or markdown file")
+	cmd.Flags().StringArrayVar(&answers, "answer", nil, "apply plan clarification answers as key=value when resuming from a saved plan artifact")
 	cmd.Flags().StringVar(&planName, "plan-name", "", "optional plan artifact name")
 	cmd.Flags().StringVar(&planDir, "plan-dir", ".deck/plan", "directory for ask plan artifacts")
 	cmd.Flags().StringVar(&provider, "provider", "", "override the configured ask provider for this run")

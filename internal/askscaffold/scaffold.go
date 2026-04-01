@@ -9,16 +9,17 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askknowledge"
+	"github.com/Airgap-Castaways/deck/internal/askpattern"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
 
 const (
 	FamilyApplyOnly     = "apply-only-local-change"
-	FamilyOfflineBundle = "offline-artifact-prepare-apply"
-	FamilyKubeadm       = "kubeadm-single-node-starter"
-	FamilyKubeadmMulti  = "kubeadm-multi-node-prepare-apply"
-	FamilyRefine        = "refine-scaffold-preservation"
+	FamilyArtifactStage = "artifact-staging-prepare-apply"
+	FamilyBootstrap     = "cluster-bootstrap-starter"
+	FamilyRoleAware     = "role-aware-prepare-apply"
+	FamilyRefine        = "preserve-existing-structure"
 )
 
 type Scaffold struct {
@@ -44,11 +45,11 @@ func Build(req askpolicy.ScenarioRequirements, workspace askretrieve.WorkspaceSu
 	switch family {
 	case FamilyRefine:
 		scaffold = refineScaffold(workspace, plan)
-	case FamilyKubeadmMulti:
+	case FamilyRoleAware:
 		scaffold = kubeadmMultiNodeScaffold(req, plan, bundle)
-	case FamilyKubeadm:
+	case FamilyBootstrap:
 		scaffold = kubeadmScaffold(req, bundle)
-	case FamilyOfflineBundle:
+	case FamilyArtifactStage:
 		scaffold = offlineBundleScaffold(req, bundle)
 	default:
 		scaffold = applyOnlyScaffold(req, bundle)
@@ -64,19 +65,19 @@ func Build(req askpolicy.ScenarioRequirements, workspace askretrieve.WorkspaceSu
 }
 
 func selectFamily(req askpolicy.ScenarioRequirements, workspace askretrieve.WorkspaceSummary, decision askintent.Decision, plan askcontract.PlanResponse) string {
-	if decision.Route == askintent.RouteRefine || req.AcceptanceLevel == "refine" {
-		return FamilyRefine
-	}
-	brief := plan.AuthoringBrief
-	text := strings.ToLower(strings.Join([]string{strings.Join(req.ScenarioIntent, " "), plan.Request, plan.TargetOutcome}, " "))
-	if strings.Contains(text, "kubeadm") {
-		if strings.EqualFold(brief.Topology, "multi-node") || strings.EqualFold(brief.Topology, "ha") || brief.NodeCount > 1 || strings.Contains(text, "join") {
-			return FamilyKubeadmMulti
+	_ = decision
+	patterns := askpattern.Compose(req, workspace, plan)
+	for _, pattern := range patterns {
+		switch pattern.Name {
+		case "preserve-existing":
+			return FamilyRefine
+		case "role-aware-apply":
+			return FamilyRoleAware
+		case "cluster-bootstrap":
+			return FamilyBootstrap
+		case "artifact-staging":
+			return FamilyArtifactStage
 		}
-		return FamilyKubeadm
-	}
-	if req.NeedsPrepare || len(req.ArtifactKinds) > 0 || workspace.HasPrepare {
-		return FamilyOfflineBundle
 	}
 	return FamilyApplyOnly
 }
@@ -111,7 +112,7 @@ func offlineBundleScaffold(req askpolicy.ScenarioRequirements, bundle askknowled
 		files = append(files, File{Path: bundle.Topology.VarsPath, Purpose: "Shared variables for repeated values", Locked: true, Template: "# plain YAML data only\n"})
 	}
 	return Scaffold{
-		Family:  FamilyOfflineBundle,
+		Family:  FamilyArtifactStage,
 		Summary: "Prepare/apply scaffold for offline artifact staging and local convergence.",
 		Files:   files,
 		Constraints: []string{
@@ -129,8 +130,8 @@ func offlineBundleScaffold(req askpolicy.ScenarioRequirements, bundle askknowled
 
 func kubeadmScaffold(req askpolicy.ScenarioRequirements, bundle askknowledge.Bundle) Scaffold {
 	s := offlineBundleScaffold(req, bundle)
-	s.Family = FamilyKubeadm
-	s.Summary = "Single-node kubeadm starter scaffold with offline preparation and apply verification."
+	s.Family = FamilyBootstrap
+	s.Summary = "Cluster bootstrap starter scaffold with offline preparation and apply verification."
 	for i := range s.Files {
 		switch s.Files[i].Path {
 		case bundle.Topology.CanonicalPrepare:
@@ -145,8 +146,8 @@ func kubeadmScaffold(req askpolicy.ScenarioRequirements, bundle askknowledge.Bun
 
 func kubeadmMultiNodeScaffold(req askpolicy.ScenarioRequirements, plan askcontract.PlanResponse, bundle askknowledge.Bundle) Scaffold {
 	s := offlineBundleScaffold(req, bundle)
-	s.Family = FamilyKubeadmMulti
-	s.Summary = "Multi-node kubeadm scaffold with offline prepare/apply split and explicit join/verify phases."
+	s.Family = FamilyRoleAware
+	s.Summary = "Role-aware prepare/apply scaffold with explicit bootstrap, join, and verification phases."
 	nodeCount := 3
 	controlPlaneReady := 1
 	if plan.AuthoringBrief.NodeCount > 1 {

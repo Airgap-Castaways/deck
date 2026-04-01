@@ -27,6 +27,13 @@ var canonicalPreparedRoots = []string{
 	PreparedBinRoot,
 }
 
+var allowedAuthoringPaths = []string{
+	WorkflowRootDir + "/" + CanonicalPrepareWorkflowRel,
+	WorkflowRootDir + "/" + WorkflowScenariosDir + "/*.yaml",
+	WorkflowRootDir + "/" + WorkflowComponentsDir + "/*.yaml",
+	WorkflowRootDir + "/" + WorkflowVarsRel,
+}
+
 func WorkflowPath(root string, rel string) string {
 	parts := append([]string{root, WorkflowRootDir}, strings.Split(filepath.ToSlash(rel), "/")...)
 	return filepath.Join(parts...)
@@ -62,6 +69,21 @@ func DefaultPreparedRoot(root string) string {
 
 func CanonicalPreparedRoots() []string {
 	return append([]string(nil), canonicalPreparedRoots...)
+}
+
+func AllowedAuthoringPathPatterns() []string {
+	return append([]string(nil), allowedAuthoringPaths...)
+}
+
+func IsAllowedAuthoringPath(path string) bool {
+	clean := filepath.ToSlash(strings.TrimSpace(path))
+	if clean == "" || strings.Contains(clean, "..") {
+		return false
+	}
+	return clean == WorkflowRootDir+"/"+CanonicalPrepareWorkflowRel ||
+		clean == WorkflowRootDir+"/"+WorkflowVarsRel ||
+		strings.HasPrefix(clean, WorkflowRootDir+"/"+WorkflowScenariosDir+"/") ||
+		strings.HasPrefix(clean, WorkflowRootDir+"/"+WorkflowComponentsDir+"/")
 }
 
 func IsCanonicalPreparedPath(rel string) bool {

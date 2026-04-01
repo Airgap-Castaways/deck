@@ -91,6 +91,234 @@ func TestMaterializeRefineBracketPathEdit(t *testing.T) {
 	}
 }
 
+func TestMaterializeRefineExtractVarTransform(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	varsPath := filepath.Join(root, "workflows", "vars.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      podNetworkCIDR: 10.244.0.0/16\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	if err := os.WriteFile(varsPath, []byte("clusterName: demo\n"), 0o600); err != nil {
+		t.Fatalf("write vars: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/scenarios/apply.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:     "extract-var",
+			RawPath:  "steps[0].spec.podNetworkCIDR",
+			VarName:  "podCIDR",
+			VarsPath: "workflows/vars.yaml",
+			Value:    "10.244.0.0/16",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize refine transform: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected scenario and vars files, got %#v", files)
+	}
+	byPath := map[string]string{}
+	for _, file := range files {
+		byPath[file.Path] = file.Content
+	}
+	if !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "{{ .vars.podCIDR }}") {
+		t.Fatalf("expected scenario to reference extracted var, got %q", byPath["workflows/scenarios/apply.yaml"])
+	}
+	if !strings.Contains(byPath["workflows/vars.yaml"], "podCIDR: 10.244.0.0/16") {
+		t.Fatalf("expected vars file to include extracted value, got %q", byPath["workflows/vars.yaml"])
+	}
+}
+
+func TestMaterializeRefineExtractVarTransformsAccumulateSharedVarsFile(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	varsPath := filepath.Join(root, "workflows", "vars.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      podNetworkCIDR: 10.244.0.0/16\n      kubernetesVersion: v1.30.1\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	if err := os.WriteFile(varsPath, []byte("clusterName: demo\n"), 0o600); err != nil {
+		t.Fatalf("write vars: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/scenarios/apply.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:     "extract-var",
+			RawPath:  "steps[0].spec.podNetworkCIDR",
+			VarName:  "podCIDR",
+			VarsPath: "workflows/vars.yaml",
+			Value:    "10.244.0.0/16",
+		}, {
+			Type:     "extract-var",
+			RawPath:  "steps[0].spec.kubernetesVersion",
+			VarName:  "kubernetesVersion",
+			VarsPath: "workflows/vars.yaml",
+			Value:    "v1.30.1",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize repeated vars transforms: %v", err)
+	}
+	byPath := map[string]string{}
+	for _, file := range files {
+		byPath[file.Path] = file.Content
+	}
+	varsContent := byPath["workflows/vars.yaml"]
+	for _, want := range []string{"podCIDR: 10.244.0.0/16", "kubernetesVersion: v1.30.1", "clusterName: demo"} {
+		if !strings.Contains(varsContent, want) {
+			t.Fatalf("expected %q in vars file, got %q", want, varsContent)
+		}
+	}
+}
+
+func TestMaterializeRefineSetFieldTransform(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      podNetworkCIDR: 10.244.0.0/16\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/scenarios/apply.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:    "set-field",
+			RawPath: "steps[0].spec.podNetworkCIDR",
+			Value:   "10.250.0.0/16",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize set-field transform: %v", err)
+	}
+	if len(files) != 1 || !strings.Contains(files[0].Content, "10.250.0.0/16") {
+		t.Fatalf("expected set-field transform to update scenario, got %#v", files)
+	}
+}
+
+func TestMaterializeRefineCandidateSetFieldTransform(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      podNetworkCIDR: 10.244.0.0/16\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/scenarios/apply.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:      "set-field",
+			Candidate: "set-field|workflows/scenarios/apply.yaml|steps[0].spec.podNetworkCIDR",
+			Value:     "10.250.0.0/16",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize candidate set-field transform: %v", err)
+	}
+	if len(files) != 1 || !strings.Contains(files[0].Content, "10.250.0.0/16") {
+		t.Fatalf("expected candidate-driven set-field transform to update scenario, got %#v", files)
+	}
+}
+
+func TestMaterializeRefineVarsEditCreatesMissingVarsFile(t *testing.T) {
+	root := t.TempDir()
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/vars.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:  "set-field",
+			Path:  "vars.joinFilePath",
+			Value: "/tmp/deck/join.txt",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize vars edit: %v", err)
+	}
+	if len(files) != 1 || !strings.Contains(files[0].Content, "joinFilePath: /tmp/deck/join.txt") {
+		t.Fatalf("expected missing vars file to be created via edit transform, got %#v", files)
+	}
+}
+
+func TestMaterializeRefineDeleteFieldTransform(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      podNetworkCIDR: 10.244.0.0/16\n      ignorePreflightErrors: [Swap]\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/scenarios/apply.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:    "delete-field",
+			RawPath: "steps[0].spec.ignorePreflightErrors",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize delete-field transform: %v", err)
+	}
+	if len(files) != 1 || strings.Contains(files[0].Content, "ignorePreflightErrors") {
+		t.Fatalf("expected delete-field transform to remove field, got %#v", files)
+	}
+}
+
+func TestMaterializeRefineExtractComponentTransform(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        kind: InitKubeadm\n        spec:\n          podNetworkCIDR: 10.244.0.0/16\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/scenarios/apply.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:    "extract-component",
+			RawPath: "phases.bootstrap",
+			Path:    "workflows/components/bootstrap.yaml",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize extract-component transform: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected scenario and component files, got %#v", files)
+	}
+	byPath := map[string]string{}
+	for _, file := range files {
+		byPath[file.Path] = file.Content
+	}
+	if !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "imports:") || !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "path: bootstrap.yaml") {
+		t.Fatalf("expected scenario to import extracted component, got %q", byPath["workflows/scenarios/apply.yaml"])
+	}
+	if strings.Contains(byPath["workflows/scenarios/apply.yaml"], "kind: InitKubeadm") {
+		t.Fatalf("expected inline steps removed from scenario, got %q", byPath["workflows/scenarios/apply.yaml"])
+	}
+	if !strings.Contains(byPath["workflows/components/bootstrap.yaml"], "kind: InitKubeadm") {
+		t.Fatalf("expected component to contain extracted steps, got %q", byPath["workflows/components/bootstrap.yaml"])
+	}
+}
+
 func TestMaterializeDeleteDocument(t *testing.T) {
 	files, err := Materialize(t.TempDir(), askcontract.GenerationResponse{
 		Documents: []askcontract.GeneratedDocument{{Path: "workflows/components/old.yaml", Action: "delete"}},
@@ -100,6 +328,16 @@ func TestMaterializeDeleteDocument(t *testing.T) {
 	}
 	if len(files) != 1 || !files[0].Delete {
 		t.Fatalf("expected delete file, got %#v", files)
+	}
+}
+
+func TestMaterializeCompilesBuilderSelection(t *testing.T) {
+	files, err := Materialize(t.TempDir(), askcontract.GenerationResponse{Program: &askcontract.AuthoringProgram{Cluster: askcontract.ProgramCluster{JoinFile: "/tmp/deck/join.txt", ControlPlaneCount: 1}, Verification: askcontract.ProgramVerification{ExpectedNodeCount: 1, ExpectedReadyCount: 1, ExpectedControlPlaneReady: 1}}, Selection: &askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm", Overrides: map[string]any{}}, {ID: "apply.check-cluster", Overrides: map[string]any{}}}}}}})
+	if err != nil {
+		t.Fatalf("materialize builder selection: %v", err)
+	}
+	if len(files) != 1 || !strings.Contains(files[0].Content, "kind: InitKubeadm") || !strings.Contains(files[0].Content, "kind: CheckCluster") {
+		t.Fatalf("expected builder selection to render typed workflow content, got %#v", files)
 	}
 }
 

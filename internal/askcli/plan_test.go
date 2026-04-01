@@ -7,11 +7,11 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
 
-func TestNeedsComplexPlannerSkipsGenericKubeadmClusterStarterPrompt(t *testing.T) {
+func TestNeedsComplexPlannerKeepsGenericKubeadmClusterPrompt(t *testing.T) {
 	decision := askintent.Decision{Route: askintent.RouteDraft}
 	workspace := askretrieve.WorkspaceSummary{}
-	if needsComplexPlanner("create an air-gapped rhel9 kubeadm cluster workflow", workspace, decision) {
-		t.Fatalf("expected generic kubeadm cluster starter prompt to avoid planner")
+	if !needsComplexPlanner("create an air-gapped rhel9 kubeadm cluster workflow", workspace, decision) {
+		t.Fatalf("expected generic kubeadm cluster prompt to require planner")
 	}
 }
 

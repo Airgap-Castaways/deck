@@ -30,12 +30,39 @@ type Definition struct {
 
 type AskMetadata struct {
 	Capabilities             []string
+	ContractHints            ContractHints
+	Builders                 []AuthoringBuilder
 	MatchSignals             []string
 	KeyFields                []string
 	ValidationHints          []ValidationHint
 	ConstrainedLiteralFields []ConstrainedLiteralField
 	QualityRules             []QualityRule
 	AntiSignals              []string
+}
+
+type AuthoringBuilder struct {
+	ID                   string
+	Phase                string
+	DefaultStepID        string
+	Summary              string
+	RequiresCapabilities []string
+	Bindings             []AuthoringBinding
+}
+
+type AuthoringBinding struct {
+	Path     string
+	From     string
+	Semantic string
+	Required bool
+}
+
+type ContractHints struct {
+	ProducesArtifacts   []string
+	ConsumesArtifacts   []string
+	PublishesState      []string
+	ConsumesState       []string
+	RoleSensitive       bool
+	VerificationRelated bool
 }
 
 type ValidationHint struct {
@@ -195,6 +222,21 @@ func cloneDefinition(def Definition) Definition {
 	cloned.Outputs = append([]string(nil), def.Outputs...)
 	cloned.Notes = append([]string(nil), def.Notes...)
 	cloned.Ask.Capabilities = append([]string(nil), def.Ask.Capabilities...)
+	cloned.Ask.ContractHints.ProducesArtifacts = append([]string(nil), def.Ask.ContractHints.ProducesArtifacts...)
+	cloned.Ask.ContractHints.ConsumesArtifacts = append([]string(nil), def.Ask.ContractHints.ConsumesArtifacts...)
+	cloned.Ask.ContractHints.PublishesState = append([]string(nil), def.Ask.ContractHints.PublishesState...)
+	cloned.Ask.ContractHints.ConsumesState = append([]string(nil), def.Ask.ContractHints.ConsumesState...)
+	if len(def.Ask.Builders) > 0 {
+		cloned.Ask.Builders = make([]AuthoringBuilder, len(def.Ask.Builders))
+		copy(cloned.Ask.Builders, def.Ask.Builders)
+		for i := range cloned.Ask.Builders {
+			cloned.Ask.Builders[i].RequiresCapabilities = append([]string(nil), def.Ask.Builders[i].RequiresCapabilities...)
+			if len(def.Ask.Builders[i].Bindings) > 0 {
+				cloned.Ask.Builders[i].Bindings = make([]AuthoringBinding, len(def.Ask.Builders[i].Bindings))
+				copy(cloned.Ask.Builders[i].Bindings, def.Ask.Builders[i].Bindings)
+			}
+		}
+	}
 	cloned.Ask.MatchSignals = append([]string(nil), def.Ask.MatchSignals...)
 	cloned.Ask.KeyFields = append([]string(nil), def.Ask.KeyFields...)
 	cloned.Ask.AntiSignals = append([]string(nil), def.Ask.AntiSignals...)

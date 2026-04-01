@@ -24,7 +24,9 @@ func Current() Spec {
 			Use:   "ask [request]",
 			Short: "(Experimental) AI helper for drafting and reviewing workflows",
 			Flags: []Flag{
-				{Name: "--write", Description: "Write generated workflow files into the current workspace."},
+				{Name: "--create", Description: "Treat the request as new workflow authoring."},
+				{Name: "--edit", Description: "Treat the request as workflow refinement."},
+				{Name: "--review", Description: "Review the current workspace without writing files."},
 				{Name: "--from", Description: "Load additional request details from a text or markdown file."},
 				{Name: "--plan-name", Description: "Optional plan artifact name used by ask plan."},
 				{Name: "--plan-dir", Description: "Directory for ask plan artifacts."},

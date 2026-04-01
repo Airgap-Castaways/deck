@@ -465,10 +465,26 @@ func validateToolSchemas(wf *config.Workflow) error {
 		}
 
 		msgs := make([]string, 0, len(result.Errors()))
+		issues := make([]Issue, 0, len(result.Errors()))
 		for _, e := range result.Errors() {
 			msgs = append(msgs, e.String())
+			issue := wrapIssue("", Issue{
+				Code:      "validation_error",
+				Severity:  "blocking",
+				Path:      strings.TrimSpace(e.Field()),
+				StepID:    strings.TrimSpace(step.ID),
+				StepKind:  strings.TrimSpace(step.Kind),
+				Message:   fmt.Sprintf("step %s (%s): %s", step.ID, step.Kind, e.Description()),
+				Expected:  strings.TrimSpace(e.Description()),
+				Actual:    fmt.Sprint(e.Value()),
+				SourceRef: schemaFile,
+			})
+			if property, ok := e.Details()["property"]; ok {
+				issue.Path = joinIssuePath(issue.Path, fmt.Sprint(property))
+			}
+			issues = append(issues, issue)
 		}
-		return fmt.Errorf("E_SCHEMA_INVALID: step %s (%s): %s", step.ID, step.Kind, strings.Join(msgs, "; "))
+		return schemaValidationError(fmt.Sprintf("E_SCHEMA_INVALID: step %s (%s): %s", step.ID, step.Kind, strings.Join(msgs, "; ")), issues)
 	}
 
 	return nil
@@ -566,10 +582,43 @@ func validateSchema(name string, content []byte, kind documentKind) error {
 	}
 
 	msgs := make([]string, 0, len(result.Errors()))
+	issues := make([]Issue, 0, len(result.Errors()))
 	for _, e := range result.Errors() {
 		msgs = append(msgs, e.String())
+		issue := wrapIssue(name, Issue{
+			Code:      "validation_error",
+			Severity:  "blocking",
+			Path:      strings.TrimSpace(e.Field()),
+			Message:   e.Description(),
+			Expected:  strings.TrimSpace(e.Description()),
+			Actual:    fmt.Sprint(e.Value()),
+			SourceRef: schemaIssueSource(kind),
+		})
+		if property, ok := e.Details()["property"]; ok {
+			issue.Path = joinIssuePath(issue.Path, fmt.Sprint(property))
+		}
+		issues = append(issues, issue)
 	}
-	return fmt.Errorf("E_SCHEMA_INVALID: %s", strings.Join(msgs, "; "))
+	return schemaValidationError(fmt.Sprintf("E_SCHEMA_INVALID: %s", strings.Join(msgs, "; ")), issues)
+}
+
+func schemaIssueSource(kind documentKind) string {
+	if kind == documentKindComponentFragment {
+		return "deck-component-fragment.schema.json"
+	}
+	return "deck-workflow.schema.json"
+}
+
+func joinIssuePath(base string, prop string) string {
+	base = strings.TrimSpace(base)
+	prop = strings.TrimSpace(prop)
+	if base == "" {
+		return prop
+	}
+	if prop == "" {
+		return base
+	}
+	return base + "." + prop
 }
 
 func validatePhaseSemantics(wf *config.Workflow, role string) error {
@@ -578,10 +627,10 @@ func validatePhaseSemantics(wf *config.Workflow, role string) error {
 	for _, phase := range phases {
 		phaseName := strings.TrimSpace(phase.Name)
 		if phaseName == "" {
-			return fmt.Errorf("E_DUPLICATE_PHASE_NAME: empty phase name")
+			return schemaValidationError("E_DUPLICATE_PHASE_NAME: empty phase name", []Issue{issueForDuplicatePhase("", "")})
 		}
 		if seenPhase[phaseName] {
-			return fmt.Errorf("E_DUPLICATE_PHASE_NAME: %s", phaseName)
+			return schemaValidationError(fmt.Sprintf("E_DUPLICATE_PHASE_NAME: %s", phaseName), []Issue{issueForDuplicatePhase("", phaseName)})
 		}
 		seenPhase[phaseName] = true
 		if err := validatePhaseParallelSemantics(phase, role); err != nil {

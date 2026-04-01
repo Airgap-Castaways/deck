@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Airgap-Castaways/deck/internal/askauthoring"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
@@ -39,12 +40,12 @@ func buildPlanWithReview(ctx context.Context, client askprovider.Client, cfg ask
 		if attempt == 2 {
 			return planned, critic, false, nil
 		}
-		currentPrompt = appendPlanCriticRetryPrompt(requestText, critic)
+		currentPrompt = appendPlanCriticRetryPrompt(requestText, planned, critic)
 	}
 	return planned, critic, false, nil
 }
 
-func appendPlanCriticRetryPrompt(base string, critic askcontract.PlanCriticResponse) string {
+func appendPlanCriticRetryPrompt(base string, plan askcontract.PlanResponse, critic askcontract.PlanCriticResponse) string {
 	b := &strings.Builder{}
 	b.WriteString(strings.TrimSpace(base))
 	b.WriteString("\n\nPlan critic requested a stronger plan before generation. Address these issues in the next plan JSON:\n")
@@ -80,9 +81,22 @@ func appendPlanCriticRetryPrompt(base string, critic askcontract.PlanCriticRespo
 		}
 	}
 	b.WriteString("Required plan updates before generation:\n")
-	b.WriteString("- Ensure executionModel.artifactContracts explicitly cover every staged package/image handoff used by apply.\n")
-	b.WriteString("- Ensure exactly one authoritative join handoff contract is present when workers join a cluster.\n")
-	b.WriteString("- Ensure executionModel.roleExecution and executionModel.verification match the requested topology and role behavior.\n")
+	added := false
+	if planNeedsArtifactContracts(plan) {
+		b.WriteString("- Ensure executionModel.artifactContracts explicitly cover each staged producer/consumer handoff used by apply.\n")
+		added = true
+	}
+	if planNeedsMultiRoleExecution(plan) {
+		b.WriteString("- Ensure shared-state and role-execution contracts are explicit for every control-plane/worker handoff.\n")
+		added = true
+	}
+	if planNeedsStagedVerification(plan) {
+		b.WriteString("- Ensure executionModel.verification and apply assumptions reflect the intended execution order and verification stage.\n")
+		added = true
+	}
+	if !added {
+		b.WriteString("- Tighten executionModel and validationChecklist so the requested workflow shape is explicit and internally consistent.\n")
+	}
 	b.WriteString("- Prefer recoverable omissions to be fixed in the plan rather than adding new blockers or open questions.\n")
 	return strings.TrimSpace(b.String())
 }
@@ -120,7 +134,7 @@ func hasFatalPlanReviewIssues(plan askcontract.PlanResponse, critic askcontract.
 func fatalPlanReviewReasons(plan askcontract.PlanResponse, critic askcontract.PlanCriticResponse) []string {
 	reasons := []string{}
 	for _, finding := range normalizedPlanCriticFindings(plan, critic) {
-		if !planCriticFindingIsFatal(finding) {
+		if !planCriticFindingIsFatal(finding) && !planCriticFindingNeedsExecutionGate(plan, finding) {
 			continue
 		}
 		if text := strings.TrimSpace(finding.Message); text != "" {
@@ -132,6 +146,62 @@ func fatalPlanReviewReasons(plan askcontract.PlanResponse, critic askcontract.Pl
 			reasons = append(reasons, item)
 		}
 	}
+	reasons = append(reasons, fatalPlanScopeReasons(plan)...)
+	reasons = append(reasons, fatalPlanProgramReasons(plan)...)
+	reasons = append(reasons, fatalPlanGraphReasons(plan)...)
+	return dedupe(reasons)
+}
+
+func fatalPlanScopeReasons(plan askcontract.PlanResponse) []string {
+	if askintent.ParseRoute(plan.Intent) != askintent.RouteRefine {
+		return nil
+	}
+	if len(plan.AuthoringBrief.AnchorPaths) == 0 {
+		return []string{"refine generation requires at least one anchor path before execution can continue"}
+	}
+	return nil
+}
+
+func fatalPlanProgramReasons(plan askcontract.PlanResponse) []string {
+	reasons := []string{}
+	program := plan.AuthoringProgram
+	if strings.TrimSpace(program.Platform.Family) == "" && strings.TrimSpace(program.Cluster.JoinFile) == "" && program.Verification.ExpectedNodeCount == 0 && strings.TrimSpace(program.Cluster.RoleSelector) == "" {
+		return nil
+	}
+	if strings.TrimSpace(program.Platform.Family) == "" {
+		missingPlatform := false
+		for _, capability := range plan.AuthoringBrief.RequiredCapabilities {
+			if strings.TrimSpace(capability) == "package-staging" || strings.TrimSpace(capability) == "prepare-artifacts" {
+				missingPlatform = true
+				break
+			}
+		}
+		if missingPlatform {
+			reasons = append(reasons, "authoring program is missing platform.family required for package authoring")
+		}
+	}
+	if planNeedsMultiRoleExecution(plan) && strings.TrimSpace(program.Cluster.RoleSelector) == "" {
+		reasons = append(reasons, "authoring program is missing cluster.roleSelector required for multi-role execution")
+	}
+	if hasPlanCapability(plan, "cluster-verification") && program.Verification.ExpectedNodeCount <= 0 {
+		reasons = append(reasons, "authoring program is missing verification.expectedNodeCount required for cluster verification")
+	}
+	if hasPlanCapability(plan, "kubeadm-bootstrap") && strings.TrimSpace(program.Cluster.JoinFile) == "" {
+		reasons = append(reasons, "authoring program is missing cluster.joinFile required for kubeadm bootstrap flows")
+	}
+	return dedupe(reasons)
+}
+
+func fatalPlanGraphReasons(plan askcontract.PlanResponse) []string {
+	facts := askauthoring.InferFacts(plan.Request, plan.ArtifactKinds, plan.OfflineAssumption)
+	graph := askauthoring.BuildContractGraph(facts, askauthoring.RequirementLike{
+		Connectivity:   plan.OfflineAssumption,
+		NeedsPrepare:   plan.NeedsPrepare,
+		ArtifactKinds:  plan.ArtifactKinds,
+		EntryScenario:  plan.EntryScenario,
+		ScenarioIntent: plan.AuthoringBrief.RequiredCapabilities,
+	}, askretrieve.WorkspaceSummary{})
+	reasons := []string{}
 	if strings.TrimSpace(plan.EntryScenario) == "" {
 		reasons = append(reasons, "no viable entry scenario can be determined")
 	}
@@ -141,60 +211,38 @@ func fatalPlanReviewReasons(plan askcontract.PlanResponse, critic askcontract.Pl
 	if strings.TrimSpace(plan.AuthoringBrief.ModeIntent) == "prepare+apply" && !hasPlannedPath(plan.Files, filepath.ToSlash(strings.TrimSpace(plan.EntryScenario))) {
 		reasons = append(reasons, "required prepare/apply entry scenario is absent and cannot be defaulted")
 	}
-	if isMultiRoleTopology(plan.AuthoringBrief.Topology) && strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) == "" && !authoringBriefSuggestsRoleSelector(plan.AuthoringBrief) {
+	if len(graph.Artifacts) > 0 && len(plan.ExecutionModel.ArtifactContracts) == 0 {
+		reasons = append(reasons, "artifact-dependent request has no viable artifact contract graph")
+	}
+	if len(graph.SharedState) > 0 && len(plan.ExecutionModel.SharedStateContracts) == 0 {
+		reasons = append(reasons, "multi-role request has no viable shared-state contract graph")
+	}
+	if graph.RoleExecution.PerNodeInvocation && strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) == "" {
 		reasons = append(reasons, "multi-role request has no viable role selector or branching model")
 	}
-	if needsArtifactPreparation(plan) && len(plan.ExecutionModel.ArtifactContracts) == 0 && !planHasArtifactConsumerPath(plan) {
-		reasons = append(reasons, "artifact-dependent request has no viable consumer path")
+	if graph.Verification.ExpectedNodeCount > 0 && plan.ExecutionModel.Verification.ExpectedNodeCount <= 0 {
+		reasons = append(reasons, "verification contract is incomplete for the requested topology")
 	}
-	return dedupe(reasons)
+	return reasons
 }
 
 func fatalPlanBlockers(plan askcontract.PlanResponse) []string {
-	_ = plan
-	return nil
+	reasons := []string{}
+	for _, item := range plan.Clarifications {
+		if !item.BlocksGeneration || strings.TrimSpace(item.Answer) != "" {
+			continue
+		}
+		if text := strings.TrimSpace(item.Question); text != "" {
+			reasons = append(reasons, text)
+		}
+	}
+	return dedupe(reasons)
 }
 
 func hasPlannedPath(files []askcontract.PlanFile, want string) bool {
 	want = strings.TrimSpace(want)
 	for _, file := range files {
 		if filepath.ToSlash(strings.TrimSpace(file.Path)) == want {
-			return true
-		}
-	}
-	return false
-}
-
-func isMultiRoleTopology(topology string) bool {
-	switch strings.TrimSpace(topology) {
-	case "multi-node", "ha":
-		return true
-	default:
-		return false
-	}
-}
-
-func needsArtifactPreparation(plan askcontract.PlanResponse) bool {
-	return plan.NeedsPrepare || len(plan.ArtifactKinds) > 0 || strings.TrimSpace(plan.AuthoringBrief.ModeIntent) == "prepare+apply"
-}
-
-func authoringBriefSuggestsRoleSelector(brief askcontract.AuthoringBrief) bool {
-	if strings.TrimSpace(brief.ModeIntent) != "prepare+apply" {
-		return false
-	}
-	for _, capability := range brief.RequiredCapabilities {
-		capability = strings.TrimSpace(capability)
-		if capability == "kubeadm-join" || capability == "cluster-verification" {
-			return true
-		}
-	}
-	return isMultiRoleTopology(brief.Topology)
-}
-
-func planHasArtifactConsumerPath(plan askcontract.PlanResponse) bool {
-	for _, file := range plan.Files {
-		path := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if strings.HasPrefix(path, "workflows/scenarios/") {
 			return true
 		}
 	}
@@ -258,16 +306,83 @@ func planCriticFindingKey(finding askcontract.PlanCriticFinding) string {
 }
 
 func planCriticFindingIsFatal(finding askcontract.PlanCriticFinding) bool {
-	if spec, ok := workflowissues.SpecFor(finding.Code); ok {
-		return spec.DefaultSeverity == workflowissues.SeverityBlocking && !spec.DefaultRecoverable
-	}
 	if finding.Recoverable {
 		return false
 	}
-	return finding.Severity == workflowissues.SeverityBlocking
+	if finding.Severity != "" {
+		return finding.Severity == workflowissues.SeverityBlocking
+	}
+	if spec, ok := workflowissues.SpecFor(finding.Code); ok {
+		return spec.DefaultSeverity == workflowissues.SeverityBlocking && !spec.DefaultRecoverable
+	}
+	return false
+}
+
+func planCriticFindingNeedsExecutionGate(plan askcontract.PlanResponse, finding askcontract.PlanCriticFinding) bool {
+	switch finding.Code {
+	case workflowissues.CodeMissingArtifactConsumer,
+		workflowissues.CodeArtifactContractGap:
+		return planNeedsArtifactContracts(plan) && len(plan.ExecutionModel.ArtifactContracts) == 0
+	case workflowissues.CodeMissingRoleSelector:
+		return planNeedsMultiRoleExecution(plan) && strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) == ""
+	case workflowissues.CodeAmbiguousJoinContract,
+		workflowissues.CodeWorkerJoinFanoutGap:
+		return planNeedsMultiRoleExecution(plan) && len(plan.ExecutionModel.SharedStateContracts) == 0
+	case workflowissues.CodeRoleCardinalityGap,
+		workflowissues.CodeTopologyFidelityGap:
+		return planNeedsMultiRoleExecution(plan) && (plan.AuthoringBrief.NodeCount <= 0 || strings.TrimSpace(plan.AuthoringBrief.Topology) == "unspecified")
+	case workflowissues.CodeWeakVerificationStaging:
+		return planNeedsStagedVerification(plan) && plan.ExecutionModel.Verification.ExpectedNodeCount <= 0
+	default:
+		return false
+	}
+}
+
+func planNeedsArtifactContracts(plan askcontract.PlanResponse) bool {
+	return plan.NeedsPrepare || len(plan.ArtifactKinds) > 0 || len(plan.ExecutionModel.ArtifactContracts) > 0
+}
+
+func hasPlanCapability(plan askcontract.PlanResponse, want string) bool {
+	for _, capability := range plan.AuthoringBrief.RequiredCapabilities {
+		if strings.TrimSpace(capability) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func planNeedsMultiRoleExecution(plan askcontract.PlanResponse) bool {
+	if strings.TrimSpace(plan.AuthoringBrief.Topology) == "multi-node" || strings.TrimSpace(plan.AuthoringBrief.Topology) == "ha" || plan.AuthoringBrief.NodeCount > 1 {
+		return true
+	}
+	if strings.TrimSpace(plan.ExecutionModel.RoleExecution.WorkerFlow) != "" || plan.ExecutionModel.RoleExecution.PerNodeInvocation {
+		return true
+	}
+	for _, capability := range plan.AuthoringBrief.RequiredCapabilities {
+		if strings.TrimSpace(capability) == "kubeadm-join" {
+			return true
+		}
+	}
+	return false
+}
+
+func planNeedsStagedVerification(plan askcontract.PlanResponse) bool {
+	if planNeedsArtifactContracts(plan) || planNeedsMultiRoleExecution(plan) || strings.TrimSpace(plan.AuthoringBrief.ModeIntent) == "prepare+apply" {
+		return true
+	}
+	for _, capability := range plan.AuthoringBrief.RequiredCapabilities {
+		switch strings.TrimSpace(capability) {
+		case "kubeadm-bootstrap", "kubeadm-join":
+			return true
+		}
+	}
+	return false
 }
 
 func planCriticFindingIsRecoverable(finding askcontract.PlanCriticFinding) bool {
+	if finding.Recoverable {
+		return true
+	}
 	if spec, ok := workflowissues.SpecFor(finding.Code); ok {
 		return spec.DefaultRecoverable
 	}
@@ -275,11 +390,10 @@ func planCriticFindingIsRecoverable(finding askcontract.PlanCriticFinding) bool 
 }
 
 func legacyPlanCriticFinding(text string, severity workflowissues.Severity) askcontract.PlanCriticFinding {
-	recoverable := severity != workflowissues.SeverityBlocking
 	return askcontract.PlanCriticFinding{
 		Code:        workflowissues.CodeAskUnclassifiedCriticFinding,
 		Severity:    severity,
 		Message:     text,
-		Recoverable: recoverable,
+		Recoverable: true,
 	}
 }

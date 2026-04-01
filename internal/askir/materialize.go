@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askdraft"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
@@ -14,6 +15,18 @@ func Materialize(root string, gen askcontract.GenerationResponse) ([]askcontract
 }
 
 func MaterializeWithBase(root string, base []askcontract.GeneratedFile, gen askcontract.GenerationResponse) ([]askcontract.GeneratedFile, error) {
+	if gen.Selection != nil {
+		switch {
+		case askcontract.SelectionUsesBuilders(*gen.Selection):
+			docs, err := askdraft.CompileWithProgram(derefProgram(gen.Program), *gen.Selection)
+			if err != nil {
+				return nil, err
+			}
+			gen.Documents = append(gen.Documents, docs...)
+		case len(gen.Documents) == 0:
+			gen.Documents = askcontract.CompileDraftSelection(*gen.Selection)
+		}
+	}
 	if len(gen.Documents) == 0 {
 		return nil, nil
 	}
@@ -41,6 +54,13 @@ func MaterializeWithBase(root string, base []askcontract.GeneratedFile, gen askc
 	return materialized, nil
 }
 
+func derefProgram(program *askcontract.AuthoringProgram) askcontract.AuthoringProgram {
+	if program == nil {
+		return askcontract.AuthoringProgram{}
+	}
+	return *program
+}
+
 func materializeDocument(root string, baseContent map[string]string, doc askcontract.GeneratedDocument) ([]askcontract.GeneratedFile, error) {
 	action := normalizeAction(doc)
 	path := filepath.ToSlash(strings.TrimSpace(doc.Path))
@@ -53,11 +73,13 @@ func materializeDocument(root string, baseContent map[string]string, doc askcont
 	case "delete":
 		return []askcontract.GeneratedFile{{Path: path, Delete: true}}, nil
 	case "edit":
-		content, err := applyDocumentEdits(root, baseContent, path, doc)
+		content, extraFiles, err := applyDocumentEdits(root, baseContent, path, doc)
 		if err != nil {
 			return nil, err
 		}
-		return []askcontract.GeneratedFile{{Path: path, Content: content}}, nil
+		files := []askcontract.GeneratedFile{{Path: path, Content: content}}
+		files = append(files, extraFiles...)
+		return files, nil
 	case "replace", "create":
 		content, err := renderDocument(path, doc)
 		if err != nil {

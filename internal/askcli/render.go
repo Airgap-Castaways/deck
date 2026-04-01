@@ -87,10 +87,12 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 		if _, err := io.WriteString(stdout, "next:\n"); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(stdout, "- deck ask --from %s \"implement this plan\"\n", result.PlanMarkdown); err != nil {
-			return err
+		if result.Plan != nil && hasBlockingClarifications(*result.Plan) && result.PlanJSON != "" {
+			if _, err := fmt.Fprintf(stdout, "- deck ask plan --from %s --answer clarification.id=value\n", result.PlanJSON); err != nil {
+				return err
+			}
 		}
-		if _, err := fmt.Fprintf(stdout, "- deck ask --write --from %s \"implement this plan\"\n", result.PlanMarkdown); err != nil {
+		if _, err := fmt.Fprintf(stdout, "- deck ask --from %s \"implement this plan\"\n", result.PlanMarkdown); err != nil {
 			return err
 		}
 	}
@@ -157,7 +159,7 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 		}
 	}
 	if len(result.Files) > 0 {
-		label := "preview"
+		label := "files"
 		if result.WroteFiles {
 			label = "wrote"
 		}

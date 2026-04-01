@@ -29,7 +29,7 @@ func rewriteWorkflowStepPath(segments []structuredpath.Segment, doc askcontract.
 			}
 		}
 	}
-	if doc.Workflow.Phases == nil && doc.Workflow.Steps != nil {
+	if len(doc.Workflow.Steps) > 0 {
 		for stepIdx, step := range doc.Workflow.Steps {
 			if strings.TrimSpace(step.ID) == stepKey {
 				prefix := []structuredpath.Segment{{Key: "steps"}, {Index: stepIdx, IsIndex: true}}

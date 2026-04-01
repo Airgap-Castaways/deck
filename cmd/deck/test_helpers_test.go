@@ -47,15 +47,28 @@ func runWithCapturedStdout(args []string) (string, error) {
 	}
 
 	oldStdout := os.Stdout
+	oldStdin := os.Stdin
 	r, w, err := os.Pipe()
 	if err != nil {
 		return "", err
 	}
+	stdinFile, err := os.CreateTemp("", "deck-test-stdin-*")
+	if err != nil {
+		_ = r.Close()
+		_ = w.Close()
+		return "", err
+	}
+	defer func() {
+		_ = stdinFile.Close()
+		_ = os.Remove(stdinFile.Name())
+	}()
 	os.Stdout = w
+	os.Stdin = stdinFile
 
 	runErr := run(args)
 	_ = w.Close()
 	os.Stdout = oldStdout
+	os.Stdin = oldStdin
 
 	raw, readErr := io.ReadAll(r)
 	_ = r.Close()

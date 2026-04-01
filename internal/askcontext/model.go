@@ -124,6 +124,12 @@ type StepKindContext struct {
 	ValidationHints          []ValidationHint
 	ConstrainedLiteralFields []ConstrainedFieldHint
 	Capabilities             []string
+	ProducesArtifacts        []string
+	ConsumesArtifacts        []string
+	PublishesState           []string
+	ConsumesState            []string
+	RoleSensitive            bool
+	VerificationRelated      bool
 	MatchSignals             []string
 	AntiSignals              []string
 	QualityRules             []QualityRule

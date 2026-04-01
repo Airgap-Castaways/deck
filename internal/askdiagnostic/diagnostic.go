@@ -2,12 +2,14 @@ package askdiagnostic
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
+	"github.com/Airgap-Castaways/deck/internal/validate"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
 )
 
@@ -16,6 +18,9 @@ type Diagnostic struct {
 	Severity     string   `json:"severity"`
 	File         string   `json:"file,omitempty"`
 	Path         string   `json:"path,omitempty"`
+	StepID       string   `json:"stepId,omitempty"`
+	StepKind     string   `json:"stepKind,omitempty"`
+	RepairOp     string   `json:"repairOp,omitempty"`
 	Message      string   `json:"message"`
 	Expected     string   `json:"expected,omitempty"`
 	Actual       string   `json:"actual,omitempty"`
@@ -25,7 +30,20 @@ type Diagnostic struct {
 	SuggestedFix string   `json:"suggestedFix,omitempty"`
 }
 
-func FromValidationError(message string, bundle askknowledge.Bundle) []Diagnostic {
+func FromValidationError(err error, message string, bundle askknowledge.Bundle) []Diagnostic {
+	var validationErr *validate.ValidationError
+	if errors.As(err, &validationErr) {
+		structured := FromValidationIssues(validationErr.ValidationIssues())
+		if len(structured) > 0 {
+			fallbackFile := diagnosticMessageFile(message)
+			for i := range structured {
+				if strings.TrimSpace(structured[i].File) == "" {
+					structured[i].File = fallbackFile
+				}
+			}
+			return structured
+		}
+	}
 	message = strings.TrimSpace(message)
 	if message == "" {
 		return nil
@@ -121,6 +139,60 @@ func FromValidationError(message string, bundle askknowledge.Bundle) []Diagnosti
 		}
 	}
 	return dedupe(diags)
+}
+
+func FromValidationIssues(issues []validate.Issue) []Diagnostic {
+	if len(issues) == 0 {
+		return nil
+	}
+	diags := make([]Diagnostic, 0, len(issues))
+	for _, issue := range issues {
+		file := strings.TrimSpace(issue.File)
+		if file == "" {
+			file = diagnosticMessageFile(strings.TrimSpace(issue.Message))
+		}
+		message := strings.TrimSpace(issue.Message)
+		if message == "" {
+			message = strings.TrimSpace(issue.Expected)
+		}
+		if message == "" {
+			continue
+		}
+		diags = append(diags, Diagnostic{
+			Code:         strings.TrimSpace(issue.Code),
+			Severity:     strings.TrimSpace(issue.Severity),
+			File:         file,
+			Path:         strings.TrimSpace(issue.Path),
+			StepID:       strings.TrimSpace(issue.StepID),
+			StepKind:     strings.TrimSpace(issue.StepKind),
+			RepairOp:     classifyRepairOp(issue),
+			Message:      message,
+			Expected:     strings.TrimSpace(issue.Expected),
+			Actual:       strings.TrimSpace(issue.Actual),
+			SourceRef:    strings.TrimSpace(issue.SourceRef),
+			SuggestedFix: strings.TrimSpace(issue.SuggestedFix),
+		})
+	}
+	return dedupe(diags)
+}
+
+func classifyRepairOp(issue validate.Issue) string {
+	lowerCode := strings.ToLower(strings.TrimSpace(issue.Code))
+	lowerMessage := strings.ToLower(strings.TrimSpace(issue.Message))
+	switch {
+	case lowerCode == "missing_step_field" || strings.Contains(lowerMessage, " is required"):
+		return "fill-field"
+	case lowerCode == "unknown_step_field" || strings.Contains(lowerMessage, "additional property"):
+		return "remove-field"
+	case lowerCode == "duplicate_step_id":
+		return "rename-step"
+	case strings.Contains(lowerMessage, "must be one of") || strings.Contains(lowerMessage, "does not match pattern"):
+		return "fix-literal"
+	case strings.Contains(lowerMessage, "parse yaml"):
+		return "repair-structure"
+	default:
+		return "review-diagnostic"
+	}
 }
 
 func extractDuplicateStepID(message string) (string, bool) {

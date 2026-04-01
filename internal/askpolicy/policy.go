@@ -7,9 +7,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Airgap-Castaways/deck/internal/askauthoring"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
+	"github.com/Airgap-Castaways/deck/internal/askir"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
 
@@ -49,23 +51,36 @@ func BriefFromRequirements(req ScenarioRequirements, decision askintent.Decision
 }
 
 func ExecutionModelFromRequirements(req ScenarioRequirements) askcontract.ExecutionModel {
-	model := askcontract.ExecutionModel{
-		ArtifactContracts:    artifactContractsFromRequirements(req),
-		SharedStateContracts: sharedStateContractsFromRequirements(req),
-		RoleExecution: askcontract.RoleExecutionModel{
-			RoleSelector:      roleSelectorFromRequirements(req),
-			ControlPlaneFlow:  controlPlaneFlowFromRequirements(req),
-			WorkerFlow:        workerFlowFromRequirements(req),
-			PerNodeInvocation: perNodeInvocationFromRequirements(req),
-		},
-		Verification: askcontract.VerificationStrategy{
-			BootstrapPhase:            bootstrapPhaseFromRequirements(req),
-			FinalPhase:                finalPhaseFromRequirements(req),
-			FinalVerificationRole:     finalVerificationRoleFromRequirements(req),
-			ExpectedNodeCount:         expectedNodeCountFromRequirements(req),
-			ExpectedControlPlaneReady: expectedControlPlaneReadyFromRequirements(req),
-		},
-		ApplyAssumptions: applyAssumptionsFromRequirements(req),
+	facts := askauthoring.InferFacts(strings.Join(req.ScenarioIntent, " ")+" "+strings.Join(req.ArtifactKinds, " "), req.ArtifactKinds, req.Connectivity)
+	graph := askauthoring.BuildContractGraph(facts, askauthoring.RequirementLike{
+		Connectivity:   req.Connectivity,
+		NeedsPrepare:   req.NeedsPrepare,
+		ArtifactKinds:  req.ArtifactKinds,
+		ScenarioIntent: req.ScenarioIntent,
+		RequiredFiles:  req.RequiredFiles,
+		EntryScenario:  req.EntryScenario,
+	}, askretrieve.WorkspaceSummary{})
+	model := graph.ExecutionModel()
+	if model.Verification.ExpectedNodeCount <= 0 {
+		model.Verification.ExpectedNodeCount = expectedNodeCountFromRequirements(req)
+	}
+	if model.Verification.ExpectedControlPlaneReady <= 0 {
+		model.Verification.ExpectedControlPlaneReady = expectedControlPlaneReadyFromRequirements(req)
+	}
+	if strings.TrimSpace(model.RoleExecution.ControlPlaneFlow) == "" {
+		model.RoleExecution.ControlPlaneFlow = controlPlaneFlowFromRequirements(req)
+	}
+	if strings.TrimSpace(model.RoleExecution.WorkerFlow) == "" {
+		model.RoleExecution.WorkerFlow = workerFlowFromRequirements(req)
+	}
+	if strings.TrimSpace(model.Verification.BootstrapPhase) == "" {
+		model.Verification.BootstrapPhase = bootstrapPhaseFromRequirements(req)
+	}
+	if strings.TrimSpace(model.Verification.FinalPhase) == "" {
+		model.Verification.FinalPhase = finalPhaseFromRequirements(req)
+	}
+	if strings.TrimSpace(model.Verification.FinalVerificationRole) == "" {
+		model.Verification.FinalVerificationRole = finalVerificationRoleFromRequirements(req)
 	}
 	return model
 }
@@ -85,10 +100,11 @@ type EvaluationResult struct {
 func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) ScenarioRequirements {
 	requestedMode := requestedWorkflowMode(prompt)
 	artifactKinds := mergedArtifactKinds(prompt, retrieval)
-	needsPrepare := len(artifactKinds) > 0 || strings.Contains(strings.ToLower(prompt), "prepare")
+	facts := askauthoring.InferFacts(prompt, artifactKinds, InferOfflineAssumption(prompt))
+	needsPrepare := facts.NeedsPrepare
 	req := ScenarioRequirements{
 		AcceptanceLevel:     inferAcceptanceLevel(prompt, workspace, decision),
-		Connectivity:        InferOfflineAssumption(prompt),
+		Connectivity:        facts.Connectivity,
 		NeedsPrepare:        needsPrepare,
 		ArtifactKinds:       artifactKinds,
 		RequiredFiles:       nil,
@@ -96,7 +112,7 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 		TypedPreference:     typedPreferenceRequested(prompt),
 		VarsAdvisories:      inferVarsRecommendation(prompt),
 		ComponentAdvisories: inferComponentRecommendation(prompt),
-		ScenarioIntent:      inferScenarioIntent(prompt),
+		ScenarioIntent:      append([]string(nil), facts.Intents...),
 	}
 	if req.AcceptanceLevel == "starter" {
 		req.ComponentAdvisories = nil
@@ -110,6 +126,12 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 	}
 	if strings.Contains(strings.ToLower(prompt), "vars") || len(req.VarsAdvisories) > 0 {
 		req.RequiredFiles = append(req.RequiredFiles, "workflows/vars.yaml")
+	}
+	for _, path := range askintent.ExtractWorkflowPaths(prompt) {
+		req.RequiredFiles = append(req.RequiredFiles, path)
+		if strings.HasPrefix(path, "workflows/scenarios/") || path == "workflows/prepare.yaml" {
+			req.EntryScenario = path
+		}
 	}
 	if workspace.HasWorkflowTree && decision.Route == askintent.RouteRefine {
 		// retain known required files for refine if prepare already exists
@@ -156,6 +178,7 @@ func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askinte
 		Intent:                  string(decision.Route),
 		Complexity:              inferRequestComplexity(prompt, req),
 		AuthoringBrief:          BriefFromRequirements(req, decision),
+		AuthoringProgram:        normalizeAuthoringProgram(askcontract.AuthoringProgram{}, BriefFromRequirements(req, decision), ExecutionModelFromRequirements(req), prompt),
 		ExecutionModel:          ExecutionModelFromRequirements(req),
 		OfflineAssumption:       req.Connectivity,
 		NeedsPrepare:            req.NeedsPrepare,
@@ -164,40 +187,82 @@ func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askinte
 		ComponentRecommendation: append([]string(nil), req.ComponentAdvisories...),
 		TargetOutcome:           "Generate valid workflow files for the request.",
 		Assumptions:             []string{"Use v1alpha1 workflow schema", "Prefer typed steps where possible"},
+		Clarifications:          planClarificationsFromRequirements(prompt, req, decision, workspace),
 		EntryScenario:           req.EntryScenario,
 		Files:                   files,
 		ValidationChecklist:     defaultValidationChecklist(req),
 	}
 }
 
-func artifactContractsFromRequirements(req ScenarioRequirements) []askcontract.ArtifactContract {
-	contracts := make([]askcontract.ArtifactContract, 0, len(req.ArtifactKinds))
-	for _, kind := range req.ArtifactKinds {
-		switch strings.ToLower(strings.TrimSpace(kind)) {
-		case "package":
-			contracts = append(contracts, askcontract.ArtifactContract{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml", Description: "prepare downloads package content and apply installs it from a local repository path"})
-		case "image":
-			contracts = append(contracts, askcontract.ArtifactContract{Kind: "image", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml", Description: "prepare downloads container images and apply loads them from a local image bundle path"})
-		case "repository-mirror":
-			contracts = append(contracts, askcontract.ArtifactContract{Kind: "repository-setup", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml", Description: "prepare stages repository content and apply configures the node to consume it locally"})
+func planClarificationsFromRequirements(prompt string, req ScenarioRequirements, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) []askcontract.PlanClarification {
+	facts := askauthoring.InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
+	items := clarificationCandidatesFromRequirements(prompt, req, decision, workspace, facts)
+	for i := range items {
+		applyClarificationHints(&items[i], facts)
+	}
+	return sortClarifications(dedupePlanClarifications(items))
+}
+
+func targetClarificationsFromRequirements(prompt string, req ScenarioRequirements, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) []askcontract.PlanClarification {
+	if decision.Route != askintent.RouteRefine {
+		return nil
+	}
+	if len(askintent.ExtractWorkflowPaths(prompt)) > 0 {
+		return nil
+	}
+	options := []string{}
+	for _, file := range workspace.Files {
+		path := filepath.ToSlash(strings.TrimSpace(file.Path))
+		if path == "workflows/vars.yaml" || path == "workflows/prepare.yaml" || strings.HasPrefix(path, "workflows/scenarios/") || strings.HasPrefix(path, "workflows/components/") {
+			options = append(options, path)
 		}
 	}
-	return dedupeArtifactContracts(contracts)
+	options = dedupeStrings(options)
+	if len(options) <= 1 {
+		return nil
+	}
+	defaultPath := ""
+	for _, path := range options {
+		if strings.HasPrefix(path, "workflows/scenarios/") {
+			defaultPath = path
+			break
+		}
+	}
+	if defaultPath == "" {
+		defaultPath = options[0]
+	}
+	return []askcontract.PlanClarification{{
+		ID:                 "refine.anchorPath",
+		Question:           "This refine request does not name a single workflow file to anchor the change. Which existing file should the refactor treat as the primary target?",
+		Kind:               "path",
+		Reason:             "Refine generation keeps one user-anchored file stable and may expand only into explicitly allowed companion files.",
+		Decision:           "scope",
+		Options:            options,
+		RecommendedDefault: defaultPath,
+		BlocksGeneration:   true,
+		Affects:            []string{"authoringBrief.targetPaths", "authoringBrief.targetScope"},
+	}}
 }
 
-func sharedStateContractsFromRequirements(req ScenarioRequirements) []askcontract.SharedStateContract {
-	contracts := []askcontract.SharedStateContract{}
-	if containsString(req.ScenarioIntent, "join") || containsString(req.ScenarioIntent, "multi-node") || containsString(req.ScenarioIntent, "ha") {
-		contracts = append(contracts, askcontract.SharedStateContract{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "published-for-worker-consumption", Description: "control-plane publish step must make join data available before worker JoinKubeadm steps run"})
+func applyClarificationHints(item *askcontract.PlanClarification, facts askauthoring.Facts) {
+	if item == nil {
+		return
 	}
-	return contracts
-}
-
-func roleSelectorFromRequirements(req ScenarioRequirements) string {
-	if containsString(req.ScenarioIntent, "join") || containsString(req.ScenarioIntent, "multi-node") || containsString(req.ScenarioIntent, "ha") {
-		return "vars.role"
+	if strings.TrimSpace(item.Answer) != "" {
+		return
 	}
-	return ""
+	switch strings.TrimSpace(item.ID) {
+	case "topology.nodeCount":
+		if facts.NodeCount > 0 {
+			item.RecommendedDefault = strconv.Itoa(facts.NodeCount)
+		}
+	case "topology.roleModel":
+		if facts.ControlPlaneCount > 0 && facts.WorkerCount > 0 {
+			item.RecommendedDefault = fmt.Sprintf("%dcp-%dworkers", facts.ControlPlaneCount, facts.WorkerCount)
+		} else if facts.Topology == "ha" && facts.NodeCount >= 3 {
+			item.RecommendedDefault = fmt.Sprintf("%dcp-ha", facts.NodeCount)
+		}
+	}
 }
 
 func controlPlaneFlowFromRequirements(req ScenarioRequirements) string {
@@ -212,10 +277,6 @@ func workerFlowFromRequirements(req ScenarioRequirements) string {
 		return "preflight -> runtime setup -> JoinKubeadm -> final cluster verification"
 	}
 	return ""
-}
-
-func perNodeInvocationFromRequirements(req ScenarioRequirements) bool {
-	return containsString(req.ScenarioIntent, "join") || containsString(req.ScenarioIntent, "multi-node") || containsString(req.ScenarioIntent, "ha")
 }
 
 func bootstrapPhaseFromRequirements(req ScenarioRequirements) string {
@@ -260,20 +321,6 @@ func expectedControlPlaneReadyFromRequirements(req ScenarioRequirements) int {
 		return 1
 	}
 	return 0
-}
-
-func applyAssumptionsFromRequirements(req ScenarioRequirements) []string {
-	assumptions := []string{}
-	if req.Connectivity == "offline" {
-		assumptions = append(assumptions, "apply consumes only local staged artifacts and must not perform remote downloads")
-	}
-	if req.NeedsPrepare {
-		assumptions = append(assumptions, "prepare runs before apply and stages artifacts at paths apply can consume")
-	}
-	if perNodeInvocationFromRequirements(req) {
-		assumptions = append(assumptions, "apply runs per node with a role selector that distinguishes control-plane and worker execution")
-	}
-	return dedupeStrings(assumptions)
 }
 
 func dedupeArtifactContracts(contracts []askcontract.ArtifactContract) []askcontract.ArtifactContract {
@@ -403,6 +450,9 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 	if generationViolatesVerificationExpectations(gen.Files, executionModel.Verification) {
 		findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_verification_mismatch", Message: fmt.Sprintf("generated CheckCluster expectations do not match the execution model verification contract (expected nodes=%d controlPlaneReady=%d)", executionModel.Verification.ExpectedNodeCount, executionModel.Verification.ExpectedControlPlaneReady), Fix: "Align final CheckCluster node expectations with the execution model topology contract", Path: "workflows/scenarios/apply.yaml"})
 	}
+	if hasCapability(brief.RequiredCapabilities, "cluster-verification") && !hasKind(generatedWorkflowSteps(gen.Files), "CheckCluster") {
+		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_cluster_verification", Message: "request requires cluster verification but generated workflow does not include a CheckCluster step", Fix: "Use the typed CheckCluster step when the plan requires cluster verification", Path: "workflows/scenarios/apply.yaml"})
+	}
 	if req.TypedPreference && countCommands(gen.Files) > 0 {
 		alternatives := askcontext.StrongTypedAlternativesWithOptions(plan.Request, askcontext.StepGuidanceOptions{ModeIntent: plan.AuthoringBrief.ModeIntent, Topology: plan.AuthoringBrief.Topology, RequiredCapabilities: plan.AuthoringBrief.RequiredCapabilities})
 		if len(alternatives) > 0 {
@@ -480,13 +530,16 @@ func isAdvisoryComponentTarget(path string, brief askcontract.AuthoringBrief) bo
 }
 
 func generationAppearsToHandleJoinState(files []askcontract.GeneratedFile) bool {
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		if strings.Contains(content, "outputjoinfile") && strings.Contains(content, "joinfile") {
-			return true
+	for _, step := range generatedWorkflowSteps(files) {
+		if strings.EqualFold(step.Kind, "InitKubeadm") {
+			if value, ok := stringSpec(step.Spec, "outputJoinFile"); ok && strings.TrimSpace(value) != "" {
+				return true
+			}
 		}
-		if strings.Contains(content, "joinfilepath") || strings.Contains(content, "publish") && strings.Contains(content, "join") {
-			return true
+		if strings.EqualFold(step.Kind, "JoinKubeadm") {
+			if value, ok := stringSpec(step.Spec, "joinFile"); ok && strings.TrimSpace(value) != "" {
+				return true
+			}
 		}
 	}
 	return false
@@ -495,13 +548,17 @@ func generationAppearsToHandleJoinState(files []askcontract.GeneratedFile) bool 
 func generationAppearsToHandleSharedState(files []askcontract.GeneratedFile, contract askcontract.SharedStateContract) bool {
 	name := strings.ToLower(strings.TrimSpace(contract.Name))
 	producerPath := strings.ToLower(strings.TrimSpace(contract.ProducerPath))
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		if producerPath != "" && strings.Contains(content, producerPath) {
-			return true
-		}
-		if name != "" && strings.Contains(content, name) {
-			return true
+	for _, step := range generatedWorkflowSteps(files) {
+		for _, field := range []string{"outputJoinFile", "joinFile", "path", "sourcePath", "targetPath"} {
+			if value, ok := stringSpec(step.Spec, field); ok {
+				lower := strings.ToLower(strings.TrimSpace(value))
+				if producerPath != "" && lower == producerPath {
+					return true
+				}
+				if name != "" && strings.Contains(lower, name) {
+					return true
+				}
+			}
 		}
 	}
 	if name == "join-file" {
@@ -512,16 +569,29 @@ func generationAppearsToHandleSharedState(files []askcontract.GeneratedFile, con
 
 func generationAppearsToPublishJoinState(files []askcontract.GeneratedFile, producerPath string) bool {
 	producerPath = strings.ToLower(strings.TrimSpace(producerPath))
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		if strings.Contains(content, "kind: copyfile") && strings.Contains(content, "join") {
-			return true
+	for _, step := range generatedWorkflowSteps(files) {
+		if strings.EqualFold(step.Kind, "InitKubeadm") {
+			if value, ok := stringSpec(step.Spec, "outputJoinFile"); ok {
+				lower := strings.ToLower(strings.TrimSpace(value))
+				if lower != "" && (producerPath == "" || lower == producerPath) {
+					return true
+				}
+			}
 		}
-		if strings.Contains(content, "kind: ensuredirectory") && strings.Contains(content, "join") {
-			return true
-		}
-		if producerPath != "" && strings.Contains(content, producerPath) && strings.Contains(content, "outputjoinfile") {
-			return true
+	}
+	for _, step := range generatedWorkflowSteps(files) {
+		if strings.EqualFold(step.Kind, "CopyFile") || strings.EqualFold(step.Kind, "EnsureDirectory") || strings.EqualFold(step.Kind, "WriteFile") {
+			for _, field := range []string{"path", "targetPath", "sourcePath"} {
+				if value, ok := stringSpec(step.Spec, field); ok {
+					lower := strings.ToLower(strings.TrimSpace(value))
+					if producerPath != "" && lower == producerPath {
+						return true
+					}
+					if strings.Contains(lower, "join") {
+						return true
+					}
+				}
+			}
 		}
 	}
 	return false
@@ -533,13 +603,14 @@ func generationAppearsToPublishSharedState(files []askcontract.GeneratedFile, co
 	}
 	name := strings.ToLower(strings.TrimSpace(contract.Name))
 	producerPath := strings.ToLower(strings.TrimSpace(contract.ProducerPath))
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		if strings.Contains(content, "kind: copyfile") && ((name != "" && strings.Contains(content, name)) || (producerPath != "" && strings.Contains(content, producerPath))) {
-			return true
-		}
-		if strings.Contains(content, "kind: writefile") && ((name != "" && strings.Contains(content, name)) || (producerPath != "" && strings.Contains(content, producerPath))) {
-			return true
+	for _, step := range generatedWorkflowSteps(files) {
+		for _, field := range []string{"path", "sourcePath", "targetPath", "outputJoinFile"} {
+			if value, ok := stringSpec(step.Spec, field); ok {
+				lower := strings.ToLower(strings.TrimSpace(value))
+				if (name != "" && strings.Contains(lower, name)) || (producerPath != "" && lower == producerPath) {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -550,19 +621,11 @@ func generationViolatesFinalVerificationRole(files []askcontract.GeneratedFile, 
 	if role == "" || role == "any" || role == "local" {
 		return false
 	}
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		idx := strings.LastIndex(content, "kind: checkcluster")
-		if idx == -1 {
+	for _, step := range generatedWorkflowSteps(files) {
+		if !strings.EqualFold(step.Kind, "CheckCluster") {
 			continue
 		}
-		windowStart := strings.LastIndex(content[:idx], "- id:")
-		if windowStart == -1 {
-			windowStart = 0
-		}
-		window := content[windowStart : idx+len("kind: checkcluster")]
-		expected := fmt.Sprintf(`when: .vars.role == "%s"`, role)
-		if strings.Contains(window, expected) {
+		if strings.Contains(strings.ToLower(strings.TrimSpace(step.When)), strings.ToLower(role)) {
 			return false
 		}
 	}
@@ -573,14 +636,13 @@ func generationViolatesVerificationExpectations(files []askcontract.GeneratedFil
 	if verification.ExpectedNodeCount <= 0 || verification.ExpectedControlPlaneReady <= 0 {
 		return false
 	}
-	expectedNodes := fmt.Sprintf("total: %d", verification.ExpectedNodeCount)
-	expectedCP := fmt.Sprintf("controlplaneready: %d", verification.ExpectedControlPlaneReady)
-	for _, file := range files {
-		content := strings.ToLower(file.Content)
-		if !strings.Contains(content, "kind: checkcluster") {
+	for _, step := range generatedWorkflowSteps(files) {
+		if !strings.EqualFold(step.Kind, "CheckCluster") {
 			continue
 		}
-		if strings.Contains(content, expectedNodes) && strings.Contains(content, expectedCP) {
+		total, totalOK := intSpec(step.Spec, "nodes", "total")
+		cp, cpOK := intSpec(step.Spec, "nodes", "controlPlaneReady")
+		if totalOK && cpOK && total == verification.ExpectedNodeCount && cp == verification.ExpectedControlPlaneReady {
 			return false
 		}
 	}
@@ -592,12 +654,71 @@ func generationAppearsRoleAware(files []askcontract.GeneratedFile, roleSelector 
 	if selector == "" {
 		return true
 	}
-	for _, file := range files {
-		if strings.Contains(strings.ToLower(file.Content), selector) {
+	for _, step := range generatedWorkflowSteps(files) {
+		if strings.Contains(strings.ToLower(strings.TrimSpace(step.When)), selector) {
 			return true
 		}
 	}
 	return false
+}
+
+func generatedWorkflowSteps(files []askcontract.GeneratedFile) []askcontract.WorkflowStep {
+	out := []askcontract.WorkflowStep{}
+	for _, file := range files {
+		if file.Delete {
+			continue
+		}
+		doc, err := askir.ParseDocument(file.Path, []byte(file.Content))
+		if err != nil || doc.Workflow == nil {
+			continue
+		}
+		out = append(out, doc.Workflow.Steps...)
+		for _, phase := range doc.Workflow.Phases {
+			out = append(out, phase.Steps...)
+		}
+	}
+	return out
+}
+
+func stringSpec(spec map[string]any, keys ...string) (string, bool) {
+	value, ok := nestedSpec(spec, keys...)
+	if !ok {
+		return "", false
+	}
+	text, ok := value.(string)
+	return text, ok
+}
+
+func intSpec(spec map[string]any, keys ...string) (int, bool) {
+	value, ok := nestedSpec(spec, keys...)
+	if !ok {
+		return 0, false
+	}
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case int64:
+		return int(typed), true
+	case float64:
+		return int(typed), true
+	default:
+		return 0, false
+	}
+}
+
+func nestedSpec(spec map[string]any, keys ...string) (any, bool) {
+	current := any(spec)
+	for _, key := range keys {
+		obj, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		current, ok = obj[key]
+		if !ok {
+			return nil, false
+		}
+	}
+	return current, true
 }
 
 func defaultValidationChecklist(req ScenarioRequirements) []string {
@@ -652,47 +773,28 @@ func inferComponentRecommendation(prompt string) []string {
 	return nil
 }
 
-func inferScenarioIntent(prompt string) []string {
-	lower := strings.ToLower(strings.TrimSpace(prompt))
-	intents := []string{}
-	if strings.Contains(lower, "kubeadm") {
-		intents = append(intents, "kubeadm")
-	}
-	if strings.Contains(lower, "single-node") || strings.Contains(lower, "single node") {
-		intents = append(intents, "single-node", "node-count:1")
-	}
-	if strings.Contains(lower, "multi-node") || strings.Contains(lower, "multi node") {
-		intents = append(intents, "multi-node")
-	}
-	if strings.Contains(lower, "ha") || strings.Contains(lower, "high-availability") || strings.Contains(lower, "high availability") {
-		intents = append(intents, "ha")
-	}
-	if strings.Contains(lower, "worker") || strings.Contains(lower, "workers") || strings.Contains(lower, "join") {
-		intents = append(intents, "join")
-	}
-	for _, token := range strings.FieldsFunc(lower, func(r rune) bool { return r < '0' || r > '9' }) {
-		if token == "" {
-			continue
-		}
-		if n, err := strconv.Atoi(token); err == nil && n > 1 && strings.Contains(lower, token+"-node") {
-			intents = append(intents, "multi-node", fmt.Sprintf("node-count:%d", n))
-		}
-	}
-	if strings.Contains(lower, "registry mirror") || strings.Contains(lower, "mirror") {
-		intents = append(intents, "registry-mirror")
-	}
-	return intents
-}
-
 func inferAcceptanceLevel(prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) string {
-	req := ScenarioRequirements{ScenarioIntent: inferScenarioIntent(prompt), NeedsPrepare: strings.Contains(strings.ToLower(strings.TrimSpace(prompt)), "prepare")}
-	if containsString(req.ScenarioIntent, "multi-node") || containsString(req.ScenarioIntent, "ha") || inferNodeCount(req) > 1 {
+	facts := askauthoring.InferFacts(prompt, InferArtifactKinds(prompt, nil), InferOfflineAssumption(prompt))
+	if facts.Topology == "multi-node" || facts.Topology == "ha" || facts.NodeCount > 1 {
 		if decision.Route == askintent.RouteRefine && workspace.HasWorkflowTree {
 			return "refine"
 		}
 		return "complete"
 	}
-	if explicitComplexAuthoring(prompt) {
+	score := 0
+	if facts.NeedsPrepare {
+		score++
+	}
+	if len(facts.ArtifactKinds) > 1 {
+		score++
+	}
+	if len(facts.Capabilities) > 2 {
+		score++
+	}
+	if len(facts.Ambiguities) > 0 {
+		score++
+	}
+	if score >= 2 {
 		if decision.Route == askintent.RouteRefine && workspace.HasWorkflowTree {
 			return "refine"
 		}
@@ -711,21 +813,21 @@ func inferAcceptanceLevel(prompt string, workspace askretrieve.WorkspaceSummary,
 }
 
 func inferRequestComplexity(prompt string, req ScenarioRequirements) string {
-	lower := strings.ToLower(strings.TrimSpace(prompt))
+	facts := askauthoring.InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
 	score := 0
 	if req.NeedsPrepare {
 		score++
 	}
-	if strings.Contains(lower, "prepare and apply") {
+	if facts.RequestedMode == "workspace" && req.NeedsPrepare && strings.TrimSpace(req.EntryScenario) != "" {
 		score++
 	}
-	if containsString(req.ScenarioIntent, "multi-node") || containsString(req.ScenarioIntent, "ha") {
+	if facts.Topology == "multi-node" || facts.Topology == "ha" {
 		score += 2
 	}
-	if containsString(req.ScenarioIntent, "kubeadm") {
+	if containsString(facts.Intents, "kubeadm") {
 		score++
 	}
-	if containsString(req.ScenarioIntent, "join") {
+	if facts.MultiRoleRequested {
 		score++
 	}
 	if len(req.ArtifactKinds) > 1 {
@@ -739,18 +841,6 @@ func inferRequestComplexity(prompt string, req ScenarioRequirements) string {
 	default:
 		return "simple"
 	}
-}
-
-func explicitComplexAuthoring(prompt string) bool {
-	lower := strings.ToLower(strings.TrimSpace(prompt))
-	markers := []string{"prepare and apply", "multi-node", "multi node", "3-node", "ha", "high availability", "worker", "workers", "join"}
-	hits := 0
-	for _, marker := range markers {
-		if strings.Contains(lower, marker) {
-			hits++
-		}
-	}
-	return hits >= 3
 }
 
 func inferModeIntent(req ScenarioRequirements) string {
@@ -769,13 +859,16 @@ func inferModeIntent(req ScenarioRequirements) string {
 }
 
 func inferTargetScope(req ScenarioRequirements, decision askintent.Decision) string {
+	if len(briefTargetPaths(req)) > 1 {
+		return "workspace"
+	}
 	if decision.Target.Kind == "scenario" && strings.TrimSpace(decision.Target.Path) != "" && inferModeIntent(req) != "prepare+apply" {
 		return "scenario"
 	}
-	if decision.Target.Kind == "vars" {
+	if decision.Target.Kind == "vars" && len(briefTargetPaths(req)) == 1 {
 		return "vars"
 	}
-	if decision.Target.Kind == "component" {
+	if decision.Target.Kind == "component" && len(briefTargetPaths(req)) == 1 {
 		return "component"
 	}
 	if inferModeIntent(req) == "prepare+apply" || len(req.RequiredFiles) > 1 {
@@ -793,18 +886,15 @@ func briefTargetPaths(req ScenarioRequirements) []string {
 }
 
 func inferTopology(req ScenarioRequirements) string {
-	intents := map[string]bool{}
 	for _, intent := range req.ScenarioIntent {
-		intents[strings.ToLower(strings.TrimSpace(intent))] = true
-	}
-	if intents["ha"] {
-		return "ha"
-	}
-	if intents["multi-node"] {
-		return "multi-node"
-	}
-	if intents["single-node"] {
-		return "single-node"
+		switch strings.ToLower(strings.TrimSpace(intent)) {
+		case "ha":
+			return "ha"
+		case "multi-node":
+			return "multi-node"
+		case "single-node":
+			return "single-node"
+		}
 	}
 	return "unspecified"
 }
@@ -826,32 +916,8 @@ func inferNodeCount(req ScenarioRequirements) int {
 }
 
 func inferRequiredCapabilities(req ScenarioRequirements) []string {
-	capabilities := []string{}
-	if req.NeedsPrepare {
-		capabilities = append(capabilities, "prepare-artifacts")
-	}
-	for _, kind := range req.ArtifactKinds {
-		switch strings.ToLower(strings.TrimSpace(kind)) {
-		case "package":
-			capabilities = append(capabilities, "package-staging")
-		case "image":
-			capabilities = append(capabilities, "image-staging")
-		case "repository-mirror":
-			capabilities = append(capabilities, "repository-setup")
-		}
-	}
-	for _, intent := range req.ScenarioIntent {
-		switch strings.ToLower(strings.TrimSpace(intent)) {
-		case "kubeadm":
-			capabilities = append(capabilities, "kubeadm-bootstrap", "cluster-verification")
-		case "join":
-			capabilities = append(capabilities, "kubeadm-join")
-		}
-	}
-	if inferTopology(req) == "multi-node" || inferTopology(req) == "ha" {
-		capabilities = append(capabilities, "kubeadm-join")
-	}
-	return dedupeStrings(capabilities)
+	facts := askauthoring.InferFacts(strings.Join(req.ScenarioIntent, " "), req.ArtifactKinds, req.Connectivity)
+	return dedupeStrings(facts.Capabilities)
 }
 
 func typedPreferenceRequested(prompt string) bool {
@@ -920,6 +986,18 @@ func preparePathsFromGeneration(files []askcontract.GeneratedFile) []string {
 }
 
 func onlineActivityDetected(content string) bool {
+	if doc, err := askir.ParseDocument("workflows/scenarios/apply.yaml", []byte(content)); err == nil && doc.Workflow != nil {
+		for _, step := range generatedWorkflowSteps([]askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: content}}) {
+			switch strings.TrimSpace(step.Kind) {
+			case "DownloadPackage", "DownloadImage", "RefreshRepository":
+				return true
+			case "Command":
+				if commandSpecLooksOnline(step.Spec) {
+					return true
+				}
+			}
+		}
+	}
 	lower := strings.ToLower(content)
 	hints := []string{"curl", "wget", "dnf download", "apt-get download", "docker pull", "ctr image pull", "podman pull", "repo sync", "refreshrepository", "downloadpackage", "downloadimage"}
 	for _, hint := range hints {
@@ -931,6 +1009,25 @@ func onlineActivityDetected(content string) bool {
 }
 
 func prepareAppearsArtifactOriented(content string, artifactKinds []string) bool {
+	steps := generatedWorkflowSteps([]askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: content}})
+	if len(steps) > 0 {
+		for _, kind := range artifactKinds {
+			switch strings.ToLower(strings.TrimSpace(kind)) {
+			case "package":
+				if hasKind(steps, "DownloadPackage") {
+					return true
+				}
+			case "image":
+				if hasKind(steps, "DownloadImage") {
+					return true
+				}
+			case "repository-mirror":
+				if hasKind(steps, "DownloadPackage") || hasKind(steps, "ConfigureRepository") {
+					return true
+				}
+			}
+		}
+	}
 	lower := strings.ToLower(content)
 	hasPackages := strings.Contains(lower, "kind: downloadpackage") || strings.Contains(lower, "packages:")
 	hasImages := strings.Contains(lower, "kind: downloadimage") || strings.Contains(lower, "images:")
@@ -1007,8 +1104,19 @@ func fieldUsesVarsTemplate(content string, path string) bool {
 }
 
 func prepareUsesCommandForArtifacts(content string, artifactKinds []string) bool {
+	steps := generatedWorkflowSteps([]askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: content}})
+	foundCommand := false
+	for _, step := range steps {
+		if strings.TrimSpace(step.Kind) != "Command" {
+			continue
+		}
+		foundCommand = true
+		if commandSpecLooksOnline(step.Spec) {
+			return true
+		}
+	}
 	lower := strings.ToLower(content)
-	if !strings.Contains(lower, "kind: command") {
+	if !foundCommand && !strings.Contains(lower, "kind: command") {
 		return false
 	}
 	if containsString(artifactKinds, "image") && (strings.Contains(lower, "docker pull") || strings.Contains(lower, "docker save") || strings.Contains(lower, "ctr image pull") || strings.Contains(lower, "podman pull")) {
@@ -1058,12 +1166,21 @@ func inferVarsAdvisories(files []askcontract.GeneratedFile) []string {
 
 func inferComponentAdvisories(files []askcontract.GeneratedFile) []string {
 	sequenceCounts := map[string]int{}
-	for _, file := range files {
+	for _, doc := range generatedWorkflowDocs(files) {
 		kinds := []string{}
-		for _, line := range strings.Split(file.Content, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "kind: ") {
-				kinds = append(kinds, strings.TrimSpace(strings.TrimPrefix(trimmed, "kind: ")))
+		if doc.Workflow == nil {
+			continue
+		}
+		for _, step := range doc.Workflow.Steps {
+			if strings.TrimSpace(step.Kind) != "" {
+				kinds = append(kinds, strings.TrimSpace(step.Kind))
+			}
+		}
+		for _, phase := range doc.Workflow.Phases {
+			for _, step := range phase.Steps {
+				if strings.TrimSpace(step.Kind) != "" {
+					kinds = append(kinds, strings.TrimSpace(step.Kind))
+				}
 			}
 		}
 		if len(kinds) >= 2 {
@@ -1088,13 +1205,15 @@ func scenarioAppearsIncomplete(req ScenarioRequirements, files []askcontract.Gen
 	if req.AcceptanceLevel == "starter" {
 		return false
 	}
-	combined := strings.ToLower(combinedWorkflowContent(files))
+	steps := generatedWorkflowSteps(files)
+	hasInit := hasKind(steps, "InitKubeadm") || hasKind(steps, "UpgradeKubeadm")
+	hasCheck := hasKind(steps, "CheckCluster")
 	for _, intent := range req.ScenarioIntent {
 		if intent == "kubeadm" {
-			if !strings.Contains(combined, "initkubeadm") && !strings.Contains(combined, "upgradekubeadm") {
+			if !hasInit {
 				return true
 			}
-			if !strings.Contains(combined, "checkcluster") {
+			if !hasCheck {
 				return true
 			}
 		}
@@ -1105,15 +1224,36 @@ func scenarioAppearsIncomplete(req ScenarioRequirements, files []askcontract.Gen
 	return false
 }
 
-func combinedWorkflowContent(files []askcontract.GeneratedFile) string {
-	b := &strings.Builder{}
-	for _, file := range files {
-		b.WriteString("\n")
-		b.WriteString(filepath.ToSlash(strings.TrimSpace(file.Path)))
-		b.WriteString("\n")
-		b.WriteString(file.Content)
+func commandSpecLooksOnline(spec map[string]any) bool {
+	value, ok := spec["command"]
+	if !ok {
+		return false
 	}
-	return b.String()
+	text := strings.ToLower(fmt.Sprint(value))
+	for _, hint := range []string{"curl", "wget", "docker pull", "ctr image pull", "podman pull", "dnf download", "apt-get download", "repo sync"} {
+		if strings.Contains(text, hint) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasKind(steps []askcontract.WorkflowStep, kind string) bool {
+	for _, step := range steps {
+		if strings.EqualFold(strings.TrimSpace(step.Kind), kind) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasCapability(values []string, want string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == strings.TrimSpace(want) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasGeneratedComponents(files []askcontract.GeneratedFile) bool {
@@ -1123,6 +1263,21 @@ func hasGeneratedComponents(files []askcontract.GeneratedFile) bool {
 		}
 	}
 	return false
+}
+
+func generatedWorkflowDocs(files []askcontract.GeneratedFile) []askcontract.GeneratedDocument {
+	out := []askcontract.GeneratedDocument{}
+	for _, file := range files {
+		if file.Delete {
+			continue
+		}
+		doc, err := askir.ParseDocument(file.Path, []byte(file.Content))
+		if err != nil {
+			continue
+		}
+		out = append(out, doc)
+	}
+	return out
 }
 
 func containsString(values []string, want string) bool {

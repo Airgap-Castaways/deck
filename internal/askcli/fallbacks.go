@@ -39,14 +39,15 @@ func localClarify(prompt string) string {
 	if strings.TrimSpace(prompt) == "" {
 		return "Your request is empty. Please describe what you want to do."
 	}
-	return "Your request is too ambiguous to start workflow generation."
+	return "I could not safely determine whether you want an explanation, review, new workflow creation, or workflow edits."
 }
 
 func clarificationSuggestions() []string {
 	return []string{
-		"Try: deck ask \"create an air-gapped rhel9 single-node kubeadm workflow\"",
-		"Try: deck ask --review",
-		"Try: deck ask \"explain what workflows/scenarios/apply.yaml does\"",
+		"Try: deck ask --create \"create an air-gapped rhel9 single-node kubeadm workflow\"",
+		"Try: deck ask --edit \"refactor workflows/scenarios/apply.yaml to use workflows/vars.yaml\"",
+		"Try: deck ask --review \"review workflows/scenarios/apply.yaml for offline issues\"",
+		"Or add more detail about the target file and whether you want explain, review, create, or edit behavior.",
 	}
 }
 
