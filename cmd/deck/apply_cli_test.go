@@ -497,10 +497,32 @@ func TestApplyVerboseDiagnostics(t *testing.T) {
 	if res.stdout != "apply: ok\n" {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
-	for _, want := range []string{"deck: apply workflow=", "deck: apply runlog=", "deck: apply step=verbose-step kind=Command phase=install status=started attempt=1", "deck: apply step=verbose-step kind=Command phase=install status=succeeded attempt=1"} {
+	for _, want := range []string{"deck: apply workflow=", "deck: apply runlog=", "deck: apply step=verbose-step kind=Command phase=install status=started attempt=1", "deck: apply step=verbose-step kind=Command phase=install status=succeeded attempt=1 duration="} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 		}
+	}
+}
+
+func TestApplyDefaultProgressLogs(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	wfPath := filepath.Join(t.TempDir(), "apply-default-progress.yaml")
+	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: progress-step\n        kind: Command\n        spec:\n          command: [\"true\"]\n")
+	bundle := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle workflows: %v", err)
+	}
+	createValidBundleManifest(t, bundle)
+
+	res := execute([]string{"apply", "--workflow", wfPath, bundle})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "deck: apply step=progress-step kind=Command phase=install status=started attempt=1") {
+		t.Fatalf("expected started progress log, got %q", res.stderr)
+	}
+	if !strings.Contains(res.stderr, "deck: apply step=progress-step kind=Command phase=install status=succeeded attempt=1 duration=") {
+		t.Fatalf("expected completion progress log with duration, got %q", res.stderr)
 	}
 }
 

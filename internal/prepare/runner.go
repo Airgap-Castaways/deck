@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -26,6 +27,7 @@ type RunOptions struct {
 	BundleRoot       string
 	CommandRunner    CommandRunner
 	ForceRedownload  bool
+	EventSink        StepEventSink
 	imageDownloadOps imageDownloadOps
 	checksRuntime    checksRuntime
 }
@@ -184,7 +186,7 @@ func executePrepareBatch(ctx context.Context, runner CommandRunner, bundleRoot s
 	snapshot := cloneRuntimeVars(runtimeVars)
 	results := make([]prepareBatchResult, len(batch.Steps))
 	if !batch.Parallel() {
-		result, err := executePrepareStep(ctx, runner, bundleRoot, wf, snapshot, ctxData, batch.Steps[0], opts)
+		result, err := executePrepareStep(ctx, runner, bundleRoot, wf, snapshot, ctxData, batch.PhaseName, batch.Steps[0], opts)
 		if err != nil {
 			return nil, err
 		}
@@ -200,7 +202,7 @@ func executePrepareBatch(ctx context.Context, runner CommandRunner, bundleRoot s
 			i := i
 			step := step
 			group.Go(func() error {
-				result, err := executePrepareStep(groupCtx, runner, bundleRoot, wf, snapshot, ctxData, step, opts)
+				result, err := executePrepareStep(groupCtx, runner, bundleRoot, wf, snapshot, ctxData, batch.PhaseName, step, opts)
 				if err != nil {
 					return err
 				}
@@ -223,12 +225,13 @@ func executePrepareBatch(ctx context.Context, runner CommandRunner, bundleRoot s
 	return files, nil
 }
 
-func executePrepareStep(ctx context.Context, runner CommandRunner, bundleRoot string, wf *config.Workflow, runtimeSnapshot map[string]any, ctxData map[string]any, step config.Step, opts RunOptions) (prepareBatchResult, error) {
+func executePrepareStep(ctx context.Context, runner CommandRunner, bundleRoot string, wf *config.Workflow, runtimeSnapshot map[string]any, ctxData map[string]any, phaseName string, step config.Step, opts RunOptions) (prepareBatchResult, error) {
 	ok, err := evaluateWhen(step.When, wf.Vars, runtimeSnapshot)
 	if err != nil {
 		return prepareBatchResult{}, fmt.Errorf("step %s (%s): %w", step.ID, step.Kind, err)
 	}
 	if !ok {
+		emitStepEvent(opts.EventSink, StepEvent{StepID: step.ID, Kind: step.Kind, Phase: phaseName, Status: "skipped", Reason: "when"})
 		return prepareBatchResult{outputs: map[string]any{}}, nil
 	}
 	attempts := step.Retry + 1
@@ -237,22 +240,34 @@ func executePrepareStep(ctx context.Context, runner CommandRunner, bundleRoot st
 	}
 	var execErr error
 	for i := 0; i < attempts; i++ {
+		if err := ctx.Err(); err != nil {
+			execErr = err
+			break
+		}
+		startedAt := time.Now().UTC().Format(time.RFC3339Nano)
+		emitStepEvent(opts.EventSink, StepEvent{StepID: step.ID, Kind: step.Kind, Phase: phaseName, Status: "started", Attempt: i + 1, StartedAt: startedAt})
 		rendered, renderErr := renderSpecWithContext(step.Spec, wf, runtimeSnapshot, ctxData)
 		if renderErr != nil {
 			execErr = fmt.Errorf("render spec template: %w", renderErr)
+			emitStepEvent(opts.EventSink, StepEvent{StepID: step.ID, Kind: step.Kind, Phase: phaseName, Status: "failed", Attempt: i + 1, StartedAt: startedAt, EndedAt: time.Now().UTC().Format(time.RFC3339Nano), Error: execErr.Error()})
 			break
 		}
 		inputVars := collectStepInputVarValues(step.Spec, wf.Vars)
 		key, keyErr := workflowexec.ResolveStepTypeKey(wf.Version, step.APIVersion, step.Kind)
 		if keyErr != nil {
 			execErr = keyErr
-			continue
+		} else {
+			stepFiles, outputs, stepErr := runPrepareRenderedStepWithKey(ctx, runner, bundleRoot, step, rendered, key, inputVars, opts)
+			if stepErr == nil {
+				emitStepEvent(opts.EventSink, StepEvent{StepID: step.ID, Kind: step.Kind, Phase: phaseName, Status: "succeeded", Attempt: i + 1, StartedAt: startedAt, EndedAt: time.Now().UTC().Format(time.RFC3339Nano)})
+				return prepareBatchResult{files: stepFiles, outputs: outputs}, nil
+			}
+			execErr = stepErr
 		}
-		stepFiles, outputs, stepErr := runPrepareRenderedStepWithKey(ctx, runner, bundleRoot, step, rendered, key, inputVars, opts)
-		if stepErr == nil {
-			return prepareBatchResult{files: stepFiles, outputs: outputs}, nil
+		emitStepEvent(opts.EventSink, StepEvent{StepID: step.ID, Kind: step.Kind, Phase: phaseName, Status: "failed", Attempt: i + 1, StartedAt: startedAt, EndedAt: time.Now().UTC().Format(time.RFC3339Nano), Error: execErr.Error()})
+		if ctx.Err() != nil {
+			break
 		}
-		execErr = stepErr
 	}
 	return prepareBatchResult{}, fmt.Errorf("step %s (%s): %w", step.ID, step.Kind, execErr)
 }

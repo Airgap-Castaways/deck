@@ -153,6 +153,75 @@ func TestRunPrepareVerboseDiagnostics(t *testing.T) {
 	}
 }
 
+func TestRunPrepareVerboseStepDiagnostics(t *testing.T) {
+	root := t.TempDir()
+	workflowsDir := filepath.Join(root, "workflows")
+	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	writePrepareDownloadWorkflowFixture(t, root, "files/seed.bin")
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("version: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+
+	originalCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(originalCWD) })
+
+	res := execute([]string{"prepare", "--root", filepath.Join(root, "outputs"), "--v=1"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	if !strings.Contains(res.stdout, "prepare: ok") {
+		t.Fatalf("unexpected stdout: %q", res.stdout)
+	}
+	for _, want := range []string{
+		"deck: prepare step=seed kind=DownloadFile phase=prepare status=started attempt=1",
+		"deck: prepare step=seed kind=DownloadFile phase=prepare status=succeeded attempt=1 duration=",
+	} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+		}
+	}
+}
+
+func TestRunPrepareEmitsDefaultProgressLog(t *testing.T) {
+	root := t.TempDir()
+	workflowsDir := filepath.Join(root, "workflows")
+	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	writePrepareDownloadWorkflowFixture(t, root, "files/seed.bin")
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("version: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+
+	originalCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(originalCWD) })
+
+	res := execute([]string{"prepare", "--root", filepath.Join(root, "outputs")})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "deck: prepare step=seed kind=DownloadFile phase=prepare status=started attempt=1") {
+		t.Fatalf("expected default step progress on stderr, got %q", res.stderr)
+	}
+	if !strings.Contains(res.stderr, "deck: prepare step=seed kind=DownloadFile phase=prepare status=succeeded attempt=1 duration=") {
+		t.Fatalf("expected completion progress with duration, got %q", res.stderr)
+	}
+}
+
 func TestRunPrepareSucceedsWithoutApplyWorkflow(t *testing.T) {
 	root := t.TempDir()
 	workflowsDir := filepath.Join(root, "workflows")

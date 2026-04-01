@@ -871,6 +871,72 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 	}
 }
 
+func TestRun_EmitsStepEvents(t *testing.T) {
+	bundle := t.TempDir()
+	localCache := t.TempDir()
+
+	sourceRel := filepath.ToSlash(filepath.Join("files", "a.bin"))
+	sourceAbs := filepath.Join(localCache, filepath.FromSlash(sourceRel))
+	if err := os.MkdirAll(filepath.Dir(sourceAbs), 0o755); err != nil {
+		t.Fatalf("mkdir source dir: %v", err)
+	}
+	if err := os.WriteFile(sourceAbs, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Vars:    map[string]any{"role": "control-plane"},
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{
+				{
+					ID:   "download-a",
+					Kind: "DownloadFile",
+					Spec: map[string]any{
+						"source":     map[string]any{"path": sourceRel},
+						"fetch":      map[string]any{"sources": []any{map[string]any{"type": "local", "path": localCache}}},
+						"outputPath": "files/a-out.bin",
+					},
+				},
+				{
+					ID:   "skip-worker-only",
+					Kind: "DownloadFile",
+					When: "vars.role == \"worker\"",
+					Spec: map[string]any{
+						"source":     map[string]any{"path": sourceRel},
+						"fetch":      map[string]any{"sources": []any{map[string]any{"type": "local", "path": localCache}}},
+						"outputPath": "files/skip.bin",
+					},
+				},
+			},
+		}},
+	}
+
+	var events []StepEvent
+	if err := Run(context.Background(), wf, RunOptions{
+		BundleRoot: bundle,
+		EventSink: func(event StepEvent) {
+			events = append(events, event)
+		},
+	}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	if len(events) != 3 {
+		t.Fatalf("expected 3 events, got %#v", events)
+	}
+	if events[0].StepID != "download-a" || events[0].Status != "started" || events[0].Phase != "prepare" || events[0].Attempt != 1 {
+		t.Fatalf("unexpected first event: %+v", events[0])
+	}
+	if events[1].StepID != "download-a" || events[1].Status != "succeeded" || events[1].Phase != "prepare" || events[1].Attempt != 1 {
+		t.Fatalf("unexpected second event: %+v", events[1])
+	}
+	if events[2].StepID != "skip-worker-only" || events[2].Status != "skipped" || events[2].Reason != "when" || events[2].Phase != "prepare" {
+		t.Fatalf("unexpected third event: %+v", events[2])
+	}
+}
+
 func TestRunPrepareStep_DownloadFileItems(t *testing.T) {
 	bundle := t.TempDir()
 	localCache := t.TempDir()
