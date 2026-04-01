@@ -32,6 +32,27 @@ func TestTryAutoRepairRenamesDuplicateStepIDs(t *testing.T) {
 	}
 }
 
+func TestTryAutoRepairRenamesDuplicateStepIDsWithoutCollidingPrefixedIDs(t *testing.T) {
+	files := []askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: worker\n    steps:\n      - id: worker-preflight\n        kind: CheckHost\n        spec:\n          checks: [os]\n      - id: preflight\n        kind: CheckHost\n        spec:\n          checks: [arch]\n      - id: preflight\n        kind: CheckHost\n        spec:\n          checks: [swap]\n"}}
+	diags := []askdiagnostic.Diagnostic{{RepairOp: "rename-step", File: "workflows/scenarios/apply.yaml", Message: "workflow reuses step id preflight"}}
+	repaired, _, applied, err := TryAutoRepair(t.TempDir(), files, diags, []string{"workflows/scenarios/apply.yaml"})
+	if err != nil {
+		t.Fatalf("try auto repair duplicate ids with prefixed collision: %v", err)
+	}
+	if !applied || len(repaired) != 1 {
+		t.Fatalf("expected duplicate step ids to be repaired, got %#v", repaired)
+	}
+	content := repaired[0].Content
+	for _, want := range []string{"id: worker-preflight", "id: worker-preflight-2"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("expected %q in repaired content, got %q", want, content)
+		}
+	}
+	if strings.Count(content, "id: worker-preflight\n") != 1 {
+		t.Fatalf("expected original prefixed id to remain unique, got %q", content)
+	}
+}
+
 func TestTryAutoRepairMigratesInstallPackageSourcePath(t *testing.T) {
 	files := []askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      sourcePath: /tmp/packages\n"}}
 	diags := []askdiagnostic.Diagnostic{{RepairOp: "remove-field", File: "workflows/scenarios/apply.yaml", StepID: "install", StepKind: "InstallPackage", Path: "spec.sourcePath", Message: "InstallPackage: Additional property sourcePath is not allowed"}}

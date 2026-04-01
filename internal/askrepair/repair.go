@@ -374,7 +374,18 @@ func uniqueStepID(current string, prefix string, seen map[string]int) (string, b
 	if count == 0 {
 		return current, false
 	}
-	return sanitizeName(prefix) + "-" + current, true
+	base := sanitizeName(prefix) + "-" + current
+	if seen[base] == 0 {
+		seen[base] = 1
+		return base, true
+	}
+	for suffix := 2; ; suffix++ {
+		candidate := fmt.Sprintf("%s-%d", base, suffix)
+		if seen[candidate] == 0 {
+			seen[candidate] = 1
+			return candidate, true
+		}
+	}
 }
 
 func workflowSteps(doc askcontract.WorkflowDocument) []askcontract.WorkflowStep {
