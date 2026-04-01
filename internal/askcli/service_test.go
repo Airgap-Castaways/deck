@@ -817,6 +817,35 @@ func TestMaybePostProcessGenerationAppliesOptionalStructuralCleanupWhenHeuristic
 	}
 }
 
+func TestStructuralGapSignalsMatchesCanonicalArtifactsAndRoleSelectors(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		ExecutionModel: askcontract.ExecutionModel{
+			ArtifactContracts: []askcontract.ArtifactContract{{Kind: "package"}, {Kind: "image"}, {Kind: "repository-setup"}},
+			RoleExecution:     askcontract.RoleExecutionModel{RoleSelector: "vars.role", PerNodeInvocation: true},
+			Verification:      askcontract.VerificationStrategy{ExpectedNodeCount: 2},
+		},
+	}
+	files := []askcontract.GeneratedFile{
+		{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: repo\n    kind: ConfigureRepository\n    spec:\n      type: rpm\n  - id: pkg\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n  - id: img\n    kind: DownloadImage\n    spec:\n      images: [registry.k8s.io/pause:3.9]\n"},
+		{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: verify\n    when: vars.role == \"control-plane\"\n    kind: CheckCluster\n    spec:\n      nodes:\n        total: 2\n        ready: 2\n        controlPlaneReady: 1\n"},
+	}
+	if score := structuralGapSignals(plan, files); score != 0 {
+		t.Fatalf("expected no structural gap signals, got %d", score)
+	}
+}
+
+func TestStructuralWorkflowSummaryIncludesWhenConditions(t *testing.T) {
+	doc := askcontract.WorkflowDocument{
+		Steps: []askcontract.WorkflowStep{{ID: "verify", Kind: "CheckCluster", When: "vars.role == \"control-plane\"", Spec: map[string]any{"nodes": map[string]any{"total": 1}}}},
+	}
+	summary := structuralWorkflowSummary(doc)
+	for _, want := range []string{"CheckCluster", "vars.role == \"control-plane\""} {
+		if !strings.Contains(summary, want) {
+			t.Fatalf("expected %q in summary, got %q", want, summary)
+		}
+	}
+}
+
 func TestEnrichPostProcessFindingsAddsPreserveInlineAndVarCleanupAdvisory(t *testing.T) {
 	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: fetch\n    kind: DownloadPackage\n    spec:\n      outputDir: /srv/offline/kubernetes\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      source:\n        type: local-repo\n        path: /srv/offline/kubernetes\n"}})
 	findings := enrichPostProcessFindings(askcontract.PostProcessResponse{}, gen.Files)

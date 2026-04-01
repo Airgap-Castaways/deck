@@ -1050,21 +1050,32 @@ func generatedDocumentSummaryBlock(files []askcontract.GeneratedFile) string {
 }
 
 func structuralWorkflowSummary(doc askcontract.WorkflowDocument) string {
-	kinds := []string{}
+	tokens := []string{}
 	for _, step := range doc.Steps {
 		if strings.TrimSpace(step.Kind) != "" {
-			kinds = append(kinds, strings.TrimSpace(step.Kind))
+			tokens = append(tokens, strings.TrimSpace(step.Kind))
+		}
+		if strings.TrimSpace(step.When) != "" {
+			tokens = append(tokens, strings.TrimSpace(step.When))
 		}
 	}
 	for _, phase := range doc.Phases {
+		for _, imp := range phase.Imports {
+			if strings.TrimSpace(imp.When) != "" {
+				tokens = append(tokens, strings.TrimSpace(imp.When))
+			}
+		}
 		for _, step := range phase.Steps {
 			if strings.TrimSpace(step.Kind) != "" {
-				kinds = append(kinds, strings.TrimSpace(step.Kind))
+				tokens = append(tokens, strings.TrimSpace(step.Kind))
+			}
+			if strings.TrimSpace(step.When) != "" {
+				tokens = append(tokens, strings.TrimSpace(step.When))
 			}
 		}
 	}
-	kinds = dedupe(kinds)
-	return fmt.Sprintf("phases=%d topLevelSteps=%d kinds=%s", len(doc.Phases), len(doc.Steps), strings.Join(kinds, ", "))
+	tokens = dedupe(tokens)
+	return fmt.Sprintf("phases=%d topLevelSteps=%d tokens=%s", len(doc.Phases), len(doc.Steps), strings.Join(tokens, ", "))
 }
 
 func infoPrompts(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, prompt string) (string, string) {

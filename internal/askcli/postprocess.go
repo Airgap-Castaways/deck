@@ -100,19 +100,33 @@ func shouldAutoPostProcess(plan askcontract.PlanResponse, brief askcontract.Auth
 
 func structuralGapSignals(plan askcontract.PlanResponse, files []askcontract.GeneratedFile) int {
 	score := 0
-	parsed := generatedDocumentSummaryBlock(files)
+	parsed := strings.ToLower(generatedDocumentSummaryBlock(files))
 	for _, contract := range plan.ExecutionModel.ArtifactContracts {
-		if !strings.Contains(parsed, strings.TrimSpace(contract.Kind)) {
+		if !strings.Contains(parsed, structuralContractMatchToken(contract.Kind)) {
 			score++
 		}
 	}
-	if plan.ExecutionModel.RoleExecution.PerNodeInvocation && !strings.Contains(parsed, strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector)) {
+	if plan.ExecutionModel.RoleExecution.PerNodeInvocation && !strings.Contains(parsed, strings.ToLower(strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector))) {
 		score++
 	}
-	if plan.ExecutionModel.Verification.ExpectedNodeCount > 0 && !strings.Contains(parsed, "CheckCluster") {
+	if plan.ExecutionModel.Verification.ExpectedNodeCount > 0 && !strings.Contains(parsed, "checkcluster") {
 		score++
 	}
 	return score
+}
+
+func structuralContractMatchToken(kind string) string {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	switch kind {
+	case "package":
+		return "downloadpackage"
+	case "image":
+		return "downloadimage"
+	case "repository-setup", "repository-mirror":
+		return "configurerepository"
+	default:
+		return kind
+	}
 }
 
 func critiquePostProcess(ctx context.Context, client askprovider.Client, req askprovider.Request, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, files []askcontract.GeneratedFile, judge askcontract.JudgeResponse, critic askcontract.CriticResponse, planCritic askcontract.PlanCriticResponse, logger askLogger) (askcontract.PostProcessResponse, error) {

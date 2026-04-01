@@ -211,9 +211,6 @@ func extractCountNear(lower string, labels []string) int {
 		replaced = strings.ReplaceAll(replaced, old, newValue)
 	}
 	for _, label := range labels {
-		for _, form := range []string{"+ " + label, " " + label, label + " +", label + ","} {
-			_ = form
-		}
 		idx := strings.Index(replaced, label)
 		if idx < 0 {
 			continue
