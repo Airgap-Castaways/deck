@@ -490,7 +490,7 @@ func context7StructuredValue(toolName string, result *mcp.CallToolResult) any {
 	}
 	switch strings.ToLower(strings.TrimSpace(toolName)) {
 	case "resolve-library-id":
-		if firstString(structured, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}) != "" {
+		if exactString(structured, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}) != "" {
 			return structured
 		}
 		for _, key := range []string{"library", "match", "resolved"} {
@@ -505,7 +505,7 @@ func context7StructuredValue(toolName string, result *mcp.CallToolResult) any {
 			}
 		}
 	case "get-library-docs", "query-docs":
-		if firstString(structured, []string{"url", "uri", "href", "link", "source", "title", "name", "libraryName", "excerpt", "snippet", "summary", "description", "text", "content"}) != "" {
+		if exactString(structured, []string{"url", "uri", "href", "link", "source", "title", "name", "libraryName", "excerpt", "snippet", "summary", "description", "text", "content"}) != "" {
 			return structured
 		}
 		for _, key := range []string{"document", "doc", "page"} {
@@ -713,18 +713,6 @@ func extractText(result *mcp.CallToolResult) string {
 	return strings.TrimSpace(b.String())
 }
 
-func firstString(value any, keys []string) string {
-	if len(keys) == 0 {
-		return ""
-	}
-	for _, key := range keys {
-		if out := firstStringForKey(value, key); out != "" {
-			return out
-		}
-	}
-	return ""
-}
-
 func exactString(value any, keys []string) string {
 	if len(keys) == 0 {
 		return ""
@@ -734,36 +722,13 @@ func exactString(value any, keys []string) string {
 		return ""
 	}
 	for _, key := range keys {
+		target := strings.TrimSpace(key)
 		for candidate, raw := range mapped {
-			if !strings.EqualFold(strings.TrimSpace(candidate), strings.TrimSpace(key)) {
-				continue
-			}
-			text, ok := raw.(string)
-			if ok {
-				return strings.TrimSpace(text)
-			}
-		}
-	}
-	return ""
-}
-
-func firstStringForKey(value any, key string) string {
-	switch typed := value.(type) {
-	case map[string]any:
-		for candidate, raw := range typed {
-			if strings.EqualFold(strings.TrimSpace(candidate), strings.TrimSpace(key)) {
-				if text, ok := raw.(string); ok {
+			if strings.EqualFold(strings.TrimSpace(candidate), target) {
+				text, ok := raw.(string)
+				if ok {
 					return strings.TrimSpace(text)
 				}
-			}
-			if nested := firstStringForKey(raw, key); nested != "" {
-				return nested
-			}
-		}
-	case []any:
-		for _, item := range typed {
-			if nested := firstStringForKey(item, key); nested != "" {
-				return nested
 			}
 		}
 	}
