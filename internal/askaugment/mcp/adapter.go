@@ -342,28 +342,30 @@ func extractLibraryIDFromText(text string) string {
 }
 
 func normalizeEvidence(providerID string, toolName string, prompt string, result *mcp.CallToolResult, seed normalizedEvidence) normalizedEvidence {
+	normalizedToolName := normalizeToolName(toolName)
 	if providerID == "web-search" {
-		return normalizeWebSearchEvidence(toolName, prompt, result, seed)
+		return normalizeWebSearchEvidence(normalizedToolName, prompt, result, seed)
 	}
 	text := extractText(result)
-	structured := context7StructuredValue(toolName, result)
+	structured := context7StructuredValue(normalizedToolName, result)
+	structuredStrings := caseInsensitiveStringIndex(structured)
 	evidence := seed
 	evidence.Provider = providerID
 	evidence.ToolName = toolName
 	if evidence.SourceURL == "" {
-		evidence.SourceURL = exactString(structured, []string{"url", "uri", "href", "link", "source"})
+		evidence.SourceURL = indexedString(structuredStrings, []string{"url", "uri", "href", "link", "source"})
 	}
 	if evidence.Domain == "" {
 		evidence.Domain = domainFromURL(evidence.SourceURL)
 	}
 	if evidence.Title == "" {
-		evidence.Title = exactString(structured, []string{"title", "name", "libraryName"})
+		evidence.Title = indexedString(structuredStrings, []string{"title", "name", "libraryName"})
 	}
 	if evidence.Title == "" {
 		evidence.Title = firstNonEmptyLine(text)
 	}
 	if evidence.Excerpt == "" {
-		evidence.Excerpt = exactString(structured, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
+		evidence.Excerpt = indexedString(structuredStrings, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
 	}
 	if evidence.Excerpt == "" {
 		evidence.Excerpt = compactExcerpt(text, 600)
@@ -386,13 +388,14 @@ func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.Call
 	best.ToolName = toolName
 	bestScore := -1
 	for _, candidate := range candidates {
+		candidateStrings := caseInsensitiveStringIndex(candidate)
 		evidence := seed
 		evidence.Provider = "web-search"
 		evidence.ToolName = toolName
-		evidence.SourceURL = exactString(candidate, []string{"url", "uri", "href", "link", "source"})
+		evidence.SourceURL = indexedString(candidateStrings, []string{"url", "uri", "href", "link", "source"})
 		evidence.Domain = domainFromURL(evidence.SourceURL)
-		evidence.Title = exactString(candidate, []string{"title", "name"})
-		evidence.Excerpt = exactString(candidate, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
+		evidence.Title = indexedString(candidateStrings, []string{"title", "name"})
+		evidence.Excerpt = indexedString(candidateStrings, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
 		if evidence.Title == "" {
 			evidence.Title = firstNonEmptyLine(text)
 		}
@@ -408,13 +411,14 @@ func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.Call
 	}
 	if bestScore < 0 {
 		structured := webSearchStructuredFallback(toolName, result)
-		best.SourceURL = exactString(structured, []string{"url", "uri", "href", "link", "source"})
+		structuredStrings := caseInsensitiveStringIndex(structured)
+		best.SourceURL = indexedString(structuredStrings, []string{"url", "uri", "href", "link", "source"})
 		best.Domain = domainFromURL(best.SourceURL)
-		best.Title = exactString(structured, []string{"title", "name"})
+		best.Title = indexedString(structuredStrings, []string{"title", "name"})
 		if best.Title == "" {
 			best.Title = firstNonEmptyLine(text)
 		}
-		best.Excerpt = exactString(structured, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
+		best.Excerpt = indexedString(structuredStrings, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
 		if best.Excerpt == "" {
 			best.Excerpt = compactExcerpt(text, 600)
 		}
@@ -458,7 +462,7 @@ func webSearchStructuredFallback(toolName string, result *mcp.CallToolResult) an
 }
 
 func webSearchCandidateKeys(toolName string) []string {
-	switch strings.ToLower(strings.TrimSpace(toolName)) {
+	switch toolName {
 	case "search", "web-search", "web_search":
 		return []string{"results", "items", "sources"}
 	default:
@@ -467,7 +471,7 @@ func webSearchCandidateKeys(toolName string) []string {
 }
 
 func webSearchSingleObjectKeys(toolName string) []string {
-	switch strings.ToLower(strings.TrimSpace(toolName)) {
+	switch toolName {
 	case "search", "web-search", "web_search":
 		return []string{"result", "item", "source"}
 	default:
@@ -483,7 +487,7 @@ func context7StructuredValue(toolName string, result *mcp.CallToolResult) any {
 	if !ok {
 		return result.StructuredContent
 	}
-	switch strings.ToLower(strings.TrimSpace(toolName)) {
+	switch toolName {
 	case "resolve-library-id":
 		if hasCaseInsensitiveKey(structured, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}) {
 			return structured
@@ -702,40 +706,44 @@ func extractText(result *mcp.CallToolResult) string {
 }
 
 func exactString(value any, keys []string) string {
-	if len(keys) == 0 {
-		return ""
-	}
-	mapped, ok := value.(map[string]any)
-	if !ok {
-		return ""
-	}
-	for _, key := range keys {
-		target := strings.TrimSpace(key)
-		for candidate, raw := range mapped {
-			if strings.EqualFold(candidate, target) {
-				text, ok := raw.(string)
-				if ok {
-					return strings.TrimSpace(text)
-				}
-			}
-		}
-	}
-	return ""
+	return indexedString(caseInsensitiveStringIndex(value), keys)
 }
 
 func hasCaseInsensitiveKey(mapped map[string]any, keys []string) bool {
-	if len(keys) == 0 {
-		return false
+	_, ok := caseInsensitiveValue(mapped, keys)
+	return ok
+}
+
+func normalizeToolName(toolName string) string {
+	return strings.ToLower(strings.TrimSpace(toolName))
+}
+
+func caseInsensitiveStringIndex(value any) map[string]string {
+	mapped, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	indexed := make(map[string]string, len(mapped))
+	for candidate, raw := range mapped {
+		text, ok := raw.(string)
+		if !ok {
+			continue
+		}
+		indexed[strings.ToLower(strings.TrimSpace(candidate))] = strings.TrimSpace(text)
+	}
+	return indexed
+}
+
+func indexedString(index map[string]string, keys []string) string {
+	if len(index) == 0 || len(keys) == 0 {
+		return ""
 	}
 	for _, key := range keys {
-		target := strings.TrimSpace(key)
-		for candidate := range mapped {
-			if strings.EqualFold(candidate, target) {
-				return true
-			}
+		if text, ok := index[strings.ToLower(strings.TrimSpace(key))]; ok {
+			return text
 		}
 	}
-	return false
+	return ""
 }
 
 func caseInsensitiveValue(mapped map[string]any, keys []string) (any, bool) {
