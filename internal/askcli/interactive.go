@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"syscall"
 
@@ -25,6 +26,9 @@ func isInteractiveSession(stdin io.Reader, stdout io.Writer) bool {
 
 func isCharDevice(fd uintptr, name string) bool {
 	_ = name
+	if fd > math.MaxInt {
+		return false
+	}
 	var stat syscall.Stat_t
 	if err := syscall.Fstat(int(fd), &stat); err != nil {
 		return false
