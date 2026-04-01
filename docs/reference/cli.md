@@ -222,7 +222,6 @@ Optional ask augmentation config example:
 
 - `deck ask` writes workflow files directly for authoring routes; use `--create` or `--edit` to make authoring intent explicit.
 - `deck ask plan` saves reusable plan artifacts under `./.deck/plan/`.
-- ambiguous authoring requests may stop for clarification instead of generating weak workflow files.
 <!-- END GENERATED:ASK_CLI_CONTEXT -->
 
 <!-- BEGIN GENERATED:ASK_AUTHORING_CONTEXT -->
