@@ -312,10 +312,10 @@ func libraryQueryFromPrompt(prompt string) string {
 }
 
 func parseContext7Entity(result *mcp.CallToolResult, prompt string) context7Entity {
-	structured := primaryStructuredValue(result.StructuredContent)
+	structured := context7StructuredValue("resolve-library-id", result)
 	entity := context7Entity{
-		LibraryID: firstString(structured, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}),
-		Title:     firstString(structured, []string{"title", "name", "libraryName"}),
+		LibraryID: exactString(structured, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}),
+		Title:     exactString(structured, []string{"title", "name", "libraryName"}),
 	}
 	if entity.LibraryID == "" {
 		entity.LibraryID = extractLibraryIDFromText(extractText(result))
@@ -346,24 +346,24 @@ func normalizeEvidence(providerID string, toolName string, prompt string, result
 		return normalizeWebSearchEvidence(toolName, prompt, result, seed)
 	}
 	text := extractText(result)
-	structured := primaryStructuredValue(result.StructuredContent)
+	structured := context7StructuredValue(toolName, result)
 	evidence := seed
 	evidence.Provider = providerID
 	evidence.ToolName = toolName
 	if evidence.SourceURL == "" {
-		evidence.SourceURL = firstString(structured, []string{"url", "uri", "href", "link", "source"})
+		evidence.SourceURL = exactString(structured, []string{"url", "uri", "href", "link", "source"})
 	}
 	if evidence.Domain == "" {
 		evidence.Domain = domainFromURL(evidence.SourceURL)
 	}
 	if evidence.Title == "" {
-		evidence.Title = firstString(structured, []string{"title", "name", "libraryName"})
+		evidence.Title = exactString(structured, []string{"title", "name", "libraryName"})
 	}
 	if evidence.Title == "" {
 		evidence.Title = firstNonEmptyLine(text)
 	}
 	if evidence.Excerpt == "" {
-		evidence.Excerpt = firstString(structured, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
+		evidence.Excerpt = exactString(structured, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
 	}
 	if evidence.Excerpt == "" {
 		evidence.Excerpt = compactExcerpt(text, 600)
@@ -379,7 +379,7 @@ func normalizeEvidence(providerID string, toolName string, prompt string, result
 
 func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.CallToolResult, seed normalizedEvidence) normalizedEvidence {
 	text := extractText(result)
-	candidates := webSearchEvidenceCandidates(result)
+	candidates := webSearchStructuredCandidates(toolName, result)
 	version := requestedVersion(prompt)
 	best := seed
 	best.Provider = "web-search"
@@ -389,10 +389,10 @@ func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.Call
 		evidence := seed
 		evidence.Provider = "web-search"
 		evidence.ToolName = toolName
-		evidence.SourceURL = firstString(candidate, []string{"url", "uri", "href", "link", "source"})
+		evidence.SourceURL = exactString(candidate, []string{"url", "uri", "href", "link", "source"})
 		evidence.Domain = domainFromURL(evidence.SourceURL)
-		evidence.Title = firstString(candidate, []string{"title", "name"})
-		evidence.Excerpt = firstString(candidate, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
+		evidence.Title = exactString(candidate, []string{"title", "name"})
+		evidence.Excerpt = exactString(candidate, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
 		if evidence.Title == "" {
 			evidence.Title = firstNonEmptyLine(text)
 		}
@@ -407,14 +407,14 @@ func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.Call
 		}
 	}
 	if bestScore < 0 {
-		structured := primaryStructuredValue(result.StructuredContent)
-		best.SourceURL = firstString(structured, []string{"url", "uri", "href", "link", "source"})
+		structured := webSearchStructuredFallback(toolName, result)
+		best.SourceURL = exactString(structured, []string{"url", "uri", "href", "link", "source"})
 		best.Domain = domainFromURL(best.SourceURL)
-		best.Title = firstString(structured, []string{"title", "name"})
+		best.Title = exactString(structured, []string{"title", "name"})
 		if best.Title == "" {
 			best.Title = firstNonEmptyLine(text)
 		}
-		best.Excerpt = firstString(structured, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
+		best.Excerpt = exactString(structured, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
 		if best.Excerpt == "" {
 			best.Excerpt = compactExcerpt(text, 600)
 		}
@@ -429,7 +429,7 @@ func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.Call
 	return best
 }
 
-func webSearchEvidenceCandidates(result *mcp.CallToolResult) []any {
+func webSearchStructuredCandidates(toolName string, result *mcp.CallToolResult) []any {
 	if result == nil {
 		return nil
 	}
@@ -437,13 +437,84 @@ func webSearchEvidenceCandidates(result *mcp.CallToolResult) []any {
 	if !ok {
 		return nil
 	}
-	for _, key := range []string{"results", "items", "documents", "sources"} {
+	for _, key := range webSearchCandidateKeys(toolName) {
 		items, ok := structured[key].([]any)
 		if ok && len(items) > 0 {
 			return items
 		}
 	}
 	return nil
+}
+
+func webSearchStructuredFallback(toolName string, result *mcp.CallToolResult) any {
+	if result == nil {
+		return nil
+	}
+	structured, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		return result.StructuredContent
+	}
+	for _, key := range webSearchSingleObjectKeys(toolName) {
+		if nested, ok := structured[key]; ok {
+			return nested
+		}
+	}
+	return structured
+}
+
+func webSearchCandidateKeys(toolName string) []string {
+	switch strings.ToLower(strings.TrimSpace(toolName)) {
+	case "search", "web-search", "web_search":
+		return []string{"results", "items", "sources"}
+	default:
+		return nil
+	}
+}
+
+func webSearchSingleObjectKeys(toolName string) []string {
+	switch strings.ToLower(strings.TrimSpace(toolName)) {
+	case "search", "web-search", "web_search":
+		return []string{"result", "item", "source"}
+	default:
+		return nil
+	}
+}
+
+func context7StructuredValue(toolName string, result *mcp.CallToolResult) any {
+	if result == nil {
+		return nil
+	}
+	structured, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		return result.StructuredContent
+	}
+	switch strings.ToLower(strings.TrimSpace(toolName)) {
+	case "resolve-library-id":
+		if firstString(structured, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}) != "" {
+			return structured
+		}
+		for _, key := range []string{"library", "match", "resolved"} {
+			if nested, ok := structured[key]; ok {
+				return nested
+			}
+		}
+		for _, key := range []string{"matches", "libraries", "candidates"} {
+			items, ok := structured[key].([]any)
+			if ok && len(items) > 0 {
+				return items[0]
+			}
+		}
+	case "get-library-docs", "query-docs":
+		if firstString(structured, []string{"url", "uri", "href", "link", "source", "title", "name", "libraryName", "excerpt", "snippet", "summary", "description", "text", "content"}) != "" {
+			return structured
+		}
+		for _, key := range []string{"document", "doc", "page"} {
+			if nested, ok := structured[key]; ok {
+				return nested
+			}
+		}
+	}
+	return structured
 }
 
 func scoreWebSearchEvidence(evidence normalizedEvidence, version string) int {
@@ -642,25 +713,6 @@ func extractText(result *mcp.CallToolResult) string {
 	return strings.TrimSpace(b.String())
 }
 
-func primaryStructuredValue(value any) any {
-	current := value
-outer:
-	for {
-		mapped, ok := current.(map[string]any)
-		if !ok {
-			return current
-		}
-		for _, key := range []string{"results", "items", "documents", "sources"} {
-			items, ok := mapped[key].([]any)
-			if ok && len(items) > 0 {
-				current = items[0]
-				continue outer
-			}
-		}
-		return mapped
-	}
-}
-
 func firstString(value any, keys []string) string {
 	if len(keys) == 0 {
 		return ""
@@ -668,6 +720,28 @@ func firstString(value any, keys []string) string {
 	for _, key := range keys {
 		if out := firstStringForKey(value, key); out != "" {
 			return out
+		}
+	}
+	return ""
+}
+
+func exactString(value any, keys []string) string {
+	if len(keys) == 0 {
+		return ""
+	}
+	mapped, ok := value.(map[string]any)
+	if !ok {
+		return ""
+	}
+	for _, key := range keys {
+		for candidate, raw := range mapped {
+			if !strings.EqualFold(strings.TrimSpace(candidate), strings.TrimSpace(key)) {
+				continue
+			}
+			text, ok := raw.(string)
+			if ok {
+				return strings.TrimSpace(text)
+			}
 		}
 	}
 	return ""
