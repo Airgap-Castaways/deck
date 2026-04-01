@@ -170,11 +170,6 @@ func isLibraryPrompt(prompt string) bool {
 		"api documentation",
 		"api reference",
 		"reference docs",
-		"package docs",
-		"module docs",
-		"sdk docs",
-		"npm package",
-		"pip package",
 		"crate",
 	} {
 		if strings.Contains(prompt, hint) {
