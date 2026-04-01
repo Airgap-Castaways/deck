@@ -7,8 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/mark3labs/mcp-go/mcp"
+
+	"github.com/Airgap-Castaways/deck/internal/askconfig"
 )
 
 type Request struct {

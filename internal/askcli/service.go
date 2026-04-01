@@ -157,12 +157,13 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	lspChunks := []askretrieve.Chunk{}
 	lspEvents := []string{"lsp: disabled for default local pipeline"}
 	forceAuthoringAugment := isAuthoringRoute(decision.Route) && askFeatureEnabled("DECK_ASK_ENABLE_AUGMENT")
-	if forceAuthoringAugment || strings.TrimSpace(evidencePlan.Decision) != "unnecessary" {
+	switch {
+	case forceAuthoringAugment || strings.TrimSpace(evidencePlan.Decision) != "unnecessary":
 		mcpChunks, mcpEvents = mcpaugment.Gather(ctx, effective.MCP, decision.Route, requestText)
 		mcpEvents = append(evidenceEvents, mcpEvents...)
-	} else if isAuthoringRoute(decision.Route) {
+	case isAuthoringRoute(decision.Route):
 		mcpEvents = append(mcpEvents, "mcp: disabled for default local pipeline")
-	} else {
+	default:
 		mcpEvents = append(mcpEvents, "mcp: skipped by evidence plan (unnecessary)")
 	}
 	if !isAuthoringRoute(decision.Route) || askFeatureEnabled("DECK_ASK_ENABLE_AUGMENT") {

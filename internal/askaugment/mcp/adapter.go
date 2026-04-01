@@ -268,16 +268,20 @@ func parseContext7Entity(result *mcp.CallToolResult, prompt string) context7Enti
 }
 
 func extractLibraryIDFromText(text string) string {
-	pattern := regexp.MustCompile(`(?i)(/[a-z0-9_.-]+/[a-z0-9_.-]+(?:/[a-z0-9_.-]+)?|github\.com/[\w./-]+|golang\.org/[\w./-]+|context7-compatible\s+library\s+id\s*[:=]\s*(/[\w./-]+)|library\s*id\s*[:=]\s*(/[\w./-]+)|library\s*[:=]\s*([\w./-]+))`)
-	match := pattern.FindStringSubmatch(text)
-	if len(match) == 0 {
-		return ""
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?i)context7-compatible\s+library\s+id\s*[:=]\s*(/[\w./-]+)`),
+		regexp.MustCompile(`(?i)library\s*id\s*[:=]\s*(/[\w./-]+)`),
+		regexp.MustCompile(`(?i)library\s*[:=]\s*([\w./-]+)`),
+		regexp.MustCompile(`(?i)(/[a-z0-9_.-]+/[a-z0-9_.-]+(?:/[a-z0-9_.-]+)?)`),
+		regexp.MustCompile(`(?i)(github\.com/[\w./-]+)`),
+		regexp.MustCompile(`(?i)(golang\.org/[\w./-]+)`),
 	}
-	for _, candidate := range match[1:] {
-		candidate = strings.TrimSpace(candidate)
-		candidate = strings.TrimPrefix(strings.ToLower(candidate), "context7-compatible library id:")
-		candidate = strings.TrimPrefix(candidate, "library id:")
-		candidate = strings.TrimPrefix(candidate, "library:")
+	for _, pattern := range patterns {
+		match := pattern.FindStringSubmatch(text)
+		if len(match) < 2 {
+			continue
+		}
+		candidate := strings.TrimSpace(match[1])
 		candidate = strings.Trim(candidate, " \t\r\n\"'")
 		if candidate != "" {
 			return candidate
@@ -334,11 +338,12 @@ func evidenceChunk(evidence normalizedEvidence) *askretrieve.Chunk {
 		OfflineHints:  append([]string(nil), evidence.OfflineHints...),
 	}
 	label := evidence.Provider
-	if strings.TrimSpace(summary.Title) != "" {
+	switch {
+	case strings.TrimSpace(summary.Title) != "":
 		label += ":" + strings.TrimSpace(summary.Title)
-	} else if strings.TrimSpace(summary.Domain) != "" {
+	case strings.TrimSpace(summary.Domain) != "":
 		label += ":" + strings.TrimSpace(summary.Domain)
-	} else if strings.TrimSpace(evidence.ToolName) != "" {
+	case strings.TrimSpace(evidence.ToolName) != "":
 		label += ":" + strings.TrimSpace(evidence.ToolName)
 	}
 	content := renderEvidence(*summary)
@@ -346,11 +351,12 @@ func evidenceChunk(evidence normalizedEvidence) *askretrieve.Chunk {
 		content += "\n\nSource excerpt:\n" + strings.TrimSpace(summary.Excerpt)
 	}
 	topicKey := evidence.Provider
-	if summary.Domain != "" {
+	switch {
+	case summary.Domain != "":
 		topicKey += ":" + summary.Domain
-	} else if summary.Title != "" {
+	case summary.Title != "":
 		topicKey += ":" + summary.Title
-	} else if evidence.ToolName != "" {
+	case evidence.ToolName != "":
 		topicKey += ":" + evidence.ToolName
 	}
 	idKey := evidence.Provider + "-" + evidence.ToolName
@@ -390,6 +396,7 @@ func extractText(result *mcp.CallToolResult) string {
 
 func primaryStructuredValue(value any) any {
 	current := value
+outer:
 	for {
 		mapped, ok := current.(map[string]any)
 		if !ok {
@@ -399,11 +406,10 @@ func primaryStructuredValue(value any) any {
 			items, ok := mapped[key].([]any)
 			if ok && len(items) > 0 {
 				current = items[0]
-				goto next
+				continue outer
 			}
 		}
 		return mapped
-	next:
 	}
 }
 

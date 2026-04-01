@@ -6,10 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mark3labs/mcp-go/mcp"
+
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/testutil/mcpfake"
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
 func TestMCPFakeProcess(t *testing.T) {

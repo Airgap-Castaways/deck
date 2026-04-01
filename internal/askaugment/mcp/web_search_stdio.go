@@ -7,12 +7,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	xhtml "golang.org/x/net/html"
 )
 
 type builtInSearchResult struct {
@@ -73,28 +73,34 @@ func runBuiltInWebSearch(ctx context.Context, query string, limit int) ([]builtI
 }
 
 func parseDuckDuckGoResults(body string, limit int) []builtInSearchResult {
-	anchorRe := regexp.MustCompile(`(?is)<a[^>]*class="[^"]*(?:result__a|result-link)[^"]*"[^>]*href="([^"]+)"[^>]*>(.*?)</a>`)
-	snippetRe := regexp.MustCompile(`(?is)<(?:a|div)[^>]*class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</(?:a|div)>`)
-	matches := anchorRe.FindAllStringSubmatchIndex(body, limit)
-	results := make([]builtInSearchResult, 0, len(matches))
-	for idx, match := range matches {
-		if len(match) < 6 {
+	doc, err := xhtml.Parse(strings.NewReader(body))
+	if err != nil {
+		return nil
+	}
+	containers := findDuckDuckGoResultContainers(doc)
+	results := make([]builtInSearchResult, 0, min(limit, len(containers)))
+	for _, container := range containers {
+		if len(results) >= limit {
+			break
+		}
+		anchor := findFirstNode(container, func(node *xhtml.Node) bool {
+			return node.Type == xhtml.ElementNode && node.Data == "a" && hasClass(node, "result__a", "result-link")
+		})
+		if anchor == nil {
 			continue
 		}
-		rawURL := body[match[2]:match[3]]
-		title := cleanSearchHTML(body[match[4]:match[5]])
+		title := strings.TrimSpace(nodeText(anchor))
 		if title == "" {
 			continue
 		}
-		segmentEnd := len(body)
-		if idx+1 < len(matches) && len(matches[idx+1]) > 0 {
-			segmentEnd = matches[idx+1][0]
+		snippetNode := findFirstNode(container, func(node *xhtml.Node) bool {
+			return node.Type == xhtml.ElementNode && hasClass(node, "result__snippet")
+		})
+		result := builtInSearchResult{Title: title, URL: normalizeDuckDuckGoURL(attr(anchor, "href"))}
+		if snippetNode != nil {
+			result.Snippet = strings.TrimSpace(nodeText(snippetNode))
 		}
-		snippet := ""
-		if snippetMatch := snippetRe.FindStringSubmatch(body[match[1]:segmentEnd]); len(snippetMatch) > 1 {
-			snippet = cleanSearchHTML(firstNonEmptyString(snippetMatch[1:]...))
-		}
-		results = append(results, builtInSearchResult{Title: title, URL: normalizeDuckDuckGoURL(rawURL), Snippet: snippet})
+		results = append(results, result)
 	}
 	return results
 }
@@ -123,12 +129,6 @@ func normalizeDuckDuckGoURL(raw string) string {
 	return parsed.String()
 }
 
-func cleanSearchHTML(raw string) string {
-	tagRe := regexp.MustCompile(`(?is)<[^>]+>`)
-	cleaned := html.UnescapeString(tagRe.ReplaceAllString(raw, " "))
-	return strings.Join(strings.Fields(cleaned), " ")
-}
-
 func renderBuiltInWebSearchResults(results []builtInSearchResult) string {
 	if len(results) == 0 {
 		return "No search results found."
@@ -151,11 +151,100 @@ func renderBuiltInWebSearchResults(results []builtInSearchResult) string {
 	return strings.TrimSpace(b.String())
 }
 
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
+func findDuckDuckGoResultContainers(root *xhtml.Node) []*xhtml.Node {
+	results := make([]*xhtml.Node, 0)
+	var walk func(*xhtml.Node)
+	walk = func(node *xhtml.Node) {
+		if node == nil {
+			return
+		}
+		if node.Type == xhtml.ElementNode && hasClass(node, "result") {
+			results = append(results, node)
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(root)
+	return results
+}
+
+func findFirstNode(root *xhtml.Node, match func(*xhtml.Node) bool) *xhtml.Node {
+	if root == nil {
+		return nil
+	}
+	if match(root) {
+		return root
+	}
+	for child := root.FirstChild; child != nil; child = child.NextSibling {
+		if found := findFirstNode(child, match); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func hasClass(node *xhtml.Node, classes ...string) bool {
+	if node == nil {
+		return false
+	}
+	classValue := attr(node, "class")
+	if classValue == "" {
+		return false
+	}
+	parts := strings.Fields(classValue)
+	for _, className := range classes {
+		for _, part := range parts {
+			if strings.TrimSpace(part) == strings.TrimSpace(className) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func attr(node *xhtml.Node, name string) string {
+	if node == nil {
+		return ""
+	}
+	for _, attribute := range node.Attr {
+		if strings.EqualFold(attribute.Key, name) {
+			return html.UnescapeString(strings.TrimSpace(attribute.Val))
 		}
 	}
 	return ""
+}
+
+func nodeText(node *xhtml.Node) string {
+	if node == nil {
+		return ""
+	}
+	b := &strings.Builder{}
+	var walk func(*xhtml.Node)
+	walk = func(current *xhtml.Node) {
+		if current == nil {
+			return
+		}
+		if current.Type == xhtml.TextNode {
+			text := strings.TrimSpace(html.UnescapeString(current.Data))
+			if text != "" {
+				if b.Len() > 0 {
+					b.WriteString(" ")
+				}
+				b.WriteString(text)
+			}
+		}
+		for child := current.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(node)
+	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+func min(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

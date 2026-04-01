@@ -9,9 +9,11 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
 
-var versionPattern = regexp.MustCompile(`(?i)\bv?\d+\.\d+(?:\.\d+)?\b`)
-var repoEntityPattern = regexp.MustCompile(`(?i)\b(?:github\.com|gitlab\.com|golang\.org)/[^\s)]+`)
-var tokenPattern = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+._/-]*`)
+var (
+	versionPattern    = regexp.MustCompile(`(?i)\bv?\d+\.\d+(?:\.\d+)?\b`)
+	repoEntityPattern = regexp.MustCompile(`(?i)\b(?:github\.com|gitlab\.com|golang\.org)/[^\s)]+`)
+	tokenPattern      = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+._/-]*`)
+)
 
 func BuildEvidencePlan(prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) askcontract.EvidencePlan {
 	trimmed := strings.TrimSpace(prompt)

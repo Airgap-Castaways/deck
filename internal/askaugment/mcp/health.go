@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mark3labs/mcp-go/client"
@@ -28,10 +29,16 @@ type ProviderHealth struct {
 }
 
 func ProbeConfiguredProviders(ctx context.Context, cfg askconfig.MCP) []ProviderHealth {
-	out := make([]ProviderHealth, 0, len(cfg.Servers))
-	for _, server := range cfg.Servers {
-		out = append(out, probeServer(ctx, server))
+	out := make([]ProviderHealth, len(cfg.Servers))
+	var wg sync.WaitGroup
+	for idx, server := range cfg.Servers {
+		wg.Add(1)
+		go func(index int, configured askconfig.MCPServer) {
+			defer wg.Done()
+			out[index] = probeServer(ctx, configured)
+		}(idx, server)
 	}
+	wg.Wait()
 	return out
 }
 

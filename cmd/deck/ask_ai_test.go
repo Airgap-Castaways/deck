@@ -10,11 +10,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mark3labs/mcp-go/mcp"
+
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	"github.com/Airgap-Castaways/deck/internal/testutil/legacygen"
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
 type mockAskClient struct {

@@ -125,15 +125,19 @@ func TestSaveStoredCanonicalizesLegacyWebServerAlias(t *testing.T) {
 }
 
 func TestNormalizeMCPProviderName(t *testing.T) {
-	for input, want := range map[string]string{
-		" context7 ":      "context7",
-		"WEB-SEARCH":      "web-search",
-		"web-server":      "web-search",
-		"custom-provider": "custom-provider",
-		"":                "",
-	} {
-		if got := NormalizeMCPProviderName(input); got != want {
-			t.Fatalf("NormalizeMCPProviderName(%q) = %q, want %q", input, got, want)
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: " context7 ", want: "context7"},
+		{input: "WEB-SEARCH", want: "web-search"},
+		{input: "web-server", want: "web-search"},
+		{input: "custom-provider", want: "custom-provider"},
+		{input: "", want: ""},
+	}
+	for _, tt := range tests {
+		if got := NormalizeMCPProviderName(tt.input); got != tt.want {
+			t.Fatalf("NormalizeMCPProviderName(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }

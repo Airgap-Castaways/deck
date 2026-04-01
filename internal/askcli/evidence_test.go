@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mark3labs/mcp-go/mcp"
+
 	mcpaugment "github.com/Airgap-Castaways/deck/internal/askaugment/mcp"
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
@@ -16,7 +18,6 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/askstate"
 	"github.com/Airgap-Castaways/deck/internal/testutil/mcpfake"
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
 func TestMCPFakeProcess(t *testing.T) {
@@ -85,9 +86,11 @@ func TestExecuteAuthoringBlocksWhenRequiredExternalEvidenceFails(t *testing.T) {
 	if err := askconfig.SaveStored(askconfig.Settings{MCP: askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{{Name: "web-search", RunCommand: "/bin/sh", Args: []string{"-c", "exit 0"}}}}}); err != nil {
 		t.Fatalf("save stored config: %v", err)
 	}
-	client := &stubClient{responses: []string{`{"version":1,"request":"create Kubernetes 1.35.1 workflow","intent":"draft","complexity":"complex","authoringProgram":{"verification":{"expectedNodeCount":1,"expectedReadyCount":1,"expectedControlPlaneReady":1}},"blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`,
+	client := &stubClient{responses: []string{
+		`{"version":1,"request":"create Kubernetes 1.35.1 workflow","intent":"draft","complexity":"complex","authoringProgram":{"verification":{"expectedNodeCount":1,"expectedReadyCount":1,"expectedControlPlaneReady":1}},"blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`,
 		`{"summary":"ok","blocking":[],"advisory":[],"missingContracts":[],"suggestedFixes":[],"findings":[]}`,
-		`{"summary":"generated","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-cluster","overrides":{"nodeCount":1}}]}]}}`}}
+		`{"summary":"generated","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-cluster","overrides":{"nodeCount":1}}]}]}}`,
+	}}
 	root := t.TempDir()
 	err := Execute(context.Background(), Options{Root: root, Prompt: "Create a Kubernetes 1.35.1 workflow", Create: true, Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client)
 	if err == nil || !strings.Contains(err.Error(), "required external evidence could not be fetched") {
