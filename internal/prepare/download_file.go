@@ -124,11 +124,17 @@ func runDownloadFileItem(ctx context.Context, bundleRoot string, decoded prepare
 		return outPath, nil
 	}
 
-	f, err := fsutil.Create(target)
+	f, tempPath, err := createDownloadTempFile(target)
 	if err != nil {
 		return "", fmt.Errorf("create output file: %w", err)
 	}
-	defer func() { _ = f.Close() }()
+	published := false
+	defer func() {
+		_ = f.Close()
+		if !published {
+			_ = os.Remove(tempPath)
+		}
+	}()
 
 	if sourcePath != "" {
 		raw, err := resolveSourceBytesFromSpec(ctx, decoded, sourcePath)
@@ -163,22 +169,45 @@ func runDownloadFileItem(ctx context.Context, bundleRoot string, decoded prepare
 	}
 
 	if expectedSHA != "" {
-		if err := verifyFileSHA256(target, expectedSHA); err != nil {
+		if err := verifyFileSHA256(tempPath, expectedSHA); err != nil {
 			return "", err
 		}
 	}
 
+	var targetMode os.FileMode = filemode.ArtifactFileMode
 	if modeRaw := strings.TrimSpace(decoded.Mode); modeRaw != "" {
 		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
 		if err != nil {
 			return "", fmt.Errorf("invalid mode: %w", err)
 		}
-		if err := os.Chmod(target, os.FileMode(modeVal)); err != nil {
-			return "", fmt.Errorf("apply mode: %w", err)
-		}
+		targetMode = os.FileMode(modeVal)
 	}
+	if err := os.Chmod(tempPath, targetMode); err != nil {
+		return "", fmt.Errorf("apply mode: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("close output file: %w", err)
+	}
+	if err := os.Rename(tempPath, target); err != nil {
+		return "", fmt.Errorf("publish output file: %w", err)
+	}
+	published = true
 
 	return outPath, nil
+}
+
+func createDownloadTempFile(target string) (*os.File, string, error) {
+	dir := filepath.Dir(target)
+	base := filepath.Base(target)
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		base = "download"
+	}
+	pattern := "." + base + ".tmp-*"
+	f, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return nil, "", err
+	}
+	return f, f.Name(), nil
 }
 
 func downloadURLToFile(ctx context.Context, target *os.File, url string) error {
@@ -310,7 +339,7 @@ func canReuseDownloadFile(ctx context.Context, bundleRoot string, spec prepareDo
 
 	sourcePath := strings.TrimSpace(spec.Source.Path)
 	if sourcePath == "" {
-		return false, nil
+		return strings.TrimSpace(spec.Source.URL) != "", nil
 	}
 	raw, resolveErr := resolveSourceBytesFromSpec(ctx, spec, sourcePath)
 	if resolveErr != nil {
