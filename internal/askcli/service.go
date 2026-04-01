@@ -169,6 +169,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		lspChunks, lspEvents = lspaugment.Gather(ctx, effective.LSP, decision.Target, workspace)
 	}
 	externalChunks := append(append([]askretrieve.Chunk{}, mcpChunks...), lspChunks...)
+	mcpEvents = append(mcpEvents, externalEvidenceWarningEvents(mcpChunks)...)
 	if failure := requiredExternalEvidenceFailure(evidencePlan, mcpChunks, mcpEvents); failure != "" {
 		if isAuthoringRoute(decision.Route) {
 			return fmt.Errorf("required external evidence could not be fetched for this request: %s; check `deck ask config health`", failure)

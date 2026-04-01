@@ -3,6 +3,7 @@ package askcli
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
@@ -167,4 +168,32 @@ func externalEvidenceFailureChunk(message string) askretrieve.Chunk {
 	message = strings.TrimSpace(message)
 	content := "External evidence status:\n- required upstream evidence could not be fetched\n- explain this limitation explicitly and avoid guessing fresh install/version/troubleshooting facts\n- detail: " + message
 	return askretrieve.Chunk{ID: "external-evidence-status", Source: "external-evidence", Label: "required-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: content, Score: 85}
+}
+
+func externalEvidenceWarningEvents(chunks []askretrieve.Chunk) []string {
+	events := make([]string, 0)
+	for _, chunk := range chunks {
+		if chunk.Evidence == nil {
+			continue
+		}
+		parts := make([]string, 0, 3)
+		if len(chunk.Evidence.ArtifactKinds) > 0 {
+			parts = append(parts, "artifactKinds="+strings.Join(chunk.Evidence.ArtifactKinds, ","))
+		}
+		if len(chunk.Evidence.InstallHints) > 0 {
+			parts = append(parts, "installHints="+strconv.Itoa(len(chunk.Evidence.InstallHints)))
+		}
+		if len(chunk.Evidence.OfflineHints) > 0 {
+			parts = append(parts, "offlineHints="+strconv.Itoa(len(chunk.Evidence.OfflineHints)))
+		}
+		if len(parts) == 0 {
+			continue
+		}
+		label := strings.TrimSpace(chunk.Label)
+		if label == "" {
+			label = chunk.ID
+		}
+		events = append(events, "evidence-warning: external summaries are advisory only; "+label+" "+strings.Join(parts, " "))
+	}
+	return events
 }

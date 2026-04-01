@@ -98,6 +98,17 @@ func TestBuildScenarioRequirementsSupportsExplicitPrepareOnlyRequest(t *testing.
 	}
 }
 
+func TestBuildScenarioRequirementsIgnoresExternalEvidenceArtifactKinds(t *testing.T) {
+	retrieval := askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}", Evidence: &askretrieve.EvidenceSummary{ArtifactKinds: []string{"package"}, OfflineHints: []string{"Treat gathered installation artifacts as offline bundle inputs for prepare before apply."}}}}}
+	req := BuildScenarioRequirements("create a minimal single-node apply-only kubeadm workflow using only init-kubeadm and check-cluster builders", retrieval, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
+	if req.NeedsPrepare {
+		t.Fatalf("expected external evidence artifact hints not to force prepare, got %#v", req)
+	}
+	if len(req.ArtifactKinds) != 0 {
+		t.Fatalf("expected external evidence artifact kinds not to enter requirements, got %#v", req.ArtifactKinds)
+	}
+}
+
 func TestBuildPlanDefaultsPreservesComplexityForComplexAsk(t *testing.T) {
 	req := ScenarioRequirements{NeedsPrepare: true, ArtifactKinds: []string{"package", "image"}, ScenarioIntent: []string{"kubeadm", "multi-node", "join", "node-count:3"}, Connectivity: "offline", RequiredFiles: []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml", "workflows/vars.yaml"}}
 	plan := BuildPlanDefaults(req, "create an air-gapped rhel9 3-node kubeadm workflow with prepare and apply", askintent.Decision{Route: askintent.RouteDraft}, askretrieve.WorkspaceSummary{})

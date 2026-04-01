@@ -85,11 +85,11 @@ func TestExecuteAuthoringBlocksWhenRequiredExternalEvidenceFails(t *testing.T) {
 	if err := askconfig.SaveStored(askconfig.Settings{MCP: askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{{Name: "web-search", RunCommand: "/bin/sh", Args: []string{"-c", "exit 0"}}}}}); err != nil {
 		t.Fatalf("save stored config: %v", err)
 	}
-	client := &stubClient{responses: []string{`{"version":1,"request":"create Kubernetes 1.37 workflow","intent":"draft","complexity":"complex","authoringProgram":{"verification":{"expectedNodeCount":1,"expectedReadyCount":1,"expectedControlPlaneReady":1}},"blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`,
+	client := &stubClient{responses: []string{`{"version":1,"request":"create Kubernetes 1.35.1 workflow","intent":"draft","complexity":"complex","authoringProgram":{"verification":{"expectedNodeCount":1,"expectedReadyCount":1,"expectedControlPlaneReady":1}},"blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`,
 		`{"summary":"ok","blocking":[],"advisory":[],"missingContracts":[],"suggestedFixes":[],"findings":[]}`,
 		`{"summary":"generated","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-cluster","overrides":{"nodeCount":1}}]}]}}`}}
 	root := t.TempDir()
-	err := Execute(context.Background(), Options{Root: root, Prompt: "Create a Kubernetes 1.37 workflow", Create: true, Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client)
+	err := Execute(context.Background(), Options{Root: root, Prompt: "Create a Kubernetes 1.35.1 workflow", Create: true, Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client)
 	if err == nil || !strings.Contains(err.Error(), "required external evidence could not be fetched") {
 		t.Fatalf("expected required evidence failure, got %v", err)
 	}
@@ -107,6 +107,18 @@ func TestQuestionPromptIncludesExternalEvidenceFailureGuidance(t *testing.T) {
 	for _, want := range []string{"Evidence boundaries:", "external source: Installing kubeadm [domain=kubernetes.io, freshness=external-docs, official=true]", "External evidence status:", "required upstream evidence could not be fetched"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in question prompt, got %q", want, prompt)
+		}
+	}
+}
+
+func TestExternalEvidenceWarningEventsAreAdvisoryOnly(t *testing.T) {
+	events := externalEvidenceWarningEvents([]askretrieve.Chunk{{ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Evidence: &askretrieve.EvidenceSummary{ArtifactKinds: []string{"package"}, OfflineHints: []string{"prepare before apply"}}}})
+	if len(events) != 1 {
+		t.Fatalf("expected one advisory event, got %#v", events)
+	}
+	for _, want := range []string{"evidence-warning: external summaries are advisory only", "artifactKinds=package", "offlineHints=1"} {
+		if !strings.Contains(events[0], want) {
+			t.Fatalf("expected advisory event to contain %q, got %q", want, events[0])
 		}
 	}
 }

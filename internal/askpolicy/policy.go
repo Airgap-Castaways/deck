@@ -736,25 +736,8 @@ func defaultValidationChecklist(req ScenarioRequirements) []string {
 }
 
 func mergedArtifactKinds(prompt string, retrieval askretrieve.RetrievalResult) []string {
-	kinds := InferArtifactKinds(strings.TrimSpace(prompt), nil)
-	seen := map[string]bool{}
-	for _, kind := range kinds {
-		seen[kind] = true
-	}
-	for _, chunk := range retrieval.Chunks {
-		if chunk.Evidence == nil {
-			continue
-		}
-		for _, kind := range chunk.Evidence.ArtifactKinds {
-			kind = strings.TrimSpace(strings.ToLower(kind))
-			if kind == "" || seen[kind] {
-				continue
-			}
-			seen[kind] = true
-			kinds = append(kinds, kind)
-		}
-	}
-	return dedupeStrings(kinds)
+	_ = retrieval
+	return InferArtifactKinds(strings.TrimSpace(prompt), nil)
 }
 
 func inferVarsRecommendation(prompt string) []string {
