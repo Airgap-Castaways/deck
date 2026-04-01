@@ -132,7 +132,6 @@ func capabilityRequestForRoute(profile providerProfile, route askintent.Route, p
 	request := capabilityRequest{Query: strings.TrimSpace(prompt)}
 	switch profile.ID {
 	case "context7":
-		request.Capabilities = []capability{capabilityDocFetch}
 		if isLibraryPrompt(prompt) {
 			request.Capabilities = []capability{capabilityEntityResolve, capabilityDocFetch}
 		}
@@ -156,7 +155,28 @@ func isLibraryPrompt(prompt string) bool {
 	if prompt == "" {
 		return false
 	}
-	for _, hint := range []string{"library", "package", "module", "sdk", "api", "golang.org/", "github.com/", "npm", "pip", "crate"} {
+	for _, hint := range []string{
+		"github.com/",
+		"gitlab.com/",
+		"golang.org/",
+		"pkg.go.dev/",
+		"library",
+		"package",
+		"module",
+		"sdk",
+		"client-go",
+		"godoc",
+		"api docs",
+		"api documentation",
+		"api reference",
+		"reference docs",
+		"package docs",
+		"module docs",
+		"sdk docs",
+		"npm package",
+		"pip package",
+		"crate",
+	} {
 		if strings.Contains(prompt, hint) {
 			return true
 		}
