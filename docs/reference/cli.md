@@ -30,6 +30,7 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 - `ask`: experimental helper to question, explain, review, draft, or refine workflows from the current workspace using an LLM-backed authoring assistant
 - `ask config set`: save `ask.provider`, `ask.model`, `ask.endpoint`, and `ask.apiKey` in XDG config
 - `ask config show`: show the effective ask config with a masked api key
+- `ask config health`: probe configured ask augmentation providers and show transport and capability status
 - `ask config unset`: clear saved ask config
 
 `ask` is experimental and ships as part of the standard `deck` binary.
@@ -55,6 +56,17 @@ You can override `provider`, `model`, and `endpoint` per run, or save defaults w
 - `basic`: route and provider summary
 - `debug`: `basic` plus the user command and MCP/LSP events
 - `trace`: `debug` plus classifier/route system prompts and user prompts
+
+`ask.mcp.servers[]` keeps the same config shape, but it now selects built-in external-docs providers rather than arbitrary first-class MCP semantics. Current built-in provider ids are:
+
+- `context7`: upstream library and API documentation lookup
+- `web-search`: upstream web search for install, compatibility, version, and troubleshooting context
+
+Compatibility notes:
+
+- `web-server` remains accepted as a legacy alias for `web-search`
+- `command` and `args` still work as transport overrides for a built-in provider id
+- unknown provider names are ignored with diagnostics instead of being treated as supported authoring inputs
 
 These commands are additive. They do not replace the default local execution path.
 
@@ -172,9 +184,10 @@ Optional ask augmentation config example:
       "enabled": true,
       "servers": [
         {
-          "name": "context7",
-          "command": "context7-mcp",
-          "args": []
+          "name": "context7"
+        },
+        {
+          "name": "web-search"
         }
       ]
     },
@@ -184,6 +197,30 @@ Optional ask augmentation config example:
         "command": "yaml-language-server",
         "args": ["--stdio"]
       }
+    }
+  }
+}
+```
+
+Optional transport override example:
+
+```json
+{
+  "ask": {
+    "mcp": {
+      "enabled": true,
+      "servers": [
+        {
+          "name": "context7",
+          "command": "npx",
+          "args": ["-y", "@upstash/context7-mcp@latest"]
+        },
+        {
+          "name": "web-search",
+          "command": "/usr/local/bin/deck",
+          "args": ["ask", "mcp", "web-search"]
+        }
+      ]
     }
   }
 }
@@ -203,7 +240,10 @@ Optional ask augmentation config example:
 - complex one-shot authoring requests may stop after planning or clarification if blockers remain; in that case `deck ask` prints the saved plan paths and follow-up commands instead of writing weak output.
 - `ask config set --log-level trace` is the quickest way to see the effective `deck ask` command, MCP/LSP events, and prompt text in terminal logs.
 - optional augmentation config can be defined under `ask.mcp` and `ask.lsp` in the same config file.
-- optional MCP and LSP augmentation is disabled by default and degrades gracefully when configured tools are unavailable.
+- `ask config show` includes the configured built-in MCP provider ids, effective transport commands, and capability lists.
+- `ask config health` checks whether configured built-in MCP providers can start, initialize, list tools, and satisfy their required capabilities.
+- external docs evidence is used for upstream install, compatibility, version, and troubleshooting facts; local deck workflow validity still comes from local metadata and validation.
+- required external evidence can block freshness-sensitive authoring requests when providers are unavailable; answer routes surface the limitation explicitly instead of guessing.
 - phase imports resolve from `workflows/components/` using component-relative paths
 - `apply` runs all phases by default when phases are used; `--phase` narrows execution to one phase.
 - top-level `steps` execute as an implicit `default` phase.

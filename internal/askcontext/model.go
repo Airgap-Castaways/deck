@@ -24,6 +24,8 @@ const (
 	TopicStepQuality          Topic = "step-quality-rules"
 	TopicCLIHints             Topic = "cli-hints"
 	TopicProjectPhilosophy    Topic = "project-philosophy"
+	TopicRepoGrounding        Topic = "repo-grounding"
+	TopicExternalEvidence     Topic = "external-evidence"
 )
 
 type PromptBlock struct {

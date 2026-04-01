@@ -336,7 +336,7 @@ func normalize(settings Settings) Settings {
 	settings.Endpoint = strings.TrimSpace(settings.Endpoint)
 	settings.LogLevel = normalizeLogLevel(settings.LogLevel)
 	for i := range settings.MCP.Servers {
-		settings.MCP.Servers[i].Name = strings.TrimSpace(settings.MCP.Servers[i].Name)
+		settings.MCP.Servers[i].Name = NormalizeMCPProviderName(settings.MCP.Servers[i].Name)
 		settings.MCP.Servers[i].RunCommand = strings.TrimSpace(settings.MCP.Servers[i].RunCommand)
 		trimmed := make([]string, 0, len(settings.MCP.Servers[i].Args))
 		for _, arg := range settings.MCP.Servers[i].Args {
@@ -372,6 +372,18 @@ func normalizeLogLevel(level string) string {
 
 func normalizeProvider(provider string) string {
 	return askprovider.NormalizeProvider(provider)
+}
+
+func NormalizeMCPProviderName(name string) string {
+	trimmed := strings.TrimSpace(name)
+	switch strings.ToLower(trimmed) {
+	case "context7":
+		return "context7"
+	case "web-search", "web-server":
+		return "web-search"
+	default:
+		return trimmed
+	}
 }
 
 func modelLooksMismatched(provider string, model string, source string) bool {

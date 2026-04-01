@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
@@ -19,9 +24,89 @@ type mockAskClient struct {
 	calls     int
 }
 
+type mcpHelperRequest struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      *mcp.RequestId  `json:"id,omitempty"`
+	Method  string          `json:"method"`
+	Params  json.RawMessage `json:"params,omitempty"`
+}
+
+type mcpHelperResponse struct {
+	JSONRPC string         `json:"jsonrpc"`
+	ID      *mcp.RequestId `json:"id,omitempty"`
+	Result  any            `json:"result,omitempty"`
+}
+
 func enableLegacyAuthoringFallback(t *testing.T) {
 	t.Helper()
 	t.Setenv("DECK_ASK_ENABLE_LEGACY_AUTHORING_FALLBACK", "1")
+}
+
+func enableBuiltInWebSearchTransportHelper(t *testing.T) {
+	t.Helper()
+	t.Setenv("DECK_TEST_MCP_WEB_SEARCH_COMMAND", os.Args[0])
+	t.Setenv("DECK_TEST_MCP_WEB_SEARCH_ARGS", "-test.run=TestAskMCPWebSearchHelperProcess --")
+	t.Setenv("DECK_TEST_MCP_WEB_SEARCH_HELPER", "1")
+}
+
+func TestAskMCPWebSearchHelperProcess(t *testing.T) {
+	if os.Getenv("DECK_TEST_MCP_WEB_SEARCH_HELPER") != "1" {
+		return
+	}
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			os.Exit(0)
+		}
+		line = strings.TrimRight(line, "\r\n")
+		var req mcpHelperRequest
+		if err := json.Unmarshal([]byte(line), &req); err != nil {
+			continue
+		}
+		resp := handleWebSearchHelperRequest(req)
+		if resp == nil {
+			continue
+		}
+		raw, err := json.Marshal(resp)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		if _, err := fmt.Fprintf(os.Stdout, "%s\n", raw); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+	}
+}
+
+func handleWebSearchHelperRequest(req mcpHelperRequest) *mcpHelperResponse {
+	resp := &mcpHelperResponse{JSONRPC: "2.0", ID: req.ID}
+	switch req.Method {
+	case string(mcp.MethodInitialize):
+		resp.Result = map[string]any{
+			"protocolVersion": mcp.LATEST_PROTOCOL_VERSION,
+			"serverInfo":      map[string]any{"name": "deck-web-search", "version": "1.0.0"},
+			"capabilities":    map[string]any{"tools": map[string]any{}},
+		}
+		return resp
+	case string(mcp.MethodToolsList):
+		resp.Result = map[string]any{"tools": []map[string]any{{
+			"name": "search",
+			"inputSchema": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{"type": "string"},
+					"limit": map[string]any{"type": "integer"},
+				},
+			},
+		}}}
+		return resp
+	case "notifications/initialized":
+		return nil
+	default:
+		return nil
+	}
 }
 
 func (m *mockAskClient) Generate(_ context.Context, req askprovider.Request) (askprovider.Response, error) {
@@ -160,9 +245,42 @@ func TestAskConfigShowIncludesStoredAugmentSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config show: %v", err)
 	}
-	for _, want := range []string{"logLevel=trace", "mcpEnabled=true", "lspEnabled=true"} {
+	for _, want := range []string{"logLevel=trace", "mcpEnabled=true", "mcpProviderCount=1", "mcpProvider[0].name=context7", "mcpProvider[0].id=context7", "mcpProvider[0].transport=context7-mcp", "mcpProvider[0].transportSource=config-override", "mcpProvider[0].capabilities=entity-resolve,doc-fetch,official-doc-search", "lspEnabled=true"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in config show output, got %q", want, out)
+		}
+	}
+}
+
+func TestAskConfigShowIncludesBuiltInWebSearchTransport(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+	if err := askconfig.SaveStored(askconfig.Settings{MCP: askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{{Name: "web-server"}}}}); err != nil {
+		t.Fatalf("save stored config: %v", err)
+	}
+	out, err := runWithCapturedStdout([]string{"ask", "config", "show"})
+	if err != nil {
+		t.Fatalf("config show: %v", err)
+	}
+	for _, want := range []string{"mcpProviderCount=1", "mcpProvider[0].name=web-search", "mcpProvider[0].id=web-search", "mcpProvider[0].transport=deck ask mcp web-search", "mcpProvider[0].transportSource=built-in-default"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in config show output, got %q", want, out)
+		}
+	}
+}
+
+func TestAskConfigHealthReportsBuiltInWebSearchHealthy(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+	enableBuiltInWebSearchTransportHelper(t)
+	if err := askconfig.SaveStored(askconfig.Settings{MCP: askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{{Name: "web-search"}}}}); err != nil {
+		t.Fatalf("save stored config: %v", err)
+	}
+	out, err := runWithCapturedStdout([]string{"ask", "config", "health"})
+	if err != nil {
+		t.Fatalf("config health: %v", err)
+	}
+	for _, want := range []string{"mcpEnabled=true", "mcpProviderCount=1", "mcpProvider[0].name=web-search", "mcpProvider[0].id=web-search", "mcpProvider[0].transport=deck ask mcp web-search", "mcpProvider[0].status=healthy", "mcpProvider[0].phase=ready", "mcpProvider[0].tools=search", "mcpProvider[0].capabilities=official-doc-search,web-search,error-lookup", "mcpProvider[0].message=ok"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in config health output, got %q", want, out)
 		}
 	}
 }

@@ -42,9 +42,11 @@ This rule is the main defense against drift between authoring behavior and actua
 ## Main packages and responsibilities
 
 - `internal/askcli`: top-level route orchestration, LLM calls, planning flow, generation loop, and final write behavior.
+- `internal/askaugment/mcp`: built-in external-docs provider registry, capability adapters, health checks, and evidence normalization.
 - `internal/askpolicy`: plan normalization, blocking decisions, and `AuthoringProgram` derivation.
 - `internal/askcontract`: typed contracts shared across planning, generation, compile, refine, and repair.
 - `internal/askcontext`: build prompt-facing workspace and authoring context.
+- `internal/askretrieve`: merge workspace retrieval, repo grounding, examples, local state, and external evidence into route-specific chunks.
 - `internal/askcatalog`: project source-of-truth step and field metadata into an ask-facing catalog.
 - `internal/askdraft`: expose draft builder candidates and compile selected builders into workflow documents.
 - `internal/askrefine`: compute refine transform candidates from parsed workflow structure.
@@ -104,6 +106,71 @@ Refine is selection-based as well.
 - Code applies the selected transforms and re-renders documents.
 
 Refine should keep anchor files stable and only expand into allowed companion files declared by plan policy.
+
+## Evidence planning and external docs
+
+External docs are not gathered blindly.
+
+- `internal/askpolicy` builds an `EvidencePlan` that marks external evidence as `required`, `optional`, or `unnecessary`.
+- Heuristics cover obvious freshness-sensitive requests such as versioned install, compatibility, prerequisite, and troubleshooting asks.
+- A small LLM evidence-planning pass may refine ambiguous external entity selection when heuristics cannot identify the upstream technology cleanly.
+
+This keeps ask off a raw tool-calling loop while still letting unfamiliar products route into external evidence lookup.
+
+## Built-in MCP providers and capability adapters
+
+`ask.mcp.servers[]` still exists in config, but ask now treats it as built-in provider selection plus optional transport override.
+
+Current built-in provider ids are:
+
+- `context7`
+- `web-search`
+
+`web-server` remains a compatibility alias for `web-search`.
+
+Ask core should not depend on raw MCP tool names. Provider adapters own capability routing. The current capability families include:
+
+- `entity-resolve`
+- `official-doc-search`
+- `doc-fetch`
+- `web-search`
+- `error-lookup`
+
+Provider-specific adapter code is responsible for translating those capabilities into actual MCP tool calls, argument shapes, and multi-step flows.
+
+## Repo grounding versus external evidence
+
+Retrieval now separates three concerns:
+
+- local repo grounding for deck source-of-truth
+- external evidence for upstream product behavior and recency
+- normal workspace and example context
+
+Local repo grounding is authoritative for:
+
+- step metadata and builder behavior from `internal/stepmeta`
+- typed step metadata from `internal/stepspec/*_meta.go`
+- draft compilation behavior from `internal/askdraft`
+- planning defaults and authoring rules from `internal/askpolicy`
+- repair semantics from `internal/askrepair`
+
+External evidence is only authoritative for upstream facts such as:
+
+- current install steps
+- version-sensitive changes
+- compatibility and prerequisite notes
+- troubleshooting guidance
+
+Prompts must preserve that boundary explicitly. External docs must not override local schema truth, validator rules, workflow path rules, or repair behavior.
+
+## Required evidence failure behavior
+
+When required external evidence cannot be fetched:
+
+- answer routes should surface the limitation explicitly and avoid guessing fresh facts
+- authoring routes should stop instead of writing version-sensitive output based on stale or missing upstream context
+
+This failure mode is intentional. It is safer than silently continuing with weak external assumptions.
 
 ## Repair path
 

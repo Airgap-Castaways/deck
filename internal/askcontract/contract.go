@@ -502,6 +502,21 @@ type ClassificationTarget struct {
 	Name string `json:"name,omitempty"`
 }
 
+type EvidencePlan struct {
+	Decision                string           `json:"decision"`
+	Reason                  string           `json:"reason,omitempty"`
+	FreshnessSensitive      bool             `json:"freshnessSensitive,omitempty"`
+	InstallEvidence         bool             `json:"installEvidence,omitempty"`
+	CompatibilityEvidence   bool             `json:"compatibilityEvidence,omitempty"`
+	TroubleshootingEvidence bool             `json:"troubleshootingEvidence,omitempty"`
+	Entities                []EvidenceEntity `json:"entities,omitempty"`
+}
+
+type EvidenceEntity struct {
+	Name string `json:"name"`
+	Kind string `json:"kind,omitempty"`
+}
+
 func ParseGeneration(raw string) (GenerationResponse, error) {
 	cleaned := clean(raw)
 	if cleaned == "" {
@@ -568,6 +583,39 @@ func ParseGeneration(raw string) (GenerationResponse, error) {
 		}
 	}
 	return resp, nil
+}
+
+func ParseEvidencePlan(raw string) (EvidencePlan, error) {
+	cleaned := clean(raw)
+	if cleaned == "" {
+		return EvidencePlan{}, fmt.Errorf("model returned empty response")
+	}
+	var plan EvidencePlan
+	if err := json.Unmarshal([]byte(cleaned), &plan); err != nil {
+		return EvidencePlan{}, fmt.Errorf("parse evidence plan: %w", err)
+	}
+	plan.Decision = normalizeEvidenceDecision(plan.Decision)
+	if plan.Decision == "" {
+		return EvidencePlan{}, fmt.Errorf("evidence plan is missing decision")
+	}
+	plan.Reason = strings.TrimSpace(plan.Reason)
+	seen := map[string]bool{}
+	normalized := make([]EvidenceEntity, 0, len(plan.Entities))
+	for _, entity := range plan.Entities {
+		entity.Name = strings.TrimSpace(entity.Name)
+		entity.Kind = strings.TrimSpace(entity.Kind)
+		if entity.Name == "" {
+			continue
+		}
+		key := strings.ToLower(entity.Name) + "::" + strings.ToLower(entity.Kind)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		normalized = append(normalized, entity)
+	}
+	plan.Entities = normalized
+	return plan, nil
 }
 
 func CompileDraftSelection(selection DraftSelection) []GeneratedDocument {
@@ -832,6 +880,19 @@ func ParseClassification(raw string) (ClassificationResponse, error) {
 		resp.Confidence = 1
 	}
 	return resp, nil
+}
+
+func normalizeEvidenceDecision(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "required", "require", "must":
+		return "required"
+	case "optional", "recommended", "prefer":
+		return "optional"
+	case "unnecessary", "none", "skip", "not-needed":
+		return "unnecessary"
+	default:
+		return ""
+	}
 }
 
 func ParsePlan(raw string) (PlanResponse, error) {

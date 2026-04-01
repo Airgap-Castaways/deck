@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	mcpaugment "github.com/Airgap-Castaways/deck/internal/askaugment/mcp"
 	"github.com/Airgap-Castaways/deck/internal/askcli"
 	"github.com/Airgap-Castaways/deck/internal/askcommandspec"
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
@@ -83,6 +84,7 @@ func newAskCommand() *cobra.Command {
 
 	cmd.AddCommand(newAskPlanCommand())
 	cmd.AddCommand(newAskConfigCommand())
+	cmd.AddCommand(newAskMCPCommand())
 	cmd.AddCommand(newAskLoginCommand(), newAskLogoutCommand(), newAskStatusCommand())
 	return cmd
 }
@@ -143,7 +145,7 @@ func newAskConfigCommand() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(newAskConfigSetCommand(), newAskConfigShowCommand(), newAskConfigUnsetCommand())
+	cmd.AddCommand(newAskConfigSetCommand(), newAskConfigShowCommand(), newAskConfigHealthCommand(), newAskConfigUnsetCommand())
 	return cmd
 }
 
@@ -240,6 +242,22 @@ func newAskConfigShowCommand() *cobra.Command {
 			if err := stdoutPrintf("mcpEnabled=%t\n", effective.MCP.Enabled); err != nil {
 				return err
 			}
+			providers := mcpaugment.DescribeConfiguredProviders(effective.MCP)
+			if err := stdoutPrintf("mcpProviderCount=%d\n", len(providers)); err != nil {
+				return err
+			}
+			for idx, provider := range providers {
+				if err := printKeyValues(fmt.Sprintf("mcpProvider[%d]", idx), map[string]string{
+					"name":            provider.ConfiguredName,
+					"id":              provider.ProviderID,
+					"transport":       provider.Transport,
+					"transportSource": provider.TransportSource,
+					"capabilities":    strings.Join(provider.Capabilities, ","),
+					"warning":         provider.Warning,
+				}); err != nil {
+					return err
+				}
+			}
 			if err := stdoutPrintf("lspEnabled=%t\n", effective.LSP.Enabled); err != nil {
 				return err
 			}
@@ -261,6 +279,59 @@ func newAskConfigShowCommand() *cobra.Command {
 	return cmd
 }
 
+func newAskConfigHealthCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "health",
+		Short: "Probe built-in ask augmentation providers",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			effective, err := askconfig.ResolveEffective(askconfig.Settings{})
+			if err != nil {
+				return err
+			}
+			if err := stdoutPrintf("mcpEnabled=%t\n", effective.MCP.Enabled); err != nil {
+				return err
+			}
+			health := mcpaugment.ProbeConfiguredProviders(cmd.Context(), effective.MCP)
+			if err := stdoutPrintf("mcpProviderCount=%d\n", len(health)); err != nil {
+				return err
+			}
+			for idx, provider := range health {
+				if err := printKeyValues(fmt.Sprintf("mcpProvider[%d]", idx), map[string]string{
+					"name":                provider.ConfiguredName,
+					"id":                  provider.ProviderID,
+					"transport":           provider.Transport,
+					"transportSource":     provider.TransportSource,
+					"status":              provider.Status,
+					"phase":               provider.Phase,
+					"tools":               strings.Join(provider.Tools, ","),
+					"capabilities":        strings.Join(provider.Capabilities, ","),
+					"missingCapabilities": strings.Join(provider.MissingCapabilities, ","),
+					"message":             provider.Message,
+				}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+	return cmd
+}
+
+func printKeyValues(prefix string, fields map[string]string) error {
+	orderedKeys := []string{"name", "id", "transport", "transportSource", "status", "phase", "tools", "capabilities", "missingCapabilities", "message", "warning"}
+	for _, key := range orderedKeys {
+		value, ok := fields[key]
+		if !ok || value == "" {
+			continue
+		}
+		if err := stdoutPrintf("%s.%s=%s\n", prefix, key, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func newAskConfigUnsetCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "unset",
@@ -271,6 +342,24 @@ func newAskConfigUnsetCommand() *cobra.Command {
 				return err
 			}
 			return stdoutPrintln("ask config cleared")
+		},
+	}
+	return cmd
+}
+
+func newAskMCPCommand() *cobra.Command {
+	cmd := &cobra.Command{Use: "mcp", Hidden: true, Args: cobra.NoArgs}
+	cmd.AddCommand(newAskMCPWebSearchCommand())
+	return cmd
+}
+
+func newAskMCPWebSearchCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:    "web-search",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return mcpaugment.ServeBuiltInWebSearchMCP()
 		},
 	}
 	return cmd

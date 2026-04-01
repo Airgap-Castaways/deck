@@ -148,15 +148,36 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		return fmt.Errorf("cannot refine workflow files because this workspace has no workflow tree yet; run a draft generation first")
 	}
 
+	evidencePlan, evidenceEvents, err := buildEvidencePlan(ctx, client, effective, requestText, decision, workspace, logger)
+	if err != nil {
+		return err
+	}
 	mcpChunks := []askretrieve.Chunk{}
-	mcpEvents := []string{"mcp: disabled for default local pipeline"}
+	mcpEvents := append([]string(nil), evidenceEvents...)
 	lspChunks := []askretrieve.Chunk{}
 	lspEvents := []string{"lsp: disabled for default local pipeline"}
-	if !isAuthoringRoute(decision.Route) || askFeatureEnabled("DECK_ASK_ENABLE_AUGMENT") {
+	forceAuthoringAugment := isAuthoringRoute(decision.Route) && askFeatureEnabled("DECK_ASK_ENABLE_AUGMENT")
+	switch {
+	case forceAuthoringAugment || strings.TrimSpace(evidencePlan.Decision) != "unnecessary":
 		mcpChunks, mcpEvents = mcpaugment.Gather(ctx, effective.MCP, decision.Route, requestText)
+		mcpEvents = append(evidenceEvents, mcpEvents...)
+	case isAuthoringRoute(decision.Route):
+		mcpEvents = append(mcpEvents, "mcp: disabled for default local pipeline")
+	default:
+		mcpEvents = append(mcpEvents, "mcp: skipped by evidence plan (unnecessary)")
+	}
+	if !isAuthoringRoute(decision.Route) || askFeatureEnabled("DECK_ASK_ENABLE_AUGMENT") {
 		lspChunks, lspEvents = lspaugment.Gather(ctx, effective.LSP, decision.Target, workspace)
 	}
 	externalChunks := append(append([]askretrieve.Chunk{}, mcpChunks...), lspChunks...)
+	mcpEvents = append(mcpEvents, externalEvidenceWarningEvents(mcpChunks)...)
+	if failure := requiredExternalEvidenceFailure(evidencePlan, mcpChunks, mcpEvents); failure != "" {
+		if isAuthoringRoute(decision.Route) {
+			return fmt.Errorf("required external evidence could not be fetched for this request: %s; check `deck ask config health`", failure)
+		}
+		externalChunks = append(externalChunks, externalEvidenceFailureChunk(failure))
+		mcpEvents = append(mcpEvents, "mcp: required external evidence unavailable")
+	}
 	externalChunks = append(externalChunks, projectContextChunk(resolvedRoot))
 	retrieval := askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, externalChunks)
 	requirements := askpolicy.BuildScenarioRequirements(requestText, retrieval, workspace, decision)

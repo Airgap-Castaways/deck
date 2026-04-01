@@ -107,6 +107,41 @@ func TestResolveEffectiveUsesSavedOAuthSessionBeforeConfig(t *testing.T) {
 	}
 }
 
+func TestSaveStoredCanonicalizesLegacyWebServerAlias(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+	if err := SaveStored(Settings{MCP: MCP{Enabled: true, Servers: []MCPServer{{Name: "web-server", RunCommand: "node", Args: []string{"legacy-web.js"}}}}}); err != nil {
+		t.Fatalf("save stored: %v", err)
+	}
+	loaded, err := LoadStored()
+	if err != nil {
+		t.Fatalf("load stored: %v", err)
+	}
+	if len(loaded.MCP.Servers) != 1 || loaded.MCP.Servers[0].Name != "web-search" {
+		t.Fatalf("expected canonical web-search provider, got %#v", loaded.MCP.Servers)
+	}
+	if loaded.MCP.Servers[0].RunCommand != "node" || len(loaded.MCP.Servers[0].Args) != 1 || loaded.MCP.Servers[0].Args[0] != "legacy-web.js" {
+		t.Fatalf("expected transport override to be preserved, got %#v", loaded.MCP.Servers[0])
+	}
+}
+
+func TestNormalizeMCPProviderName(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: " context7 ", want: "context7"},
+		{input: "WEB-SEARCH", want: "web-search"},
+		{input: "web-server", want: "web-search"},
+		{input: "custom-provider", want: "custom-provider"},
+		{input: "", want: ""},
+	}
+	for _, tt := range tests {
+		if got := NormalizeMCPProviderName(tt.input); got != tt.want {
+			t.Fatalf("NormalizeMCPProviderName(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestResolveEffectiveMarksExpiredOpenAISessionWithoutRefreshing(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
 	if err := askauth.Save(askauth.Session{Provider: "openai", AccessToken: "stale", RefreshToken: "refresh-token", ExpiresAt: time.Now().UTC().Add(-time.Minute)}); err != nil {

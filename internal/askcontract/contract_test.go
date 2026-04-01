@@ -130,6 +130,25 @@ func TestParseClassification(t *testing.T) {
 	}
 }
 
+func TestParseEvidencePlan(t *testing.T) {
+	resp, err := ParseEvidencePlan(`{"decision":"required","reason":"need current install docs","freshnessSensitive":true,"installEvidence":true,"entities":[{"name":"Cilium","kind":"technology"},{"name":"Cilium","kind":"technology"}]}`)
+	if err != nil {
+		t.Fatalf("parse evidence plan: %v", err)
+	}
+	if resp.Decision != "required" || !resp.FreshnessSensitive || !resp.InstallEvidence {
+		t.Fatalf("unexpected evidence plan: %#v", resp)
+	}
+	if len(resp.Entities) != 1 || resp.Entities[0].Name != "Cilium" {
+		t.Fatalf("expected deduped entities, got %#v", resp.Entities)
+	}
+}
+
+func TestParseEvidencePlanRejectsUnknownDecision(t *testing.T) {
+	if _, err := ParseEvidencePlan(`{"decision":"maybe"}`); err == nil {
+		t.Fatalf("expected invalid decision to fail")
+	}
+}
+
 func TestParsePlan(t *testing.T) {
 	raw := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","authoringBrief":{"modeIntent":"apply-only"},"executionModel":{"artifactContracts":[{"kind":"package","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"offline package flow"}],"roleExecution":{"roleSelector":"vars.role","controlPlaneFlow":"bootstrap","workerFlow":"join","perNodeInvocation":true},"verification":{"bootstrapPhase":"bootstrap-control-plane","finalPhase":"verify-cluster","finalVerificationRole":"control-plane","expectedNodeCount":3,"expectedControlPlaneReady":1},"applyAssumptions":["apply consumes local artifacts"]},"offlineAssumption":"offline","needsPrepare":false,"artifactKinds":[],"blockers":[],"targetOutcome":"generate files","assumptions":["use v1alpha1"],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
 	resp, err := ParsePlan(raw)

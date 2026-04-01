@@ -93,6 +93,10 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, requ
 	b.WriteString("Primary repository context follows. Prefer workspace snippets first, then the closest repository examples.\n")
 	b.WriteString(generationRetrievalPromptBlock(retrieval))
 	b.WriteString("\n")
+	if block := evidenceBoundaryPromptBlock(retrieval); strings.TrimSpace(block) != "" {
+		b.WriteString(block)
+		b.WriteString("\n")
+	}
 	b.WriteString(bundle.WorkflowPromptBlock())
 	b.WriteString("\n")
 	b.WriteString(askpolicy.RequirementsPromptBlock(requirements))
@@ -139,6 +143,57 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, requ
 	b.WriteString("- Do not use Kubernetes-style fields such as apiVersion, kind, metadata, or spec wrappers at the workflow top level.\n")
 	b.WriteString("- Do not invent unsupported fields.\n")
 	return b.String()
+}
+
+func evidenceBoundaryPromptBlock(retrieval askretrieve.RetrievalResult) string {
+	hasRepoGrounding := false
+	hasExternalEvidence := false
+	externalLines := make([]string, 0)
+	for _, chunk := range retrieval.Chunks {
+		switch chunk.Source {
+		case "repo-grounding":
+			hasRepoGrounding = true
+		case "mcp":
+			hasExternalEvidence = true
+			if chunk.Evidence != nil {
+				line := "- external source"
+				if strings.TrimSpace(chunk.Evidence.Title) != "" {
+					line += ": " + strings.TrimSpace(chunk.Evidence.Title)
+				}
+				parts := make([]string, 0, 3)
+				if strings.TrimSpace(chunk.Evidence.Domain) != "" {
+					parts = append(parts, "domain="+strings.TrimSpace(chunk.Evidence.Domain))
+				}
+				if strings.TrimSpace(chunk.Evidence.Freshness) != "" {
+					parts = append(parts, "freshness="+strings.TrimSpace(chunk.Evidence.Freshness))
+				}
+				if chunk.Evidence.Official {
+					parts = append(parts, "official=true")
+				}
+				if len(parts) > 0 {
+					line += " [" + strings.Join(parts, ", ") + "]"
+				}
+				externalLines = append(externalLines, line)
+			}
+		}
+	}
+	if !hasRepoGrounding && !hasExternalEvidence {
+		return ""
+	}
+	b := &strings.Builder{}
+	b.WriteString("Evidence boundaries:\n")
+	if hasRepoGrounding {
+		b.WriteString("- Local repo grounding is authoritative for deck workflow validity, typed step metadata, builder behavior, and repair semantics.\n")
+	}
+	if hasExternalEvidence {
+		b.WriteString("- External evidence is only for upstream product behavior, install steps, compatibility, versions, or troubleshooting recency.\n")
+		b.WriteString("- Do not let external docs override local deck workflow truth, schema rules, validator behavior, or path constraints.\n")
+		for _, line := range externalLines {
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func refineTransformPromptBlock(plan askcontract.PlanResponse, brief askcontract.AuthoringBrief) string {
@@ -1182,6 +1237,10 @@ func infoSystemPrompt(route askintent.Route, target askintent.Target, retrieval 
 	}
 	b.WriteString("Return strict JSON with shape {\"summary\":string,\"answer\":string,\"suggestions\":[]string,\"findings\":[]string,\"suggestedChanges\":[]string}.\n")
 	b.WriteString("Do not return file content for this route.\n")
+	if block := evidenceBoundaryPromptBlock(retrieval); strings.TrimSpace(block) != "" {
+		b.WriteString(block)
+		b.WriteString("\n")
+	}
 	b.WriteString(askretrieve.BuildChunkText(retrieval))
 	return b.String()
 }
@@ -1193,6 +1252,10 @@ func questionSystemPrompt(target askintent.Target, retrieval askretrieve.Retriev
 	b.WriteString("Keep the answer concise but specific.\n")
 	b.WriteString("Return strict JSON with shape {\"summary\":string,\"answer\":string,\"suggestions\":[]string}.\n")
 	b.WriteString("If evidence is incomplete, say what is known from the workspace and avoid speculation.\n")
+	if block := evidenceBoundaryPromptBlock(retrieval); strings.TrimSpace(block) != "" {
+		b.WriteString(block)
+		b.WriteString("\n")
+	}
 	if target.Path != "" {
 		b.WriteString("Target path: ")
 		b.WriteString(target.Path)
@@ -1207,6 +1270,10 @@ func explainSystemPrompt(target askintent.Target, retrieval askretrieve.Retrieva
 	b.WriteString("You are deck ask explaining an existing deck workspace file or workflow.\n")
 	b.WriteString("Explain what the target does, how it fits into the workflow, and call out imports, phases, major step kinds, and Command usage when present.\n")
 	b.WriteString("Do not give a shallow file count summary.\n")
+	if block := evidenceBoundaryPromptBlock(retrieval); strings.TrimSpace(block) != "" {
+		b.WriteString(block)
+		b.WriteString("\n")
+	}
 	if block := retrievalDocumentSummaryBlock(retrieval); strings.TrimSpace(block) != "" {
 		b.WriteString(block)
 		b.WriteString("\n")
@@ -1226,6 +1293,10 @@ func reviewSystemPrompt(target askintent.Target, retrieval askretrieve.Retrieval
 	b.WriteString("You are deck ask reviewing an existing deck workspace.\n")
 	b.WriteString("Use the retrieved evidence and any local findings to produce a scoped review with practical concerns and suggested changes.\n")
 	b.WriteString("Narrate the findings instead of only repeating raw warnings.\n")
+	if block := evidenceBoundaryPromptBlock(retrieval); strings.TrimSpace(block) != "" {
+		b.WriteString(block)
+		b.WriteString("\n")
+	}
 	if block := retrievalDocumentSummaryBlock(retrieval); strings.TrimSpace(block) != "" {
 		b.WriteString(block)
 		b.WriteString("\n")
