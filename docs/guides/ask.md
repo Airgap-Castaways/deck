@@ -159,7 +159,7 @@ The config shape still uses `ask.mcp.servers[]`, but the meaning has changed:
 
 `deck ask` uses these providers only when the evidence plan calls for them. Typical cases include:
 
-- versioned or release-sensitive requests such as Kubernetes `1.37`
+- versioned or release-sensitive requests such as Kubernetes `1.35.1`
 - install or upgrade guidance
 - compatibility or prerequisite questions
 - troubleshooting or error-driven requests

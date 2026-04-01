@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuildEvidencePlanMarksVersionedUnknownInstallRequestRequired(t *testing.T) {
-	plan := BuildEvidencePlan("Install AcmeMesh 1.37 on Ubuntu 22.04 and list prerequisites", askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteQuestion})
+	plan := BuildEvidencePlan("Install AcmeMesh 1.35.1 on Ubuntu 22.04 and list prerequisites", askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteQuestion})
 	if plan.Decision != "required" || !plan.FreshnessSensitive || !plan.InstallEvidence || !plan.CompatibilityEvidence {
 		t.Fatalf("expected required external evidence plan, got %#v", plan)
 	}
