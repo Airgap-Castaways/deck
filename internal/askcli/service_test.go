@@ -1632,6 +1632,23 @@ func TestValidateSemanticGenerationRefineRejectsUnplannedFile(t *testing.T) {
 	}
 }
 
+func TestValidateSemanticGenerationDoesNotRequireVarsFromChecklistMentionOnly(t *testing.T) {
+	gen := testMaterialized("draft", []askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: bootstrap\n    kind: InitKubeadm\n    spec:\n      outputJoinFile: /tmp/deck/join.txt\n"}})
+	plan := askcontract.PlanResponse{
+		EntryScenario: "workflows/scenarios/apply.yaml",
+		Files:         []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}},
+		AuthoringBrief: askcontract.AuthoringBrief{
+			TargetPaths: []string{"workflows/scenarios/apply.yaml"},
+		},
+		ValidationChecklist: []string{
+			"Do not add prepare workflow, components, or vars unless later requested.",
+		},
+	}
+	if err := validateSemanticGeneration(gen, askintent.Decision{Route: askintent.RouteDraft}, plan); err != nil {
+		t.Fatalf("expected checklist mention alone not to require vars file, got %v", err)
+	}
+}
+
 func TestSemanticCriticWarnsWhenTypedStepsRequestedButOnlyCommandUsed(t *testing.T) {
 	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [\"true\"]\n"}})
 	plan := askcontract.PlanResponse{

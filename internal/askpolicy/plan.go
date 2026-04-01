@@ -362,6 +362,17 @@ func normalizeEntryScenario(current string, req ScenarioRequirements, files []as
 
 func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askcontract.AuthoringBrief, execution askcontract.ExecutionModel, prompt string) askcontract.AuthoringProgram {
 	family, release := inferPlatformFromPrompt(prompt)
+	minimalSingleNodeBootstrap := isMinimalSingleNodeBootstrapPrompt(prompt, brief)
+	if minimalSingleNodeBootstrap {
+		program.Platform.Family = "custom"
+		program.Platform.Release = "unspecified"
+		program.Platform.RepoType = "none"
+		program.Platform.BackendImage = "none"
+		program.Artifacts.PackageOutputDir = ""
+		program.Artifacts.ImageOutputDir = ""
+		program.Cluster.RoleSelector = ""
+		program.Verification.ExpectedReadyCount = 0
+	}
 	if strings.TrimSpace(program.Platform.Family) == "" {
 		if strings.TrimSpace(brief.PlatformFamily) != "" {
 			program.Platform.Family = strings.TrimSpace(brief.PlatformFamily)
@@ -372,16 +383,16 @@ func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askco
 	if strings.TrimSpace(program.Platform.Release) == "" {
 		program.Platform.Release = release
 	}
-	if strings.TrimSpace(program.Platform.RepoType) == "" {
+	if strings.TrimSpace(program.Platform.RepoType) == "" && !minimalSingleNodeBootstrap {
 		program.Platform.RepoType = defaultRepoType(program.Platform.Family)
 	}
-	if strings.TrimSpace(program.Platform.BackendImage) == "" {
+	if strings.TrimSpace(program.Platform.BackendImage) == "" && !minimalSingleNodeBootstrap {
 		program.Platform.BackendImage = defaultBackendImage(program.Platform.Family, program.Platform.Release)
 	}
-	if strings.TrimSpace(program.Artifacts.PackageOutputDir) == "" {
+	if strings.TrimSpace(program.Artifacts.PackageOutputDir) == "" && !minimalSingleNodeBootstrap {
 		program.Artifacts.PackageOutputDir = defaultPackageOutputDir(program.Platform.Family, program.Platform.Release, program.Platform.RepoType)
 	}
-	if strings.TrimSpace(program.Artifacts.ImageOutputDir) == "" {
+	if strings.TrimSpace(program.Artifacts.ImageOutputDir) == "" && !minimalSingleNodeBootstrap {
 		program.Artifacts.ImageOutputDir = "images/control-plane"
 	}
 	if strings.TrimSpace(program.Cluster.JoinFile) == "" {
@@ -391,6 +402,9 @@ func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askco
 		program.Cluster.PodCIDR = "10.244.0.0/16"
 	}
 	program.Cluster.RoleSelector = normalizeRoleSelector(firstNonEmpty(strings.TrimSpace(program.Cluster.RoleSelector), strings.TrimSpace(execution.RoleExecution.RoleSelector)))
+	if !briefNeedsRoleSelector(brief) {
+		program.Cluster.RoleSelector = ""
+	}
 	if program.Cluster.ControlPlaneCount <= 0 {
 		program.Cluster.ControlPlaneCount = inferControlPlaneCount(brief, execution)
 	}
@@ -413,7 +427,11 @@ func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askco
 		program.Verification.ExpectedControlPlaneReady = maxInt(1, program.Cluster.ControlPlaneCount)
 	}
 	if program.Verification.ExpectedReadyCount <= 0 {
-		program.Verification.ExpectedReadyCount = program.Verification.ExpectedNodeCount
+		if minimalSingleNodeBootstrap {
+			program.Verification.ExpectedReadyCount = 0
+		} else {
+			program.Verification.ExpectedReadyCount = program.Verification.ExpectedNodeCount
+		}
 	}
 	if strings.TrimSpace(program.Verification.FinalVerificationRole) == "" {
 		program.Verification.FinalVerificationRole = strings.TrimSpace(execution.Verification.FinalVerificationRole)
@@ -436,6 +454,23 @@ func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askco
 		}
 	}
 	return program
+}
+
+func isMinimalSingleNodeBootstrapPrompt(prompt string, brief askcontract.AuthoringBrief) bool {
+	lower := strings.ToLower(strings.TrimSpace(prompt))
+	if strings.TrimSpace(brief.ModeIntent) != "apply-only" || strings.TrimSpace(brief.Topology) != "single-node" {
+		return false
+	}
+	if strings.Contains(lower, "prepare") || strings.Contains(lower, "join") || strings.Contains(lower, "worker") {
+		return false
+	}
+	if !strings.Contains(lower, "init-kubeadm") || !strings.Contains(lower, "check-cluster") {
+		return false
+	}
+	if strings.Contains(lower, "ready=1") || strings.Contains(lower, "ready 1") || strings.Contains(lower, "cni") {
+		return false
+	}
+	return true
 }
 
 func inferPlatformFromPrompt(prompt string) (string, string) {
@@ -819,8 +854,7 @@ func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.Gene
 			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "planned_file_missing", Message: fmt.Sprintf("planned file missing from generation: %s", path), Path: path})
 		}
 	}
-	checklistText := strings.ToLower(strings.Join(plan.ValidationChecklist, "\n"))
-	if strings.Contains(checklistText, "vars") {
+	if planRequiresVarsFile(plan) {
 		if _, ok := generated["workflows/vars.yaml"]; !ok {
 			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "vars_required_by_checklist", Message: "validation checklist requires vars but workflows/vars.yaml was not generated", Path: "workflows/vars.yaml"})
 		}
@@ -846,6 +880,20 @@ func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.Gene
 		}
 	}
 	return EvaluationResult{Findings: findings}
+}
+
+func planRequiresVarsFile(plan askcontract.PlanResponse) bool {
+	for _, path := range plan.AuthoringBrief.TargetPaths {
+		if path == "workflows/vars.yaml" {
+			return true
+		}
+	}
+	for _, file := range plan.Files {
+		if filepath.ToSlash(strings.TrimSpace(file.Path)) == "workflows/vars.yaml" {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidatePlanStructure enforces only pre-generation viability.

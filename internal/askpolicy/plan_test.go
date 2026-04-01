@@ -223,6 +223,20 @@ func TestNormalizePlanAddsRuntimePlatformClarificationForPackageRequestWithoutDi
 	}
 }
 
+func TestNormalizePlanSkipsRuntimePlatformClarificationForMinimalApplyOnlySingleNodeBootstrap(t *testing.T) {
+	prompt := "Create a minimal single-node apply-only offline kubeadm workflow for Kubernetes 1.35.1 using only init-kubeadm and check-cluster builders"
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request:             prompt,
+		Intent:              "draft",
+		Files:               []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}},
+		TargetOutcome:       "generate files",
+		ValidationChecklist: []string{"lint"},
+	}, prompt, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
+	if hasClarification(plan.Clarifications, "runtime.platformFamily") {
+		t.Fatalf("expected no runtime platform clarification for minimal apply-only flow, got %#v", plan.Clarifications)
+	}
+}
+
 func TestNormalizePlanAddsRefineVarsCompanionClarificationWhenVarsPathIsImplicit(t *testing.T) {
 	workspace := askretrieve.WorkspaceSummary{HasWorkflowTree: true, Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/control-plane-bootstrap.yaml"}, {Path: "workflows/vars.yaml"}, {Path: "workflows/scenarios/other.yaml"}}}
 	plan := NormalizePlan(askcontract.PlanResponse{
@@ -325,6 +339,49 @@ func TestValidatePlanStructureRejectsMissingViableEntryScenario(t *testing.T) {
 	}
 	if err := ValidatePlanStructure(plan); err == nil {
 		t.Fatalf("expected missing entry scenario to fail viability check")
+	}
+}
+
+func TestEvaluatePlanConformanceDoesNotRequireVarsFromChecklistMentionOnly(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		AuthoringBrief: askcontract.AuthoringBrief{TargetPaths: []string{"workflows/scenarios/apply.yaml"}},
+		EntryScenario:  "workflows/scenarios/apply.yaml",
+		Files:          []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}},
+		ValidationChecklist: []string{
+			"Do not add prepare workflow, components, or vars unless later requested.",
+		},
+	}
+	gen := askcontract.GenerationResponse{Files: []askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps: []\n"}}}
+	result := EvaluatePlanConformance(plan, gen, askintent.Decision{Route: askintent.RouteDraft})
+	for _, finding := range result.Findings {
+		if finding.Code == "vars_required_by_checklist" {
+			t.Fatalf("expected checklist mention alone not to require vars file, got %#v", result.Findings)
+		}
+	}
+}
+
+func TestEvaluatePlanConformanceRequiresVarsWhenPlanned(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		AuthoringBrief: askcontract.AuthoringBrief{TargetPaths: []string{"workflows/scenarios/apply.yaml", "workflows/vars.yaml"}},
+		EntryScenario:  "workflows/scenarios/apply.yaml",
+		Files: []askcontract.PlanFile{
+			{Path: "workflows/scenarios/apply.yaml", Action: "create"},
+			{Path: "workflows/vars.yaml", Action: "create"},
+		},
+	}
+	gen := askcontract.GenerationResponse{Files: []askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps: []\n"}}}
+	result := EvaluatePlanConformance(plan, gen, askintent.Decision{Route: askintent.RouteDraft})
+	found := false
+	for _, finding := range result.Findings {
+		if finding.Code == "vars_required_by_checklist" {
+			found = true
+			if finding.Path != "workflows/vars.yaml" {
+				t.Fatalf("expected vars path finding, got %#v", finding)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected planned vars file to remain required, got %#v", result.Findings)
 	}
 }
 
