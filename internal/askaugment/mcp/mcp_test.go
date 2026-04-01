@@ -28,12 +28,12 @@ func TestGatherDisabledReturnsNothing(t *testing.T) {
 	}
 }
 
-func TestQueryServerContext7GenericExplainRouteReturnsNoKnownTool(t *testing.T) {
+func TestQueryServerContext7GenericExplainRouteSkipsProvider(t *testing.T) {
 	chunk, event := queryServer(context.Background(), helperServer(t, "context7", "context7-no-tool"), askintent.RouteExplain, "What is kubeadm?")
 	if chunk != nil {
 		t.Fatalf("expected no chunk, got %#v", chunk)
 	}
-	if event != "mcp:context7 no known tool for route explain" {
+	if event != "" {
 		t.Fatalf("unexpected event: %q", event)
 	}
 }
@@ -239,6 +239,37 @@ func TestCapabilityRequestForRoute(t *testing.T) {
 	request = capabilityRequestForRoute(webSearch, askintent.RouteReview, "review this workspace")
 	if len(request.Capabilities) != 0 {
 		t.Fatalf("expected review route to avoid external evidence capabilities, got %#v", request)
+	}
+}
+
+func TestCapabilityRequestForRouteSkipsContext7ForInstallPrompt(t *testing.T) {
+	context7, ok := lookupProviderProfile("context7")
+	if !ok {
+		t.Fatalf("expected context7 profile")
+	}
+	request := capabilityRequestForRoute(context7, askintent.RouteExplain, "How do I install kubeadm on Ubuntu 24.04?")
+	if len(request.Capabilities) != 0 {
+		t.Fatalf("expected install prompt to skip context7, got %#v", request)
+	}
+}
+
+func TestGatherPrefersWebSearchForInstallPrompt(t *testing.T) {
+	chunks, events := Gather(context.Background(), askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{
+		helperServer(t, "context7", "context7-success"),
+		helperServer(t, "web-search", "web-search-success"),
+	}}, askintent.RouteExplain, "How do I install kubeadm on Ubuntu 24.04?")
+	if len(chunks) != 1 {
+		t.Fatalf("expected only one evidence chunk, got %#v", chunks)
+	}
+	if chunks[0].Evidence == nil || chunks[0].Evidence.Provider != "web-search" {
+		t.Fatalf("expected web-search evidence, got %#v", chunks[0].Evidence)
+	}
+	joined := strings.Join(events, "\n")
+	if strings.Contains(joined, "mcp:context7") {
+		t.Fatalf("expected install prompt to avoid context7 activity, got %#v", events)
+	}
+	if !strings.Contains(joined, "mcp:web-search call search ok") {
+		t.Fatalf("expected web-search success event, got %#v", events)
 	}
 }
 
