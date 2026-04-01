@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	mcpaugment "github.com/Airgap-Castaways/deck/internal/askaugment/mcp"
 	"github.com/Airgap-Castaways/deck/internal/askcli"
 	"github.com/Airgap-Castaways/deck/internal/askcommandspec"
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
@@ -83,6 +84,7 @@ func newAskCommand() *cobra.Command {
 
 	cmd.AddCommand(newAskPlanCommand())
 	cmd.AddCommand(newAskConfigCommand())
+	cmd.AddCommand(newAskMCPCommand())
 	cmd.AddCommand(newAskLoginCommand(), newAskLogoutCommand(), newAskStatusCommand())
 	return cmd
 }
@@ -143,7 +145,7 @@ func newAskConfigCommand() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(newAskConfigSetCommand(), newAskConfigShowCommand(), newAskConfigUnsetCommand())
+	cmd.AddCommand(newAskConfigSetCommand(), newAskConfigShowCommand(), newAskConfigHealthCommand(), newAskConfigUnsetCommand())
 	return cmd
 }
 
@@ -240,6 +242,31 @@ func newAskConfigShowCommand() *cobra.Command {
 			if err := stdoutPrintf("mcpEnabled=%t\n", effective.MCP.Enabled); err != nil {
 				return err
 			}
+			providers := mcpaugment.DescribeConfiguredProviders(effective.MCP)
+			if err := stdoutPrintf("mcpProviderCount=%d\n", len(providers)); err != nil {
+				return err
+			}
+			for idx, provider := range providers {
+				prefix := fmt.Sprintf("mcpProvider[%d]", idx)
+				if err := stdoutPrintf("%s.name=%s\n", prefix, provider.ConfiguredName); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.id=%s\n", prefix, provider.ProviderID); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.transport=%s\n", prefix, provider.Transport); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.transportSource=%s\n", prefix, provider.TransportSource); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.capabilities=%s\n", prefix, strings.Join(provider.Capabilities, ",")); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.warning=%s\n", prefix, provider.Warning); err != nil {
+					return err
+				}
+			}
 			if err := stdoutPrintf("lspEnabled=%t\n", effective.LSP.Enabled); err != nil {
 				return err
 			}
@@ -261,6 +288,62 @@ func newAskConfigShowCommand() *cobra.Command {
 	return cmd
 }
 
+func newAskConfigHealthCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "health",
+		Short: "Probe built-in ask augmentation providers",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			effective, err := askconfig.ResolveEffective(askconfig.Settings{})
+			if err != nil {
+				return err
+			}
+			if err := stdoutPrintf("mcpEnabled=%t\n", effective.MCP.Enabled); err != nil {
+				return err
+			}
+			health := mcpaugment.ProbeConfiguredProviders(cmd.Context(), effective.MCP)
+			if err := stdoutPrintf("mcpProviderCount=%d\n", len(health)); err != nil {
+				return err
+			}
+			for idx, provider := range health {
+				prefix := fmt.Sprintf("mcpProvider[%d]", idx)
+				if err := stdoutPrintf("%s.name=%s\n", prefix, provider.ConfiguredName); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.id=%s\n", prefix, provider.ProviderID); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.transport=%s\n", prefix, provider.Transport); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.transportSource=%s\n", prefix, provider.TransportSource); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.status=%s\n", prefix, provider.Status); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.phase=%s\n", prefix, provider.Phase); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.tools=%s\n", prefix, strings.Join(provider.Tools, ",")); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.capabilities=%s\n", prefix, strings.Join(provider.Capabilities, ",")); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.missingCapabilities=%s\n", prefix, strings.Join(provider.MissingCapabilities, ",")); err != nil {
+					return err
+				}
+				if err := stdoutPrintf("%s.message=%s\n", prefix, provider.Message); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+	return cmd
+}
+
 func newAskConfigUnsetCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "unset",
@@ -271,6 +354,24 @@ func newAskConfigUnsetCommand() *cobra.Command {
 				return err
 			}
 			return stdoutPrintln("ask config cleared")
+		},
+	}
+	return cmd
+}
+
+func newAskMCPCommand() *cobra.Command {
+	cmd := &cobra.Command{Use: "mcp", Hidden: true, Args: cobra.NoArgs}
+	cmd.AddCommand(newAskMCPWebSearchCommand())
+	return cmd
+}
+
+func newAskMCPWebSearchCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:    "web-search",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return mcpaugment.ServeBuiltInWebSearchMCP()
 		},
 	}
 	return cmd

@@ -40,9 +40,17 @@ type Chunk struct {
 }
 
 type EvidenceSummary struct {
-	ArtifactKinds []string
-	InstallHints  []string
-	OfflineHints  []string
+	Provider      string   `json:"provider,omitempty"`
+	SourceURL     string   `json:"sourceUrl,omitempty"`
+	SourceID      string   `json:"sourceId,omitempty"`
+	Domain        string   `json:"domain,omitempty"`
+	Title         string   `json:"title,omitempty"`
+	Excerpt       string   `json:"excerpt,omitempty"`
+	Freshness     string   `json:"freshness,omitempty"`
+	Official      bool     `json:"official,omitempty"`
+	ArtifactKinds []string `json:"artifactKinds,omitempty"`
+	InstallHints  []string `json:"installHints,omitempty"`
+	OfflineHints  []string `json:"offlineHints,omitempty"`
 }
 
 type RetrievalResult struct {
@@ -141,6 +149,7 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 		Chunk{ID: "vars-guidance", Source: "askcontext", Label: "vars-guidance", Topic: askcontext.TopicVarsGuidance, Content: bundle.VarsPromptBlock(), Score: 52},
 		Chunk{ID: "cli-guidance", Source: "askcontext", Label: "cli-hints", Topic: askcontext.TopicCLIHints, Content: askcontext.CLIHintsBlock(), Score: 25},
 	)
+	chunks = append(chunks, repoGroundingChunks(route, lowerPrompt)...)
 	chunks = append(chunks, exampleReferenceChunks(route, lowerPrompt)...)
 	for _, file := range workspace.Files {
 		if !workspaceFileAllowed(file.Path) {
@@ -357,22 +366,45 @@ func BuildChunkTextWithoutTopics(retrieval RetrievalResult, excluded ...askconte
 		excludedSet[topic] = true
 	}
 	b := &strings.Builder{}
+	appendChunkGroup := func(title string, chunks []Chunk) {
+		if len(chunks) == 0 {
+			return
+		}
+		b.WriteString(title)
+		b.WriteString("\n")
+		for _, chunk := range chunks {
+			b.WriteString("[chunk:")
+			b.WriteString(chunk.ID)
+			b.WriteString(",source:")
+			b.WriteString(chunk.Source)
+			b.WriteString(",label:")
+			b.WriteString(chunk.Label)
+			b.WriteString("]\n")
+			b.WriteString(chunk.Content)
+			if !strings.HasSuffix(chunk.Content, "\n") {
+				b.WriteString("\n")
+			}
+		}
+	}
+	repoChunks := make([]Chunk, 0)
+	externalChunks := make([]Chunk, 0)
+	otherChunks := make([]Chunk, 0)
 	for _, chunk := range retrieval.Chunks {
 		if excludedSet[chunk.Topic] {
 			continue
 		}
-		b.WriteString("[chunk:")
-		b.WriteString(chunk.ID)
-		b.WriteString(",source:")
-		b.WriteString(chunk.Source)
-		b.WriteString(",label:")
-		b.WriteString(chunk.Label)
-		b.WriteString("]\n")
-		b.WriteString(chunk.Content)
-		if !strings.HasSuffix(chunk.Content, "\n") {
-			b.WriteString("\n")
+		switch chunk.Source {
+		case "repo-grounding":
+			repoChunks = append(repoChunks, chunk)
+		case "mcp", "external-evidence":
+			externalChunks = append(externalChunks, chunk)
+		default:
+			otherChunks = append(otherChunks, chunk)
 		}
 	}
+	appendChunkGroup("Local repo grounding:", repoChunks)
+	appendChunkGroup("External evidence:", externalChunks)
+	appendChunkGroup("Retrieved context:", otherChunks)
 	return b.String()
 }
 

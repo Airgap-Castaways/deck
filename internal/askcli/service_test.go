@@ -923,9 +923,9 @@ func TestAskLoggerDebugAndTrace(t *testing.T) {
 func TestGenerationSystemPromptIncludesAskContextBlocks(t *testing.T) {
 	req := askpolicy.ScenarioRequirements{Connectivity: "offline", RequiredFiles: []string{"workflows/scenarios/apply.yaml"}}
 	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askknowledge.Current())
-	retrieval := askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "example-1", Source: "example", Label: "test/workflows/scenarios/kubeadm.yaml", Content: "Reference example:\n- path: test/workflows/scenarios/kubeadm.yaml\nversion: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n", Score: 90}, {ID: "workspace-apply", Source: "workspace", Label: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: join\n    kind: JoinKubeadm\n", Score: 80}, {ID: "typed-steps-draft", Source: "askcontext", Topic: askcontext.TopicTypedSteps, Label: "typed-steps", Content: "typed guidance", Score: 70}}}
+	retrieval := askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "repo-1", Source: "repo-grounding", Label: "source-of-truth-stepmeta", Topic: "repo-grounding:stepmeta", Content: "Local repo grounding:\n- path: internal/stepmeta/registry.go", Score: 91}, {ID: "example-1", Source: "example", Label: "test/workflows/scenarios/kubeadm.yaml", Content: "Reference example:\n- path: test/workflows/scenarios/kubeadm.yaml\nversion: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n", Score: 90}, {ID: "workspace-apply", Source: "workspace", Label: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: join\n    kind: JoinKubeadm\n", Score: 80}, {ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Topic: "mcp:web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}", Score: 75, Evidence: &askretrieve.EvidenceSummary{Title: "Installing kubeadm", Domain: "kubernetes.io", Freshness: "external-docs", Official: true}}, {ID: "typed-steps-draft", Source: "askcontext", Topic: askcontext.TopicTypedSteps, Label: "typed-steps", Content: "typed guidance", Score: 70}}}
 	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "workspace"}, "create an air-gapped 3-node kubeadm workflow", retrieval, req, askcontract.PlanResponse{}, askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Connectivity: "offline", CompletenessTarget: "starter", Topology: "multi-node", RequiredCapabilities: []string{"kubeadm-join", "cluster-verification"}}, askcontract.ExecutionModel{ArtifactContracts: []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml", Description: "offline package flow"}}, SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "published-for-worker-consumption"}}, RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role", ControlPlaneFlow: "bootstrap", WorkerFlow: "join", PerNodeInvocation: true}, Verification: askcontract.VerificationStrategy{FinalVerificationRole: "control-plane", ExpectedNodeCount: 3, ExpectedControlPlaneReady: 1}, ApplyAssumptions: []string{"apply consumes local artifacts"}}, scaffold)
-	for _, want := range []string{"Workflow source-of-truth:", "Authoring policy from deck metadata:", "Validated scaffold:", "Return structured workflow documents, not final YAML text.", "JSON shape: {\"summary\":string,\"review\":[]string,\"selection\":"} {
+	for _, want := range []string{"Workflow source-of-truth:", "Authoring policy from deck metadata:", "Validated scaffold:", "Return structured workflow documents, not final YAML text.", "JSON shape: {\"summary\":string,\"review\":[]string,\"selection\":", "Evidence boundaries:", "Local repo grounding is authoritative for deck workflow validity", "External evidence is only for upstream product behavior", "Do not let external docs override local deck workflow truth", "external source: Installing kubeadm [domain=kubernetes.io, freshness=external-docs, official=true]"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
 		}
@@ -972,6 +972,18 @@ func TestGenerationRetrievalPromptBlockSkipsProjectContextAndCapsExamples(t *tes
 	}
 	if strings.Count(block, "Reference example:") != 2 {
 		t.Fatalf("expected exactly two examples in generation retrieval block, got %q", block)
+	}
+}
+
+func TestGenerationRetrievalPromptBlockSeparatesRepoGroundingAndExternalEvidence(t *testing.T) {
+	block := generationRetrievalPromptBlock(askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "repo-1", Source: "repo-grounding", Label: "source-of-truth-stepmeta", Topic: "repo-grounding:stepmeta", Content: "Local repo grounding:\n- path: internal/stepmeta/registry.go", Score: 80}, {ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Topic: "mcp:web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}", Score: 70}, {ID: "workspace-1", Source: "workspace", Label: "workflows/scenarios/apply.yaml", Topic: "workspace:workflows/scenarios/apply.yaml", Content: "version: v1alpha1", Score: 60}}})
+	for _, want := range []string{"Local repo grounding:", "External evidence:", "Retrieved context:"} {
+		if !strings.Contains(block, want) {
+			t.Fatalf("expected %q in retrieval prompt block, got %q", want, block)
+		}
+	}
+	if strings.Index(block, "Local repo grounding:") > strings.Index(block, "External evidence:") {
+		t.Fatalf("expected repo grounding before external evidence, got %q", block)
 	}
 }
 
@@ -1462,6 +1474,67 @@ func TestExecutePlanResumeStopsWhenClarificationsRemain(t *testing.T) {
 	}
 }
 
+func TestExecuteAuthoringAugmentationIsGatedByEnv(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "test-key")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+	if err := askconfig.SaveStored(askconfig.Settings{MCP: askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{{Name: "web-server", RunCommand: "/bin/sh", Args: []string{"-c", "exit 0"}}}}}); err != nil {
+		t.Fatalf("save stored config: %v", err)
+	}
+	tests := []struct {
+		name    string
+		enabled bool
+		want    []string
+		avoid   []string
+	}{
+		{
+			name:    "disabled-by-default",
+			enabled: false,
+			want: []string{
+				"mcp: disabled for default local pipeline",
+				"lsp: disabled for default local pipeline",
+			},
+			avoid: []string{"mcp:web-search initialize failed:"},
+		},
+		{
+			name:    "enabled-via-env",
+			enabled: true,
+			want: []string{
+				"mcp:web-search initialize failed:",
+				"transport closed",
+			},
+			avoid: []string{"mcp: disabled for default local pipeline"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.enabled {
+				t.Setenv("DECK_ASK_ENABLE_AUGMENT", "1")
+			}
+			root := t.TempDir()
+			writeLatestPlanArtifact(t, root)
+			client := &stubClient{responses: []string{`{"summary":"generated starter workflows","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-cluster","overrides":{"nodeCount":1}}]}]}}`}}
+			if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client); err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			state, err := askstate.Load(root)
+			if err != nil {
+				t.Fatalf("load ask state: %v", err)
+			}
+			joined := strings.Join(state.LastAugmentEvents, "\n")
+			for _, want := range tc.want {
+				if !strings.Contains(joined, want) {
+					t.Fatalf("expected augment event %q, got %#v", want, state.LastAugmentEvents)
+				}
+			}
+			for _, avoid := range tc.avoid {
+				if strings.Contains(joined, avoid) {
+					t.Fatalf("did not expect augment event %q, got %#v", avoid, state.LastAugmentEvents)
+				}
+			}
+		})
+	}
+}
+
 func TestExecutePlanResumeInteractiveClarificationCanQuit(t *testing.T) {
 	t.Setenv("DECK_ASK_API_KEY", "test-key")
 	root := t.TempDir()
@@ -1723,5 +1796,20 @@ func TestPlanWorkspaceChunksIncludeImportedComponents(t *testing.T) {
 	chunks := planWorkspaceChunks(plan, workspace)
 	if len(chunks) < 2 {
 		t.Fatalf("expected planned scenario and imported component chunks, got %d", len(chunks))
+	}
+}
+
+func writeLatestPlanArtifact(t *testing.T, root string) {
+	t.Helper()
+	planDir := filepath.Join(root, ".deck", "plan")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatalf("mkdir plan dir: %v", err)
+	}
+	json := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","authoringProgram":{"verification":{"expectedNodeCount":1,"expectedReadyCount":1,"expectedControlPlaneReady":1}},"blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	if err := os.WriteFile(filepath.Join(planDir, "latest.json"), []byte(json), 0o600); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "latest.md"), []byte("md"), 0o600); err != nil {
+		t.Fatalf("write md: %v", err)
 	}
 }
