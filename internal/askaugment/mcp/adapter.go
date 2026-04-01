@@ -313,9 +313,10 @@ func libraryQueryFromPrompt(prompt string) string {
 
 func parseContext7Entity(result *mcp.CallToolResult, prompt string) context7Entity {
 	structured := context7StructuredValue("resolve-library-id", result)
+	index := caseInsensitiveStringIndex(structured)
 	entity := context7Entity{
-		LibraryID: exactString(structured, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}),
-		Title:     exactString(structured, []string{"title", "name", "libraryName"}),
+		LibraryID: indexedString(index, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}),
+		Title:     indexedString(index, []string{"title", "name", "libraryName"}),
 	}
 	if entity.LibraryID == "" {
 		entity.LibraryID = extractLibraryIDFromText(extractText(result))
@@ -705,10 +706,6 @@ func extractText(result *mcp.CallToolResult) string {
 	return strings.TrimSpace(b.String())
 }
 
-func exactString(value any, keys []string) string {
-	return indexedString(caseInsensitiveStringIndex(value), keys)
-}
-
 func hasCaseInsensitiveKey(mapped map[string]any, keys []string) bool {
 	_, ok := caseInsensitiveValue(mapped, keys)
 	return ok
@@ -753,7 +750,7 @@ func caseInsensitiveValue(mapped map[string]any, keys []string) (any, bool) {
 	for _, key := range keys {
 		target := strings.TrimSpace(key)
 		for candidate, raw := range mapped {
-			if strings.EqualFold(candidate, target) {
+			if strings.EqualFold(strings.TrimSpace(candidate), target) {
 				return raw, true
 			}
 		}
