@@ -803,6 +803,168 @@ func TestRun_FileOfflinePolicyBlocksDirectURL(t *testing.T) {
 	}
 }
 
+func TestRun_DownloadFileReusesURLOnlyArtifact(t *testing.T) {
+	bundle := t.TempDir()
+	var mu sync.Mutex
+	requests := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests++
+		n := requests
+		mu.Unlock()
+		_, _ = fmt.Fprintf(w, "payload-%d", n)
+	}))
+	defer server.Close()
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{{
+				ID:   "download-file",
+				Kind: "DownloadFile",
+				Spec: map[string]any{
+					"source":     map[string]any{"url": server.URL + "/artifact.bin"},
+					"outputPath": "files/out.bin",
+				},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
+		t.Fatalf("first Run failed: %v", err)
+	}
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
+		t.Fatalf("second Run failed: %v", err)
+	}
+
+	mu.Lock()
+	gotRequests := requests
+	mu.Unlock()
+	if gotRequests != 1 {
+		t.Fatalf("expected URL download to be reused, got %d requests", gotRequests)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(bundle, "files", "out.bin"))
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if string(raw) != "payload-1" {
+		t.Fatalf("expected reused payload, got %q", string(raw))
+	}
+}
+
+func TestRun_DownloadFileForceRedownloadBypassesURLReuse(t *testing.T) {
+	bundle := t.TempDir()
+	var mu sync.Mutex
+	requests := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests++
+		n := requests
+		mu.Unlock()
+		_, _ = fmt.Fprintf(w, "payload-%d", n)
+	}))
+	defer server.Close()
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{{
+				ID:   "download-file",
+				Kind: "DownloadFile",
+				Spec: map[string]any{
+					"source":     map[string]any{"url": server.URL + "/artifact.bin"},
+					"outputPath": "files/out.bin",
+				},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
+		t.Fatalf("first Run failed: %v", err)
+	}
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, ForceRedownload: true}); err != nil {
+		t.Fatalf("forced second Run failed: %v", err)
+	}
+
+	mu.Lock()
+	gotRequests := requests
+	mu.Unlock()
+	if gotRequests != 2 {
+		t.Fatalf("expected forced redownload to hit URL again, got %d requests", gotRequests)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(bundle, "files", "out.bin"))
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if string(raw) != "payload-2" {
+		t.Fatalf("expected refreshed payload, got %q", string(raw))
+	}
+}
+
+func TestRun_DownloadFileFailedRedownloadKeepsExistingArtifact(t *testing.T) {
+	bundle := t.TempDir()
+	var mu sync.Mutex
+	requests := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests++
+		n := requests
+		mu.Unlock()
+		if n == 1 {
+			_, _ = w.Write([]byte("payload-1"))
+			return
+		}
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{{
+				ID:   "download-file",
+				Kind: "DownloadFile",
+				Spec: map[string]any{
+					"source":     map[string]any{"url": server.URL + "/artifact.bin"},
+					"outputPath": "files/out.bin",
+				},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
+		t.Fatalf("first Run failed: %v", err)
+	}
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, ForceRedownload: true})
+	if err == nil {
+		t.Fatalf("expected forced redownload failure")
+	}
+
+	raw, readErr := os.ReadFile(filepath.Join(bundle, "files", "out.bin"))
+	if readErr != nil {
+		t.Fatalf("read output: %v", readErr)
+	}
+	if string(raw) != "payload-1" {
+		t.Fatalf("expected existing payload to survive failed redownload, got %q", string(raw))
+	}
+
+	matches, globErr := filepath.Glob(filepath.Join(bundle, "files", ".*.tmp-*"))
+	if globErr != nil {
+		t.Fatalf("glob temp files: %v", globErr)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("expected temp files to be cleaned up, got %v", matches)
+	}
+}
+
 func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 	bundle := t.TempDir()
 	localCache := t.TempDir()
