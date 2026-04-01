@@ -106,8 +106,8 @@ func TestExecuteAuthoringBlocksWhenRequiredExternalEvidenceFails(t *testing.T) {
 }
 
 func TestQuestionPromptIncludesExternalEvidenceFailureGuidance(t *testing.T) {
-	prompt := questionSystemPrompt(askintent.Target{}, askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "ext-status", Source: "external-evidence", Label: "required-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: "External evidence status:\n- required upstream evidence could not be fetched", Score: 90}, {ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Topic: "mcp:web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}", Score: 80, Evidence: &askretrieve.EvidenceSummary{Title: "Installing kubeadm", Domain: "kubernetes.io", Freshness: "external-docs", Official: true}}}})
-	for _, want := range []string{"Evidence boundaries:", "external source: Installing kubeadm [domain=kubernetes.io, freshness=external-docs, official=true]", "External evidence status:", "required upstream evidence could not be fetched"} {
+	prompt := questionSystemPrompt(askintent.Target{}, askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "ext-status", Source: "external-evidence", Label: "required-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: "External evidence status:\n- required upstream evidence could not be fetched", Score: 90}, {ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Topic: "mcp:web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}", Score: 80, Evidence: &askretrieve.EvidenceSummary{Title: "Installing kubeadm", Domain: "kubernetes.io", DomainCategory: "official-docs", Freshness: "external-docs", Official: true, TrustLevel: "high", VersionSupport: "direct"}}}})
+	for _, want := range []string{"Evidence boundaries:", "external source: Installing kubeadm [domain=kubernetes.io, category=official-docs, freshness=external-docs, official=true, trust=high, versionSupport=direct]", "External evidence status:", "required upstream evidence could not be fetched"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in question prompt, got %q", want, prompt)
 		}
@@ -145,7 +145,7 @@ func TestAnswerWithLLMUsesHealthyExternalEvidence(t *testing.T) {
 	if resp.Summary != "explained kubeadm" || !strings.Contains(resp.Answer, "official kubeadm install guide") {
 		t.Fatalf("unexpected llm answer: %#v", resp)
 	}
-	if len(client.prompts) != 1 || !strings.Contains(client.prompts[0].SystemPrompt, "external source: Installing kubeadm [domain=kubernetes.io, freshness=external-docs, official=true]") {
+	if len(client.prompts) != 1 || !strings.Contains(client.prompts[0].SystemPrompt, "external source: Installing kubeadm [domain=kubernetes.io, category=official-docs, freshness=external-docs, official=true, trust=high]") {
 		t.Fatalf("expected answer prompt to include normalized external evidence, got %#v", client.prompts)
 	}
 }

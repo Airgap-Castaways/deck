@@ -118,8 +118,50 @@ func TestQueryServerWebSearchReturnsNormalizedEvidence(t *testing.T) {
 	if chunk.Evidence.Title != "Installing kubeadm" || !chunk.Evidence.Official {
 		t.Fatalf("expected official search metadata, got %#v", chunk.Evidence)
 	}
+	if chunk.Evidence.DomainCategory != "official-docs" || chunk.Evidence.TrustLevel != "high" {
+		t.Fatalf("expected trust metadata, got %#v", chunk.Evidence)
+	}
 	if !strings.Contains(chunk.Content, `"title": "Installing kubeadm"`) || !strings.Contains(chunk.Content, "Install kubeadm and kubelet from the official Kubernetes docs") {
 		t.Fatalf("expected structured web-search evidence, got %q", chunk.Content)
+	}
+}
+
+func TestQueryServerWebSearchPrefersOfficialResultAcrossMixedSources(t *testing.T) {
+	chunk, event := queryServer(context.Background(), helperServer(t, "web-search", "web-search-mixed-trust"), askintent.RouteExplain, "How do I install kubeadm 1.35.1?")
+	if event != "mcp:web-search call search ok" {
+		t.Fatalf("unexpected event: %q", event)
+	}
+	if chunk == nil || chunk.Evidence == nil {
+		t.Fatalf("expected evidence chunk, got %#v", chunk)
+	}
+	if chunk.Evidence.Domain != "kubernetes.io" || chunk.Evidence.TrustLevel != "high" || !chunk.Evidence.Official {
+		t.Fatalf("expected official high-trust evidence, got %#v", chunk.Evidence)
+	}
+	if chunk.Evidence.VersionSupport != "direct" {
+		t.Fatalf("expected direct version support, got %#v", chunk.Evidence)
+	}
+}
+
+func TestQueryServerWebSearchMarksWeakVersionSupport(t *testing.T) {
+	chunk, event := queryServer(context.Background(), helperServer(t, "web-search", "web-search-community-version"), askintent.RouteExplain, "How do I install kubeadm 1.35.1?")
+	if event != "mcp:web-search call search ok" {
+		t.Fatalf("unexpected event: %q", event)
+	}
+	if chunk == nil || chunk.Evidence == nil {
+		t.Fatalf("expected evidence chunk, got %#v", chunk)
+	}
+	if chunk.Evidence.TrustLevel != "low" || chunk.Evidence.DomainCategory != "community" || chunk.Evidence.Official {
+		t.Fatalf("expected low-trust community evidence, got %#v", chunk.Evidence)
+	}
+	if chunk.Evidence.VersionSupport != "unknown" {
+		t.Fatalf("expected unknown version support, got %#v", chunk.Evidence)
+	}
+}
+
+func TestDetectVersionSupportAvoidsSubstringFalsePositive(t *testing.T) {
+	evidence := normalizedEvidence{Title: "Installing kubeadm v1.35", Excerpt: "Official Kubernetes documentation for kubeadm v1.35 installation."}
+	if got := detectVersionSupport("1.3", evidence); got != "indirect" {
+		t.Fatalf("expected substring mismatch to avoid direct match, got %q", got)
 	}
 }
 
@@ -414,7 +456,7 @@ func helperTools(mode string) []map[string]any {
 				},
 			},
 		}
-	case "web-search-success":
+	case "web-search-success", "web-search-mixed-trust", "web-search-community-version":
 		return []map[string]any{{
 			"name": "search",
 			"inputSchema": map[string]any{
@@ -511,6 +553,35 @@ func helperToolResult(mode string, req mcpfake.Request) map[string]any {
 					"title":   "Installing kubeadm",
 					"url":     "https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/",
 					"snippet": "Install kubeadm and kubelet from the official Kubernetes docs.",
+				}},
+			},
+		}
+	case "web-search-mixed-trust":
+		return map[string]any{
+			"content": []map[string]any{{"type": "text", "text": "Multiple install guides found."}},
+			"structuredContent": map[string]any{
+				"results": []map[string]any{
+					{
+						"title":   "Kubeadm install thread",
+						"url":     "https://reddit.com/r/kubernetes/comments/example/kubeadm_install/",
+						"snippet": "Community discussion about installing kubeadm.",
+					},
+					{
+						"title":   "Installing kubeadm v1.35.1",
+						"url":     "https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/",
+						"snippet": "Official Kubernetes documentation for kubeadm v1.35.1 installation.",
+					},
+				},
+			},
+		}
+	case "web-search-community-version":
+		return map[string]any{
+			"content": []map[string]any{{"type": "text", "text": "Community installation notes for kubeadm."}},
+			"structuredContent": map[string]any{
+				"results": []map[string]any{{
+					"title":   "Kubeadm install notes",
+					"url":     "https://stackoverflow.com/questions/example/kubeadm-install-notes",
+					"snippet": "A user-described kubeadm installation flow without explicit version coverage.",
 				}},
 			},
 		}
