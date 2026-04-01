@@ -62,6 +62,36 @@ var context7LibraryIDPatterns = []*regexp.Regexp{
 
 var requestedVersionPattern = regexp.MustCompile(`(?i)\bv?\d+\.\d+(?:\.\d+)?\b`)
 
+var communityDomains = map[string]struct{}{
+	"stackoverflow.com": {},
+	"serverfault.com":   {},
+	"superuser.com":     {},
+	"reddit.com":        {},
+	"medium.com":        {},
+	"dev.to":            {},
+	"substack.com":      {},
+	"blogspot.com":      {},
+	"wordpress.com":     {},
+}
+
+var aggregatorDomains = map[string]struct{}{
+	"wikipedia.org":      {},
+	"geeksforgeeks.org":  {},
+	"baeldung.com":       {},
+	"tutorialspoint.com": {},
+	"w3schools.com":      {},
+}
+
+var sourceHostDomains = map[string]struct{}{
+	"github.com":            {},
+	"gitlab.com":            {},
+	"pkg.go.dev":            {},
+	"hub.docker.com":        {},
+	"registry.terraform.io": {},
+	"pypi.org":              {},
+	"npmjs.com":             {},
+}
+
 func (context7ProviderAdapter) Fetch(ctx context.Context, server resolvedServer, c *client.Client, route askintent.Route, prompt string, tools *mcp.ListToolsResult) (*askretrieve.Chunk, string) {
 	request := capabilityRequestForRoute(server.Profile, route, prompt)
 	if len(request.Capabilities) == 0 {
@@ -350,6 +380,7 @@ func normalizeEvidence(providerID string, toolName string, prompt string, result
 func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.CallToolResult, seed normalizedEvidence) normalizedEvidence {
 	text := extractText(result)
 	candidates := webSearchEvidenceCandidates(result)
+	version := requestedVersion(prompt)
 	best := seed
 	best.Provider = "web-search"
 	best.ToolName = toolName
@@ -368,8 +399,8 @@ func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.Call
 		if evidence.Excerpt == "" {
 			evidence.Excerpt = compactExcerpt(text, 600)
 		}
-		annotateEvidenceTrust(&evidence, prompt)
-		score := scoreWebSearchEvidence(evidence, prompt)
+		annotateEvidenceTrust(&evidence, version)
+		score := scoreWebSearchEvidence(evidence, version)
 		if score > bestScore {
 			best = evidence
 			bestScore = score
@@ -387,7 +418,7 @@ func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.Call
 		if best.Excerpt == "" {
 			best.Excerpt = compactExcerpt(text, 600)
 		}
-		annotateEvidenceTrust(&best, prompt)
+		annotateEvidenceTrust(&best, version)
 	}
 	artifacts := summarizeEvidence(text, prompt)
 	if artifacts != nil {
@@ -415,7 +446,7 @@ func webSearchEvidenceCandidates(result *mcp.CallToolResult) []any {
 	return nil
 }
 
-func scoreWebSearchEvidence(evidence normalizedEvidence, prompt string) int {
+func scoreWebSearchEvidence(evidence normalizedEvidence, version string) int {
 	score := 0
 	switch evidence.TrustLevel {
 	case "high":
@@ -434,7 +465,7 @@ func scoreWebSearchEvidence(evidence normalizedEvidence, prompt string) int {
 	case "indirect":
 		score += 10
 	case "unknown":
-		if requestedVersion(prompt) != "" {
+		if strings.TrimSpace(version) != "" {
 			score -= 10
 		}
 	}
@@ -447,7 +478,7 @@ func scoreWebSearchEvidence(evidence normalizedEvidence, prompt string) int {
 	return score
 }
 
-func annotateEvidenceTrust(evidence *normalizedEvidence, prompt string) {
+func annotateEvidenceTrust(evidence *normalizedEvidence, version string) {
 	if evidence == nil {
 		return
 	}
@@ -483,7 +514,7 @@ func annotateEvidenceTrust(evidence *normalizedEvidence, prompt string) {
 	evidence.DomainCategory = category
 	evidence.TrustLevel = trust
 	evidence.Official = official
-	evidence.VersionSupport = detectVersionSupport(prompt, *evidence)
+	evidence.VersionSupport = detectVersionSupport(version, *evidence)
 }
 
 func requestedVersion(prompt string) string {
@@ -491,13 +522,13 @@ func requestedVersion(prompt string) string {
 	return strings.TrimSpace(strings.TrimPrefix(strings.ToLower(match), "v"))
 }
 
-func detectVersionSupport(prompt string, evidence normalizedEvidence) string {
-	version := requestedVersion(prompt)
+func detectVersionSupport(version string, evidence normalizedEvidence) string {
+	version = strings.TrimSpace(strings.ToLower(version))
 	if version == "" {
 		return ""
 	}
 	text := strings.ToLower(strings.Join([]string{evidence.Title, evidence.Excerpt, evidence.SourceURL}, " "))
-	if strings.Contains(text, version) || strings.Contains(text, "v"+version) {
+	if versionBoundaryPattern(version).MatchString(text) {
 		return "direct"
 	}
 	if requestedVersionPattern.MatchString(text) {
@@ -507,7 +538,7 @@ func detectVersionSupport(prompt string, evidence normalizedEvidence) string {
 }
 
 func isCommunityDomain(domain string) bool {
-	for _, token := range []string{"stackoverflow.com", "serverfault.com", "superuser.com", "reddit.com", "medium.com", "dev.to", "substack.com", "blogspot.com", "wordpress.com"} {
+	for token := range communityDomains {
 		if domain == token || strings.HasSuffix(domain, "."+token) {
 			return true
 		}
@@ -516,7 +547,7 @@ func isCommunityDomain(domain string) bool {
 }
 
 func isAggregatorDomain(domain string) bool {
-	for _, token := range []string{"wikipedia.org", "geeksforgeeks.org", "baeldung.com", "tutorialspoint.com", "w3schools.com"} {
+	for token := range aggregatorDomains {
 		if domain == token || strings.HasSuffix(domain, "."+token) {
 			return true
 		}
@@ -525,12 +556,16 @@ func isAggregatorDomain(domain string) bool {
 }
 
 func isSourceHostDomain(domain string) bool {
-	for _, token := range []string{"github.com", "gitlab.com", "pkg.go.dev", "hub.docker.com", "registry.terraform.io", "pypi.org", "npmjs.com"} {
+	for token := range sourceHostDomains {
 		if domain == token || strings.HasSuffix(domain, "."+token) {
 			return true
 		}
 	}
 	return false
+}
+
+func versionBoundaryPattern(version string) *regexp.Regexp {
+	return regexp.MustCompile(`(?i)\bv?` + regexp.QuoteMeta(strings.TrimSpace(version)) + `\b`)
 }
 
 func evidenceChunk(evidence normalizedEvidence) *askretrieve.Chunk {

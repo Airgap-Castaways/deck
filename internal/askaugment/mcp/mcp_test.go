@@ -158,6 +158,13 @@ func TestQueryServerWebSearchMarksWeakVersionSupport(t *testing.T) {
 	}
 }
 
+func TestDetectVersionSupportAvoidsSubstringFalsePositive(t *testing.T) {
+	evidence := normalizedEvidence{Title: "Installing kubeadm v1.35", Excerpt: "Official Kubernetes documentation for kubeadm v1.35 installation."}
+	if got := detectVersionSupport("1.3", evidence); got != "indirect" {
+		t.Fatalf("expected substring mismatch to avoid direct match, got %q", got)
+	}
+}
+
 func TestQueryServerReportsListToolsMismatch(t *testing.T) {
 	chunk, event := queryServer(context.Background(), helperServer(t, "web-search", "list-tools-mismatch"), askintent.RouteExplain, "How do I install kubeadm?")
 	if chunk != nil {
