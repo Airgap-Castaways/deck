@@ -813,7 +813,7 @@ func TestRun_DownloadFileReusesURLOnlyArtifact(t *testing.T) {
 		requests++
 		n := requests
 		mu.Unlock()
-		_, _ = w.Write([]byte(fmt.Sprintf("payload-%d", n)))
+		_, _ = fmt.Fprintf(w, "payload-%d", n)
 	}))
 	defer server.Close()
 
@@ -865,7 +865,7 @@ func TestRun_DownloadFileForceRedownloadBypassesURLReuse(t *testing.T) {
 		requests++
 		n := requests
 		mu.Unlock()
-		_, _ = w.Write([]byte(fmt.Sprintf("payload-%d", n)))
+		_, _ = fmt.Fprintf(w, "payload-%d", n)
 	}))
 	defer server.Close()
 

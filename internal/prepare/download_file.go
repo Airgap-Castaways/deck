@@ -168,12 +168,6 @@ func runDownloadFileItem(ctx context.Context, bundleRoot string, decoded prepare
 		}
 	}
 
-	if expectedSHA != "" {
-		if err := verifyFileSHA256(tempPath, expectedSHA); err != nil {
-			return "", err
-		}
-	}
-
 	var targetMode os.FileMode = filemode.ArtifactFileMode
 	if modeRaw := strings.TrimSpace(decoded.Mode); modeRaw != "" {
 		modeVal, err := strconv.ParseUint(modeRaw, 8, 32)
@@ -182,11 +176,16 @@ func runDownloadFileItem(ctx context.Context, bundleRoot string, decoded prepare
 		}
 		targetMode = os.FileMode(modeVal)
 	}
-	if err := os.Chmod(tempPath, targetMode); err != nil {
+	if err := f.Chmod(targetMode); err != nil {
 		return "", fmt.Errorf("apply mode: %w", err)
 	}
 	if err := f.Close(); err != nil {
 		return "", fmt.Errorf("close output file: %w", err)
+	}
+	if expectedSHA != "" {
+		if err := verifyFileSHA256(tempPath, expectedSHA); err != nil {
+			return "", err
+		}
 	}
 	if err := os.Rename(tempPath, target); err != nil {
 		return "", fmt.Errorf("publish output file: %w", err)
