@@ -27,7 +27,7 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 
 ## Authoring helper
 
-- `ask`: experimental helper to draft, refine, or review workflows from the current workspace using an LLM-backed authoring assistant
+- `ask`: experimental helper to question, explain, review, draft, or refine workflows from the current workspace using an LLM-backed authoring assistant
 - `ask config set`: save `ask.provider`, `ask.model`, `ask.endpoint`, and `ask.apiKey` in XDG config
 - `ask config show`: show the effective ask config with a masked api key
 - `ask config unset`: clear saved ask config
@@ -36,7 +36,9 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 
 For a task-oriented guide to configuring and using `deck ask`, see `../guides/ask.md`.
 
-`ask` uses LLM-first intent classification and route-specific prompts. Workflow generation only runs for authoring routes (`draft`/`refine`), while explain/review/question routes return answer-oriented responses.
+`ask` routes requests before generation. Explicit authoring and review flags such as `--create`, `--edit`, and `--review` act as hard overrides. Other requests go through LLM-assisted route classification, and ambiguous requests can stop for clarification instead of drifting into generation.
+
+For authoring routes, `ask` builds a plan before generation, then uses constrained selection and validation-driven repair. Workflow generation only runs for authoring routes (`draft`/`refine`), while `question`, `explain`, `review`, and `clarify` return answer-oriented or plan-oriented responses.
 
 When model access is unavailable, `ask` degrades explicitly instead of silently pretending to answer with full reasoning. `explain` falls back to a local structural summary of the target file, `review` falls back to local findings, and generation routes fail fast because local validation cannot replace model output.
 
@@ -151,7 +153,7 @@ deck cache list -o json --v=1
 deck plan --scenario apply --source server
 
 deck ask config set --provider openai --model gpt-5.4 --endpoint https://api.openai.com/v1 --api-key "$DECK_ASK_API_KEY"
-deck ask "create an air-gapped rhel9 single-node kubeadm workflow"
+deck ask --create "create an air-gapped rhel9 single-node kubeadm workflow"
 deck ask plan "air-gapped rhel9 kubeadm cluster with prepare/apply split"
 deck ask "explain what workflows/scenarios/apply.yaml does"
 deck ask --review
@@ -198,7 +200,7 @@ Optional ask augmentation config example:
 - `ask` workspace context lives under `./.deck/ask/`, while saved ask config defaults live under `~/.config/deck/config.json` as the top-level `ask` object.
 - `deck ask plan` writes plan artifacts under `./.deck/plan/` by default (`<timestamp>-<slug>.md`, `<timestamp>-<slug>.json`, `latest.md`, `latest.json`).
 - `deck ask --from .deck/plan/<name>.md "implement this plan"` prefers the same-basename `.json` artifact when present.
-- complex one-shot authoring requests may stop after planning if blockers remain; in that case `deck ask` prints the saved plan paths and follow-up commands instead of writing weak output.
+- complex one-shot authoring requests may stop after planning or clarification if blockers remain; in that case `deck ask` prints the saved plan paths and follow-up commands instead of writing weak output.
 - `ask config set --log-level trace` is the quickest way to see the effective `deck ask` command, MCP/LSP events, and prompt text in terminal logs.
 - optional augmentation config can be defined under `ask.mcp` and `ask.lsp` in the same config file.
 - optional MCP and LSP augmentation is disabled by default and degrades gracefully when configured tools are unavailable.
@@ -220,6 +222,7 @@ Optional ask augmentation config example:
 
 - `deck ask` writes workflow files directly for authoring routes; use `--create` or `--edit` to make authoring intent explicit.
 - `deck ask plan` saves reusable plan artifacts under `./.deck/plan/`.
+- ambiguous authoring requests may stop for clarification instead of generating weak workflow files.
 <!-- END GENERATED:ASK_CLI_CONTEXT -->
 
 <!-- BEGIN GENERATED:ASK_AUTHORING_CONTEXT -->

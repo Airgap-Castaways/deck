@@ -29,14 +29,17 @@ flowchart LR
   A[Request] --> B[Intent]
   B --> C[Retrieval]
   C --> D{Route}
-  D -- Question / Explain / Review --> E[Answer]
-  D -- Draft / Refine --> F[Authoring]
-  F --> G[Requirements]
-  G --> H[Generation]
-  H --> I[Validate / repair]
-  E --> J[Answer]
-  I --> K[Write files]
+  D -- Clarify --> E[Clarify / save plan]
+  D -- Question / Explain / Review --> F[Answer]
+  D -- Draft / Refine --> G[Plan / authoring program]
+  G --> H[Selection]
+  H --> I[Compile / transform]
+  I --> J[Validate / auto-repair]
+  F --> K[Answer]
+  J --> L[Write files]
 ```
+
+For authoring routes, the important rule is: the model selects, code assembles. `deck ask` does not treat model output as final workflow YAML. It builds an internal plan, derives an executable authoring program, asks the model for constrained selections, then compiles and validates the resulting workflow documents.
 
 ### Step 1: Normalize the request
 
@@ -46,7 +49,7 @@ This early inspection matters because `deck ask` behaves differently in an empty
 
 ### Step 2: Classify the request
 
-Before it decides whether to generate files, `deck ask` classifies the request into a route. Hard overrides such as `--review`, `--create`, and `--edit` bypass classifier routing. All other normal requests go through the classifier first.
+Before it decides whether to generate files, `deck ask` classifies the request into a route. Hard overrides such as `--review`, `--create`, and `--edit` bypass route classification. All other normal requests go through LLM-assisted route classification first.
 
 - `question`: answer a direct question
 - `explain`: explain an existing file or workflow
@@ -67,39 +70,56 @@ After routing, `deck ask` gathers the context needed for that request. The retri
 
 This is where `deck ask` becomes more than a generic model wrapper. It does not rely only on the user's sentence. It combines the sentence with deck's workflow rules and with the actual workspace contents.
 
-### Step 4: Derive authoring requirements
+For authoring, that context includes projected source-of-truth information about typed steps, fields, and canonical workflow paths. Those facts come from deck's schema and step metadata layers rather than from a separate ask-only schema.
 
-For `draft` and `refine`, `deck ask` derives authoring requirements from the request and the retrieved context. These requirements help decide things such as:
+### Step 4: Build the authoring plan
+
+For `draft` and `refine`, `deck ask` turns the request and retrieved context into an internal plan. That plan is not just advisory text. It acts as the execution contract for generation and helps decide things such as:
 
 - whether the request assumes offline or air-gapped execution
 - which files are likely needed
 - whether the target looks like a prepare flow, apply flow, or a split prepare/apply workflow
 - how strict the generated output needs to be to satisfy the request
+- which topology and role facts later compilation will rely on
+- which companion files are allowed for refine
 
 Non-authoring routes do not go through this stage because they return an answer rather than candidate files. Authoring routes now always build an internal plan first, even when you do not run `deck ask plan` explicitly.
 
-### Step 5: Select a scaffold and generate
+Part of that plan is an authoring program: normalized platform, artifact, cluster, and verification facts that code can later use when assembling workflow steps. This is how details such as node counts, role selectors, join-file paths, output directories, and verification expectations stay consistent across generation and repair.
 
-For authoring routes, `deck ask` first builds and reviews a plan. If required details are still missing, it asks clarification questions before generation starts. In an interactive terminal, these clarification questions happen inline. In non-interactive environments, `deck ask` saves a plan artifact and tells you how to resume.
+### Step 5: Clarify or continue
 
-Once the plan is strong enough, `deck ask` chooses a validated starter shape before generation. Instead of inventing file topology from scratch, it starts from a scaffold that matches deck's expected workspace layout.
+For authoring routes, `deck ask` checks whether the plan is strong enough to execute. If required details are still missing, it asks clarification questions before generation starts. In an interactive terminal, these clarification questions happen inline. In non-interactive environments, `deck ask` saves a plan artifact and tells you how to resume.
 
-That scaffold may point generation toward canonical paths such as `workflows/prepare.yaml`, `workflows/scenarios/`, `workflows/components/`, and `workflows/vars.yaml`.
+Clarification is part of the normal pipeline, not a fallback after a bad generation attempt. If the request is ambiguous about topology, execution role layout, refine scope, or supported coverage, `deck ask` blocks authoring until that ambiguity is resolved.
 
-Generation then fills in that structure with route-appropriate output:
+### Step 6: Select candidates, then compile
+
+Once the plan is strong enough, `deck ask` moves into constrained authoring:
+
+- for `draft`, the model selects validated builder candidates and allowed override values
+- for `refine`, code computes transform candidates from parsed workflow structure and the model selects among those candidates
+
+Code then assembles or transforms workflow documents from those selections.
+
+That compilation step uses deck source-of-truth metadata and canonical workspace rules to decide where documents belong and how required fields should be filled. Instead of asking the model to invent low-level step payloads from scratch, `deck ask` compiles toward canonical files such as `workflows/prepare.yaml`, `workflows/scenarios/`, `workflows/components/`, and `workflows/vars.yaml`.
+
+Route output still differs by route:
 
 - answer text for `question`, `explain`, and `review`
-- candidate workflow files for `draft` and `refine`
+- compiled workflow files for `draft` and `refine`
 
-### Step 6: Validate and repair
+### Step 7: Validate and auto-repair
 
 When `deck ask` generates files, it validates the result against deck's rules. That includes generated path checks, YAML shape checks, and workflow/schema validation.
 
-If validation fails, `deck ask` can use structured diagnostics to run a repair pass. Those diagnostics help it target the exact file, field, or shape mismatch instead of retrying blindly.
+If validation fails, `deck ask` uses structured diagnostics to run a repair pass. Those diagnostics help it target the exact file, field, or shape mismatch instead of retrying blindly.
+
+Repair is automatic first. When the validator reports a missing required field, invalid literal, or similar structured issue, code tries to repair it from the same source-of-truth projection and authoring program used during compilation. Model involvement is reserved for cases where multiple valid repair choices remain.
 
 This validation-and-repair loop is one of the main reasons generated output is more reliable than a single unvalidated model response.
 
-### Step 7: Write files or fall back
+### Step 8: Write files or save the plan
 
 Authoring routes now write workflow files directly once planning, generation, validation, and repair succeed. If you want to stop after planning, use `deck ask plan` and resume from the saved artifact later.
 
@@ -107,15 +127,15 @@ Route behavior differs at the end of the pipeline:
 
 - `question`, `explain`, and `review` return answer-oriented output and do not generate workflow files
 - `draft` and `refine` write workflow files directly after successful validation
-- use `--create` or `--edit` when you want to make authoring intent explicit for classifier-first routing
+- use `--create` or `--edit` when you want to make authoring intent explicit and bypass route classification
 - if model access is unavailable, `explain` falls back to a local structural summary and `review` falls back to local findings
 - generation routes fail fast when model output is unavailable because local validation cannot replace generation
 
-In practice, this means `deck ask` is not just a raw prompt wrapper. It uses deck-specific routing, topology, validation, and repair to keep output aligned with the product.
+In practice, this means `deck ask` is not just a raw prompt wrapper. It uses deck-specific routing, clarification, planning, constrained selection, compilation, validation, and repair to keep output aligned with the product.
 
 ### How `plan` fits into the pipeline
 
-`deck ask plan` uses the same general understanding stages at the front of the pipeline: normalize the request, classify it, gather context, and derive requirements. Instead of immediately trying to return final workflow files, it writes a reusable implementation plan under `./.deck/plan/`.
+`deck ask plan` uses the same general understanding stages at the front of the pipeline: normalize the request, classify it, gather context, build the execution plan, and surface any blocking clarifications. Instead of immediately trying to return final workflow files, it writes a reusable implementation plan under `./.deck/plan/`.
 
 That plan can then be fed back into the main authoring flow with `--from`, which gives you a safer path for large or ambiguous requests. If you quit an interactive clarification session, `deck ask` saves the current plan and prints resume guidance.
 
