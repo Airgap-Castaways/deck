@@ -380,42 +380,20 @@ func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askco
 			program.Platform.Family = family
 		}
 	}
-	if minimalSingleNodeBootstrap && strings.TrimSpace(program.Platform.Family) == "" {
-		program.Platform.Family = "custom"
-	}
 	if strings.TrimSpace(program.Platform.Release) == "" {
 		program.Platform.Release = release
 	}
-	if minimalSingleNodeBootstrap && strings.TrimSpace(program.Platform.Release) == "" {
-		program.Platform.Release = "unspecified"
+	if strings.TrimSpace(program.Platform.RepoType) == "" && !minimalSingleNodeBootstrap {
+		program.Platform.RepoType = defaultRepoType(program.Platform.Family)
 	}
-	if strings.TrimSpace(program.Platform.RepoType) == "" {
-		if minimalSingleNodeBootstrap {
-			program.Platform.RepoType = "none"
-		} else {
-			program.Platform.RepoType = defaultRepoType(program.Platform.Family)
-		}
+	if strings.TrimSpace(program.Platform.BackendImage) == "" && !minimalSingleNodeBootstrap {
+		program.Platform.BackendImage = defaultBackendImage(program.Platform.Family, program.Platform.Release)
 	}
-	if strings.TrimSpace(program.Platform.BackendImage) == "" {
-		if minimalSingleNodeBootstrap {
-			program.Platform.BackendImage = "none"
-		} else {
-			program.Platform.BackendImage = defaultBackendImage(program.Platform.Family, program.Platform.Release)
-		}
+	if strings.TrimSpace(program.Artifacts.PackageOutputDir) == "" && !minimalSingleNodeBootstrap {
+		program.Artifacts.PackageOutputDir = defaultPackageOutputDir(program.Platform.Family, program.Platform.Release, program.Platform.RepoType)
 	}
-	if strings.TrimSpace(program.Artifacts.PackageOutputDir) == "" {
-		if minimalSingleNodeBootstrap {
-			program.Artifacts.PackageOutputDir = ""
-		} else {
-			program.Artifacts.PackageOutputDir = defaultPackageOutputDir(program.Platform.Family, program.Platform.Release, program.Platform.RepoType)
-		}
-	}
-	if strings.TrimSpace(program.Artifacts.ImageOutputDir) == "" {
-		if minimalSingleNodeBootstrap {
-			program.Artifacts.ImageOutputDir = ""
-		} else {
-			program.Artifacts.ImageOutputDir = "images/control-plane"
-		}
+	if strings.TrimSpace(program.Artifacts.ImageOutputDir) == "" && !minimalSingleNodeBootstrap {
+		program.Artifacts.ImageOutputDir = "images/control-plane"
 	}
 	if strings.TrimSpace(program.Cluster.JoinFile) == "" {
 		program.Cluster.JoinFile = "/tmp/deck/join.txt"
@@ -905,8 +883,8 @@ func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.Gene
 }
 
 func planRequiresVarsFile(plan askcontract.PlanResponse) bool {
-	for _, path := range append([]string(nil), plan.AuthoringBrief.TargetPaths...) {
-		if filepath.ToSlash(strings.TrimSpace(path)) == "workflows/vars.yaml" {
+	for _, path := range plan.AuthoringBrief.TargetPaths {
+		if path == "workflows/vars.yaml" {
 			return true
 		}
 	}
