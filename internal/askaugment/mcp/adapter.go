@@ -29,18 +29,21 @@ type context7ProviderAdapter struct{}
 type webSearchProviderAdapter struct{}
 
 type normalizedEvidence struct {
-	Provider      string
-	ToolName      string
-	SourceURL     string
-	SourceID      string
-	Domain        string
-	Title         string
-	Excerpt       string
-	Freshness     string
-	Official      bool
-	ArtifactKinds []string
-	InstallHints  []string
-	OfflineHints  []string
+	Provider       string
+	ToolName       string
+	SourceURL      string
+	SourceID       string
+	Domain         string
+	DomainCategory string
+	Title          string
+	Excerpt        string
+	Freshness      string
+	Official       bool
+	TrustLevel     string
+	VersionSupport string
+	ArtifactKinds  []string
+	InstallHints   []string
+	OfflineHints   []string
 }
 
 type context7Entity struct {
@@ -56,6 +59,8 @@ var context7LibraryIDPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(github\.com/[\w./-]+)`),
 	regexp.MustCompile(`(?i)(golang\.org/[\w./-]+)`),
 }
+
+var requestedVersionPattern = regexp.MustCompile(`(?i)\bv?\d+\.\d+(?:\.\d+)?\b`)
 
 func (context7ProviderAdapter) Fetch(ctx context.Context, server resolvedServer, c *client.Client, route askintent.Route, prompt string, tools *mcp.ListToolsResult) (*askretrieve.Chunk, string) {
 	request := capabilityRequestForRoute(server.Profile, route, prompt)
@@ -307,6 +312,9 @@ func extractLibraryIDFromText(text string) string {
 }
 
 func normalizeEvidence(providerID string, toolName string, prompt string, result *mcp.CallToolResult, seed normalizedEvidence) normalizedEvidence {
+	if providerID == "web-search" {
+		return normalizeWebSearchEvidence(toolName, prompt, result, seed)
+	}
 	text := extractText(result)
 	structured := primaryStructuredValue(result.StructuredContent)
 	evidence := seed
@@ -339,19 +347,208 @@ func normalizeEvidence(providerID string, toolName string, prompt string, result
 	return evidence
 }
 
+func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.CallToolResult, seed normalizedEvidence) normalizedEvidence {
+	text := extractText(result)
+	candidates := webSearchEvidenceCandidates(result)
+	best := seed
+	best.Provider = "web-search"
+	best.ToolName = toolName
+	bestScore := -1
+	for _, candidate := range candidates {
+		evidence := seed
+		evidence.Provider = "web-search"
+		evidence.ToolName = toolName
+		evidence.SourceURL = firstString(candidate, []string{"url", "uri", "href", "link", "source"})
+		evidence.Domain = domainFromURL(evidence.SourceURL)
+		evidence.Title = firstString(candidate, []string{"title", "name"})
+		evidence.Excerpt = firstString(candidate, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
+		if evidence.Title == "" {
+			evidence.Title = firstNonEmptyLine(text)
+		}
+		if evidence.Excerpt == "" {
+			evidence.Excerpt = compactExcerpt(text, 600)
+		}
+		annotateEvidenceTrust(&evidence, prompt)
+		score := scoreWebSearchEvidence(evidence, prompt)
+		if score > bestScore {
+			best = evidence
+			bestScore = score
+		}
+	}
+	if bestScore < 0 {
+		structured := primaryStructuredValue(result.StructuredContent)
+		best.SourceURL = firstString(structured, []string{"url", "uri", "href", "link", "source"})
+		best.Domain = domainFromURL(best.SourceURL)
+		best.Title = firstString(structured, []string{"title", "name"})
+		if best.Title == "" {
+			best.Title = firstNonEmptyLine(text)
+		}
+		best.Excerpt = firstString(structured, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
+		if best.Excerpt == "" {
+			best.Excerpt = compactExcerpt(text, 600)
+		}
+		annotateEvidenceTrust(&best, prompt)
+	}
+	artifacts := summarizeEvidence(text, prompt)
+	if artifacts != nil {
+		best.ArtifactKinds = append([]string(nil), artifacts.ArtifactKinds...)
+		best.InstallHints = append([]string(nil), artifacts.InstallHints...)
+		best.OfflineHints = append([]string(nil), artifacts.OfflineHints...)
+	}
+	return best
+}
+
+func webSearchEvidenceCandidates(result *mcp.CallToolResult) []any {
+	if result == nil {
+		return nil
+	}
+	structured, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		return nil
+	}
+	for _, key := range []string{"results", "items", "documents", "sources"} {
+		items, ok := structured[key].([]any)
+		if ok && len(items) > 0 {
+			return items
+		}
+	}
+	return nil
+}
+
+func scoreWebSearchEvidence(evidence normalizedEvidence, prompt string) int {
+	score := 0
+	switch evidence.TrustLevel {
+	case "high":
+		score += 300
+	case "medium":
+		score += 200
+	case "low":
+		score += 100
+	}
+	if evidence.Official {
+		score += 50
+	}
+	switch evidence.VersionSupport {
+	case "direct":
+		score += 30
+	case "indirect":
+		score += 10
+	case "unknown":
+		if requestedVersion(prompt) != "" {
+			score -= 10
+		}
+	}
+	if strings.TrimSpace(evidence.Excerpt) != "" {
+		score += 5
+	}
+	if strings.TrimSpace(evidence.Title) != "" {
+		score += 3
+	}
+	return score
+}
+
+func annotateEvidenceTrust(evidence *normalizedEvidence, prompt string) {
+	if evidence == nil {
+		return
+	}
+	domain := strings.ToLower(strings.TrimSpace(evidence.Domain))
+	path := strings.ToLower(strings.TrimSpace(evidence.SourceURL))
+	var category string
+	var trust string
+	official := evidence.Official
+	switch {
+	case domain == "":
+		category = "unknown"
+		trust = "medium"
+	case isCommunityDomain(domain):
+		category = "community"
+		trust = "low"
+		official = false
+	case isAggregatorDomain(domain):
+		category = "aggregator"
+		trust = "low"
+		official = false
+	case isSourceHostDomain(domain):
+		category = "source-host"
+		trust = "medium"
+		official = false
+	case strings.HasPrefix(domain, "docs.") || strings.HasPrefix(domain, "developer.") || strings.HasPrefix(domain, "learn.") || strings.HasPrefix(domain, "support.") || strings.HasPrefix(domain, "help.") || strings.Contains(path, "/docs/") || strings.HasSuffix(path, "/docs") || strings.Contains(path, "/documentation/"):
+		category = "official-docs"
+		trust = "high"
+		official = true
+	default:
+		category = "vendor-site"
+		trust = "medium"
+	}
+	evidence.DomainCategory = category
+	evidence.TrustLevel = trust
+	evidence.Official = official
+	evidence.VersionSupport = detectVersionSupport(prompt, *evidence)
+}
+
+func requestedVersion(prompt string) string {
+	match := requestedVersionPattern.FindString(strings.TrimSpace(prompt))
+	return strings.TrimSpace(strings.TrimPrefix(strings.ToLower(match), "v"))
+}
+
+func detectVersionSupport(prompt string, evidence normalizedEvidence) string {
+	version := requestedVersion(prompt)
+	if version == "" {
+		return ""
+	}
+	text := strings.ToLower(strings.Join([]string{evidence.Title, evidence.Excerpt, evidence.SourceURL}, " "))
+	if strings.Contains(text, version) || strings.Contains(text, "v"+version) {
+		return "direct"
+	}
+	if requestedVersionPattern.MatchString(text) {
+		return "indirect"
+	}
+	return "unknown"
+}
+
+func isCommunityDomain(domain string) bool {
+	for _, token := range []string{"stackoverflow.com", "serverfault.com", "superuser.com", "reddit.com", "medium.com", "dev.to", "substack.com", "blogspot.com", "wordpress.com"} {
+		if domain == token || strings.HasSuffix(domain, "."+token) {
+			return true
+		}
+	}
+	return false
+}
+
+func isAggregatorDomain(domain string) bool {
+	for _, token := range []string{"wikipedia.org", "geeksforgeeks.org", "baeldung.com", "tutorialspoint.com", "w3schools.com"} {
+		if domain == token || strings.HasSuffix(domain, "."+token) {
+			return true
+		}
+	}
+	return false
+}
+
+func isSourceHostDomain(domain string) bool {
+	for _, token := range []string{"github.com", "gitlab.com", "pkg.go.dev", "hub.docker.com", "registry.terraform.io", "pypi.org", "npmjs.com"} {
+		if domain == token || strings.HasSuffix(domain, "."+token) {
+			return true
+		}
+	}
+	return false
+}
+
 func evidenceChunk(evidence normalizedEvidence) *askretrieve.Chunk {
 	summary := &askretrieve.EvidenceSummary{
-		Provider:      evidence.Provider,
-		SourceURL:     evidence.SourceURL,
-		SourceID:      evidence.SourceID,
-		Domain:        evidence.Domain,
-		Title:         evidence.Title,
-		Excerpt:       evidence.Excerpt,
-		Freshness:     evidence.Freshness,
-		Official:      evidence.Official,
-		ArtifactKinds: append([]string(nil), evidence.ArtifactKinds...),
-		InstallHints:  append([]string(nil), evidence.InstallHints...),
-		OfflineHints:  append([]string(nil), evidence.OfflineHints...),
+		Provider:       evidence.Provider,
+		SourceURL:      evidence.SourceURL,
+		SourceID:       evidence.SourceID,
+		Domain:         evidence.Domain,
+		DomainCategory: evidence.DomainCategory,
+		Title:          evidence.Title,
+		Excerpt:        evidence.Excerpt,
+		Freshness:      evidence.Freshness,
+		Official:       evidence.Official,
+		TrustLevel:     evidence.TrustLevel,
+		VersionSupport: evidence.VersionSupport,
+		ArtifactKinds:  append([]string(nil), evidence.ArtifactKinds...),
+		InstallHints:   append([]string(nil), evidence.InstallHints...),
+		OfflineHints:   append([]string(nil), evidence.OfflineHints...),
 	}
 	label := evidence.Provider
 	switch {

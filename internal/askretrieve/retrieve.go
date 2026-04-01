@@ -40,17 +40,20 @@ type Chunk struct {
 }
 
 type EvidenceSummary struct {
-	Provider      string   `json:"provider,omitempty"`
-	SourceURL     string   `json:"sourceUrl,omitempty"`
-	SourceID      string   `json:"sourceId,omitempty"`
-	Domain        string   `json:"domain,omitempty"`
-	Title         string   `json:"title,omitempty"`
-	Excerpt       string   `json:"excerpt,omitempty"`
-	Freshness     string   `json:"freshness,omitempty"`
-	Official      bool     `json:"official,omitempty"`
-	ArtifactKinds []string `json:"artifactKinds,omitempty"`
-	InstallHints  []string `json:"installHints,omitempty"`
-	OfflineHints  []string `json:"offlineHints,omitempty"`
+	Provider       string   `json:"provider,omitempty"`
+	SourceURL      string   `json:"sourceUrl,omitempty"`
+	SourceID       string   `json:"sourceId,omitempty"`
+	Domain         string   `json:"domain,omitempty"`
+	DomainCategory string   `json:"domainCategory,omitempty"`
+	Title          string   `json:"title,omitempty"`
+	Excerpt        string   `json:"excerpt,omitempty"`
+	Freshness      string   `json:"freshness,omitempty"`
+	Official       bool     `json:"official,omitempty"`
+	TrustLevel     string   `json:"trustLevel,omitempty"`
+	VersionSupport string   `json:"versionSupport,omitempty"`
+	ArtifactKinds  []string `json:"artifactKinds,omitempty"`
+	InstallHints   []string `json:"installHints,omitempty"`
+	OfflineHints   []string `json:"offlineHints,omitempty"`
 }
 
 type RetrievalResult struct {

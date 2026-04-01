@@ -160,15 +160,24 @@ func evidenceBoundaryPromptBlock(retrieval askretrieve.RetrievalResult) string {
 				if strings.TrimSpace(chunk.Evidence.Title) != "" {
 					line += ": " + strings.TrimSpace(chunk.Evidence.Title)
 				}
-				parts := make([]string, 0, 3)
+				parts := make([]string, 0, 6)
 				if strings.TrimSpace(chunk.Evidence.Domain) != "" {
 					parts = append(parts, "domain="+strings.TrimSpace(chunk.Evidence.Domain))
+				}
+				if strings.TrimSpace(chunk.Evidence.DomainCategory) != "" {
+					parts = append(parts, "category="+strings.TrimSpace(chunk.Evidence.DomainCategory))
 				}
 				if strings.TrimSpace(chunk.Evidence.Freshness) != "" {
 					parts = append(parts, "freshness="+strings.TrimSpace(chunk.Evidence.Freshness))
 				}
 				if chunk.Evidence.Official {
 					parts = append(parts, "official=true")
+				}
+				if strings.TrimSpace(chunk.Evidence.TrustLevel) != "" {
+					parts = append(parts, "trust="+strings.TrimSpace(chunk.Evidence.TrustLevel))
+				}
+				if strings.TrimSpace(chunk.Evidence.VersionSupport) != "" {
+					parts = append(parts, "versionSupport="+strings.TrimSpace(chunk.Evidence.VersionSupport))
 				}
 				if len(parts) > 0 {
 					line += " [" + strings.Join(parts, ", ") + "]"
