@@ -99,11 +99,12 @@ func buildStepspecSummary(root string, lowerPrompt string) string {
 			continue
 		}
 		text := string(raw)
+		lowerText := strings.ToLower(text)
 		kind := extractQuotedValue(text, "Kind:")
 		builder := extractQuotedValue(text, "ID:")
 		score := 0
 		for _, token := range strings.Fields(lowerPrompt) {
-			if token != "" && strings.Contains(strings.ToLower(text), strings.ToLower(token)) {
+			if token != "" && strings.Contains(lowerText, token) {
 				score++
 			}
 		}

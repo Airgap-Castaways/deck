@@ -48,6 +48,15 @@ type context7Entity struct {
 	Title     string
 }
 
+var context7LibraryIDPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)context7-compatible\s+library\s+id\s*[:=]\s*(/[\w./-]+)`),
+	regexp.MustCompile(`(?i)library\s*id\s*[:=]\s*(/[\w./-]+)`),
+	regexp.MustCompile(`(?i)library\s*[:=]\s*([\w./-]+)`),
+	regexp.MustCompile(`(?i)(/[a-z0-9_.-]+/[a-z0-9_.-]+(?:/[a-z0-9_.-]+)?)`),
+	regexp.MustCompile(`(?i)(github\.com/[\w./-]+)`),
+	regexp.MustCompile(`(?i)(golang\.org/[\w./-]+)`),
+}
+
 func (context7ProviderAdapter) Fetch(ctx context.Context, server resolvedServer, c *client.Client, route askintent.Route, prompt string, tools *mcp.ListToolsResult) (*askretrieve.Chunk, string) {
 	request := capabilityRequestForRoute(server.Profile, route, prompt)
 	if len(request.Capabilities) == 0 {
@@ -268,15 +277,7 @@ func parseContext7Entity(result *mcp.CallToolResult, prompt string) context7Enti
 }
 
 func extractLibraryIDFromText(text string) string {
-	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?i)context7-compatible\s+library\s+id\s*[:=]\s*(/[\w./-]+)`),
-		regexp.MustCompile(`(?i)library\s*id\s*[:=]\s*(/[\w./-]+)`),
-		regexp.MustCompile(`(?i)library\s*[:=]\s*([\w./-]+)`),
-		regexp.MustCompile(`(?i)(/[a-z0-9_.-]+/[a-z0-9_.-]+(?:/[a-z0-9_.-]+)?)`),
-		regexp.MustCompile(`(?i)(github\.com/[\w./-]+)`),
-		regexp.MustCompile(`(?i)(golang\.org/[\w./-]+)`),
-	}
-	for _, pattern := range patterns {
+	for _, pattern := range context7LibraryIDPatterns {
 		match := pattern.FindStringSubmatch(text)
 		if len(match) < 2 {
 			continue

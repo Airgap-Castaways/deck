@@ -10,9 +10,10 @@ import (
 )
 
 var (
-	versionPattern    = regexp.MustCompile(`(?i)\bv?\d+\.\d+(?:\.\d+)?\b`)
-	repoEntityPattern = regexp.MustCompile(`(?i)\b(?:github\.com|gitlab\.com|golang\.org)/[^\s)]+`)
-	tokenPattern      = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+._/-]*`)
+	versionPattern               = regexp.MustCompile(`(?i)\bv?\d+\.\d+(?:\.\d+)?\b`)
+	repoEntityPattern            = regexp.MustCompile(`(?i)\b(?:github\.com|gitlab\.com|golang\.org)/[^\s)]+`)
+	tokenPattern                 = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+._/-]*`)
+	versionAttachedEntityPattern = regexp.MustCompile(`(?i)\b([A-Za-z][A-Za-z0-9+._/-]*)\s+v?\d+\.\d+(?:\.\d+)?\b`)
 )
 
 func BuildEvidencePlan(prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) askcontract.EvidencePlan {
@@ -153,8 +154,7 @@ func extractEvidenceEntities(prompt string) []askcontract.EvidenceEntity {
 }
 
 func versionAttachedEntities(prompt string) []string {
-	pattern := regexp.MustCompile(`(?i)\b([A-Za-z][A-Za-z0-9+._/-]*)\s+v?\d+\.\d+(?:\.\d+)?\b`)
-	matches := pattern.FindAllStringSubmatch(prompt, -1)
+	matches := versionAttachedEntityPattern.FindAllStringSubmatch(prompt, -1)
 	results := make([]string, 0, len(matches))
 	for _, match := range matches {
 		if len(match) > 1 {
