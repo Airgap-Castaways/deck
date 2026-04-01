@@ -33,3 +33,17 @@ func TestShouldUseLLMEvidencePlannerWhenExternalNeedLacksEntity(t *testing.T) {
 		t.Fatalf("expected llm evidence planner fallback for ambiguous external request, got %#v", plan)
 	}
 }
+
+func TestBuildEvidencePlanSkipsStopwordsWithoutAbortingEntityExtraction(t *testing.T) {
+	plan := BuildEvidencePlan("Install the AcmeMesh on Debian 12", askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteQuestion})
+	found := false
+	for _, entity := range plan.Entities {
+		if entity.Name == "AcmeMesh" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected entity extraction to survive stopwords, got %#v", plan.Entities)
+	}
+}

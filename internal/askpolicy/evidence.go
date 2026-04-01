@@ -131,7 +131,14 @@ func extractEvidenceEntities(prompt string) []askcontract.EvidenceEntity {
 	seen := map[string]bool{}
 	add := func(name string, kind string) {
 		name = strings.TrimSpace(strings.Trim(name, `"'.,:;()[]{} `))
+		name = strings.TrimSpace(strings.TrimSuffix(name, "?"))
 		if name == "" || looksGenericEntityName(name) {
+			return
+		}
+		if digitsOnly(name) {
+			return
+		}
+		if versionPattern.MatchString(name) {
 			return
 		}
 		key := strings.ToLower(name) + "::" + strings.ToLower(strings.TrimSpace(kind))
@@ -181,11 +188,17 @@ func cueDrivenEntities(prompt string) []string {
 		for _, part := range parts {
 			clean := strings.TrimSpace(strings.Trim(part, `"'.,:;()[]{} `))
 			lowerClean := strings.ToLower(clean)
-			if clean == "" || versionPattern.MatchString(lowerClean) || cueStopword(lowerClean) {
+			if clean == "" || versionPattern.MatchString(lowerClean) {
 				break
+			}
+			if cueStopword(lowerClean) {
+				continue
 			}
 			if strings.EqualFold(lowerClean, "and") || strings.EqualFold(lowerClean, "or") {
 				break
+			}
+			if looksGenericEntityName(clean) {
+				continue
 			}
 			candidate = append(candidate, clean)
 			if len(candidate) == 3 {
@@ -224,4 +237,17 @@ func looksGenericEntityName(value string) bool {
 	default:
 		return false
 	}
+}
+
+func digitsOnly(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
