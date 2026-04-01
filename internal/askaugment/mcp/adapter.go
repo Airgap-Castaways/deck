@@ -312,10 +312,11 @@ func libraryQueryFromPrompt(prompt string) string {
 }
 
 func parseContext7Entity(result *mcp.CallToolResult, prompt string) context7Entity {
-	structured := primaryStructuredValue(result.StructuredContent)
+	structured := context7StructuredValue("resolve-library-id", result)
+	index := caseInsensitiveStringIndex(structured)
 	entity := context7Entity{
-		LibraryID: firstString(structured, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}),
-		Title:     firstString(structured, []string{"title", "name", "libraryName"}),
+		LibraryID: indexedString(index, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}),
+		Title:     indexedString(index, []string{"title", "name", "libraryName"}),
 	}
 	if entity.LibraryID == "" {
 		entity.LibraryID = extractLibraryIDFromText(extractText(result))
@@ -342,28 +343,30 @@ func extractLibraryIDFromText(text string) string {
 }
 
 func normalizeEvidence(providerID string, toolName string, prompt string, result *mcp.CallToolResult, seed normalizedEvidence) normalizedEvidence {
+	normalizedToolName := normalizeToolName(toolName)
 	if providerID == "web-search" {
-		return normalizeWebSearchEvidence(toolName, prompt, result, seed)
+		return normalizeWebSearchEvidence(normalizedToolName, prompt, result, seed)
 	}
 	text := extractText(result)
-	structured := primaryStructuredValue(result.StructuredContent)
+	structured := context7StructuredValue(normalizedToolName, result)
+	structuredStrings := caseInsensitiveStringIndex(structured)
 	evidence := seed
 	evidence.Provider = providerID
 	evidence.ToolName = toolName
 	if evidence.SourceURL == "" {
-		evidence.SourceURL = firstString(structured, []string{"url", "uri", "href", "link", "source"})
+		evidence.SourceURL = indexedString(structuredStrings, []string{"url", "uri", "href", "link", "source"})
 	}
 	if evidence.Domain == "" {
 		evidence.Domain = domainFromURL(evidence.SourceURL)
 	}
 	if evidence.Title == "" {
-		evidence.Title = firstString(structured, []string{"title", "name", "libraryName"})
+		evidence.Title = indexedString(structuredStrings, []string{"title", "name", "libraryName"})
 	}
 	if evidence.Title == "" {
 		evidence.Title = firstNonEmptyLine(text)
 	}
 	if evidence.Excerpt == "" {
-		evidence.Excerpt = firstString(structured, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
+		evidence.Excerpt = indexedString(structuredStrings, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
 	}
 	if evidence.Excerpt == "" {
 		evidence.Excerpt = compactExcerpt(text, 600)
@@ -379,20 +382,21 @@ func normalizeEvidence(providerID string, toolName string, prompt string, result
 
 func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.CallToolResult, seed normalizedEvidence) normalizedEvidence {
 	text := extractText(result)
-	candidates := webSearchEvidenceCandidates(result)
+	candidates := webSearchStructuredCandidates(toolName, result)
 	version := requestedVersion(prompt)
 	best := seed
 	best.Provider = "web-search"
 	best.ToolName = toolName
 	bestScore := -1
 	for _, candidate := range candidates {
+		candidateStrings := caseInsensitiveStringIndex(candidate)
 		evidence := seed
 		evidence.Provider = "web-search"
 		evidence.ToolName = toolName
-		evidence.SourceURL = firstString(candidate, []string{"url", "uri", "href", "link", "source"})
+		evidence.SourceURL = indexedString(candidateStrings, []string{"url", "uri", "href", "link", "source"})
 		evidence.Domain = domainFromURL(evidence.SourceURL)
-		evidence.Title = firstString(candidate, []string{"title", "name"})
-		evidence.Excerpt = firstString(candidate, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
+		evidence.Title = indexedString(candidateStrings, []string{"title", "name"})
+		evidence.Excerpt = indexedString(candidateStrings, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
 		if evidence.Title == "" {
 			evidence.Title = firstNonEmptyLine(text)
 		}
@@ -407,14 +411,15 @@ func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.Call
 		}
 	}
 	if bestScore < 0 {
-		structured := primaryStructuredValue(result.StructuredContent)
-		best.SourceURL = firstString(structured, []string{"url", "uri", "href", "link", "source"})
+		structured := webSearchStructuredFallback(toolName, result)
+		structuredStrings := caseInsensitiveStringIndex(structured)
+		best.SourceURL = indexedString(structuredStrings, []string{"url", "uri", "href", "link", "source"})
 		best.Domain = domainFromURL(best.SourceURL)
-		best.Title = firstString(structured, []string{"title", "name"})
+		best.Title = indexedString(structuredStrings, []string{"title", "name"})
 		if best.Title == "" {
 			best.Title = firstNonEmptyLine(text)
 		}
-		best.Excerpt = firstString(structured, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
+		best.Excerpt = indexedString(structuredStrings, []string{"excerpt", "snippet", "summary", "description", "text", "content"})
 		if best.Excerpt == "" {
 			best.Excerpt = compactExcerpt(text, 600)
 		}
@@ -429,7 +434,7 @@ func normalizeWebSearchEvidence(toolName string, prompt string, result *mcp.Call
 	return best
 }
 
-func webSearchEvidenceCandidates(result *mcp.CallToolResult) []any {
+func webSearchStructuredCandidates(toolName string, result *mcp.CallToolResult) []any {
 	if result == nil {
 		return nil
 	}
@@ -437,13 +442,72 @@ func webSearchEvidenceCandidates(result *mcp.CallToolResult) []any {
 	if !ok {
 		return nil
 	}
-	for _, key := range []string{"results", "items", "documents", "sources"} {
-		items, ok := structured[key].([]any)
-		if ok && len(items) > 0 {
-			return items
-		}
+	if items, ok := caseInsensitiveSliceValue(structured, webSearchCandidateKeys(toolName)); ok && len(items) > 0 {
+		return items
 	}
 	return nil
+}
+
+func webSearchStructuredFallback(toolName string, result *mcp.CallToolResult) any {
+	if result == nil {
+		return nil
+	}
+	structured, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		return result.StructuredContent
+	}
+	if nested, ok := caseInsensitiveValue(structured, webSearchSingleObjectKeys(toolName)); ok {
+		return nested
+	}
+	return structured
+}
+
+func webSearchCandidateKeys(toolName string) []string {
+	switch toolName {
+	case "search", "web-search", "web_search":
+		return []string{"results", "items", "sources"}
+	default:
+		return nil
+	}
+}
+
+func webSearchSingleObjectKeys(toolName string) []string {
+	switch toolName {
+	case "search", "web-search", "web_search":
+		return []string{"result", "item", "source"}
+	default:
+		return nil
+	}
+}
+
+func context7StructuredValue(toolName string, result *mcp.CallToolResult) any {
+	if result == nil {
+		return nil
+	}
+	structured, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		return result.StructuredContent
+	}
+	switch toolName {
+	case "resolve-library-id":
+		if hasCaseInsensitiveKey(structured, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}) {
+			return structured
+		}
+		if nested, ok := caseInsensitiveValue(structured, []string{"library", "match", "resolved"}); ok {
+			return nested
+		}
+		if items, ok := caseInsensitiveSliceValue(structured, []string{"matches", "libraries", "candidates"}); ok && len(items) > 0 {
+			return items[0]
+		}
+	case "get-library-docs", "query-docs":
+		if hasCaseInsensitiveKey(structured, []string{"url", "uri", "href", "link", "source", "title", "name", "libraryName", "excerpt", "snippet", "summary", "description", "text", "content"}) {
+			return structured
+		}
+		if nested, ok := caseInsensitiveValue(structured, []string{"document", "doc", "page"}); ok {
+			return nested
+		}
+	}
+	return structured
 }
 
 func scoreWebSearchEvidence(evidence normalizedEvidence, version string) int {
@@ -642,58 +706,77 @@ func extractText(result *mcp.CallToolResult) string {
 	return strings.TrimSpace(b.String())
 }
 
-func primaryStructuredValue(value any) any {
-	current := value
-outer:
-	for {
-		mapped, ok := current.(map[string]any)
-		if !ok {
-			return current
-		}
-		for _, key := range []string{"results", "items", "documents", "sources"} {
-			items, ok := mapped[key].([]any)
-			if ok && len(items) > 0 {
-				current = items[0]
-				continue outer
-			}
-		}
-		return mapped
-	}
+func hasCaseInsensitiveKey(mapped map[string]any, keys []string) bool {
+	_, ok := caseInsensitiveValue(mapped, keys)
+	return ok
 }
 
-func firstString(value any, keys []string) string {
-	if len(keys) == 0 {
+func normalizeToolName(toolName string) string {
+	return strings.ToLower(strings.TrimSpace(toolName))
+}
+
+func caseInsensitiveStringIndex(value any) map[string]string {
+	mapped, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	indexed := make(map[string]string, len(mapped))
+	for candidate, raw := range mapped {
+		text, ok := raw.(string)
+		if !ok {
+			continue
+		}
+		indexed[strings.ToLower(strings.TrimSpace(candidate))] = strings.TrimSpace(text)
+	}
+	return indexed
+}
+
+func caseInsensitiveValueIndex(mapped map[string]any) map[string]any {
+	if len(mapped) == 0 {
+		return nil
+	}
+	indexed := make(map[string]any, len(mapped))
+	for candidate, raw := range mapped {
+		indexed[strings.ToLower(strings.TrimSpace(candidate))] = raw
+	}
+	return indexed
+}
+
+func indexedString(index map[string]string, keys []string) string {
+	if len(index) == 0 || len(keys) == 0 {
 		return ""
 	}
 	for _, key := range keys {
-		if out := firstStringForKey(value, key); out != "" {
-			return out
+		if text, ok := index[strings.ToLower(strings.TrimSpace(key))]; ok {
+			return text
 		}
 	}
 	return ""
 }
 
-func firstStringForKey(value any, key string) string {
-	switch typed := value.(type) {
-	case map[string]any:
-		for candidate, raw := range typed {
-			if strings.EqualFold(strings.TrimSpace(candidate), strings.TrimSpace(key)) {
-				if text, ok := raw.(string); ok {
-					return strings.TrimSpace(text)
-				}
-			}
-			if nested := firstStringForKey(raw, key); nested != "" {
-				return nested
-			}
-		}
-	case []any:
-		for _, item := range typed {
-			if nested := firstStringForKey(item, key); nested != "" {
-				return nested
-			}
+func caseInsensitiveValue(mapped map[string]any, keys []string) (any, bool) {
+	if len(keys) == 0 || len(mapped) == 0 {
+		return nil, false
+	}
+	index := caseInsensitiveValueIndex(mapped)
+	for _, key := range keys {
+		if raw, ok := index[strings.ToLower(strings.TrimSpace(key))]; ok {
+			return raw, true
 		}
 	}
-	return ""
+	return nil, false
+}
+
+func caseInsensitiveSliceValue(mapped map[string]any, keys []string) ([]any, bool) {
+	raw, ok := caseInsensitiveValue(mapped, keys)
+	if !ok {
+		return nil, false
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return nil, false
+	}
+	return items, true
 }
 
 func firstNonEmptyLine(text string) string {

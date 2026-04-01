@@ -86,6 +86,35 @@ func TestQueryServerContext7QueryDocsFallbackReturnsNormalizedEvidence(t *testin
 	}
 }
 
+func TestQueryServerContext7IgnoresGenericResultsNoiseInDocsResponse(t *testing.T) {
+	chunk, event := queryServer(context.Background(), helperServer(t, "context7", "context7-docs-results-noise"), askintent.RouteExplain, "Explain github.com/mark3labs/mcp-go")
+	if event != "mcp:context7 call get-library-docs ok" {
+		t.Fatalf("unexpected event: %q", event)
+	}
+	if chunk == nil || chunk.Evidence == nil {
+		t.Fatalf("expected evidence chunk, got %#v", chunk)
+	}
+	if chunk.Evidence.Domain != "pkg.go.dev" || chunk.Evidence.Title != "github.com/mark3labs/mcp-go" {
+		t.Fatalf("expected context7 root document metadata to win, got %#v", chunk.Evidence)
+	}
+	if strings.Contains(chunk.Content, "Wrong result") {
+		t.Fatalf("expected generic results noise to be ignored, got %q", chunk.Content)
+	}
+}
+
+func TestQueryServerContext7SupportsCaseInsensitiveNestedKeys(t *testing.T) {
+	chunk, event := queryServer(context.Background(), helperServer(t, "context7", "context7-case-insensitive-keys"), askintent.RouteExplain, "Explain github.com/mark3labs/mcp-go")
+	if event != "mcp:context7 call get-library-docs ok" {
+		t.Fatalf("unexpected event: %q", event)
+	}
+	if chunk == nil || chunk.Evidence == nil {
+		t.Fatalf("expected evidence chunk, got %#v", chunk)
+	}
+	if chunk.Evidence.Domain != "pkg.go.dev" || chunk.Evidence.Title != "github.com/mark3labs/mcp-go" {
+		t.Fatalf("expected case-insensitive context7 metadata, got %#v", chunk.Evidence)
+	}
+}
+
 func TestBuildResolveArgsIncludesBothLibraryNameAndQueryWhenSchemaRequiresThem(t *testing.T) {
 	tool := mcp.Tool{Name: "resolve-library-id", InputSchema: mcp.ToolInputSchema{Type: "object", Properties: map[string]interface{}{"libraryName": map[string]any{"type": "string"}, "query": map[string]any{"type": "string"}}}}
 	args := buildResolveArgs(tool, "Explain github.com/mark3labs/mcp-go")
@@ -155,6 +184,32 @@ func TestQueryServerWebSearchMarksWeakVersionSupport(t *testing.T) {
 	}
 	if chunk.Evidence.VersionSupport != "unknown" {
 		t.Fatalf("expected unknown version support, got %#v", chunk.Evidence)
+	}
+}
+
+func TestQueryServerWebSearchSupportsItemsShape(t *testing.T) {
+	chunk, event := queryServer(context.Background(), helperServer(t, "web-search", "web-search-items-shape"), askintent.RouteExplain, "How do I install kubeadm?")
+	if event != "mcp:web-search call search ok" {
+		t.Fatalf("unexpected event: %q", event)
+	}
+	if chunk == nil || chunk.Evidence == nil {
+		t.Fatalf("expected evidence chunk, got %#v", chunk)
+	}
+	if chunk.Evidence.Domain != "kubernetes.io" || chunk.Evidence.Title != "Installing kubeadm from items" {
+		t.Fatalf("expected items-based web search evidence, got %#v", chunk.Evidence)
+	}
+}
+
+func TestQueryServerWebSearchSupportsCaseInsensitiveContainerKeys(t *testing.T) {
+	chunk, event := queryServer(context.Background(), helperServer(t, "web-search", "web-search-case-insensitive-keys"), askintent.RouteExplain, "How do I install kubeadm?")
+	if event != "mcp:web-search call search ok" {
+		t.Fatalf("unexpected event: %q", event)
+	}
+	if chunk == nil || chunk.Evidence == nil {
+		t.Fatalf("expected evidence chunk, got %#v", chunk)
+	}
+	if chunk.Evidence.Domain != "kubernetes.io" || chunk.Evidence.Title != "Installing kubeadm via Results" {
+		t.Fatalf("expected case-insensitive web-search evidence, got %#v", chunk.Evidence)
 	}
 }
 
@@ -416,7 +471,7 @@ func helperTools(mode string) []map[string]any {
 				},
 			},
 		}
-	case "context7-success":
+	case "context7-success", "context7-docs-results-noise", "context7-case-insensitive-keys":
 		return []map[string]any{
 			{
 				"name": "resolve-library-id",
@@ -456,7 +511,7 @@ func helperTools(mode string) []map[string]any {
 				},
 			},
 		}
-	case "web-search-success", "web-search-mixed-trust", "web-search-community-version":
+	case "web-search-success", "web-search-mixed-trust", "web-search-community-version", "web-search-items-shape", "web-search-case-insensitive-keys":
 		return []map[string]any{{
 			"name": "search",
 			"inputSchema": map[string]any{
@@ -513,6 +568,55 @@ func helperToolResult(mode string, req mcpfake.Request) map[string]any {
 					"url":         "https://context7.com/github.com/mark3labs/mcp-go",
 					"title":       "github.com/mark3labs/mcp-go docs",
 					"description": "MCP Go lets Go programs expose MCP servers and clients.",
+				},
+			}
+		}
+	case "context7-docs-results-noise":
+		switch toolName {
+		case "resolve-library-id":
+			return map[string]any{
+				"content": []map[string]any{{"type": "text", "text": "Resolved github.com/mark3labs/mcp-go"}},
+				"structuredContent": map[string]any{
+					"libraryId": "github.com/mark3labs/mcp-go",
+					"title":     "github.com/mark3labs/mcp-go",
+				},
+			}
+		case "get-library-docs":
+			return map[string]any{
+				"content": []map[string]any{{"type": "text", "text": "MCP Go is a Go SDK for MCP."}},
+				"structuredContent": map[string]any{
+					"url":     "https://pkg.go.dev/github.com/mark3labs/mcp-go",
+					"title":   "github.com/mark3labs/mcp-go",
+					"excerpt": "MCP Go is a Go SDK for MCP.",
+					"results": []map[string]any{{
+						"title":   "Wrong result",
+						"url":     "https://example.invalid/wrong",
+						"excerpt": "Noise from a generic results key.",
+					}},
+				},
+			}
+		}
+	case "context7-case-insensitive-keys":
+		switch toolName {
+		case "resolve-library-id":
+			return map[string]any{
+				"content": []map[string]any{{"type": "text", "text": "Resolved github.com/mark3labs/mcp-go"}},
+				"structuredContent": map[string]any{
+					"Resolved": map[string]any{
+						"LibraryId": "github.com/mark3labs/mcp-go",
+						"Title":     "github.com/mark3labs/mcp-go",
+					},
+				},
+			}
+		case "get-library-docs":
+			return map[string]any{
+				"content": []map[string]any{{"type": "text", "text": "MCP Go is a Go SDK for MCP."}},
+				"structuredContent": map[string]any{
+					"Document": map[string]any{
+						"URL":     "https://pkg.go.dev/github.com/mark3labs/mcp-go",
+						"Title":   "github.com/mark3labs/mcp-go",
+						"Excerpt": "MCP Go is a Go SDK for MCP.",
+					},
 				},
 			}
 		}
@@ -582,6 +686,28 @@ func helperToolResult(mode string, req mcpfake.Request) map[string]any {
 					"title":   "Kubeadm install notes",
 					"url":     "https://stackoverflow.com/questions/example/kubeadm-install-notes",
 					"snippet": "A user-described kubeadm installation flow without explicit version coverage.",
+				}},
+			},
+		}
+	case "web-search-items-shape":
+		return map[string]any{
+			"content": []map[string]any{{"type": "text", "text": "Install kubeadm from the official Kubernetes docs."}},
+			"structuredContent": map[string]any{
+				"items": []map[string]any{{
+					"title":   "Installing kubeadm from items",
+					"url":     "https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/",
+					"summary": "Official Kubernetes installation documentation.",
+				}},
+			},
+		}
+	case "web-search-case-insensitive-keys":
+		return map[string]any{
+			"content": []map[string]any{{"type": "text", "text": "Install kubeadm from the official Kubernetes docs."}},
+			"structuredContent": map[string]any{
+				"Results": []map[string]any{{
+					"Title":   "Installing kubeadm via Results",
+					"URL":     "https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/",
+					"Summary": "Official Kubernetes installation documentation.",
 				}},
 			},
 		}
