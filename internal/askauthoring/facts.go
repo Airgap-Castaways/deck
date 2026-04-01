@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 )
@@ -25,6 +26,8 @@ type Facts struct {
 	Clarifications     []askcontract.PlanClarification
 	MultiRoleRequested bool
 }
+
+var countPatternCache sync.Map
 
 func InferFacts(prompt string, artifactKinds []string, connectivity string) Facts {
 	lower := strings.ToLower(strings.TrimSpace(prompt))
@@ -212,12 +215,7 @@ func extractCountNear(lower string, labels []string) int {
 		replaced = strings.ReplaceAll(replaced, old, newValue)
 	}
 	for _, label := range labels {
-		pattern := flexibleLabelPattern(label)
-		for _, expr := range []string{
-			`(?i)(\d+)\s*(?:x\s*)?` + pattern,
-			`(?i)` + pattern + `\s*[:=x-]*\s*(\d+)`,
-		} {
-			re := regexp.MustCompile(expr)
+		for _, re := range countPatterns(label) {
 			match := re.FindStringSubmatch(replaced)
 			if len(match) < 2 {
 				continue
@@ -253,6 +251,20 @@ func flexibleLabelPattern(label string) string {
 		quoted = append(quoted, regexp.QuoteMeta(part))
 	}
 	return strings.Join(quoted, `[-\s]*`)
+}
+
+func countPatterns(label string) []*regexp.Regexp {
+	label = strings.TrimSpace(label)
+	if cached, ok := countPatternCache.Load(label); ok {
+		return cached.([]*regexp.Regexp)
+	}
+	pattern := flexibleLabelPattern(label)
+	compiled := []*regexp.Regexp{
+		regexp.MustCompile(`(?i)(\d+)\s*(?:x\s*)?` + pattern),
+		regexp.MustCompile(`(?i)` + pattern + `\s*[:=x-]*\s*(\d+)`),
+	}
+	actual, _ := countPatternCache.LoadOrStore(label, compiled)
+	return actual.([]*regexp.Regexp)
 }
 
 func buildClarifications(f Facts) []askcontract.PlanClarification {
