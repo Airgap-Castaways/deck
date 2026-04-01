@@ -62,9 +62,15 @@ func applyDocumentEdits(root string, baseContent map[string]string, path string,
 }
 
 func applyDocumentTransforms(root string, baseContent map[string]string, path string, raw []byte, parsedDoc askcontract.GeneratedDocument, transforms []askcontract.RefineTransformAction) (string, []askcontract.GeneratedFile, error) {
-	extraFiles := []askcontract.GeneratedFile{}
 	content := string(raw)
+	pending := map[string]string{}
+	orderedExtraPaths := []string{}
 	for _, transform := range transforms {
+		currentDoc, err := ParseDocument(path, []byte(content))
+		if err != nil {
+			return "", nil, err
+		}
+		parsedDoc = currentDoc
 		resolved, err := askrefine.ResolveCandidate(parsedDoc, transform)
 		if err != nil {
 			return "", nil, err
@@ -89,7 +95,7 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 				return "", nil, fmt.Errorf("apply extract-var transform to %s: %w", path, err)
 			}
 			content = normalizeRenderedContent(updatedTarget)
-			varsContent, err := loadVarsContent(root, baseContent, varsPath)
+			varsContent, err := loadVarsContent(root, baseContent, pending, varsPath)
 			if err != nil {
 				return "", nil, err
 			}
@@ -108,7 +114,10 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 			if err != nil {
 				return "", nil, err
 			}
-			extraFiles = append(extraFiles, askcontract.GeneratedFile{Path: varsPath, Content: renderedVars})
+			if _, ok := pending[varsPath]; !ok {
+				orderedExtraPaths = append(orderedExtraPaths, varsPath)
+			}
+			pending[varsPath] = renderedVars
 		case "set-field":
 			rawPathValue := strings.TrimSpace(transform.RawPath)
 			if rawPathValue == "" {
@@ -173,10 +182,17 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 				return "", nil, err
 			}
 			content = renderedWorkflow
-			extraFiles = append(extraFiles, askcontract.GeneratedFile{Path: componentPath, Content: renderedComponent})
+			if _, ok := pending[componentPath]; !ok {
+				orderedExtraPaths = append(orderedExtraPaths, componentPath)
+			}
+			pending[componentPath] = renderedComponent
 		default:
 			return "", nil, fmt.Errorf("unsupported refine transform %q for %s", transform.Type, path)
 		}
+	}
+	extraFiles := make([]askcontract.GeneratedFile, 0, len(orderedExtraPaths))
+	for _, extraPath := range orderedExtraPaths {
+		extraFiles = append(extraFiles, askcontract.GeneratedFile{Path: extraPath, Content: pending[extraPath]})
 	}
 	return content, extraFiles, nil
 }
@@ -205,7 +221,10 @@ func componentPhaseIndex(rawPath string, workflow askcontract.WorkflowDocument) 
 	return -1, fmt.Errorf("extract-component could not resolve phase %q", rawPath)
 }
 
-func loadVarsContent(root string, baseContent map[string]string, path string) (string, error) {
+func loadVarsContent(root string, baseContent map[string]string, pending map[string]string, path string) (string, error) {
+	if existing, ok := pending[path]; ok {
+		return existing, nil
+	}
 	if existing, ok := baseContent[path]; ok {
 		return existing, nil
 	}

@@ -134,6 +134,52 @@ func TestMaterializeRefineExtractVarTransform(t *testing.T) {
 	}
 }
 
+func TestMaterializeRefineExtractVarTransformsAccumulateSharedVarsFile(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	varsPath := filepath.Join(root, "workflows", "vars.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      podNetworkCIDR: 10.244.0.0/16\n      kubernetesVersion: v1.30.1\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	if err := os.WriteFile(varsPath, []byte("clusterName: demo\n"), 0o600); err != nil {
+		t.Fatalf("write vars: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/scenarios/apply.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:     "extract-var",
+			RawPath:  "steps[0].spec.podNetworkCIDR",
+			VarName:  "podCIDR",
+			VarsPath: "workflows/vars.yaml",
+			Value:    "10.244.0.0/16",
+		}, {
+			Type:     "extract-var",
+			RawPath:  "steps[0].spec.kubernetesVersion",
+			VarName:  "kubernetesVersion",
+			VarsPath: "workflows/vars.yaml",
+			Value:    "v1.30.1",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize repeated vars transforms: %v", err)
+	}
+	byPath := map[string]string{}
+	for _, file := range files {
+		byPath[file.Path] = file.Content
+	}
+	varsContent := byPath["workflows/vars.yaml"]
+	for _, want := range []string{"podCIDR: 10.244.0.0/16", "kubernetesVersion: v1.30.1", "clusterName: demo"} {
+		if !strings.Contains(varsContent, want) {
+			t.Fatalf("expected %q in vars file, got %q", want, varsContent)
+		}
+	}
+}
+
 func TestMaterializeRefineSetFieldTransform(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")

@@ -3,7 +3,6 @@ package askcli
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 )
 
@@ -33,17 +32,6 @@ func flushOutput(writer io.Writer) {
 	}
 	if syncer, ok := writer.(syncWriter); ok {
 		_ = syncer.Sync()
-		return
-	}
-	if fdWriter, ok := writer.(fileDescriptor); ok {
-		file := os.NewFile(fdWriter.Fd(), "writer")
-		if file != nil {
-			_ = file.Sync()
-			return
-		}
-	}
-	if file, ok := writer.(*os.File); ok {
-		_ = file.Sync()
 	}
 }
 

@@ -43,3 +43,31 @@ func TestTryAutoRepairMigratesInstallPackageSourcePath(t *testing.T) {
 		t.Fatalf("expected sourcePath migration repair, got %#v", repaired)
 	}
 }
+
+func TestTryAutoRepairRespectsRepairPaths(t *testing.T) {
+	files := []askcontract.GeneratedFile{
+		{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      podNetworkCIDR: 10.244.0.0/16\n"},
+		{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: download\n    kind: DownloadImage\n    spec:\n      images: [registry.k8s.io/pause:3.9]\n"},
+	}
+	diags := []askdiagnostic.Diagnostic{
+		{RepairOp: "fill-field", File: "workflows/scenarios/apply.yaml", StepID: "init", StepKind: "InitKubeadm", Path: "spec.outputJoinFile", Message: "InitKubeadm requires spec.outputJoinFile"},
+		{RepairOp: "fix-literal", File: "workflows/prepare.yaml", StepID: "download", StepKind: "DownloadImage", Path: "spec.backend.engine", Allowed: []string{"go-containerregistry"}, Message: "invalid backend"},
+	}
+	repaired, _, applied, err := TryAutoRepair(t.TempDir(), files, diags, []string{"workflows/scenarios/apply.yaml"})
+	if err != nil {
+		t.Fatalf("try auto repair scoped paths: %v", err)
+	}
+	if !applied {
+		t.Fatalf("expected scoped repair to apply")
+	}
+	byPath := map[string]string{}
+	for _, file := range repaired {
+		byPath[file.Path] = file.Content
+	}
+	if !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "outputJoinFile: /tmp/deck/join.txt") {
+		t.Fatalf("expected in-scope repair to apply, got %q", byPath["workflows/scenarios/apply.yaml"])
+	}
+	if strings.Contains(byPath["workflows/prepare.yaml"], "backend:") {
+		t.Fatalf("expected out-of-scope repair to be skipped, got %q", byPath["workflows/prepare.yaml"])
+	}
+}

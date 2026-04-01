@@ -17,7 +17,6 @@ func TryAutoRepair(root string, files []askcontract.GeneratedFile, diags []askdi
 }
 
 func TryAutoRepairWithProgram(root string, files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic, repairPaths []string, program askcontract.AuthoringProgram) ([]askcontract.GeneratedFile, []string, bool, error) {
-	_ = repairPaths
 	if len(files) == 0 || len(diags) == 0 {
 		return files, nil, false, nil
 	}
@@ -27,6 +26,9 @@ func TryAutoRepairWithProgram(root string, files []askcontract.GeneratedFile, di
 	for _, diag := range diags {
 		path := diagnosticFile(diag)
 		if path == "" {
+			continue
+		}
+		if !repairPathAllowed(path, repairPaths) {
 			continue
 		}
 		if _, replaced := replaceDocs[path]; replaced {
@@ -91,6 +93,19 @@ func TryAutoRepairWithProgram(root string, files []askcontract.GeneratedFile, di
 		return files, nil, false, err
 	}
 	return repaired, dedupeStrings(notes), true, nil
+}
+
+func repairPathAllowed(path string, repairPaths []string) bool {
+	if len(repairPaths) == 0 {
+		return true
+	}
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	for _, allowed := range repairPaths {
+		if filepath.ToSlash(strings.TrimSpace(allowed)) == path {
+			return true
+		}
+	}
+	return false
 }
 
 func diagnosticFile(diag askdiagnostic.Diagnostic) string {

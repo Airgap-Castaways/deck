@@ -2,6 +2,7 @@ package askauthoring
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -211,6 +212,20 @@ func extractCountNear(lower string, labels []string) int {
 		replaced = strings.ReplaceAll(replaced, old, newValue)
 	}
 	for _, label := range labels {
+		pattern := flexibleLabelPattern(label)
+		for _, expr := range []string{
+			`(?i)(\d+)\s*(?:x\s*)?` + pattern,
+			`(?i)` + pattern + `\s*[:=x-]*\s*(\d+)`,
+		} {
+			re := regexp.MustCompile(expr)
+			match := re.FindStringSubmatch(replaced)
+			if len(match) < 2 {
+				continue
+			}
+			if n, err := strconv.Atoi(strings.TrimSpace(match[1])); err == nil && n > 0 {
+				return n
+			}
+		}
 		idx := strings.Index(replaced, label)
 		if idx < 0 {
 			continue
@@ -226,6 +241,18 @@ func extractCountNear(lower string, labels []string) int {
 		}
 	}
 	return 0
+}
+
+func flexibleLabelPattern(label string) string {
+	parts := strings.Fields(strings.TrimSpace(label))
+	if len(parts) == 0 {
+		return regexp.QuoteMeta(strings.TrimSpace(label))
+	}
+	quoted := make([]string, 0, len(parts))
+	for _, part := range parts {
+		quoted = append(quoted, regexp.QuoteMeta(part))
+	}
+	return strings.Join(quoted, `[-\s]*`)
 }
 
 func buildClarifications(f Facts) []askcontract.PlanClarification {

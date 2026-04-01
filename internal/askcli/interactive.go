@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"os"
 	"strings"
+	"syscall"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 )
@@ -24,15 +24,12 @@ func isInteractiveSession(stdin io.Reader, stdout io.Writer) bool {
 }
 
 func isCharDevice(fd uintptr, name string) bool {
-	file := os.NewFile(fd, name)
-	if file == nil {
+	_ = name
+	var stat syscall.Stat_t
+	if err := syscall.Fstat(int(fd), &stat); err != nil {
 		return false
 	}
-	info, err := file.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice != 0
+	return stat.Mode&syscall.S_IFMT == syscall.S_IFCHR
 }
 
 func runInteractiveClarifications(stdin io.Reader, stdout io.Writer, plan askcontract.PlanResponse) (askcontract.PlanResponse, bool, error) {

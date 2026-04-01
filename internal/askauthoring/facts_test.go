@@ -33,3 +33,19 @@ func TestInferFactsTreatsCheckClusterPromptAsVerificationOnly(t *testing.T) {
 		t.Fatalf("expected verification-only prompt not to require cluster implementation clarification, got %#v", facts)
 	}
 }
+
+func TestInferFactsDetectsRoleCountsBeforeAndAfterLabels(t *testing.T) {
+	for _, tc := range []struct {
+		prompt   string
+		wantCP   int
+		wantWork int
+	}{
+		{prompt: "create a kubeadm workflow with 1 control-plane and 2 workers", wantCP: 1, wantWork: 2},
+		{prompt: "create a kubeadm workflow with control-plane 1 and workers 2", wantCP: 1, wantWork: 2},
+	} {
+		facts := InferFacts(tc.prompt, nil, "offline")
+		if facts.ControlPlaneCount != tc.wantCP || facts.WorkerCount != tc.wantWork {
+			t.Fatalf("prompt %q expected cp=%d workers=%d, got %#v", tc.prompt, tc.wantCP, tc.wantWork, facts)
+		}
+	}
+}
