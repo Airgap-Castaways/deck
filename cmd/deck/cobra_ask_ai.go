@@ -247,23 +247,14 @@ func newAskConfigShowCommand() *cobra.Command {
 				return err
 			}
 			for idx, provider := range providers {
-				prefix := fmt.Sprintf("mcpProvider[%d]", idx)
-				if err := stdoutPrintf("%s.name=%s\n", prefix, provider.ConfiguredName); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.id=%s\n", prefix, provider.ProviderID); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.transport=%s\n", prefix, provider.Transport); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.transportSource=%s\n", prefix, provider.TransportSource); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.capabilities=%s\n", prefix, strings.Join(provider.Capabilities, ",")); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.warning=%s\n", prefix, provider.Warning); err != nil {
+				if err := printKeyValues(fmt.Sprintf("mcpProvider[%d]", idx), map[string]string{
+					"name":            provider.ConfiguredName,
+					"id":              provider.ProviderID,
+					"transport":       provider.Transport,
+					"transportSource": provider.TransportSource,
+					"capabilities":    strings.Join(provider.Capabilities, ","),
+					"warning":         provider.Warning,
+				}); err != nil {
 					return err
 				}
 			}
@@ -306,35 +297,18 @@ func newAskConfigHealthCommand() *cobra.Command {
 				return err
 			}
 			for idx, provider := range health {
-				prefix := fmt.Sprintf("mcpProvider[%d]", idx)
-				if err := stdoutPrintf("%s.name=%s\n", prefix, provider.ConfiguredName); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.id=%s\n", prefix, provider.ProviderID); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.transport=%s\n", prefix, provider.Transport); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.transportSource=%s\n", prefix, provider.TransportSource); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.status=%s\n", prefix, provider.Status); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.phase=%s\n", prefix, provider.Phase); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.tools=%s\n", prefix, strings.Join(provider.Tools, ",")); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.capabilities=%s\n", prefix, strings.Join(provider.Capabilities, ",")); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.missingCapabilities=%s\n", prefix, strings.Join(provider.MissingCapabilities, ",")); err != nil {
-					return err
-				}
-				if err := stdoutPrintf("%s.message=%s\n", prefix, provider.Message); err != nil {
+				if err := printKeyValues(fmt.Sprintf("mcpProvider[%d]", idx), map[string]string{
+					"name":                provider.ConfiguredName,
+					"id":                  provider.ProviderID,
+					"transport":           provider.Transport,
+					"transportSource":     provider.TransportSource,
+					"status":              provider.Status,
+					"phase":               provider.Phase,
+					"tools":               strings.Join(provider.Tools, ","),
+					"capabilities":        strings.Join(provider.Capabilities, ","),
+					"missingCapabilities": strings.Join(provider.MissingCapabilities, ","),
+					"message":             provider.Message,
+				}); err != nil {
 					return err
 				}
 			}
@@ -342,6 +316,20 @@ func newAskConfigHealthCommand() *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+func printKeyValues(prefix string, fields map[string]string) error {
+	orderedKeys := []string{"name", "id", "transport", "transportSource", "status", "phase", "tools", "capabilities", "missingCapabilities", "message", "warning"}
+	for _, key := range orderedKeys {
+		value, ok := fields[key]
+		if !ok || value == "" {
+			continue
+		}
+		if err := stdoutPrintf("%s.%s=%s\n", prefix, key, value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func newAskConfigUnsetCommand() *cobra.Command {

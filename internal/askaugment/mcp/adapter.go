@@ -233,7 +233,7 @@ func setToolArg(tool mcp.Tool, args map[string]any, keys []string, value any) {
 	if args == nil {
 		return
 	}
-	properties := map[string]any(tool.InputSchema.Properties)
+	properties := tool.InputSchema.Properties
 	for _, key := range keys {
 		if _, ok := properties[key]; ok {
 			args[key] = value

@@ -51,6 +51,10 @@ func ServeBuiltInWebSearchMCP() error {
 }
 
 func runBuiltInWebSearch(ctx context.Context, query string, limit int) ([]builtInSearchResult, error) {
+	// DuckDuckGo's HTML endpoint is a pragmatic fallback because we do not have a
+	// stable structured search API in this built-in provider path. Parsing these
+	// result pages is inherently brittle, so keep the extraction logic simple and
+	// treat any future layout change as a signal to revisit the transport.
 	requestURL := "https://html.duckduckgo.com/html/?q=" + url.QueryEscape(strings.TrimSpace(query))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
