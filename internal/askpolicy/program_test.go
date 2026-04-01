@@ -18,3 +18,22 @@ func TestNormalizeAuthoringProgramBuildsDefaultsFromBriefAndExecution(t *testing
 		t.Fatalf("expected normalized verification defaults, got %#v", program.Verification)
 	}
 }
+
+func TestNormalizeAuthoringProgramUsesPreinstalledDefaultsForMinimalSingleNodeBootstrap(t *testing.T) {
+	program := normalizeAuthoringProgram(askcontract.AuthoringProgram{Platform: askcontract.ProgramPlatform{Family: "rhel", Release: "kubernetes-1.35.1", RepoType: "pre-staged-offline"}, Cluster: askcontract.ProgramCluster{RoleSelector: "single-node"}, Verification: askcontract.ProgramVerification{ExpectedReadyCount: 1}}, askcontract.AuthoringBrief{Topology: "single-node", ModeIntent: "apply-only", NodeCount: 1, RequiredCapabilities: []string{"kubeadm-bootstrap", "cluster-verification"}}, askcontract.ExecutionModel{RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role"}, Verification: askcontract.VerificationStrategy{ExpectedNodeCount: 1, ExpectedControlPlaneReady: 1, FinalVerificationRole: "control-plane"}}, "Create a minimal single-node apply-only offline kubeadm workflow for Kubernetes 1.35.1 using only init-kubeadm and check-cluster builders")
+	if program.Platform.Family != "custom" || program.Platform.RepoType != "none" || program.Platform.BackendImage != "none" {
+		t.Fatalf("expected minimal preinstalled platform defaults, got %#v", program.Platform)
+	}
+	if program.Platform.Release != "unspecified" {
+		t.Fatalf("expected unspecified release for minimal apply-only flow, got %#v", program.Platform)
+	}
+	if program.Artifacts.PackageOutputDir != "" || program.Artifacts.ImageOutputDir != "" {
+		t.Fatalf("expected no artifact output dirs for minimal apply-only flow, got %#v", program.Artifacts)
+	}
+	if program.Verification.ExpectedReadyCount != 0 {
+		t.Fatalf("expected ready count 0 for no-CNI minimal flow, got %#v", program.Verification)
+	}
+	if program.Cluster.RoleSelector != "" {
+		t.Fatalf("expected no role selector for single-node flow, got %#v", program.Cluster)
+	}
+}

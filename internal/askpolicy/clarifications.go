@@ -226,7 +226,10 @@ func needsRuntimePlatformClarification(prompt string, req ScenarioRequirements) 
 	if containsPlatformToken(lower) {
 		return false
 	}
-	if containsString(req.ArtifactKinds, "package") || strings.Contains(lower, "package") || strings.Contains(lower, "repo") || strings.Contains(lower, "repository") || strings.Contains(lower, "kubeadm") || strings.Contains(lower, "containerd") || strings.Contains(lower, "docker") {
+	if inferModeIntent(req) == "apply-only" && !req.NeedsPrepare && !containsString(req.ArtifactKinds, "package") {
+		return false
+	}
+	if containsString(req.ArtifactKinds, "package") || strings.Contains(lower, "package") || strings.Contains(lower, "repo") || strings.Contains(lower, "repository") {
 		return true
 	}
 	return false
