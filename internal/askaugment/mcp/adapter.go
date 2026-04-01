@@ -437,11 +437,8 @@ func webSearchStructuredCandidates(toolName string, result *mcp.CallToolResult) 
 	if !ok {
 		return nil
 	}
-	for _, key := range webSearchCandidateKeys(toolName) {
-		items, ok := structured[key].([]any)
-		if ok && len(items) > 0 {
-			return items
-		}
+	if items, ok := caseInsensitiveSliceValue(structured, webSearchCandidateKeys(toolName)); ok && len(items) > 0 {
+		return items
 	}
 	return nil
 }
@@ -454,10 +451,8 @@ func webSearchStructuredFallback(toolName string, result *mcp.CallToolResult) an
 	if !ok {
 		return result.StructuredContent
 	}
-	for _, key := range webSearchSingleObjectKeys(toolName) {
-		if nested, ok := structured[key]; ok {
-			return nested
-		}
+	if nested, ok := caseInsensitiveValue(structured, webSearchSingleObjectKeys(toolName)); ok {
+		return nested
 	}
 	return structured
 }
@@ -490,28 +485,21 @@ func context7StructuredValue(toolName string, result *mcp.CallToolResult) any {
 	}
 	switch strings.ToLower(strings.TrimSpace(toolName)) {
 	case "resolve-library-id":
-		if exactString(structured, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}) != "" {
+		if hasCaseInsensitiveKey(structured, []string{"context7CompatibleLibraryID", "libraryID", "libraryId", "id"}) {
 			return structured
 		}
-		for _, key := range []string{"library", "match", "resolved"} {
-			if nested, ok := structured[key]; ok {
-				return nested
-			}
+		if nested, ok := caseInsensitiveValue(structured, []string{"library", "match", "resolved"}); ok {
+			return nested
 		}
-		for _, key := range []string{"matches", "libraries", "candidates"} {
-			items, ok := structured[key].([]any)
-			if ok && len(items) > 0 {
-				return items[0]
-			}
+		if items, ok := caseInsensitiveSliceValue(structured, []string{"matches", "libraries", "candidates"}); ok && len(items) > 0 {
+			return items[0]
 		}
 	case "get-library-docs", "query-docs":
-		if exactString(structured, []string{"url", "uri", "href", "link", "source", "title", "name", "libraryName", "excerpt", "snippet", "summary", "description", "text", "content"}) != "" {
+		if hasCaseInsensitiveKey(structured, []string{"url", "uri", "href", "link", "source", "title", "name", "libraryName", "excerpt", "snippet", "summary", "description", "text", "content"}) {
 			return structured
 		}
-		for _, key := range []string{"document", "doc", "page"} {
-			if nested, ok := structured[key]; ok {
-				return nested
-			}
+		if nested, ok := caseInsensitiveValue(structured, []string{"document", "doc", "page"}); ok {
+			return nested
 		}
 	}
 	return structured
@@ -724,7 +712,7 @@ func exactString(value any, keys []string) string {
 	for _, key := range keys {
 		target := strings.TrimSpace(key)
 		for candidate, raw := range mapped {
-			if strings.EqualFold(strings.TrimSpace(candidate), target) {
+			if strings.EqualFold(candidate, target) {
 				text, ok := raw.(string)
 				if ok {
 					return strings.TrimSpace(text)
@@ -733,6 +721,48 @@ func exactString(value any, keys []string) string {
 		}
 	}
 	return ""
+}
+
+func hasCaseInsensitiveKey(mapped map[string]any, keys []string) bool {
+	if len(keys) == 0 {
+		return false
+	}
+	for _, key := range keys {
+		target := strings.TrimSpace(key)
+		for candidate := range mapped {
+			if strings.EqualFold(candidate, target) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func caseInsensitiveValue(mapped map[string]any, keys []string) (any, bool) {
+	if len(keys) == 0 {
+		return nil, false
+	}
+	for _, key := range keys {
+		target := strings.TrimSpace(key)
+		for candidate, raw := range mapped {
+			if strings.EqualFold(candidate, target) {
+				return raw, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func caseInsensitiveSliceValue(mapped map[string]any, keys []string) ([]any, bool) {
+	raw, ok := caseInsensitiveValue(mapped, keys)
+	if !ok {
+		return nil, false
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return nil, false
+	}
+	return items, true
 }
 
 func firstNonEmptyLine(text string) string {
