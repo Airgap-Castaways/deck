@@ -731,6 +731,17 @@ func caseInsensitiveStringIndex(value any) map[string]string {
 	return indexed
 }
 
+func caseInsensitiveValueIndex(mapped map[string]any) map[string]any {
+	if len(mapped) == 0 {
+		return nil
+	}
+	indexed := make(map[string]any, len(mapped))
+	for candidate, raw := range mapped {
+		indexed[strings.ToLower(strings.TrimSpace(candidate))] = raw
+	}
+	return indexed
+}
+
 func indexedString(index map[string]string, keys []string) string {
 	if len(index) == 0 || len(keys) == 0 {
 		return ""
@@ -744,15 +755,13 @@ func indexedString(index map[string]string, keys []string) string {
 }
 
 func caseInsensitiveValue(mapped map[string]any, keys []string) (any, bool) {
-	if len(keys) == 0 {
+	if len(keys) == 0 || len(mapped) == 0 {
 		return nil, false
 	}
+	index := caseInsensitiveValueIndex(mapped)
 	for _, key := range keys {
-		target := strings.TrimSpace(key)
-		for candidate, raw := range mapped {
-			if strings.EqualFold(strings.TrimSpace(candidate), target) {
-				return raw, true
-			}
+		if raw, ok := index[strings.ToLower(strings.TrimSpace(key))]; ok {
+			return raw, true
 		}
 	}
 	return nil, false
