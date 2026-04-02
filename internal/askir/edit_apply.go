@@ -69,7 +69,6 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 	content := string(raw)
 	pending := map[string]string{}
 	orderedExtraPaths := []string{}
-	appliedExtractVars := []askcontract.RefineTransformAction{}
 	for _, transform := range transforms {
 		currentDoc, err := ParseDocument(path, []byte(content))
 		if err != nil {
@@ -130,7 +129,6 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 				orderedExtraPaths = append(orderedExtraPaths, varsPath)
 			}
 			pending[varsPath] = renderedVars
-			appliedExtractVars = append(appliedExtractVars, askcontract.RefineTransformAction{RawPath: strings.TrimSpace(transform.RawPath), VarName: varName})
 		case "set-field":
 			rawPathValue := strings.TrimSpace(transform.RawPath)
 			if rawPathValue == "" {
@@ -201,27 +199,6 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 			pending[componentPath] = renderedComponent
 		default:
 			return "", nil, fmt.Errorf("unsupported refine transform %q for %s", transform.Type, path)
-		}
-	}
-	if len(appliedExtractVars) > 0 {
-		currentDoc, err := ParseDocument(path, []byte(content))
-		if err != nil {
-			return "", nil, err
-		}
-		finalEdits := make([]stepspec.StructuredEdit, 0, len(appliedExtractVars))
-		for _, item := range appliedExtractVars {
-			rawPath := resolveStructuredEditPath(strings.TrimSpace(item.RawPath), currentDoc)
-			if rawPath == "" || strings.TrimSpace(item.VarName) == "" {
-				continue
-			}
-			finalEdits = append(finalEdits, stepspec.StructuredEdit{Op: "set", RawPath: rawPath, Value: fmt.Sprintf("{{ .vars.%s }}", strings.TrimSpace(item.VarName))})
-		}
-		if len(finalEdits) > 0 {
-			updatedTarget, err := applyStructuredEdits([]byte(content), finalEdits)
-			if err != nil {
-				return "", nil, fmt.Errorf("reapply extract-var transforms to %s: %w", path, err)
-			}
-			content = normalizeRenderedContent(updatedTarget)
 		}
 	}
 	content, err := normalizeEmptyWorkflowVars(content, path)

@@ -11,7 +11,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
-var varsTemplateRefRE = regexp.MustCompile(`\{\{\s*\.vars\.([a-zA-Z0-9_.-]+)\s*\}\}`)
+var varsTemplateRefRE = regexp.MustCompile(`\$?\{\{\s*\.?vars\.([a-zA-Z0-9_.-]+)\s*\}\}`)
 
 func Materialize(root string, gen askcontract.GenerationResponse) ([]askcontract.GeneratedFile, error) {
 	return MaterializeWithBase(root, nil, gen)
@@ -33,7 +33,7 @@ func MaterializeWithBase(root string, base []askcontract.GeneratedFile, gen askc
 	if len(gen.Documents) == 0 {
 		return nil, nil
 	}
-	gen.Documents = pruneUnusedVarsDocumentTransforms(gen.Documents)
+	gen.Documents = pruneUnusedVarsDocumentTransforms(gen.Documents, base)
 	baseContent := renderedFileContentMap(base)
 	materialized := append([]askcontract.GeneratedFile(nil), base...)
 	index := map[string]int{}
@@ -58,8 +58,8 @@ func MaterializeWithBase(root string, base []askcontract.GeneratedFile, gen askc
 	return materialized, nil
 }
 
-func pruneUnusedVarsDocumentTransforms(documents []askcontract.GeneratedDocument) []askcontract.GeneratedDocument {
-	used := referencedVarNames(documents)
+func pruneUnusedVarsDocumentTransforms(documents []askcontract.GeneratedDocument, base []askcontract.GeneratedFile) []askcontract.GeneratedDocument {
+	used := referencedVarNames(documents, base)
 	if len(used) == 0 {
 		return documents
 	}
@@ -97,8 +97,16 @@ func pruneUnusedVarsDocumentTransforms(documents []askcontract.GeneratedDocument
 	return filteredDocs
 }
 
-func referencedVarNames(documents []askcontract.GeneratedDocument) map[string]bool {
+func referencedVarNames(documents []askcontract.GeneratedDocument, base []askcontract.GeneratedFile) map[string]bool {
 	used := map[string]bool{}
+	for _, file := range base {
+		if file.Delete {
+			continue
+		}
+		for _, match := range varTemplateMatches(file.Content) {
+			used[match] = true
+		}
+	}
 	for _, doc := range documents {
 		for _, transform := range doc.Transforms {
 			if strings.TrimSpace(transform.Type) == "extract-var" && strings.TrimSpace(transform.VarName) != "" {

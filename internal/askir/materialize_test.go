@@ -565,6 +565,49 @@ func TestMaterializeWithBasePreservesUntouchedFiles(t *testing.T) {
 	}
 }
 
+func TestMaterializeWithBaseKeepsVarsUsedByUntouchedBaseFiles(t *testing.T) {
+	base := []askcontract.GeneratedFile{{
+		Path:    "workflows/scenarios/apply.yaml",
+		Content: "version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      kubernetesVersion: '{{ .vars.kubernetesVersion }}'\n",
+	}}
+	files, err := MaterializeWithBase(t.TempDir(), base, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/vars.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:    "set-field",
+			RawPath: "kubernetesVersion",
+			Value:   "1.35.1",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize with base var reference: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected untouched base file plus vars update, got %#v", files)
+	}
+	byPath := map[string]string{}
+	for _, file := range files {
+		byPath[file.Path] = file.Content
+	}
+	if !strings.Contains(byPath["workflows/vars.yaml"], "kubernetesVersion: 1.35.1") {
+		t.Fatalf("expected vars update to be preserved for untouched base reference, got %#v", files)
+	}
+	if byPath["workflows/scenarios/apply.yaml"] != base[0].Content {
+		t.Fatalf("expected untouched base file to remain unchanged, got %#v", files)
+	}
+}
+
+func TestVarTemplateMatchesAcceptAliasForms(t *testing.T) {
+	text := "{{ vars.kubernetesVersion }} ${{ vars.joinFile }} {{ .vars.criSocket }}"
+	matches := varTemplateMatches(text)
+	joined := strings.Join(matches, ",")
+	for _, want := range []string{"kubernetesVersion", "joinFile", "criSocket"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected %q in alias matches, got %q", want, joined)
+		}
+	}
+}
+
 func TestParseDocumentWorkflow(t *testing.T) {
 	doc, err := ParseDocument("workflows/scenarios/apply.yaml", []byte("version: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [true]\n"))
 	if err != nil {
