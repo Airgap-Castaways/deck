@@ -76,8 +76,80 @@ func TestRunStagesReleaseRuntimeBinariesWithDefaultTargets(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("prepare run failed: %v", err)
 	}
-	if len(got) != 2 || got[0] != "v1.2.3:linux/amd64" || got[1] != "v1.2.3:linux/arm64" {
-		t.Fatalf("unexpected fetched targets: %#v", got)
+	want := []string{"v1.2.3:linux/amd64", "v1.2.3:linux/arm64", "v1.2.3:darwin/amd64", "v1.2.3:darwin/arm64"}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected fetched target count: got %#v want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unexpected fetched targets: got %#v want %#v", got, want)
+		}
+	}
+	for _, rel := range []string{
+		filepath.Join("outputs", "bin", "linux", "amd64", "deck"),
+		filepath.Join("outputs", "bin", "linux", "arm64", "deck"),
+		filepath.Join("outputs", "bin", "darwin", "amd64", "deck"),
+		filepath.Join("outputs", "bin", "darwin", "arm64", "deck"),
+	} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+			t.Fatalf("expected runtime binary %s: %v", rel, err)
+		}
+	}
+}
+
+func TestRunStagesLocalRuntimeBinariesWithDefaultTargetsFromDirectory(t *testing.T) {
+	root := prepareWorkspaceForRuntimeTests(t)
+	binDir := t.TempDir()
+	for name, body := range map[string]string{
+		"deck-linux-amd64":  "linux-amd64",
+		"deck-linux-arm64":  "linux-arm64",
+		"deck-darwin-amd64": "darwin-amd64",
+		"deck-darwin-arm64": "darwin-arm64",
+	} {
+		if err := os.WriteFile(filepath.Join(binDir, name), []byte(body), 0o755); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	if err := Run(context.Background(), Options{
+		PreparedRoot: filepath.Join(root, "outputs"),
+		BinarySource: binarySourceLocal,
+		BinaryDir:    binDir,
+	}); err != nil {
+		t.Fatalf("prepare run failed: %v", err)
+	}
+
+	for rel, want := range map[string]string{
+		filepath.Join("outputs", "bin", "linux", "amd64", "deck"):  "linux-amd64",
+		filepath.Join("outputs", "bin", "linux", "arm64", "deck"):  "linux-arm64",
+		filepath.Join("outputs", "bin", "darwin", "amd64", "deck"): "darwin-amd64",
+		filepath.Join("outputs", "bin", "darwin", "arm64", "deck"): "darwin-arm64",
+	} {
+		raw, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		if string(raw) != want {
+			t.Fatalf("unexpected %s content: %q", rel, string(raw))
+		}
+	}
+}
+
+func TestRunLocalSourceWithoutDirRejectsImplicitAllTargets(t *testing.T) {
+	root := prepareWorkspaceForRuntimeTests(t)
+	err := Run(context.Background(), Options{
+		PreparedRoot: filepath.Join(root, "outputs"),
+		BinarySource: binarySourceLocal,
+		runtimeBinaryDeps: runtimeBinaryDeps{
+			currentGOOS:   func() string { return "darwin" },
+			currentGOARCH: func() string { return "arm64" },
+			readFile:      os.ReadFile,
+			osExecutable:  os.Executable,
+			fetchRelease:  fetchReleaseRuntimeBinary,
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "default runtime bundle includes all supported platforms") {
+		t.Fatalf("expected implicit all-targets error, got %v", err)
 	}
 }
 
@@ -97,6 +169,33 @@ func TestRunLocalSourceWithoutDirRejectsForeignTarget(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "only supports the current host target darwin/arm64") {
 		t.Fatalf("expected foreign target error, got %v", err)
+	}
+}
+
+func TestResolveBinaryTargetsAppliesExcludes(t *testing.T) {
+	targets, err := resolveBinaryTargets(Options{BinaryExcludes: []string{"darwin/amd64", "darwin/arm64"}}, binarySourceRelease, defaultRuntimeBinaryDeps())
+	if err != nil {
+		t.Fatalf("resolve binary targets: %v", err)
+	}
+	got := make([]string, 0, len(targets))
+	for _, target := range targets {
+		got = append(got, target.OS+"/"+target.Arch)
+	}
+	want := []string{"linux/amd64", "linux/arm64"}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected targets: got %#v want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unexpected targets: got %#v want %#v", got, want)
+		}
+	}
+}
+
+func TestResolveBinaryTargetsRejectsEmptyAfterExclude(t *testing.T) {
+	_, err := resolveBinaryTargets(Options{Binaries: []string{"linux/amd64"}, BinaryExcludes: []string{"linux/amd64"}}, binarySourceRelease, defaultRuntimeBinaryDeps())
+	if err == nil || !strings.Contains(err.Error(), "no runtime binaries selected") {
+		t.Fatalf("expected empty-target error, got %v", err)
 	}
 }
 

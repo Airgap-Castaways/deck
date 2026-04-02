@@ -136,6 +136,7 @@ deck lint --file ./demo/workflows/prepare.yaml
 cd ./demo
 deck prepare
 deck prepare --bundle-binary-source local --bundle-binary-dir ../test/artifacts/bin --bundle-binary linux/amd64 --bundle-binary linux/arm64
+deck prepare --bundle-binary-source release --bundle-binary-exclude darwin/amd64 --bundle-binary-exclude darwin/arm64
 deck prepare --bundle-binary-source release --bundle-binary-version v0.1.0 --bundle-binary linux/amd64
 deck bundle build --out ./bundle.tar
 deck plan --scenario apply --source local
@@ -146,8 +147,11 @@ deck apply --scenario apply --source local
 Prepare runtime binary notes:
 
 - `prepare` always writes a root `./deck` launcher and stores real runtime binaries under `outputs/bin/<os>/<arch>/deck`
-- `--bundle-binary` is repeatable and selects which runtime tuples land in the bundle
+- by default `prepare` includes every supported runtime tuple in the bundle
+- `--bundle-binary` is repeatable and overrides the default set with an explicit include list
+- `--bundle-binary-exclude` is repeatable and removes runtime tuples from the default or explicit include set
 - `--bundle-binary-source=local` reads from the current executable or from `--bundle-binary-dir`
+- `--bundle-binary-source=local` without `--bundle-binary-dir` cannot satisfy the default all-platform set, so use `--bundle-binary-dir`, `--bundle-binary-source=release`, or an explicit `--bundle-binary` list
 - `--bundle-binary-source=release` downloads matching GitHub Release archives and extracts `deck`
 - `auto` defaults to `release` for tagged builds and `local` for `dev` builds
 

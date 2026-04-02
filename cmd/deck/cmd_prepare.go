@@ -8,20 +8,22 @@ import (
 )
 
 type prepareOptions struct {
-	preparedRoot string
-	dryRun       bool
-	refresh      bool
-	clean        bool
-	binarySource string
-	binaryDir    string
-	binaryVer    string
-	binaries     []string
-	varOverrides map[string]string
+	preparedRoot   string
+	dryRun         bool
+	refresh        bool
+	clean          bool
+	binarySource   string
+	binaryDir      string
+	binaryVer      string
+	binaries       []string
+	binaryExcludes []string
+	varOverrides   map[string]string
 }
 
 func newPrepareCommand() *cobra.Command {
 	vars := &varFlag{}
 	binaries := &stringSliceFlag{}
+	excludes := &stringSliceFlag{}
 	cmd := &cobra.Command{
 		Use:   "prepare",
 		Short: "Prepare bundle contents under outputs/",
@@ -56,15 +58,16 @@ func newPrepareCommand() *cobra.Command {
 				return err
 			}
 			return runPrepareWithOptions(cmd, prepareOptions{
-				preparedRoot: preparedRoot,
-				dryRun:       dryRun,
-				refresh:      refresh,
-				clean:        clean,
-				binarySource: binarySource,
-				binaryDir:    binaryDir,
-				binaryVer:    binaryVer,
-				binaries:     binaries.Values(),
-				varOverrides: vars.AsMap(),
+				preparedRoot:   preparedRoot,
+				dryRun:         dryRun,
+				refresh:        refresh,
+				clean:          clean,
+				binarySource:   binarySource,
+				binaryDir:      binaryDir,
+				binaryVer:      binaryVer,
+				binaries:       binaries.Values(),
+				binaryExcludes: excludes.Values(),
+				varOverrides:   vars.AsMap(),
 			})
 		},
 	}
@@ -76,6 +79,7 @@ func newPrepareCommand() *cobra.Command {
 	cmd.Flags().String("bundle-binary-dir", "", "directory containing local runtime binaries for --bundle-binary-source=local")
 	cmd.Flags().String("bundle-binary-version", "", "release version override for --bundle-binary-source=release")
 	cmd.Flags().Var(binaries, "bundle-binary", "runtime binary target tuple (os/arch), repeatable")
+	cmd.Flags().Var(excludes, "bundle-binary-exclude", "runtime binary target tuple (os/arch) to exclude, repeatable")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	return cmd
 }
@@ -85,17 +89,18 @@ func runPrepareWithOptions(cmd *cobra.Command, opts prepareOptions) error {
 		return err
 	}
 	return preparecli.Run(cmd.Context(), preparecli.Options{
-		PreparedRoot: opts.preparedRoot,
-		DryRun:       opts.dryRun,
-		Refresh:      opts.refresh,
-		Clean:        opts.clean,
-		BinarySource: opts.binarySource,
-		BinaryDir:    opts.binaryDir,
-		BinaryVer:    opts.binaryVer,
-		Binaries:     opts.binaries,
-		VarOverrides: varsAsAnyMap(opts.varOverrides),
-		Stdout:       stdoutWriter(),
-		Diagnosticf:  verbosef,
-		EventSink:    verbosePrepareStepSink(),
+		PreparedRoot:   opts.preparedRoot,
+		DryRun:         opts.dryRun,
+		Refresh:        opts.refresh,
+		Clean:          opts.clean,
+		BinarySource:   opts.binarySource,
+		BinaryDir:      opts.binaryDir,
+		BinaryVer:      opts.binaryVer,
+		Binaries:       opts.binaries,
+		BinaryExcludes: opts.binaryExcludes,
+		VarOverrides:   varsAsAnyMap(opts.varOverrides),
+		Stdout:         stdoutWriter(),
+		Diagnosticf:    verbosef,
+		EventSink:      verbosePrepareStepSink(),
 	})
 }

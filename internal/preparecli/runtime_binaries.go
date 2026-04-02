@@ -32,6 +32,13 @@ type runtimeBinaryTarget struct {
 	Arch string
 }
 
+var supportedRuntimeBinaryTargets = []runtimeBinaryTarget{
+	{OS: "linux", Arch: "amd64"},
+	{OS: "linux", Arch: "arm64"},
+	{OS: "darwin", Arch: "amd64"},
+	{OS: "darwin", Arch: "arm64"},
+}
+
 type runtimeBinaryDeps struct {
 	currentGOOS   func() string
 	currentGOARCH func() string
@@ -121,27 +128,60 @@ func resolveBinarySource(opts Options, deps runtimeBinaryDeps) (string, error) {
 }
 
 func resolveBinaryTargets(opts Options, source string, deps runtimeBinaryDeps) ([]runtimeBinaryTarget, error) {
-	if len(opts.Binaries) > 0 {
-		seen := map[string]bool{}
-		targets := make([]runtimeBinaryTarget, 0, len(opts.Binaries))
-		for _, raw := range opts.Binaries {
-			target, err := parseRuntimeBinaryTarget(raw)
-			if err != nil {
-				return nil, err
-			}
-			key := target.OS + "/" + target.Arch
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			targets = append(targets, target)
+	baseTargets := opts.Binaries
+	if len(baseTargets) == 0 {
+		if source == binarySourceLocal && strings.TrimSpace(opts.BinaryDir) == "" {
+			return nil, fmt.Errorf("default runtime bundle includes all supported platforms, but --bundle-binary-source=local without --bundle-binary-dir only provides the current host binary; set --bundle-binary-dir, switch to --bundle-binary-source=release, or narrow targets with --bundle-binary")
 		}
+		baseTargets = make([]string, 0, len(supportedRuntimeBinaryTargets))
+		for _, target := range supportedRuntimeBinaryTargets {
+			baseTargets = append(baseTargets, target.OS+"/"+target.Arch)
+		}
+	}
+	targets, err := parseRuntimeBinaryTargets(baseTargets)
+	if err != nil {
+		return nil, err
+	}
+	excludes, err := parseRuntimeBinaryTargets(opts.BinaryExcludes)
+	if err != nil {
+		return nil, fmt.Errorf("parse --bundle-binary-exclude: %w", err)
+	}
+	if len(excludes) == 0 {
 		return targets, nil
 	}
-	if source == binarySourceRelease {
-		return []runtimeBinaryTarget{{OS: "linux", Arch: "amd64"}, {OS: "linux", Arch: "arm64"}}, nil
+	excluded := make(map[string]bool, len(excludes))
+	for _, target := range excludes {
+		excluded[target.OS+"/"+target.Arch] = true
 	}
-	return []runtimeBinaryTarget{{OS: deps.currentGOOS(), Arch: deps.currentGOARCH()}}, nil
+	filtered := make([]runtimeBinaryTarget, 0, len(targets))
+	for _, target := range targets {
+		if excluded[target.OS+"/"+target.Arch] {
+			continue
+		}
+		filtered = append(filtered, target)
+	}
+	if len(filtered) == 0 {
+		return nil, fmt.Errorf("no runtime binaries selected after applying --bundle-binary-exclude")
+	}
+	return filtered, nil
+}
+
+func parseRuntimeBinaryTargets(rawTargets []string) ([]runtimeBinaryTarget, error) {
+	seen := map[string]bool{}
+	targets := make([]runtimeBinaryTarget, 0, len(rawTargets))
+	for _, raw := range rawTargets {
+		target, err := parseRuntimeBinaryTarget(raw)
+		if err != nil {
+			return nil, err
+		}
+		key := target.OS + "/" + target.Arch
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		targets = append(targets, target)
+	}
+	return targets, nil
 }
 
 func parseRuntimeBinaryTarget(raw string) (runtimeBinaryTarget, error) {
