@@ -44,6 +44,7 @@ type runtimeBinaryDeps struct {
 	currentGOARCH func() string
 	readFile      func(string) ([]byte, error)
 	osExecutable  func() (string, error)
+	latestRelease func(ctx context.Context) (string, error)
 	fetchRelease  func(ctx context.Context, version string, target runtimeBinaryTarget) ([]byte, error)
 }
 
@@ -53,6 +54,7 @@ func defaultRuntimeBinaryDeps() runtimeBinaryDeps {
 		currentGOARCH: func() string { return runtime.GOARCH },
 		readFile:      fsutil.ReadFile,
 		osExecutable:  os.Executable,
+		latestRelease: fetchLatestReleaseVersion,
 		fetchRelease:  fetchReleaseRuntimeBinary,
 	}
 }
@@ -62,10 +64,14 @@ func stageRuntimeBinariesWithContext(ctx context.Context, preparedRootAbs string
 		return fmt.Errorf("context is nil")
 	}
 	deps := opts.runtimeBinaryDeps
-	if deps.currentGOOS == nil || deps.currentGOARCH == nil || deps.readFile == nil || deps.osExecutable == nil || deps.fetchRelease == nil {
+	if deps.currentGOOS == nil || deps.currentGOARCH == nil || deps.readFile == nil || deps.osExecutable == nil || deps.latestRelease == nil || deps.fetchRelease == nil {
 		deps = defaultRuntimeBinaryDeps()
 	}
 	source, err := resolveBinarySource(opts, deps)
+	if err != nil {
+		return err
+	}
+	releaseVersion, err := resolveRuntimeBinaryReleaseVersion(ctx, opts, deps, source)
 	if err != nil {
 		return err
 	}
@@ -74,7 +80,7 @@ func stageRuntimeBinariesWithContext(ctx context.Context, preparedRootAbs string
 		return err
 	}
 	for _, target := range targets {
-		raw, err := loadRuntimeBinary(ctx, opts, deps, source, target)
+		raw, err := loadRuntimeBinary(ctx, opts, deps, source, releaseVersion, target)
 		if err != nil {
 			return err
 		}
@@ -91,7 +97,7 @@ func stageRuntimeBinariesWithContext(ctx context.Context, preparedRootAbs string
 
 func dryRunRuntimeBinaryWrites(preparedRootAbs string, opts Options) ([]string, error) {
 	deps := opts.runtimeBinaryDeps
-	if deps.currentGOOS == nil || deps.currentGOARCH == nil || deps.readFile == nil || deps.osExecutable == nil || deps.fetchRelease == nil {
+	if deps.currentGOOS == nil || deps.currentGOARCH == nil || deps.readFile == nil || deps.osExecutable == nil || deps.latestRelease == nil || deps.fetchRelease == nil {
 		deps = defaultRuntimeBinaryDeps()
 	}
 	source, err := resolveBinarySource(opts, deps)
@@ -117,7 +123,10 @@ func resolveBinarySource(opts Options, deps runtimeBinaryDeps) (string, error) {
 	switch requested {
 	case binarySourceAuto:
 		if buildinfo.Current().Version == "dev" {
-			return binarySourceLocal, nil
+			if strings.TrimSpace(opts.BinaryDir) != "" {
+				return binarySourceLocal, nil
+			}
+			return binarySourceRelease, nil
 		}
 		return binarySourceRelease, nil
 	case binarySourceLocal, binarySourceRelease:
@@ -197,19 +206,38 @@ func parseRuntimeBinaryTarget(raw string) (runtimeBinaryTarget, error) {
 	return runtimeBinaryTarget{OS: osVal, Arch: archVal}, nil
 }
 
-func loadRuntimeBinary(ctx context.Context, opts Options, deps runtimeBinaryDeps, source string, target runtimeBinaryTarget) ([]byte, error) {
+func resolveRuntimeBinaryReleaseVersion(ctx context.Context, opts Options, deps runtimeBinaryDeps, source string) (string, error) {
+	if source != binarySourceRelease {
+		return "", nil
+	}
+	version := strings.TrimSpace(opts.BinaryVer)
+	if version != "" {
+		return version, nil
+	}
+	version = buildinfo.Current().Version
+	if version != "" && version != "dev" {
+		return version, nil
+	}
+	version, err := deps.latestRelease(ctx)
+	if err != nil {
+		return "", fmt.Errorf("resolve latest deck release: %w", err)
+	}
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return "", fmt.Errorf("resolve latest deck release: empty version")
+	}
+	return version, nil
+}
+
+func loadRuntimeBinary(ctx context.Context, opts Options, deps runtimeBinaryDeps, source string, releaseVersion string, target runtimeBinaryTarget) ([]byte, error) {
 	switch source {
 	case binarySourceLocal:
 		return loadLocalRuntimeBinary(opts, deps, target)
 	case binarySourceRelease:
-		version := strings.TrimSpace(opts.BinaryVer)
-		if version == "" {
-			version = buildinfo.Current().Version
+		if strings.TrimSpace(releaseVersion) == "" {
+			return nil, fmt.Errorf("release version is required")
 		}
-		if version == "" || version == "dev" {
-			return nil, fmt.Errorf("--bundle-binary-source=release requires a release build or --bundle-binary-version")
-		}
-		return deps.fetchRelease(ctx, version, target)
+		return deps.fetchRelease(ctx, releaseVersion, target)
 	default:
 		return nil, fmt.Errorf("unsupported binary source %s", source)
 	}
@@ -258,6 +286,45 @@ func fetchReleaseRuntimeBinary(ctx context.Context, version string, target runti
 
 	url := fmt.Sprintf("https://github.com/Airgap-Castaways/deck/releases/download/v%s/deck_%s_%s_%s.tar.gz", v, v, target.OS, target.Arch)
 	return downloadArchiveDeckBinary(ctx, url)
+}
+
+func fetchLatestReleaseVersion(ctx context.Context) (string, error) {
+	return fetchLatestReleaseVersionFromURL(ctx, "https://github.com/Airgap-Castaways/deck/releases/latest")
+}
+
+func fetchLatestReleaseVersionFromURL(ctx context.Context, rawURL string) (string, error) {
+	if ctx == nil {
+		return "", fmt.Errorf("context is nil")
+	}
+	client := *runtimeBinaryDownloadHTTPClient
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	parsed, err := urlpkgParseHTTPS(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("resolve latest release URL: %w", err)
+	}
+	resp, err := httpfetch.Do(ctx, &client, http.MethodGet, parsed.String(), nil, "resolve latest release")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusMovedPermanently && resp.StatusCode != http.StatusTemporaryRedirect && resp.StatusCode != http.StatusPermanentRedirect {
+		return "", fmt.Errorf("resolve latest release: unexpected status %d", resp.StatusCode)
+	}
+	location := strings.TrimSpace(resp.Header.Get("Location"))
+	if location == "" {
+		return "", fmt.Errorf("resolve latest release: missing redirect location")
+	}
+	redirectURL, err := urlpkgParseHTTPS(location)
+	if err != nil {
+		return "", fmt.Errorf("resolve latest release redirect: %w", err)
+	}
+	version := pathBase(redirectURL.Path)
+	if version == "" || version == "latest" {
+		return "", fmt.Errorf("resolve latest release: invalid redirect target %s", redirectURL.String())
+	}
+	return version, nil
 }
 
 func downloadArchiveDeckBinary(ctx context.Context, url string) ([]byte, error) {

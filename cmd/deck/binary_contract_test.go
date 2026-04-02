@@ -322,7 +322,7 @@ phases:
 	}
 
 	preparedRoot := filepath.Join(tmpRoot, "outputs")
-	prepareCmd := exec.Command(binaryPath, "prepare", "--root", preparedRoot)
+	prepareCmd := exec.Command(binaryPath, "prepare", "--root", preparedRoot, "--bundle-binary-source", "local")
 	prepareCmd.Dir = tmpRoot
 	prepareCmd.Env = append(os.Environ(), "HOME="+home)
 	if raw, err := prepareCmd.CombinedOutput(); err != nil {

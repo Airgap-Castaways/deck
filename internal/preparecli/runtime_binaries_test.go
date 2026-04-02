@@ -73,6 +73,7 @@ func TestRunStagesReleaseRuntimeBinariesWithDefaultTargets(t *testing.T) {
 			currentGOARCH: func() string { return runtime.GOARCH },
 			readFile:      os.ReadFile,
 			osExecutable:  os.Executable,
+			latestRelease: func(context.Context) (string, error) { return "v9.9.9", nil },
 			fetchRelease:  fetcher,
 		},
 	}); err != nil {
@@ -161,6 +162,7 @@ func TestRunLocalSourceWithoutDirRejectsForeignTarget(t *testing.T) {
 			currentGOARCH: func() string { return "arm64" },
 			readFile:      os.ReadFile,
 			osExecutable:  os.Executable,
+			latestRelease: func(context.Context) (string, error) { return "v9.9.9", nil },
 			fetchRelease:  fetchReleaseRuntimeBinary,
 		},
 	})
@@ -196,7 +198,7 @@ func TestResolveBinaryTargetsRejectsEmptyAfterExclude(t *testing.T) {
 	}
 }
 
-func TestResolveBinarySourceAutoUsesLocalOnDev(t *testing.T) {
+func TestResolveBinarySourceAutoUsesReleaseOnDevWithoutLocalDirectory(t *testing.T) {
 	oldVersion := buildinfo.Version
 	buildinfo.Version = "dev"
 	t.Cleanup(func() { buildinfo.Version = oldVersion })
@@ -205,22 +207,91 @@ func TestResolveBinarySourceAutoUsesLocalOnDev(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve binary source: %v", err)
 	}
-	if source != binarySourceLocal {
-		t.Fatalf("unexpected source: got %q want %q", source, binarySourceLocal)
+	if source != binarySourceRelease {
+		t.Fatalf("unexpected source: got %q want %q", source, binarySourceRelease)
 	}
 }
 
-func TestResolveBinarySourceAutoKeepsLocalWhenTargetsAreExplicitOnDev(t *testing.T) {
+func TestResolveBinarySourceAutoKeepsLocalWithBinaryDirectoryOnDev(t *testing.T) {
 	oldVersion := buildinfo.Version
 	buildinfo.Version = "dev"
 	t.Cleanup(func() { buildinfo.Version = oldVersion })
 
-	source, err := resolveBinarySource(Options{Binaries: []string{"linux/amd64"}}, defaultRuntimeBinaryDeps())
+	source, err := resolveBinarySource(Options{BinaryDir: "/tmp/bin"}, defaultRuntimeBinaryDeps())
 	if err != nil {
 		t.Fatalf("resolve binary source: %v", err)
 	}
 	if source != binarySourceLocal {
 		t.Fatalf("unexpected source: got %q want %q", source, binarySourceLocal)
+	}
+}
+
+func TestResolveRuntimeBinaryReleaseVersionUsesLatestReleaseOnDev(t *testing.T) {
+	oldVersion := buildinfo.Version
+	buildinfo.Version = "dev"
+	t.Cleanup(func() { buildinfo.Version = oldVersion })
+
+	version, err := resolveRuntimeBinaryReleaseVersion(context.Background(), Options{}, runtimeBinaryDeps{
+		latestRelease: func(context.Context) (string, error) { return "v1.2.3", nil },
+	}, binarySourceRelease)
+	if err != nil {
+		t.Fatalf("resolve runtime binary release version: %v", err)
+	}
+	if version != "v1.2.3" {
+		t.Fatalf("unexpected version: got %q want %q", version, "v1.2.3")
+	}
+}
+
+func TestRunUsesLatestReleaseDefaultsOnDev(t *testing.T) {
+	oldVersion := buildinfo.Version
+	buildinfo.Version = "dev"
+	t.Cleanup(func() { buildinfo.Version = oldVersion })
+
+	root := prepareWorkspaceForRuntimeTests(t)
+	var got []string
+	if err := Run(context.Background(), Options{
+		PreparedRoot: filepath.Join(root, "outputs"),
+		runtimeBinaryDeps: runtimeBinaryDeps{
+			currentGOOS:   func() string { return runtime.GOOS },
+			currentGOARCH: func() string { return runtime.GOARCH },
+			readFile:      os.ReadFile,
+			osExecutable:  os.Executable,
+			latestRelease: func(context.Context) (string, error) { return "v1.2.3", nil },
+			fetchRelease: func(_ context.Context, version string, target runtimeBinaryTarget) ([]byte, error) {
+				got = append(got, version+":"+target.OS+"/"+target.Arch)
+				return []byte(target.OS + "-" + target.Arch), nil
+			},
+		},
+	}); err != nil {
+		t.Fatalf("prepare run failed: %v", err)
+	}
+	want := []string{"v1.2.3:linux/amd64", "v1.2.3:linux/arm64", "v1.2.3:darwin/amd64", "v1.2.3:darwin/arm64"}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected fetched targets: got %#v want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unexpected fetched targets: got %#v want %#v", got, want)
+		}
+	}
+}
+
+func TestFetchLatestReleaseVersionFollowsRedirectTarget(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/releases/latest" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		http.Redirect(w, r, srv.URL+"/releases/tag/v1.2.3", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	version, err := fetchLatestReleaseVersionFromURL(context.Background(), srv.URL+"/releases/latest")
+	if err != nil {
+		t.Fatalf("fetch latest release version: %v", err)
+	}
+	if version != "v1.2.3" {
+		t.Fatalf("unexpected version: got %q want %q", version, "v1.2.3")
 	}
 }
 
