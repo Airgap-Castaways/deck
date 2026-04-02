@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/spf13/cobra"
 
+	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 	"github.com/Airgap-Castaways/deck/internal/preparecli"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
@@ -85,7 +86,7 @@ func newPrepareCommand() *cobra.Command {
 }
 
 func runPrepareWithOptions(cmd *cobra.Command, opts prepareOptions) error {
-	if err := verbosef(1, "deck: prepare root=%s dryRun=%t refresh=%t clean=%t\n", opts.preparedRoot, opts.dryRun, opts.refresh, opts.clean); err != nil {
+	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "prepare", Event: "run_requested", Attrs: map[string]any{"root": opts.preparedRoot, "dry_run": opts.dryRun, "refresh": opts.refresh, "clean": opts.clean}}); err != nil {
 		return err
 	}
 	return preparecli.Run(cmd.Context(), preparecli.Options{

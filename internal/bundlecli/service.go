@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/bundle"
+	"github.com/Airgap-Castaways/deck/internal/logs"
 )
 
 type VerifyOptions struct {
@@ -43,11 +44,11 @@ func Verify(opts VerifyOptions) error {
 	if err != nil {
 		return err
 	}
-	if err := verbosef(opts.Verbosef, 1, "deck: bundle verify path=%s\n", resolvedPath); err != nil {
+	if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "bundle", Event: "verify_requested", Attrs: map[string]any{"path": resolvedPath}}); err != nil {
 		return err
 	}
 	if err := bundle.VerifyManifest(resolvedPath); err != nil {
-		_ = verbosef(opts.Verbosef, 2, "deck: bundle verify error=%v\n", err)
+		_ = verboseEvent(opts.Verbosef, 2, logs.CLIEvent{Level: "debug", Component: "bundle", Event: "verify_failed", Attrs: map[string]any{"error": err}})
 		return err
 	}
 	entries, err := bundle.InspectManifest(resolvedPath)
@@ -55,7 +56,7 @@ func Verify(opts VerifyOptions) error {
 		return err
 	}
 	summary := summarizeBundleManifest(entries)
-	if err := verbosef(opts.Verbosef, 2, "deck: bundle verify manifestEntries=%d files=%d images=%d packages=%d other=%d\n", summary.Entries, summary.Files, summary.Images, summary.Packages, summary.Other); err != nil {
+	if err := verboseEvent(opts.Verbosef, 2, logs.CLIEvent{Level: "debug", Component: "bundle", Event: "verify_manifest", Attrs: map[string]any{"manifest_entries": summary.Entries, "files": summary.Files, "images": summary.Images, "packages": summary.Packages, "other": summary.Other}}); err != nil {
 		return err
 	}
 	report := verifyReport{Status: "ok", Path: resolvedPath}
@@ -79,21 +80,21 @@ func Build(opts BuildOptions) error {
 	if strings.TrimSpace(opts.Out) == "" {
 		return errors.New("--out is required")
 	}
-	if err := verbosef(opts.Verbosef, 1, "deck: bundle build root=%s out=%s\n", resolvedRoot, strings.TrimSpace(opts.Out)); err != nil {
+	if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "bundle", Event: "build_requested", Attrs: map[string]any{"root": resolvedRoot, "out": strings.TrimSpace(opts.Out)}}); err != nil {
 		return err
 	}
 	manifestPath := filepath.Join(resolvedRoot, ".deck", "manifest.json")
 	entries, err := bundle.InspectManifest(resolvedRoot)
 	if err != nil {
-		if err := verbosef(opts.Verbosef, 2, "deck: bundle build manifestInspectError=%v\n", err); err != nil {
+		if err := verboseEvent(opts.Verbosef, 2, logs.CLIEvent{Level: "debug", Component: "bundle", Event: "manifest_inspect_failed", Attrs: map[string]any{"error": err}}); err != nil {
 			return err
 		}
 	} else {
 		summary := summarizeBundleManifest(entries)
-		if err := verbosef(opts.Verbosef, 1, "deck: bundle build manifest=%s entries=%d\n", manifestPath, summary.Entries); err != nil {
+		if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "bundle", Event: "manifest_loaded", Attrs: map[string]any{"manifest": manifestPath, "entries": summary.Entries}}); err != nil {
 			return err
 		}
-		if err := verbosef(opts.Verbosef, 2, "deck: bundle build manifest files=%d images=%d packages=%d other=%d\n", summary.Files, summary.Images, summary.Packages, summary.Other); err != nil {
+		if err := verboseEvent(opts.Verbosef, 2, logs.CLIEvent{Level: "debug", Component: "bundle", Event: "manifest_summary", Attrs: map[string]any{"files": summary.Files, "images": summary.Images, "packages": summary.Packages, "other": summary.Other}}); err != nil {
 			return err
 		}
 	}
@@ -101,7 +102,7 @@ func Build(opts BuildOptions) error {
 		return err
 	}
 	if info, err := os.Stat(opts.Out); err == nil {
-		if err := verbosef(opts.Verbosef, 2, "deck: bundle build archiveSize=%d\n", info.Size()); err != nil {
+		if err := verboseEvent(opts.Verbosef, 2, logs.CLIEvent{Level: "debug", Component: "bundle", Event: "archive_written", Attrs: map[string]any{"archive_size": info.Size()}}); err != nil {
 			return err
 		}
 	}
@@ -148,4 +149,12 @@ func verbosef(fn func(level int, format string, args ...any) error, level int, f
 		return nil
 	}
 	return fn(level, format, args...)
+}
+
+func verboseEvent(fn func(level int, format string, args ...any) error, level int, event logs.CLIEvent) error {
+	line, err := logs.RenderDefaultCLI(event)
+	if err != nil {
+		line = logs.FormatCLIText(logs.CLIEvent{Level: "error", Component: "bundle", Event: "log_render_failed", Attrs: map[string]any{"error": err.Error(), "original_event": event.Event}})
+	}
+	return verbosef(fn, level, "%s\n", line)
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/filemode"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
 	"github.com/Airgap-Castaways/deck/internal/httpfetch"
+	"github.com/Airgap-Castaways/deck/internal/logs"
 	"github.com/Airgap-Castaways/deck/internal/userdirs"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
@@ -93,7 +94,7 @@ func stageRuntimeBinariesWithContext(ctx context.Context, preparedRootAbs string
 		if err := writeBytes(filepath.Join(preparedRootAbs, relPath), raw, 0o755); err != nil {
 			return err
 		}
-		if err := emitDiagnostic(opts, 2, "deck: prepare runtimeBinary=%s source=%s\n", filepath.ToSlash(filepath.Join(preparedRootAbs, relPath)), source); err != nil {
+		if err := emitDiagnosticEvent(opts, 2, logs.CLIEvent{Level: "debug", Component: "prepare", Event: "runtime_binary_staged", Attrs: map[string]any{"runtime_binary": filepath.ToSlash(filepath.Join(preparedRootAbs, relPath)), "source": source}}); err != nil {
 			return err
 		}
 	}

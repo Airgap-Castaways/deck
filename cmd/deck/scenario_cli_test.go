@@ -135,7 +135,7 @@ func TestListVerboseDiagnosticsDoNotPolluteJSON(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "deck: list source=local output=json") {
+	if !strings.Contains(res.stderr, "component=list") || !strings.Contains(res.stderr, "event=list_requested") || !strings.Contains(res.stderr, "source=local") || !strings.Contains(res.stderr, "output=json") {
 		t.Fatalf("expected diagnostics on stderr, got %q", res.stderr)
 	}
 	var entries []scenarioEntry

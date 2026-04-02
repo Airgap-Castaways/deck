@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/install"
+	"github.com/Airgap-Castaways/deck/internal/logs"
 )
 
 type RunLogger interface {
@@ -39,7 +40,7 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 	if request.ExecutionWorkflow == nil {
 		return fmt.Errorf("execution workflow is nil")
 	}
-	if err := verbosef(opts.Verbosef, 1, "deck: apply workflow=%s phase=%s state=%s bundle=%s dryRun=%t fresh=%t\n", request.WorkflowPath, request.SelectedPhase, request.StatePath, strings.TrimSpace(opts.BundleRoot), opts.DryRun, request.Fresh); err != nil {
+	if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "apply", Event: "run_requested", Attrs: map[string]any{"workflow": request.WorkflowPath, "phase": request.SelectedPhase, "state": request.StatePath, "bundle": strings.TrimSpace(opts.BundleRoot), "dry_run": opts.DryRun, "fresh": request.Fresh}}); err != nil {
 		return err
 	}
 	if opts.DryRun {
@@ -52,7 +53,7 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 	if err != nil {
 		return err
 	}
-	if err := verbosef(opts.Verbosef, 1, "deck: apply runlog=%s\n", runLogger.Dir()); err != nil {
+	if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "apply", Event: "runlog_created", Attrs: map[string]any{"runlog": runLogger.Dir()}}); err != nil {
 		return err
 	}
 	eventSink := combineStepEventSinks(runLogger.EventSink(), opts.AdditionalSink)
@@ -156,4 +157,12 @@ func verbosef(fn func(level int, format string, args ...any) error, level int, f
 		return nil
 	}
 	return fn(level, format, args...)
+}
+
+func verboseEvent(fn func(level int, format string, args ...any) error, level int, event logs.CLIEvent) error {
+	line, err := logs.RenderDefaultCLI(event)
+	if err != nil {
+		line = logs.FormatCLIText(logs.CLIEvent{Level: "error", Component: "apply", Event: "log_render_failed", Attrs: map[string]any{"error": err.Error(), "original_event": event.Event}})
+	}
+	return verbosef(fn, level, "%s\n", line)
 }

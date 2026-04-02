@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Airgap-Castaways/deck/internal/httpfetch"
+	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 )
 
 const (
@@ -66,7 +67,7 @@ func executeList(ctx context.Context, source, output string) error {
 	if err != nil {
 		return err
 	}
-	if err := verbosef(1, "deck: list source=%s output=%s\n", resolvedSource, strings.TrimSpace(output)); err != nil {
+	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "list", Event: "list_requested", Attrs: map[string]any{"source": resolvedSource, "output": strings.TrimSpace(output)}}); err != nil {
 		return err
 	}
 
@@ -74,7 +75,7 @@ func executeList(ctx context.Context, source, output string) error {
 	if err != nil {
 		return err
 	}
-	if err := verbosef(1, "deck: list entries=%d\n", len(entries)); err != nil {
+	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "list", Event: "list_loaded", Attrs: map[string]any{"entries": len(entries)}}); err != nil {
 		return err
 	}
 
@@ -101,7 +102,7 @@ func discoverScenarioEntries(ctx context.Context, source string) ([]scenarioEntr
 			if source != scenarioSourceAll {
 				return nil, err
 			}
-			_ = verbosef(2, "deck: list local skipped error=%v\n", err)
+			_ = verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "local_skipped", Attrs: map[string]any{"error": err}})
 		} else {
 			entries = append(entries, localEntries...)
 		}
@@ -114,19 +115,19 @@ func discoverScenarioEntries(ctx context.Context, source string) ([]scenarioEntr
 			if source != scenarioSourceAll {
 				return nil, err
 			}
-			_ = verbosef(2, "deck: list server skipped error=%v\n", err)
+			_ = verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "server_skipped", Attrs: map[string]any{"error": err}})
 		case strings.TrimSpace(serverURL) != "":
 			serverEntries, err := discoverServerScenarioEntries(ctx, serverURL)
 			if err != nil {
 				if source != scenarioSourceAll {
 					return nil, err
 				}
-				_ = verbosef(2, "deck: list server lookup=%s error=%v\n", serverURL, err)
+				_ = verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "server_lookup_failed", Attrs: map[string]any{"server": serverURL, "error": err}})
 			} else {
 				entries = append(entries, serverEntries...)
 			}
 		case source == scenarioSourceAll:
-			_ = verbosef(2, "deck: list server skipped reason=no-remote\n")
+			_ = verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "server_skipped", Attrs: map[string]any{"reason": "no-remote"}})
 		case source == scenarioSourceServer:
 			return nil, errors.New("saved remote server URL is required; set one with \"deck server remote set <url>\"")
 		}

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/config"
+	"github.com/Airgap-Castaways/deck/internal/logs"
 	"github.com/Airgap-Castaways/deck/internal/validate"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
@@ -101,7 +102,7 @@ func BuildReport(ctx context.Context, opts Options) (Report, error) {
 	if resolvedRoot == "" {
 		resolvedRoot = "."
 	}
-	if err := verbosef(opts.Verbosef, 1, "deck: lint root=%s file=%s scenario=%s\n", resolvedRoot, resolvedFile, resolvedScenario); err != nil {
+	if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "lint", Event: "lint_requested", Attrs: map[string]any{"root": resolvedRoot, "file": resolvedFile, "scenario": resolvedScenario}}); err != nil {
 		return Report{}, err
 	}
 	if resolvedScenario != "" {
@@ -112,7 +113,7 @@ func BuildReport(ctx context.Context, opts Options) (Report, error) {
 		if err != nil {
 			return Report{}, err
 		}
-		if err := verbosef(opts.Verbosef, 1, "deck: lint entrypoint=%s\n", resolvedPath); err != nil {
+		if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "lint", Event: "entrypoint_selected", Attrs: map[string]any{"entrypoint": resolvedPath}}); err != nil {
 			return Report{}, err
 		}
 		files, err := validate.EntrypointWithContext(ctx, resolvedPath)
@@ -126,7 +127,7 @@ func BuildReport(ctx context.Context, opts Options) (Report, error) {
 			return Report{}, fmt.Errorf("lint entrypoints must live under %s/%s/: %s", opts.WorkflowRootDir, opts.ScenarioDirName, resolvedFile)
 		}
 		if isLocalScenarioWorkflowPath(resolvedFile, opts.WorkflowRootDir, opts.ScenarioDirName) {
-			if err := verbosef(opts.Verbosef, 1, "deck: lint entrypoint=%s\n", resolvedFile); err != nil {
+			if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "lint", Event: "entrypoint_selected", Attrs: map[string]any{"entrypoint": resolvedFile}}); err != nil {
 				return Report{}, err
 			}
 			files, err := validate.EntrypointWithContext(ctx, resolvedFile)
@@ -151,7 +152,7 @@ func BuildReport(ctx context.Context, opts Options) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	if err := verbosef(opts.Verbosef, 1, "deck: lint workspace=%s workflows=%d\n", resolvedRoot, len(files)); err != nil {
+	if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "lint", Event: "workspace_loaded", Attrs: map[string]any{"workspace": resolvedRoot, "workflows": len(files)}}); err != nil {
 		return Report{}, err
 	}
 	return finalizeReport(ctx, Report{Mode: "workspace", Root: resolvedRoot, Workflows: files, Summary: Summary{WorkflowCount: len(files)}})
@@ -196,33 +197,41 @@ func writeTextReport(stdoutPrintf func(format string, args ...any) error, report
 }
 
 func logReport(verbose func(level int, format string, args ...any) error, report Report) error {
-	if err := verbosef(verbose, 2, "deck: lint summary mode=%s workflows=%d warnings=%d errors=%d version=%s\n", report.Mode, report.Summary.WorkflowCount, report.Summary.WarningCount, report.Summary.ErrorCount, report.Contracts.SupportedVersion); err != nil {
+	if err := verboseEvent(verbose, 2, logs.CLIEvent{Level: "debug", Component: "lint", Event: "summary", Attrs: map[string]any{"mode": report.Mode, "workflows": report.Summary.WorkflowCount, "warnings": report.Summary.WarningCount, "errors": report.Summary.ErrorCount, "version": report.Contracts.SupportedVersion}}); err != nil {
 		return err
 	}
 	for _, workflow := range report.Workflows {
-		if err := verbosef(verbose, 2, "deck: lint workflow=%s\n", workflow); err != nil {
+		if err := verboseEvent(verbose, 2, logs.CLIEvent{Level: "debug", Component: "lint", Event: "workflow", Attrs: map[string]any{"workflow": workflow}}); err != nil {
 			return err
 		}
 	}
-	if err := verbosef(verbose, 3, "deck: lint contract importRule=%s topLevelModes=%s\n", report.Contracts.ImportRule, strings.Join(report.Contracts.TopLevelModes, ",")); err != nil {
+	if err := verboseEvent(verbose, 3, logs.CLIEvent{Level: "debug", Component: "lint", Event: "contract", Attrs: map[string]any{"import_rule": report.Contracts.ImportRule, "top_level_modes": strings.Join(report.Contracts.TopLevelModes, ",")}}); err != nil {
 		return err
 	}
 	for _, note := range report.Contracts.InvariantNotes {
-		if err := verbosef(verbose, 3, "deck: lint invariant=%s\n", note); err != nil {
+		if err := verboseEvent(verbose, 3, logs.CLIEvent{Level: "debug", Component: "lint", Event: "invariant", Attrs: map[string]any{"note": note}}); err != nil {
 			return err
 		}
 	}
 	for _, finding := range report.Findings {
-		if err := verbosef(verbose, 2, "deck: lint finding code=%s severity=%s path=%s phase=%s step=%s kind=%s\n", finding.Code, finding.Severity, displayValueOrDash(finding.Path), displayValueOrDash(finding.Phase), displayValueOrDash(finding.StepID), displayValueOrDash(finding.Kind)); err != nil {
+		if err := verboseEvent(verbose, 2, logs.CLIEvent{Level: "debug", Component: "lint", Event: "finding", Attrs: map[string]any{"code": finding.Code, "severity": finding.Severity, "path": displayValueOrDash(finding.Path), "phase": displayValueOrDash(finding.Phase), "step": displayValueOrDash(finding.StepID), "kind": displayValueOrDash(finding.Kind)}}); err != nil {
 			return err
 		}
 		if strings.TrimSpace(finding.Hint) != "" {
-			if err := verbosef(verbose, 3, "deck: lint findingHint code=%s hint=%s\n", finding.Code, finding.Hint); err != nil {
+			if err := verboseEvent(verbose, 3, logs.CLIEvent{Level: "debug", Component: "lint", Event: "finding_hint", Attrs: map[string]any{"code": finding.Code, "hint": finding.Hint}}); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func verboseEvent(fn func(level int, format string, args ...any) error, level int, event logs.CLIEvent) error {
+	line, err := logs.RenderDefaultCLI(event)
+	if err != nil {
+		line = logs.FormatCLIText(logs.CLIEvent{Level: "error", Component: "lint", Event: "log_render_failed", Attrs: map[string]any{"error": err.Error(), "original_event": event.Event}})
+	}
+	return verbosef(fn, level, "%s\n", line)
 }
 
 func resolveScenarioPath(root, scenario, workflowRootDir, scenarioDirName string) (string, error) {
