@@ -228,6 +228,11 @@ func fatalPlanGraphReasons(plan askcontract.PlanResponse) []string {
 
 func fatalPlanBlockers(plan askcontract.PlanResponse) []string {
 	reasons := []string{}
+	for _, item := range plan.Blockers {
+		if text := strings.TrimSpace(item); text != "" {
+			reasons = append(reasons, text)
+		}
+	}
 	for _, item := range plan.Clarifications {
 		if !item.BlocksGeneration || strings.TrimSpace(item.Answer) != "" {
 			continue

@@ -484,15 +484,9 @@ func appendPlanAdvisoryPrompt(base string, plan askcontract.PlanResponse, critic
 
 func planAdvisoryPromptBlock(plan askcontract.PlanResponse, critic askcontract.PlanCriticResponse) string {
 	items := []string{}
-	for _, item := range plan.Blockers {
-		item = strings.TrimSpace(item)
-		if item != "" {
-			items = append(items, "planner carry-forward: "+item)
-		}
-	}
 	for _, item := range plan.OpenQuestions {
 		item = strings.TrimSpace(item)
-		if item != "" && !strings.HasPrefix(strings.ToLower(item), "blocking:") {
+		if item != "" {
 			items = append(items, "planner carry-forward: "+item)
 		}
 	}

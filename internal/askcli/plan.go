@@ -401,7 +401,7 @@ func renderPlanMarkdown(plan askcontract.PlanResponse, mdPath string) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n## Next commands\n")
-	if hasBlockingClarifications(plan) {
+	if askpolicy.PlanNeedsClarification(plan) {
 		b.WriteString("deck ask plan --from ")
 		b.WriteString(strings.TrimSuffix(mdPath, filepath.Ext(mdPath)))
 		b.WriteString(".json --answer clarification.id=value\n")
@@ -430,15 +430,6 @@ func isAuthoringProgramEmpty(program askcontract.AuthoringProgram) bool {
 		strings.TrimSpace(program.Cluster.JoinFile) == "" &&
 		strings.TrimSpace(program.Cluster.RoleSelector) == "" &&
 		program.Verification.ExpectedNodeCount == 0
-}
-
-func hasBlockingClarifications(plan askcontract.PlanResponse) bool {
-	for _, item := range plan.Clarifications {
-		if item.BlocksGeneration && strings.TrimSpace(item.Answer) == "" {
-			return true
-		}
-	}
-	return false
 }
 
 func planChunk(plan askcontract.PlanResponse) askretrieve.Chunk {

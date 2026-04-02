@@ -316,7 +316,7 @@ func TestHasFatalPlanReviewIssuesRequiresSharedStateContractGraph(t *testing.T) 
 	}
 }
 
-func TestHasFatalPlanReviewIssuesIgnoresRecoverablePlannerBlockers(t *testing.T) {
+func TestHasFatalPlanReviewIssuesTreatsPlannerBlockersAsFatal(t *testing.T) {
 	plan := askcontract.PlanResponse{
 		AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Topology: "multi-node"},
 		EntryScenario:  "workflows/scenarios/apply.yaml",
@@ -325,12 +325,12 @@ func TestHasFatalPlanReviewIssuesIgnoresRecoverablePlannerBlockers(t *testing.T)
 		NeedsPrepare:   true,
 		Blockers:       []string{"join publication path is still underspecified", "final verification placement could be stronger"},
 	}
-	if hasFatalPlanReviewIssues(plan, askcontract.PlanCriticResponse{}) {
-		t.Fatalf("expected recoverable planner blockers to continue to generation")
+	if !hasFatalPlanReviewIssues(plan, askcontract.PlanCriticResponse{}) {
+		t.Fatalf("expected explicit planner blockers to stop generation")
 	}
 }
 
-func TestHasFatalPlanReviewIssuesDoesNotGateOnPlannerProseAlone(t *testing.T) {
+func TestHasFatalPlanReviewIssuesTreatsSinglePlannerBlockerAsFatal(t *testing.T) {
 	plan := askcontract.PlanResponse{
 		AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Topology: "multi-node"},
 		EntryScenario:  "workflows/scenarios/apply.yaml",
@@ -339,8 +339,8 @@ func TestHasFatalPlanReviewIssuesDoesNotGateOnPlannerProseAlone(t *testing.T) {
 		NeedsPrepare:   true,
 		Blockers:       []string{"no viable role selector is available for the worker/control-plane branching model"},
 	}
-	if hasFatalPlanReviewIssues(plan, askcontract.PlanCriticResponse{}) {
-		t.Fatalf("expected planner prose alone not to stop generation")
+	if !hasFatalPlanReviewIssues(plan, askcontract.PlanCriticResponse{}) {
+		t.Fatalf("expected planner blocker prose to stop generation once marked as blocker")
 	}
 }
 
@@ -1287,10 +1287,13 @@ func TestAppendPlanAdvisoryPromptCarriesRecoverableReviewIntoGeneration(t *testi
 	plan := askcontract.PlanResponse{Blockers: []string{"join publication path is still underspecified"}, OpenQuestions: []string{"artifact checksum naming can be refined later"}}
 	critic := askcontract.PlanCriticResponse{Advisory: []string{"final verification should stay on control-plane"}, MissingContracts: []string{"role cardinality contract"}, SuggestedFixes: []string{"publish join state explicitly before worker JoinKubeadm"}}
 	prompt := appendPlanAdvisoryPrompt(base, plan, critic)
-	for _, want := range []string{"Plan review carry-forward:", "generate the best viable draft", "join publication path is still underspecified", "recoverable missing contract: role cardinality contract", "plan suggested fix: publish join state explicitly before worker JoinKubeadm"} {
+	for _, want := range []string{"Plan review carry-forward:", "generate the best viable draft", "artifact checksum naming can be refined later", "recoverable missing contract: role cardinality contract", "plan suggested fix: publish join state explicitly before worker JoinKubeadm"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
 		}
+	}
+	if strings.Contains(prompt, "join publication path is still underspecified") {
+		t.Fatalf("expected fatal blockers to stay out of generation carry-forward, got %q", prompt)
 	}
 }
 
