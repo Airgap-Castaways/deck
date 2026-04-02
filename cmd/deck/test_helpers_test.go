@@ -19,7 +19,7 @@ var (
 	sharedDeckBinaryOnce sync.Once
 	sharedDeckBinaryPath string
 	sharedDeckBinaryDir  string
-	sharedDeckBinaryErr  error
+	errSharedDeckBinary  error
 )
 
 func TestMain(m *testing.M) {
@@ -104,19 +104,19 @@ type deckBinaryResult struct {
 func buildDeckBinary(t *testing.T) string {
 	t.Helper()
 	sharedDeckBinaryOnce.Do(func() {
-		sharedDeckBinaryDir, sharedDeckBinaryErr = os.MkdirTemp("", "deck-cmd-test-bin-*")
-		if sharedDeckBinaryErr != nil {
+		sharedDeckBinaryDir, errSharedDeckBinary = os.MkdirTemp("", "deck-cmd-test-bin-*")
+		if errSharedDeckBinary != nil {
 			return
 		}
 		sharedDeckBinaryPath = filepath.Join(sharedDeckBinaryDir, "deck")
 		buildCmd := exec.Command("go", "build", "-o", sharedDeckBinaryPath, "./cmd/deck")
 		buildCmd.Dir = filepath.Join("..", "..")
 		if raw, err := buildCmd.CombinedOutput(); err != nil {
-			sharedDeckBinaryErr = fmt.Errorf("build deck binary: %w, output=%s", err, string(raw))
+			errSharedDeckBinary = fmt.Errorf("build deck binary: %w, output=%s", err, string(raw))
 		}
 	})
-	if sharedDeckBinaryErr != nil {
-		t.Fatal(sharedDeckBinaryErr)
+	if errSharedDeckBinary != nil {
+		t.Fatal(errSharedDeckBinary)
 	}
 	return sharedDeckBinaryPath
 }
