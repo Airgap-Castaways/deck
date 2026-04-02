@@ -912,51 +912,6 @@ func postProcessEditSystemPrompt(brief askcontract.AuthoringBrief, plan askcontr
 	return b.String()
 }
 
-func structuralCleanupEditSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanResponse) string {
-	b := &strings.Builder{}
-	b.WriteString("You are deck ask structural cleanup editor. Return strict JSON only using the document generation response shape.\n")
-	b.WriteString("Apply only optional readability or reuse improvements after operational defects are already resolved.\n")
-	b.WriteString("Extract vars or components only when repeated values or repeated step groups clearly justify it. Preserve inline structure by default.\n")
-	b.WriteString(authoringBriefPromptBlock(brief))
-	b.WriteString("\n")
-	b.WriteString(executionModelPromptBlock(plan.ExecutionModel))
-	b.WriteString("\n")
-	return b.String()
-}
-
-func structuralCleanupEditUserPrompt(files []askcontract.GeneratedFile, findings askcontract.PostProcessResponse) string {
-	b := &strings.Builder{}
-	b.WriteString("Structural cleanup candidates:\n")
-	for _, item := range findings.UpgradeCandidates {
-		b.WriteString("- ")
-		b.WriteString(strings.TrimSpace(item))
-		b.WriteString("\n")
-	}
-	b.WriteString("Advisory guidance:\n")
-	for _, item := range findings.Advisory {
-		b.WriteString("- ")
-		b.WriteString(strings.TrimSpace(item))
-		b.WriteString("\n")
-	}
-	b.WriteString("Preserve these files unless cleanup clearly improves the result:\n")
-	for _, item := range findings.PreserveFiles {
-		b.WriteString("- ")
-		b.WriteString(strings.TrimSpace(item))
-		b.WriteString("\n")
-	}
-	b.WriteString("Rendered files from current documents:\n")
-	for _, file := range files {
-		b.WriteString("- path: ")
-		b.WriteString(strings.TrimSpace(file.Path))
-		b.WriteString("\n")
-		b.WriteString(file.Content)
-		if !strings.HasSuffix(file.Content, "\n") {
-			b.WriteString("\n")
-		}
-	}
-	return strings.TrimSpace(b.String())
-}
-
 func postProcessEditUserPrompt(files []askcontract.GeneratedFile, findings askcontract.PostProcessResponse, planCritic askcontract.PlanCriticResponse) string {
 	b := &strings.Builder{}
 	if summary := generatedDocumentSummaryBlock(files); strings.TrimSpace(summary) != "" {
