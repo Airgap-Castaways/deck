@@ -11,6 +11,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/filemode"
 	"github.com/Airgap-Castaways/deck/internal/install"
+	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 	"github.com/Airgap-Castaways/deck/internal/userdirs"
 )
 
@@ -43,16 +44,23 @@ type applyRunStepRecord struct {
 }
 
 type applyRunEventRecord struct {
-	TS        string `json:"ts"`
-	StepID    string `json:"step_id,omitempty"`
-	Kind      string `json:"kind,omitempty"`
-	Phase     string `json:"phase,omitempty"`
-	Status    string `json:"status"`
-	Reason    string `json:"reason,omitempty"`
-	Attempt   int    `json:"attempt,omitempty"`
-	StartedAt string `json:"started_at,omitempty"`
-	EndedAt   string `json:"ended_at,omitempty"`
-	Error     string `json:"error,omitempty"`
+	TS             string `json:"ts"`
+	Event          string `json:"event,omitempty"`
+	StepID         string `json:"step_id,omitempty"`
+	Kind           string `json:"kind,omitempty"`
+	Phase          string `json:"phase,omitempty"`
+	Status         string `json:"status"`
+	Reason         string `json:"reason,omitempty"`
+	Attempt        int    `json:"attempt,omitempty"`
+	StartedAt      string `json:"started_at,omitempty"`
+	EndedAt        string `json:"ended_at,omitempty"`
+	Error          string `json:"error,omitempty"`
+	BatchID        string `json:"batch_id,omitempty"`
+	ParallelGroup  string `json:"parallel_group,omitempty"`
+	Parallel       bool   `json:"parallel,omitempty"`
+	BatchSize      int    `json:"batch_size,omitempty"`
+	MaxParallelism int    `json:"max_parallelism,omitempty"`
+	FailedStep     string `json:"failed_step,omitempty"`
 }
 
 type applyRunLogger struct {
@@ -139,7 +147,7 @@ func (l *applyRunLogger) EventSink() install.StepEventSink {
 	}
 	return func(event install.StepEvent) {
 		if err := l.writeEvent(event); err != nil {
-			_ = stderrPrintf("deck: write run event log: %v\n", err)
+			_ = stderrCLIEvent(ctrllogs.CLIEvent{Level: "error", Component: "apply", Event: "runlog_write_failed", Attrs: map[string]any{"error": err}})
 		}
 	}
 }
@@ -148,16 +156,23 @@ func (l *applyRunLogger) writeEvent(event install.StepEvent) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	eventRecord := applyRunEventRecord{
-		TS:        time.Now().UTC().Format(time.RFC3339Nano),
-		StepID:    strings.TrimSpace(event.StepID),
-		Kind:      strings.TrimSpace(event.Kind),
-		Phase:     strings.TrimSpace(event.Phase),
-		Status:    strings.TrimSpace(event.Status),
-		Reason:    strings.TrimSpace(event.Reason),
-		Attempt:   event.Attempt,
-		StartedAt: strings.TrimSpace(event.StartedAt),
-		EndedAt:   strings.TrimSpace(event.EndedAt),
-		Error:     strings.TrimSpace(event.Error),
+		TS:             time.Now().UTC().Format(time.RFC3339Nano),
+		Event:          strings.TrimSpace(event.Event),
+		StepID:         strings.TrimSpace(event.StepID),
+		Kind:           strings.TrimSpace(event.Kind),
+		Phase:          strings.TrimSpace(event.Phase),
+		Status:         strings.TrimSpace(event.Status),
+		Reason:         strings.TrimSpace(event.Reason),
+		Attempt:        event.Attempt,
+		StartedAt:      strings.TrimSpace(event.StartedAt),
+		EndedAt:        strings.TrimSpace(event.EndedAt),
+		Error:          strings.TrimSpace(event.Error),
+		BatchID:        strings.TrimSpace(event.BatchID),
+		ParallelGroup:  strings.TrimSpace(event.ParallelGroup),
+		Parallel:       event.Parallel,
+		BatchSize:      event.BatchSize,
+		MaxParallelism: event.MaxParallelism,
+		FailedStep:     strings.TrimSpace(event.FailedStep),
 	}
 	raw, err := json.Marshal(eventRecord)
 	if err != nil {

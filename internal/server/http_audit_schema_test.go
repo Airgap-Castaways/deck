@@ -42,7 +42,7 @@ func TestAuditSchema(t *testing.T) {
 
 func requireAuditSchemaFields(t *testing.T, entry map[string]any) {
 	t.Helper()
-	for _, key := range []string{"ts", "schema_version", "source", "event_type", "level", "message"} {
+	for _, key := range []string{"ts", "schema_version", "component", "event", "level", "message"} {
 		if _, ok := entry[key]; !ok {
 			t.Fatalf("missing required audit key %s in %+v", key, entry)
 		}
@@ -58,8 +58,12 @@ func requireAuditSchemaFields(t *testing.T, entry map[string]any) {
 		t.Fatalf("expected schema_version=%d, got %+v", auditSchemaVersion, entry["schema_version"])
 	}
 
-	source, _ := entry["source"].(string)
-	if source != auditSourceServer {
-		t.Fatalf("expected source=%q, got %q", auditSourceServer, source)
+	component, _ := entry["component"].(string)
+	if component != auditSourceServer {
+		t.Fatalf("expected component=%q, got %q", auditSourceServer, component)
+	}
+	event, _ := entry["event"].(string)
+	if event != "request" {
+		t.Fatalf("expected event=request, got %q", event)
 	}
 }

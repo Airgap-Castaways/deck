@@ -38,21 +38,17 @@ func TestServeTask09_AuditAndSafety(t *testing.T) {
 	}
 
 	for _, entry := range entries {
-		etype, _ := entry["event_type"].(string)
-		if etype != auditEventRequest {
-			t.Fatalf("unexpected audit event type: %q", etype)
+		event, _ := entry["event"].(string)
+		if event != "request" {
+			t.Fatalf("unexpected audit event: %q", event)
 		}
-		extra, ok := entry["extra"].(map[string]any)
-		if !ok {
-			t.Fatalf("expected extra object in audit entry: %+v", entry)
-		}
-		if _, ok := extra["method"]; !ok {
+		if _, ok := entry["method"]; !ok {
 			t.Fatalf("missing method in audit extra: %+v", entry)
 		}
-		if _, ok := extra["path"]; !ok {
+		if _, ok := entry["path"]; !ok {
 			t.Fatalf("missing path in audit extra: %+v", entry)
 		}
-		if _, ok := extra["status"]; !ok {
+		if _, ok := entry["status"]; !ok {
 			t.Fatalf("missing status in audit extra: %+v", entry)
 		}
 	}

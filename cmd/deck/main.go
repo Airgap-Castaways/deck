@@ -2,15 +2,18 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"strings"
+
+	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 )
 
 func main() {
 	if err := runMain(os.Args[1:]); err != nil {
-		if _, writeErr := fmt.Fprintf(os.Stderr, "Error: %v\n", err); writeErr != nil {
-			fmt.Fprintf(os.Stderr, "deck: %v\n", writeErr)
+		line := formatCLIEvent(ctrllogs.CLIEvent{Level: "error", Component: "cli", Event: "command_failed", Attrs: map[string]any{"error": err}})
+		if _, writeErr := os.Stderr.WriteString(line + "\n"); writeErr != nil {
+			fallback := ctrllogs.FormatCLIText(ctrllogs.CLIEvent{Level: "error", Component: "cli", Event: "stderr_write_failed", Attrs: map[string]any{"error": writeErr}})
+			_, _ = os.Stderr.WriteString(fallback + "\n")
 		}
 		os.Exit(resolveExitCode(err))
 	}
@@ -55,7 +58,7 @@ func execute(args []string) cliResult {
 
 func formatCLIError(existing string, err error) string {
 	formatted := strings.TrimRight(existing, "\n")
-	message := fmt.Sprintf("Error: %v", err)
+	message := formatCLIEvent(ctrllogs.CLIEvent{Level: "error", Component: "cli", Event: "command_failed", Attrs: map[string]any{"error": err}})
 	if formatted == "" {
 		return message + "\n"
 	}

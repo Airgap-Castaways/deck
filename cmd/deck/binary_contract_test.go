@@ -59,12 +59,12 @@ func TestCLIContractRoutesErrorsToStderrWithNonZeroExit(t *testing.T) {
 		{
 			name:       "unknown flag",
 			args:       []string{"init", "--template", "multinode"},
-			wantStderr: "Error: unknown flag: --template",
+			wantStderr: "component=cli event=command_failed",
 		},
 		{
 			name:       "unknown top level command",
 			args:       []string{"unknown"},
-			wantStderr: "Error: unknown command \"unknown\" for \"deck\"",
+			wantStderr: "component=cli event=command_failed",
 		},
 	}
 
@@ -76,6 +76,9 @@ func TestCLIContractRoutesErrorsToStderrWithNonZeroExit(t *testing.T) {
 			}
 			if !strings.Contains(res.stderr, tc.wantStderr) {
 				t.Fatalf("expected stderr to include %q, got %q", tc.wantStderr, res.stderr)
+			}
+			if !strings.Contains(res.stderr, tc.args[0]) && tc.name == "unknown top level command" {
+				t.Fatalf("expected stderr to include command detail, got %q", res.stderr)
 			}
 		})
 	}
@@ -94,14 +97,14 @@ func TestCLIContractUsesSingleErrorLineWithoutAutoUsage(t *testing.T) {
 		{
 			name:        "unknown command",
 			args:        []string{"unknown"},
-			wantStderr:  "Error: unknown command \"unknown\" for \"deck\"",
+			wantStderr:  "component=cli event=command_failed",
 			forbidden:   []string{},
 			exactlyOnce: []string{"unknown command \"unknown\" for \"deck\""},
 		},
 		{
 			name:        "unknown flag",
 			args:        []string{"init", "--template", "multinode"},
-			wantStderr:  "Error: unknown flag: --template",
+			wantStderr:  "component=cli event=command_failed",
 			forbidden:   []string{},
 			exactlyOnce: []string{"unknown flag: --template"},
 		},
@@ -171,7 +174,7 @@ func TestCLIContractUnknownFlagUsesCobraWording(t *testing.T) {
 	if res.exitCode == 0 {
 		t.Fatalf("expected non-zero exit")
 	}
-	if !strings.Contains(res.stderr, "Error: unknown flag: --bogus") {
+	if !strings.Contains(res.stderr, "component=cli event=command_failed") || !strings.Contains(res.stderr, "unknown flag: --bogus") {
 		t.Fatalf("unexpected stderr: %q", res.stderr)
 	}
 }
@@ -228,9 +231,9 @@ func TestCLIContractGroupedParentsRejectUnknownSubcommandsViaBinary(t *testing.T
 		args       []string
 		wantStderr string
 	}{
-		{name: "bundle", args: []string{"bundle", "wat"}, wantStderr: "Error: unknown command \"wat\" for \"deck bundle\""},
-		{name: "cache", args: []string{"cache", "wat"}, wantStderr: "Error: unknown command \"wat\" for \"deck cache\""},
-		{name: "server", args: []string{"server", "wat"}, wantStderr: "Error: unknown command \"wat\" for \"deck server\""},
+		{name: "bundle", args: []string{"bundle", "wat"}, wantStderr: "component=cli event=command_failed"},
+		{name: "cache", args: []string{"cache", "wat"}, wantStderr: "component=cli event=command_failed"},
+		{name: "server", args: []string{"server", "wat"}, wantStderr: "component=cli event=command_failed"},
 	}
 
 	for _, tc := range tests {
