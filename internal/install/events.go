@@ -1,15 +1,22 @@
 package install
 
 type StepEvent struct {
-	StepID    string
-	Kind      string
-	Phase     string
-	Status    string
-	Reason    string
-	Attempt   int
-	StartedAt string
-	EndedAt   string
-	Error     string
+	Event          string
+	StepID         string
+	Kind           string
+	Phase          string
+	Status         string
+	Reason         string
+	Attempt        int
+	StartedAt      string
+	EndedAt        string
+	Error          string
+	BatchID        string
+	ParallelGroup  string
+	Parallel       bool
+	BatchSize      int
+	MaxParallelism int
+	FailedStep     string
 }
 
 type StepEventSink func(StepEvent)

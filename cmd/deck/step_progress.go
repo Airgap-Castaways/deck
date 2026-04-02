@@ -1,46 +1,105 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"time"
+
+	"github.com/Airgap-Castaways/deck/internal/install"
+	"github.com/Airgap-Castaways/deck/internal/logs"
 )
 
-func formatStepProgressLine(command, stepID, kind, phase, status string, attempt int, reason, errText, startedAt, endedAt string) string {
-	parts := []string{
-		fmt.Sprintf("deck: %s step=%s", strings.TrimSpace(command), strings.TrimSpace(stepID)),
-		fmt.Sprintf("kind=%s", strings.TrimSpace(kind)),
-		fmt.Sprintf("phase=%s", displayValueOrDash(phase)),
-		fmt.Sprintf("status=%s", displayValueOrDash(status)),
+func formatWorkflowEventLine(command string, event install.StepEvent) string {
+	attrs := map[string]any{
+		"phase":  displayValueOrDash(event.Phase),
+		"status": displayValueOrDash(event.Status),
 	}
-	if attempt > 0 {
-		parts = append(parts, fmt.Sprintf("attempt=%d", attempt))
+	if event.StepID != "" {
+		attrs["step"] = event.StepID
 	}
-	if duration := formatEventDuration(startedAt, endedAt); duration != "" {
-		parts = append(parts, fmt.Sprintf("duration=%s", duration))
+	if event.Kind != "" {
+		attrs["kind"] = event.Kind
 	}
-	if strings.TrimSpace(reason) != "" {
-		parts = append(parts, fmt.Sprintf("reason=%s", strings.TrimSpace(reason)))
+	if event.Attempt > 0 {
+		attrs["attempt"] = event.Attempt
 	}
-	if strings.TrimSpace(errText) != "" {
-		parts = append(parts, fmt.Sprintf("error=%s", strings.TrimSpace(errText)))
+	if event.BatchID != "" {
+		attrs["batch"] = event.BatchID
 	}
-	return strings.Join(parts, " ")
+	if event.ParallelGroup != "" {
+		attrs["parallel_group"] = event.ParallelGroup
+	}
+	if event.Parallel {
+		attrs["parallel"] = true
+	}
+	if event.BatchSize > 0 {
+		attrs["batch_size"] = event.BatchSize
+	}
+	if event.MaxParallelism > 0 {
+		attrs["max_parallelism"] = event.MaxParallelism
+	}
+	if event.Reason != "" {
+		attrs["reason"] = event.Reason
+	}
+	if event.Error != "" {
+		attrs["error"] = event.Error
+	}
+	if event.FailedStep != "" {
+		attrs["failed_step"] = event.FailedStep
+	}
+	if durationMS := formatEventDurationMS(event.StartedAt, event.EndedAt); durationMS >= 0 {
+		attrs["duration_ms"] = durationMS
+	}
+	return formatCLIEvent(logs.CLIEvent{
+		TS:        eventTimestamp(event),
+		Level:     eventLevel(event),
+		Component: command,
+		Event:     eventName(event),
+		Attrs:     attrs,
+	})
 }
 
-func formatEventDuration(startedAt, endedAt string) string {
+func formatEventDurationMS(startedAt, endedAt string) int64 {
 	started := strings.TrimSpace(startedAt)
 	ended := strings.TrimSpace(endedAt)
 	if started == "" || ended == "" {
-		return ""
+		return -1
 	}
 	start, err := time.Parse(time.RFC3339Nano, started)
 	if err != nil {
-		return ""
+		return -1
 	}
 	end, err := time.Parse(time.RFC3339Nano, ended)
 	if err != nil || end.Before(start) {
-		return ""
+		return -1
 	}
-	return end.Sub(start).String()
+	return end.Sub(start).Milliseconds()
+}
+
+func eventTimestamp(event install.StepEvent) time.Time {
+	for _, raw := range []string{event.EndedAt, event.StartedAt} {
+		if raw == "" {
+			continue
+		}
+		if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+			return ts.UTC()
+		}
+	}
+	return time.Now().UTC()
+}
+
+func eventLevel(event install.StepEvent) string {
+	if event.Status == "failed" || event.Error != "" {
+		return "error"
+	}
+	return "info"
+}
+
+func eventName(event install.StepEvent) string {
+	if event.Event != "" {
+		return event.Event
+	}
+	if event.StepID == "" {
+		return "batch_" + displayValueOrDash(event.Status)
+	}
+	return "step_" + displayValueOrDash(event.Status)
 }

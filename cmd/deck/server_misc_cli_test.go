@@ -49,7 +49,7 @@ func TestHealth(t *testing.T) {
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
-		if !strings.Contains(res.stderr, "deck: server health server=") {
+		if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "event=health_check") || !strings.Contains(res.stderr, "server="+srv.URL) {
 			t.Fatalf("expected diagnostics on stderr, got %q", res.stderr)
 		}
 		var payload struct {
@@ -68,8 +68,18 @@ func TestHealth(t *testing.T) {
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
-		if !strings.Contains(res.stderr, "deck: server health url=") || !strings.Contains(res.stderr, "deck: server health httpStatus=200") {
+		if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "url="+srv.URL+"/healthz") || !strings.Contains(res.stderr, "http_status=200") {
 			t.Fatalf("expected v2 diagnostics on stderr, got %q", res.stderr)
+		}
+		res = execute([]string{"server", "health", "--server", srv.URL, "-o", "json", "--v=2", "--log-format=json"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(res.stderr), "\n") {
+			var entry map[string]any
+			if err := json.Unmarshal([]byte(line), &entry); err != nil {
+				t.Fatalf("expected JSON diagnostic line, got %q: %v", line, err)
+			}
 		}
 	})
 
@@ -155,21 +165,21 @@ func TestServerRemoteCommands(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("server remote verbose set failed: %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "deck: server remote set url=http://127.0.0.1:9090 config=") {
+	if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "event=remote_set") || !strings.Contains(res.stderr, "url=http://127.0.0.1:9090") || !strings.Contains(res.stderr, "config=") {
 		t.Fatalf("unexpected verbose set stderr: %q", res.stderr)
 	}
 	res = execute([]string{"server", "remote", "show", "--v=1"})
 	if res.err != nil {
 		t.Fatalf("server remote verbose show failed: %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "deck: server remote show config=") || !strings.Contains(res.stderr, "origin=config") {
+	if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "event=remote_show") || !strings.Contains(res.stderr, "config=") || !strings.Contains(res.stderr, "origin=config") {
 		t.Fatalf("unexpected verbose show stderr: %q", res.stderr)
 	}
 	res = execute([]string{"server", "remote", "unset", "--v=1"})
 	if res.err != nil {
 		t.Fatalf("server remote verbose unset failed: %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "deck: server remote unset config=") {
+	if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "event=remote_unset") || !strings.Contains(res.stderr, "config=") {
 		t.Fatalf("unexpected verbose unset stderr: %q", res.stderr)
 	}
 }
@@ -258,7 +268,7 @@ func TestLogs(t *testing.T) {
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
-		if !strings.Contains(res.stderr, "deck: server logs file=") || !strings.Contains(res.stderr, "deck: server logs records=1") {
+		if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "event=logs_file") || !strings.Contains(res.stderr, "file="+logPath) || !strings.Contains(res.stderr, "event=logs_loaded") || !strings.Contains(res.stderr, "records=1") {
 			t.Fatalf("expected diagnostics on stderr, got %q", res.stderr)
 		}
 		var records []map[string]any
@@ -295,7 +305,7 @@ func TestLogs(t *testing.T) {
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
-		if !strings.Contains(res.stderr, "deck: list server skipped reason=no-remote") {
+		if !strings.Contains(res.stderr, "component=list") || !strings.Contains(res.stderr, "event=server_skipped") || !strings.Contains(res.stderr, "reason=no-remote") {
 			t.Fatalf("expected skipped server diagnostic, got %q", res.stderr)
 		}
 	})
@@ -363,7 +373,7 @@ func TestCache(t *testing.T) {
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
-		if !strings.Contains(res.stderr, "deck: cache list root=") || !strings.Contains(res.stderr, "deck: cache list entries=") {
+		if !strings.Contains(res.stderr, "component=cache") || !strings.Contains(res.stderr, "event=list_requested") || !strings.Contains(res.stderr, "root=") || !strings.Contains(res.stderr, "event=list_loaded") || !strings.Contains(res.stderr, "entries=") {
 			t.Fatalf("expected diagnostics on stderr, got %q", res.stderr)
 		}
 		var entries []struct {
@@ -404,7 +414,7 @@ func TestCache(t *testing.T) {
 		if !strings.Contains(res.stdout, packagesDir) {
 			t.Fatalf("expected packages dir in plan, got %q", res.stdout)
 		}
-		for _, want := range []string{"deck: cache clean root=", "deck: cache clean matches=1", "deck: cache clean path="} {
+		for _, want := range []string{"component=cache", "event=clean_requested", "event=clean_planned", "matches=1", "event=clean_match", "path="} {
 			if !strings.Contains(res.stderr, want) {
 				t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 			}
@@ -577,7 +587,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if res.stdout != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 modes=prepare,apply topLevelModes=phases,steps\n", wf) {
 			t.Fatalf("unexpected stdout: %q", res.stdout)
 		}
-		for _, want := range []string{"deck: lint root=", "scenario=", fmt.Sprintf("deck: lint workflow=%s", wf), "deck: lint finding code=W_COMMAND_OPAQUE severity=warning"} {
+		for _, want := range []string{"component=lint", "event=lint_requested", "scenario=", fmt.Sprintf("workflow=%s", wf), "event=workflow", "event=finding", "code=W_COMMAND_OPAQUE", "severity=warning"} {
 			if !strings.Contains(res.stderr, want) {
 				t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 			}
@@ -620,7 +630,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
-		for _, want := range []string{"deck: lint workflow=", filepath.ToSlash(applyPath), filepath.ToSlash(componentPath)} {
+		for _, want := range []string{"component=lint", "event=workflow", filepath.ToSlash(applyPath), filepath.ToSlash(componentPath)} {
 			if !strings.Contains(res.stderr, want) {
 				t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 			}
@@ -761,7 +771,7 @@ func TestRunWorkflowBundleVerifyJSON(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "deck: bundle verify path=") {
+	if !strings.Contains(res.stderr, "component=bundle") || !strings.Contains(res.stderr, "event=verify_requested") || !strings.Contains(res.stderr, "path="+bundleDir) {
 		t.Fatalf("expected diagnostics on stderr, got %q", res.stderr)
 	}
 	var payload struct {
@@ -779,7 +789,7 @@ func TestRunWorkflowBundleVerifyJSON(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "deck: bundle verify manifestEntries=1 files=1 images=0 packages=0 other=0") {
+	if !strings.Contains(res.stderr, "component=bundle") || !strings.Contains(res.stderr, "event=verify_manifest") || !strings.Contains(res.stderr, "manifest_entries=1") || !strings.Contains(res.stderr, "files=1") || !strings.Contains(res.stderr, "images=0") || !strings.Contains(res.stderr, "packages=0") || !strings.Contains(res.stderr, "other=0") {
 		t.Fatalf("expected manifest count diagnostic, got %q", res.stderr)
 	}
 }
@@ -805,7 +815,7 @@ func TestRunWorkflowBundleBuildSuccess(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected build success, got %v", res.err)
 	}
-	for _, want := range []string{"deck: bundle build manifest=", "entries=1", "deck: bundle build manifest files=1 images=0 packages=0 other=0", "deck: bundle build archiveSize="} {
+	for _, want := range []string{"component=bundle", "event=manifest_loaded", "entries=1", "event=manifest_summary", "files=1", "images=0", "packages=0", "other=0", "event=archive_written", "archive_size="} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 		}

@@ -11,7 +11,7 @@ import (
 
 func verboseApplyStepSink() install.StepEventSink {
 	return func(event install.StepEvent) {
-		_ = stderrPrintf("%s\n", formatStepProgressLine("apply", event.StepID, event.Kind, event.Phase, strings.TrimSpace(event.Status), event.Attempt, event.Reason, event.Error, event.StartedAt, event.EndedAt))
+		_ = stderrPrintf("%s\n", formatWorkflowEventLine("apply", event))
 	}
 }
 

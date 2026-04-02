@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Airgap-Castaways/deck/internal/executil"
+	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 )
 
 func newServerCommand() *cobra.Command {
@@ -241,7 +242,7 @@ func executeServerRemoteSet(rawURL string) error {
 	if err != nil {
 		return err
 	}
-	if err := verbosef(1, "deck: server remote set url=%s config=%s\n", resolved, configPath); err != nil {
+	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_set", Attrs: map[string]any{"url": resolved, "config": configPath}}); err != nil {
 		return err
 	}
 	if err := saveSourceDefaults(sourceDefaults{URL: resolved}); err != nil {
@@ -259,7 +260,7 @@ func executeServerRemoteShow() error {
 	if err != nil {
 		return err
 	}
-	if err := verbosef(1, "deck: server remote show config=%s resolved=%s origin=%s\n", configPath, displayValueOrDash(resolved), displayValueOrDash(source)); err != nil {
+	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_show", Attrs: map[string]any{"config": configPath, "resolved": displayValueOrDash(resolved), "origin": displayValueOrDash(source)}}); err != nil {
 		return err
 	}
 	if resolved == "" {
@@ -279,7 +280,7 @@ func executeServerRemoteUnset() error {
 	if err != nil {
 		return err
 	}
-	if err := verbosef(1, "deck: server remote unset config=%s\n", configPath); err != nil {
+	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_unset", Attrs: map[string]any{"config": configPath}}); err != nil {
 		return err
 	}
 	if err := clearSourceDefaults(); err != nil {

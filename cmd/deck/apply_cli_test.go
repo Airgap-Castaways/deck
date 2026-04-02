@@ -395,10 +395,10 @@ func TestPlanJSONAndVerboseDiagnostics(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "deck: plan workflow=") {
+	if !strings.Contains(res.stderr, "component=plan") || !strings.Contains(res.stderr, "event=plan_requested") || !strings.Contains(res.stderr, "workflow="+wfPath) {
 		t.Fatalf("expected plan diagnostics on stderr, got %q", res.stderr)
 	}
-	if !strings.Contains(res.stderr, "deck: plan step=guarded") {
+	if !strings.Contains(res.stderr, "component=plan") || !strings.Contains(res.stderr, "event=plan_step") || !strings.Contains(res.stderr, "step=guarded") {
 		t.Fatalf("expected verbose step diagnostics on stderr, got %q", res.stderr)
 	}
 	var payload struct {
@@ -443,7 +443,7 @@ func TestPlanJSONAndVerboseDiagnostics(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	for _, want := range []string{"deck: plan workflowVars=run runtimeVars=host completedPhases=0", "deck: plan stepEval step=guarded whenEvaluated=true registerKeys=-"} {
+	for _, want := range []string{"component=plan", "event=plan_context", "workflow_vars=run", "runtime_vars=host", "completed_phases=0", "event=plan_step_eval", "step=guarded", "when_evaluated=true", "register_keys=-"} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 		}
@@ -497,7 +497,7 @@ func TestApplyVerboseDiagnostics(t *testing.T) {
 	if res.stdout != "apply: ok\n" {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
-	for _, want := range []string{"deck: apply workflow=", "deck: apply runlog=", "deck: apply step=verbose-step kind=Command phase=install status=started attempt=1", "deck: apply step=verbose-step kind=Command phase=install status=succeeded attempt=1 duration="} {
+	for _, want := range []string{"component=apply event=run_requested", "workflow=" + wfPath, "component=apply event=runlog_created", "runlog=", "component=apply event=batch_started batch=install", "component=apply event=step_started", "step=verbose-step", "component=apply event=step_succeeded", "duration_ms=", "component=apply event=batch_succeeded batch=install"} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 		}
@@ -518,11 +518,42 @@ func TestApplyDefaultProgressLogs(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "deck: apply step=progress-step kind=Command phase=install status=started attempt=1") {
+	if !strings.Contains(res.stderr, "component=apply event=step_started") || !strings.Contains(res.stderr, "step=progress-step") || !strings.Contains(res.stderr, "batch=install") {
 		t.Fatalf("expected started progress log, got %q", res.stderr)
 	}
-	if !strings.Contains(res.stderr, "deck: apply step=progress-step kind=Command phase=install status=succeeded attempt=1 duration=") {
+	if !strings.Contains(res.stderr, "component=apply event=batch_succeeded batch=install") || !strings.Contains(res.stderr, "duration_ms=") {
 		t.Fatalf("expected completion progress log with duration, got %q", res.stderr)
+	}
+}
+
+func TestApplyParallelBatchProgressLogs(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	wfPath := filepath.Join(t.TempDir(), "apply-parallel-progress.yaml")
+	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nphases:\n  - name: install\n    maxParallelism: 2\n    steps:\n      - id: first\n        parallelGroup: downloads\n        kind: Command\n        spec:\n          command: [\"true\"]\n      - id: second\n        parallelGroup: downloads\n        kind: Command\n        spec:\n          command: [\"true\"]\n")
+	bundle := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle workflows: %v", err)
+	}
+	createValidBundleManifest(t, bundle)
+
+	res := execute([]string{"apply", "--workflow", wfPath, bundle})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	for _, want := range []string{
+		"component=apply event=batch_started batch=install:downloads",
+		"parallel_group=downloads",
+		"batch_size=2",
+		"max_parallelism=2",
+		"component=apply event=step_started",
+		"step=first",
+		"step=second",
+		"component=apply event=batch_succeeded batch=install:downloads",
+		"duration_ms=",
+	} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+		}
 	}
 }
 

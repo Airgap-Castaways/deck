@@ -1085,17 +1085,23 @@ func TestRun_EmitsStepEvents(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	if len(events) != 3 {
-		t.Fatalf("expected 3 events, got %#v", events)
+	stepEvents := make([]StepEvent, 0, len(events))
+	for _, event := range events {
+		if event.StepID != "" {
+			stepEvents = append(stepEvents, event)
+		}
 	}
-	if events[0].StepID != "download-a" || events[0].Status != "started" || events[0].Phase != "prepare" || events[0].Attempt != 1 {
-		t.Fatalf("unexpected first event: %+v", events[0])
+	if len(stepEvents) != 3 {
+		t.Fatalf("expected 3 step events, got %#v", events)
 	}
-	if events[1].StepID != "download-a" || events[1].Status != "succeeded" || events[1].Phase != "prepare" || events[1].Attempt != 1 {
-		t.Fatalf("unexpected second event: %+v", events[1])
+	if stepEvents[0].StepID != "download-a" || stepEvents[0].Status != "started" || stepEvents[0].Phase != "prepare" || stepEvents[0].Attempt != 1 {
+		t.Fatalf("unexpected first event: %+v", stepEvents[0])
 	}
-	if events[2].StepID != "skip-worker-only" || events[2].Status != "skipped" || events[2].Reason != "when" || events[2].Phase != "prepare" {
-		t.Fatalf("unexpected third event: %+v", events[2])
+	if stepEvents[1].StepID != "download-a" || stepEvents[1].Status != "succeeded" || stepEvents[1].Phase != "prepare" || stepEvents[1].Attempt != 1 {
+		t.Fatalf("unexpected second event: %+v", stepEvents[1])
+	}
+	if stepEvents[2].StepID != "skip-worker-only" || stepEvents[2].Status != "skipped" || stepEvents[2].Reason != "when" || stepEvents[2].Phase != "prepare" {
+		t.Fatalf("unexpected third event: %+v", stepEvents[2])
 	}
 }
 

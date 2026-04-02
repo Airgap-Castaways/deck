@@ -406,11 +406,11 @@ func TestServe_StaticReadOnly(t *testing.T) {
 			if err := json.Unmarshal([]byte(line), &entry); err != nil {
 				t.Fatalf("parse audit line: %v", err)
 			}
-			eventType, _ := entry["event_type"].(string)
-			if strings.HasPrefix(eventType, "alpha_") {
-				t.Fatalf("unexpected alpha audit event: %q", eventType)
+			event, _ := entry["event"].(string)
+			if strings.HasPrefix(event, "alpha_") {
+				t.Fatalf("unexpected alpha audit event: %q", event)
 			}
-			if eventType == "registry_seed" {
+			if event == "registry_seed" {
 				t.Fatalf("unexpected registry seed audit event")
 			}
 		}
@@ -446,7 +446,7 @@ func TestAccessLog(t *testing.T) {
 	h.ServeHTTP(rr, req)
 
 	line := strings.TrimSpace(accessLog.String())
-	for _, want := range []string{"127.0.0.1:43210", `"GET /healthz HTTP/1.1"`, " 200 ", " 0 ", "ms"} {
+	for _, want := range []string{"component=server", "event=request", "remote_addr=127.0.0.1:43210", "method=GET", "path=/healthz", "status=200", "bytes=0", "duration_ms="} {
 		if !strings.Contains(line, want) {
 			t.Fatalf("expected %q in access log, got %q", want, line)
 		}
