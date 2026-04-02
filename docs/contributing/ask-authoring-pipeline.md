@@ -52,9 +52,10 @@ This rule is the main defense against drift between authoring behavior and actua
 - `internal/askcli`: top-level route orchestration, LLM calls, planning flow, generation loop, and final write behavior.
 - `internal/askaugment/mcp`: built-in external-docs provider registry, capability adapters, health checks, and evidence normalization.
 - `internal/askpolicy`: plan normalization, blocking decisions, and `AuthoringProgram` derivation.
+- `internal/askevidenceplan`: external evidence planning and upstream-doc need detection.
 - `internal/askcontract`: typed contracts shared across planning, generation, compile, refine, and repair.
 - `internal/askcontext`: build prompt-facing workspace and authoring context.
-- `internal/askretrieve`: merge workspace retrieval, repo grounding, examples, local state, and external evidence into route-specific chunks.
+- `internal/askretrieve`: merge workspace facts, local facts, examples, local state, and external evidence into route-specific chunks.
 - `internal/askcatalog`: project source-of-truth step and field metadata into an ask-facing catalog.
 - `internal/askdraft`: expose draft builder candidates and compile selected builders into workflow documents.
 - `internal/askrefine`: compute refine transform candidates from parsed workflow structure.
@@ -121,7 +122,7 @@ Refine should keep anchor files stable and only expand into allowed companion fi
 
 External docs are not gathered blindly.
 
-- `internal/askpolicy` builds an `EvidencePlan` that marks external evidence as `required`, `optional`, or `unnecessary`.
+- `internal/askevidenceplan` builds an `EvidencePlan` that marks external evidence as `required`, `optional`, or `unnecessary`.
 - Heuristics cover obvious freshness-sensitive requests such as versioned install, compatibility, prerequisite, and troubleshooting asks.
 - A small LLM evidence-planning pass may refine ambiguous external entity selection when heuristics cannot identify the upstream technology cleanly.
 
@@ -150,7 +151,7 @@ Provider-specific adapter code is responsible for translating those capabilities
 
 ## Local facts versus external evidence
 
-Current code still uses names such as `repo-grounding`, but the intended architectural meaning is local authoritative facts.
+Current code uses `local-facts` for local authoritative fact blocks that describe deck-owned source-of-truth.
 
 Retrieval now separates three concerns:
 
