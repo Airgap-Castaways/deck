@@ -8,27 +8,30 @@ import (
 const Name = "deck"
 
 var (
-	Version = "dev"
-	Commit  = "unknown"
-	Date    = "unknown"
-	Dirty   = "false"
+	Repository = "https://github.com/Airgap-Castaways/deck"
+	Version    = "dev"
+	Commit     = "unknown"
+	Date       = "unknown"
+	Dirty      = "false"
 )
 
 type Info struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	Commit  string `json:"commit"`
-	Date    string `json:"date"`
-	Dirty   bool   `json:"dirty"`
+	Name       string `json:"name"`
+	Version    string `json:"version"`
+	Commit     string `json:"commit"`
+	Date       string `json:"date"`
+	Dirty      bool   `json:"dirty"`
+	Repository string `json:"repository"`
 }
 
 func Current() Info {
 	return Info{
-		Name:    Name,
-		Version: normalizedValue(Version, "dev"),
-		Commit:  normalizedValue(Commit, "unknown"),
-		Date:    normalizedValue(Date, "unknown"),
-		Dirty:   parseDirty(Dirty),
+		Name:       Name,
+		Version:    normalizedValue(Version, "dev"),
+		Commit:     normalizedValue(Commit, "unknown"),
+		Date:       normalizedValue(Date, "unknown"),
+		Dirty:      parseDirty(Dirty),
+		Repository: normalizedValue(Repository, "unknown"),
 	}
 }
 

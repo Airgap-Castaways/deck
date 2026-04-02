@@ -46,6 +46,7 @@ Examples:
 
 ```text
 deck dev
+repo https://github.com/Airgap-Castaways/deck
 ```
 
 ```json
@@ -54,7 +55,8 @@ deck dev
   "version": "dev",
   "commit": "abc1234",
   "date": "2026-03-17T10:00:00Z",
-  "dirty": true
+  "dirty": true,
+  "repository": "https://github.com/Airgap-Castaways/deck"
 }
 ```
 

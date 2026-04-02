@@ -215,7 +215,7 @@ func TestCLIContractVersionCommandViaBinary(t *testing.T) {
 	if res.exitCode != 0 {
 		t.Fatalf("expected zero exit, got %d stderr=%q", res.exitCode, res.stderr)
 	}
-	if res.stdout != "deck dev\n" {
+	if res.stdout != "deck dev\nrepo https://github.com/Airgap-Castaways/deck\n" {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
 	if res.stderr != "" {

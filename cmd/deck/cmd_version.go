@@ -21,7 +21,7 @@ func newVersionCommand() *cobra.Command {
 				return err
 			}
 			if resolvedOutput == "text" {
-				return stdoutPrintf("%s\n", buildinfo.Summary())
+				return stdoutPrintf("%s\nrepo %s\n", buildinfo.Summary(), buildinfo.Current().Repository)
 			}
 
 			enc := stdoutJSONEncoder()
