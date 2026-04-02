@@ -152,7 +152,7 @@ Prepare runtime binary notes:
 - `--bundle-binary-exclude` is repeatable and removes runtime tuples from the default or explicit include set
 - `--bundle-binary-source=local` reads from the current executable or from `--bundle-binary-dir`
 - `--bundle-binary-source=local` without `--bundle-binary-dir` uses the current executable for the current host tuple unless you explicitly request other targets
-- `--bundle-binary-source=release` downloads matching GitHub Release archives and extracts `deck`
+- `--bundle-binary-source=release` downloads matching GitHub Release archives, caches them under the deck cache root, and atomically publishes the final `deck` binary into `outputs/bin/...`
 - `auto` defaults to `release`; on dev builds it resolves the latest GitHub Release unless `--bundle-binary-dir` selects local binaries
 
 Optional site-local helper example:

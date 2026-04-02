@@ -75,6 +75,7 @@ func TestRunStagesReleaseRuntimeBinariesWithDefaultTargets(t *testing.T) {
 			osExecutable:  os.Executable,
 			latestRelease: func(context.Context) (string, error) { return "v9.9.9", nil },
 			fetchRelease:  fetcher,
+			cacheRoot:     func() (string, error) { return t.TempDir(), nil },
 		},
 	}); err != nil {
 		t.Fatalf("prepare run failed: %v", err)
@@ -164,6 +165,7 @@ func TestRunLocalSourceWithoutDirRejectsForeignTarget(t *testing.T) {
 			osExecutable:  os.Executable,
 			latestRelease: func(context.Context) (string, error) { return "v9.9.9", nil },
 			fetchRelease:  fetchReleaseRuntimeBinary,
+			cacheRoot:     func() (string, error) { return t.TempDir(), nil },
 		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "only supports the current host target darwin/arm64") {
@@ -261,6 +263,7 @@ func TestRunUsesLatestReleaseDefaultsOnDev(t *testing.T) {
 				got = append(got, version+":"+target.OS+"/"+target.Arch)
 				return []byte(target.OS + "-" + target.Arch), nil
 			},
+			cacheRoot: func() (string, error) { return t.TempDir(), nil },
 		},
 	}); err != nil {
 		t.Fatalf("prepare run failed: %v", err)
@@ -273,6 +276,49 @@ func TestRunUsesLatestReleaseDefaultsOnDev(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("unexpected fetched targets: got %#v want %#v", got, want)
 		}
+	}
+}
+
+func TestLoadCachedReleaseRuntimeBinaryReusesCache(t *testing.T) {
+	cacheRoot := t.TempDir()
+	fetchCount := 0
+	deps := runtimeBinaryDeps{
+		readFile: os.ReadFile,
+		fetchRelease: func(_ context.Context, version string, target runtimeBinaryTarget) ([]byte, error) {
+			fetchCount++
+			return []byte(version + ":" + target.OS + "/" + target.Arch), nil
+		},
+		cacheRoot: func() (string, error) { return cacheRoot, nil },
+	}
+	target := runtimeBinaryTarget{OS: "linux", Arch: "amd64"}
+
+	raw1, err := loadCachedReleaseRuntimeBinary(context.Background(), deps, "v1.2.3", target)
+	if err != nil {
+		t.Fatalf("load cached release runtime binary first: %v", err)
+	}
+	raw2, err := loadCachedReleaseRuntimeBinary(context.Background(), deps, "v1.2.3", target)
+	if err != nil {
+		t.Fatalf("load cached release runtime binary second: %v", err)
+	}
+	if fetchCount != 1 {
+		t.Fatalf("expected one fetch, got %d", fetchCount)
+	}
+	if string(raw1) != "v1.2.3:linux/amd64" || string(raw2) != string(raw1) {
+		t.Fatalf("unexpected cached payloads: %q %q", string(raw1), string(raw2))
+	}
+	cachePath, err := runtimeBinaryCachePath(deps, "v1.2.3", target)
+	if err != nil {
+		t.Fatalf("runtime binary cache path: %v", err)
+	}
+	if _, err := os.Stat(cachePath); err != nil {
+		t.Fatalf("expected cache file: %v", err)
+	}
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(cachePath), ".deck.tmp-*"))
+	if err != nil {
+		t.Fatalf("glob temp files: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("unexpected temp files left behind: %#v", matches)
 	}
 }
 
