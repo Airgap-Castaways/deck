@@ -20,6 +20,8 @@ Authoring routes write workflow files directly. Use `deck ask plan` when you wan
 
 For command-level syntax and subcommands, see [CLI Reference](../reference/cli.md).
 
+Contributors working on the internal pipeline should also see [Ask Authoring Pipeline](../contributing/ask-authoring-pipeline.md) and [Ask Quality Evaluation](../contributing/ask-quality-evaluation.md).
+
 ## How it works
 
 `deck ask` follows a routed pipeline instead of treating every request like workflow generation.

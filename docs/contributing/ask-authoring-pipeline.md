@@ -9,6 +9,14 @@ This document describes the current `deck ask` authoring architecture for contri
 - Let the model select among constrained options.
 - Let code assemble, transform, validate, and repair workflow documents.
 - Keep source-of-truth in `stepmeta`, generated schema, and validation layers rather than in ask-local rule maps.
+- Keep the pipeline small enough that contributors can explain each stage in terms of facts, judgment, execution, or validation.
+
+## Execution rules for contributors
+
+- Run a before/after `ask` quality suite for meaningful pipeline changes. See [Ask Quality Evaluation](ask-quality-evaluation.md).
+- Prefer deleting replaced paths over keeping long-lived legacy fallbacks.
+- If a stage mixes authoritative facts with recommendation behavior, split or rename it before adding more logic.
+- If a simplification improves maintainability but weakens workflow quality, it is not done yet.
 
 ## High-level flow
 
@@ -52,6 +60,8 @@ This rule is the main defense against drift between authoring behavior and actua
 - `internal/askrefine`: compute refine transform candidates from parsed workflow structure.
 - `internal/askrepair`: map structured diagnostics to automatic repair operations.
 - `internal/askir`: materialize generated documents into files and apply structured edits.
+
+Some current package names are broader than their long-term architectural role. Contributors should treat this document as the intent boundary even when package names still reflect older terminology.
 
 ## Execution contract
 
@@ -138,15 +148,17 @@ Ask core should not depend on raw MCP tool names. Provider adapters own capabili
 
 Provider-specific adapter code is responsible for translating those capabilities into actual MCP tool calls, argument shapes, and multi-step flows.
 
-## Repo grounding versus external evidence
+## Local facts versus external evidence
+
+Current code still uses names such as `repo-grounding`, but the intended architectural meaning is local authoritative facts.
 
 Retrieval now separates three concerns:
 
-- local repo grounding for deck source-of-truth
+- local facts for deck source-of-truth
 - external evidence for upstream product behavior and recency
 - normal workspace and example context
 
-Local repo grounding is authoritative for:
+Local facts are authoritative for:
 
 - step metadata and builder behavior from `internal/stepmeta`
 - typed step metadata from `internal/stepspec/*_meta.go`
@@ -162,6 +174,8 @@ External evidence is only authoritative for upstream facts such as:
 - troubleshooting guidance
 
 Prompts must preserve that boundary explicitly. External docs must not override local schema truth, validator rules, workflow path rules, or repair behavior.
+
+If a local-facts block starts behaving like ranked guidance or candidate recommendation, that is a design smell. Facts and guidance should be separate concerns.
 
 ## Required evidence failure behavior
 
@@ -205,10 +219,13 @@ When changing ask authoring behavior:
 - keep refine output on transform selection, not raw path editing
 - keep clarification decisions code-driven
 - keep repair automatic-first and structured
+- run the before/after `ask` quality suite for meaningful pipeline changes
+- remove superseded paths, labels, and aliases instead of leaving dormant compatibility branches
 - run `make test && make lint`
 
 ## Related docs
 
 - [Using deck ask](../guides/ask.md)
+- [Ask Quality Evaluation](ask-quality-evaluation.md)
 - [Comment-Driven Step Metadata](comment-driven-step-metadata.md)
 - [Architecture](../core-concepts/architecture.md)
