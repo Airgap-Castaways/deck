@@ -1190,6 +1190,13 @@ func TestValidatePrimaryRefineContractRejectsRawTransformWithoutTargetPath(t *te
 	}
 }
 
+func TestValidatePrimaryRefineContractRejectsExtractComponentWithoutSourceRawPath(t *testing.T) {
+	err := validatePrimaryRefineContract(askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "extract-component", Path: "workflows/components/bootstrap.yaml"}}}}})
+	if err == nil || !strings.Contains(err.Error(), "explicit target path") {
+		t.Fatalf("expected extract-component without raw path to be rejected, got %v", err)
+	}
+}
+
 func TestGenerationSystemPromptAddsComponentTransformHintsForRefine(t *testing.T) {
 	req := askpolicy.ScenarioRequirements{AcceptanceLevel: "refine", RequiredFiles: []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/components/bootstrap.yaml"}}
 	workspace := askretrieve.WorkspaceSummary{HasWorkflowTree: true}

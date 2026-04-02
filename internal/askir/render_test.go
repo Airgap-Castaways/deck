@@ -26,6 +26,9 @@ func TestRenderDocumentQuotesWholeValueTemplateScalars(t *testing.T) {
 	if !strings.Contains(content, `kubernetesVersion: "{{ .vars.kubernetesVersion }}"`) {
 		t.Fatalf("expected quoted whole-value template scalar, got %q", content)
 	}
+	if !strings.Contains(content, "\n  - id: init\n") {
+		t.Fatalf("expected workflow output to use 2-space list indentation, got %q", content)
+	}
 }
 
 func TestRenderDocumentPreservesBlockScalarTemplateLines(t *testing.T) {

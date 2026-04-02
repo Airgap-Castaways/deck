@@ -253,7 +253,7 @@ func quoteWholeValueTemplateScalars(raw []byte) ([]byte, error) {
 	markWholeValueTemplateScalars(&node)
 	var out strings.Builder
 	encoder := yaml.NewEncoder(&out)
-	encoder.SetIndent(4)
+	encoder.SetIndent(2)
 	if err := encoder.Encode(&node); err != nil {
 		_ = encoder.Close()
 		return nil, fmt.Errorf("encode rendered yaml with quoted templates: %w", err)

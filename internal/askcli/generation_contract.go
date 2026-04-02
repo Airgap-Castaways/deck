@@ -94,7 +94,7 @@ func refineAllowsRawTransform(doc askcontract.GeneratedDocument, transform askco
 		if strings.TrimSpace(doc.Path) == "workflows/vars.yaml" {
 			return false
 		}
-		return rawPath != "" && strings.TrimSpace(transform.Path) != ""
+		return strings.TrimSpace(transform.RawPath) != "" && strings.TrimSpace(transform.Path) != ""
 	default:
 		return false
 	}
