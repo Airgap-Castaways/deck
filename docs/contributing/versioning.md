@@ -14,7 +14,7 @@ The first planned release is `v0.1.0`.
 
 Until `v1.0.0`, `deck` should be treated as a fast-moving pre-stable tool.
 
-- Minor and patch releases in the `v0.x.y` line may still change workflow schema details, CLI output, bundle layout, audit records, and other user-facing contracts.
+- Minor and patch releases in the v0.x series may still change workflow schemas, CLI contracts, bundle structure, audit records, and other published contracts.
 - The project does not promise broad legacy compatibility across pre-1.0 releases.
 - When a simpler canonical shape is identified, prefer converging on it instead of carrying long-lived compatibility shims for abandoned pre-1.0 designs.
 - Compatibility code that does exist in the `v0.x.y` line should stay narrow and intentional, typically only where it protects a real on-disk migration path or a clearly documented upgrade flow.
