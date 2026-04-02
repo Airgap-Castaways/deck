@@ -42,7 +42,7 @@ func TestAuditSchema(t *testing.T) {
 
 func requireAuditSchemaFields(t *testing.T, entry map[string]any) {
 	t.Helper()
-	for _, key := range []string{"ts", "schema_version", "source", "event_type", "level", "message"} {
+	for _, key := range []string{"ts", "schema_version", "component", "event", "level", "message"} {
 		if _, ok := entry[key]; !ok {
 			t.Fatalf("missing required audit key %s in %+v", key, entry)
 		}
@@ -58,8 +58,34 @@ func requireAuditSchemaFields(t *testing.T, entry map[string]any) {
 		t.Fatalf("expected schema_version=%d, got %+v", auditSchemaVersion, entry["schema_version"])
 	}
 
-	source, _ := entry["source"].(string)
-	if source != auditSourceServer {
-		t.Fatalf("expected source=%q, got %q", auditSourceServer, source)
+	component, _ := entry["component"].(string)
+	if component != auditSourceServer {
+		t.Fatalf("expected component=%q, got %q", auditSourceServer, component)
+	}
+	event, _ := entry["event"].(string)
+	if event != "request" {
+		t.Fatalf("expected event=request, got %q", event)
+	}
+}
+
+func TestAddExtraIgnoresReservedAuditKeys(t *testing.T) {
+	entry := buildServerAuditRecord(time.Date(2026, time.April, 2, 10, 0, 0, 0, time.UTC), auditEventRequest, "info", "http request handled")
+	addExtra(entry, map[string]any{
+		"component": "shadowed",
+		"event":     "shadowed",
+		"message":   "shadowed",
+		"method":    "GET",
+	})
+	if got, _ := entry["component"].(string); got != auditSourceServer {
+		t.Fatalf("expected component to remain %q, got %q", auditSourceServer, got)
+	}
+	if got, _ := entry["event"].(string); got != "request" {
+		t.Fatalf("expected event to remain request, got %q", got)
+	}
+	if got, _ := entry["message"].(string); got != "http request handled" {
+		t.Fatalf("expected message to remain canonical, got %q", got)
+	}
+	if got, _ := entry["method"].(string); got != "GET" {
+		t.Fatalf("expected method to be added, got %q", got)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/filemode"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
 	"github.com/Airgap-Castaways/deck/internal/hostfs"
+	"github.com/Airgap-Castaways/deck/internal/logs"
 	"github.com/Airgap-Castaways/deck/internal/prepare"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
@@ -51,7 +52,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
-	if err := emitDiagnostic(opts, 1, "deck: prepare workflow=%s\n", filepath.ToSlash(prepareWorkflowPath)); err != nil {
+	if err := emitDiagnosticEvent(opts, 1, logs.CLIEvent{Component: "prepare", Event: "workflow_selected", Attrs: map[string]any{"workflow": filepath.ToSlash(prepareWorkflowPath)}}); err != nil {
 		return err
 	}
 	workflowRootDirPath := filepath.Dir(prepareWorkflowPath)
@@ -60,7 +61,7 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 	if varsWorkflowPath != "" {
-		if err := emitDiagnostic(opts, 1, "deck: prepare vars=%s\n", filepath.ToSlash(varsWorkflowPath)); err != nil {
+		if err := emitDiagnosticEvent(opts, 1, logs.CLIEvent{Component: "prepare", Event: "vars_selected", Attrs: map[string]any{"vars": filepath.ToSlash(varsWorkflowPath)}}); err != nil {
 			return err
 		}
 	}
@@ -69,7 +70,7 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 	if applyWorkflowPath != "" {
-		if err := emitDiagnostic(opts, 1, "deck: prepare apply=%s\n", filepath.ToSlash(applyWorkflowPath)); err != nil {
+		if err := emitDiagnosticEvent(opts, 1, logs.CLIEvent{Component: "prepare", Event: "apply_selected", Attrs: map[string]any{"apply": filepath.ToSlash(applyWorkflowPath)}}); err != nil {
 			return err
 		}
 	}
@@ -81,7 +82,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("resolve --root: %w", err)
 	}
-	if err := emitDiagnostic(opts, 1, "deck: prepare preparedRoot=%s\n", filepath.ToSlash(resolvedPreparedRootAbs)); err != nil {
+	if err := emitDiagnosticEvent(opts, 1, logs.CLIEvent{Component: "prepare", Event: "prepared_root", Attrs: map[string]any{"prepared_root": filepath.ToSlash(resolvedPreparedRootAbs)}}); err != nil {
 		return err
 	}
 	preparedRoot, err := fsutil.NewPreparedRoot(resolvedPreparedRootAbs)
@@ -96,7 +97,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
-	if err := emitDiagnostic(opts, 1, "deck: prepare refresh=%t clean=%t\n", opts.Refresh, opts.Clean); err != nil {
+	if err := emitDiagnosticEvent(opts, 1, logs.CLIEvent{Component: "prepare", Event: "run_config", Attrs: map[string]any{"refresh": opts.Refresh, "clean": opts.Clean}}); err != nil {
 		return err
 	}
 	planDiagnostics, err := prepare.InspectPlan(prepareWorkflow, preparedRoot.Abs(), prepare.RunOptions{BundleRoot: preparedRoot.Abs(), ForceRedownload: opts.Refresh})
@@ -113,11 +114,11 @@ func Run(ctx context.Context, opts Options) error {
 			default:
 				fetchCount++
 			}
-			if err := emitDiagnostic(opts, 2, "deck: prepare cacheArtifact step=%s type=%s action=%s\n", artifact.StepID, artifact.Type, artifact.Action); err != nil {
+			if err := emitDiagnosticEvent(opts, 2, logs.CLIEvent{Level: "debug", Component: "prepare", Event: "cache_artifact", Attrs: map[string]any{"step": artifact.StepID, "type": artifact.Type, "action": artifact.Action}}); err != nil {
 				return err
 			}
 		}
-		if err := emitDiagnostic(opts, 2, "deck: prepare cachePlan fetch=%d reuse=%d\n", fetchCount, reuseCount); err != nil {
+		if err := emitDiagnosticEvent(opts, 2, logs.CLIEvent{Level: "debug", Component: "prepare", Event: "cache_plan", Attrs: map[string]any{"fetch": fetchCount, "reuse": reuseCount}}); err != nil {
 			return err
 		}
 	}
@@ -127,10 +128,10 @@ func Run(ctx context.Context, opts Options) error {
 		if err != nil {
 			return err
 		}
-		if err := emitDiagnostic(opts, 1, "deck: prepare dry-run outputsRoot=%s\n", filepath.ToSlash(preparedRoot.Abs())); err != nil {
+		if err := emitDiagnosticEvent(opts, 1, logs.CLIEvent{Component: "prepare", Event: "dry_run", Attrs: map[string]any{"outputs_root": filepath.ToSlash(preparedRoot.Abs())}}); err != nil {
 			return err
 		}
-		if err := emitDiagnostic(opts, 2, "deck: prepare workflowIncludes=%d\n", workflowIncludeCount(prepareWorkflowPath, varsWorkflowPath, applyWorkflowPath)); err != nil {
+		if err := emitDiagnosticEvent(opts, 2, logs.CLIEvent{Level: "debug", Component: "prepare", Event: "workflow_includes", Attrs: map[string]any{"count": workflowIncludeCount(prepareWorkflowPath, varsWorkflowPath, applyWorkflowPath)}}); err != nil {
 			return err
 		}
 		for _, line := range []string{
@@ -166,7 +167,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	if opts.Clean {
-		if err := emitDiagnostic(opts, 1, "deck: prepare cleaning preparedRoot=%s\n", filepath.ToSlash(preparedRoot.Abs())); err != nil {
+		if err := emitDiagnosticEvent(opts, 1, logs.CLIEvent{Component: "prepare", Event: "cleaning", Attrs: map[string]any{"prepared_root": filepath.ToSlash(preparedRoot.Abs())}}); err != nil {
 			return err
 		}
 		if err := preparedHostPath.RemoveAll(); err != nil {
@@ -180,7 +181,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err := prepare.Run(ctx, prepareWorkflow, prepare.RunOptions{BundleRoot: preparedRoot.Abs(), ForceRedownload: opts.Refresh, EventSink: opts.EventSink}); err != nil {
 		return err
 	}
-	if err := emitDiagnostic(opts, 2, "deck: prepare bundleRoot=%s\n", filepath.ToSlash(preparedRoot.Abs())); err != nil {
+	if err := emitDiagnosticEvent(opts, 2, logs.CLIEvent{Level: "debug", Component: "prepare", Event: "bundle_root", Attrs: map[string]any{"bundle_root": filepath.ToSlash(preparedRoot.Abs())}}); err != nil {
 		return err
 	}
 
@@ -199,10 +200,10 @@ func Run(ctx context.Context, opts Options) error {
 	if err := writePreparedManifest(filepath.Join(preparedWorkspaceRoot, ".deck", "manifest.json"), manifest); err != nil {
 		return err
 	}
-	if err := emitDiagnostic(opts, 1, "deck: prepare manifestEntries=%d workspaceRoot=%s\n", len(manifest.Entries), filepath.ToSlash(preparedWorkspaceRoot)); err != nil {
+	if err := emitDiagnosticEvent(opts, 1, logs.CLIEvent{Component: "prepare", Event: "manifest_written", Attrs: map[string]any{"manifest_entries": len(manifest.Entries), "workspace_root": filepath.ToSlash(preparedWorkspaceRoot)}}); err != nil {
 		return err
 	}
-	if err := emitDiagnostic(opts, 2, "deck: prepare manifestPath=%s\n", filepath.ToSlash(filepath.Join(preparedWorkspaceRoot, ".deck", "manifest.json"))); err != nil {
+	if err := emitDiagnosticEvent(opts, 2, logs.CLIEvent{Level: "debug", Component: "prepare", Event: "manifest_path", Attrs: map[string]any{"manifest_path": filepath.ToSlash(filepath.Join(preparedWorkspaceRoot, ".deck", "manifest.json"))}}); err != nil {
 		return err
 	}
 
@@ -214,6 +215,14 @@ func emitDiagnostic(opts Options, level int, format string, args ...any) error {
 		return nil
 	}
 	return opts.Diagnosticf(level, format, args...)
+}
+
+func emitDiagnosticEvent(opts Options, level int, event logs.CLIEvent) error {
+	line, err := logs.RenderDefaultCLI(event)
+	if err != nil {
+		line = logs.FormatCLIText(logs.CLIEvent{Level: "error", Component: "prepare", Event: "log_render_failed", Attrs: map[string]any{"error": err.Error(), "original_event": event.Event}})
+	}
+	return emitDiagnostic(opts, level, "%s\n", line)
 }
 
 func workflowIncludeCount(prepareWorkflowPath, varsWorkflowPath, applyWorkflowPath string) int {

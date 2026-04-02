@@ -7,12 +7,15 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 )
 
 var (
 	cliStdout    io.Writer = os.Stdout
 	cliStderr    io.Writer = os.Stderr
 	cliVerbosity int
+	cliLogFormat string = "text"
 )
 
 type varFlag struct {
@@ -114,6 +117,17 @@ func resolveOutputFormat(output string) (string, error) {
 	return resolvedOutput, nil
 }
 
+func resolveCLILogFormat(format string) (string, error) {
+	resolved := strings.ToLower(strings.TrimSpace(format))
+	if resolved == "" {
+		resolved = "text"
+	}
+	if resolved != "text" && resolved != "json" {
+		return "", errors.New("--log-format must be text or json")
+	}
+	return resolved, nil
+}
+
 func setCLIWriters(stdout io.Writer, stderr io.Writer) {
 	if stdout == nil {
 		stdout = os.Stdout
@@ -123,6 +137,15 @@ func setCLIWriters(stdout io.Writer, stderr io.Writer) {
 	}
 	cliStdout = stdout
 	cliStderr = stderr
+}
+
+func setCLILogFormat(format string) {
+	resolved, err := resolveCLILogFormat(format)
+	if err != nil {
+		resolved = "text"
+	}
+	cliLogFormat = resolved
+	ctrllogs.SetCLIFormat(resolved)
 }
 
 func stdoutWriter() io.Writer {
@@ -138,6 +161,40 @@ func setCLIVerbosity(level int) {
 		level = 0
 	}
 	cliVerbosity = level
+}
+
+func formatCLIEvent(event ctrllogs.CLIEvent) string {
+	line, err := ctrllogs.RenderDefaultCLI(event)
+	if err != nil {
+		return ctrllogs.FormatCLIText(ctrllogs.CLIEvent{
+			TS:        event.TS,
+			Level:     "error",
+			Component: "cli",
+			Event:     "log_render_failed",
+			Attrs: map[string]any{
+				"error": err.Error(),
+				"event": event.Event,
+			},
+		})
+	}
+	return line
+}
+
+func stderrCLIEvent(event ctrllogs.CLIEvent) error {
+	_, err := fmt.Fprintf(cliStderr, "%s\n", formatCLIEvent(event))
+	return err
+}
+
+func stdoutCLIEvent(event ctrllogs.CLIEvent) error {
+	_, err := fmt.Fprintf(stdoutWriter(), "%s\n", formatCLIEvent(event))
+	return err
+}
+
+func verboseCLIEvent(level int, event ctrllogs.CLIEvent) error {
+	if cliVerbosity < level {
+		return nil
+	}
+	return stderrCLIEvent(event)
 }
 
 func verbosef(level int, format string, args ...any) error {

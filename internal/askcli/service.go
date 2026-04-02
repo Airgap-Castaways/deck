@@ -104,14 +104,14 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			effective.AccountID = session.AccountID
 		}
 	}
-	logger := newAskLogger(opts.Stderr, effective.LogLevel)
-	logger.logf("basic", "\n[ask][phase:request] routeCandidate=%s review=%t\n", heuristic.Route, opts.Review)
-	logger.logf("basic", "[ask][config] provider=%s model=%s endpoint=%s apiKeySource=%s oauthTokenSource=%s accountID=%t logLevel=%s\n", effective.Provider, effective.Model, effective.Endpoint, effective.APIKeySource, effective.OAuthTokenSource, strings.TrimSpace(effective.AccountID) != "", effective.LogLevel)
-	logger.logf("debug", "[ask][command] %s\n", renderUserCommand(opts))
+	logger := newAskLogger(opts.Stderr, effective.LogLevel, resolvedRoot)
+	logger.info("request_received", "route_candidate", heuristic.Route, "review", opts.Review)
+	logger.info("config_resolved", "provider", effective.Provider, "model", effective.Model, "endpoint", effective.Endpoint, "api_key_source", effective.APIKeySource, "oauth_token_source", effective.OAuthTokenSource, "account_id", strings.TrimSpace(effective.AccountID) != "", "log_level", effective.LogLevel)
+	logger.debug("command", "command", renderUserCommand(opts))
 	if requestSource != "" {
-		logger.logf("debug", "[ask][request-source] type=%s from=%s\n", requestSource, strings.TrimSpace(opts.FromPath))
+		logger.debug("request_source", "type", requestSource, "from", strings.TrimSpace(opts.FromPath))
 	}
-	logger.logf("trace", "\n[ask][request]\n%s\n", strings.TrimSpace(requestText))
+	logger.trace("request", "content", strings.TrimSpace(requestText))
 
 	decision := heuristic
 	classifierLLM := false
@@ -120,28 +120,28 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	switch {
 	case canUseLLM(effective) && resumedPlan == nil && !askintent.IsHardOverride(heuristic):
 		progress.status("classifying request")
-		logger.logf("debug", "\n[ask][phase:classify:start] provider=%s model=%s\n", effective.Provider, effective.Model)
+		logger.debug("phase_started", "phase", "classify", "provider", effective.Provider, "model", effective.Model)
 		classified, classifyErr := classifyWithLLM(ctx, client, effective, classifierSystem, classifierUser, logger)
 		if classifyErr == nil {
 			decision = classified
 			classifierLLM = true
-			logger.logf("basic", "[ask][phase:classify:done] route=%s confidence=%.2f reason=%s\n", decision.Route, decision.Confidence, decision.Reason)
+			logger.info("phase_succeeded", "phase", "classify", "route", decision.Route, "confidence", decision.Confidence, "reason", decision.Reason)
 		} else {
 			var cErr classifierError
 			if ok := errors.As(classifyErr, &cErr); ok && cErr.kind == classifierErrorSemantic {
 				decision = askintent.Decision{Route: askintent.RouteClarify, Confidence: 0.0, Reason: "classifier could not determine a safe route", Target: heuristic.Target, AllowGeneration: false, AllowRetry: false, RequiresLint: false, LLMPolicy: askintent.LLMOptional}
-				logger.logf("debug", "[ask][phase:classify:clarify] error=%v\n", classifyErr)
+				logger.debug("phase_failed", "phase", "classify", "result", "clarify", "error", classifyErr)
 				break
 			}
 			return classifyErr
 		}
 	case canUseLLM(effective):
-		logger.logf("debug", "[ask][phase:classify:skip] reason=hard-override-or-resumed-plan\n")
+		logger.debug("phase_skipped", "phase", "classify", "reason", "hard-override-or-resumed-plan")
 	default:
 		if !askintent.IsHardOverride(heuristic) {
 			return fmt.Errorf("ask classifier requires model access; use --create, --edit, or --review, or configure provider credentials")
 		}
-		logger.logf("debug", "[ask][phase:classify:skip] reason=no-llm-required-for-hard-override\n")
+		logger.debug("phase_skipped", "phase", "classify", "reason", "no-llm-required-for-hard-override")
 	}
 	if decision.Route == askintent.RouteRefine && !workspace.HasWorkflowTree {
 		return fmt.Errorf("cannot refine workflow files because this workspace has no workflow tree yet; run a draft generation first")
@@ -197,15 +197,15 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 
 	progress.status("loading workspace context")
-	logger.logf("debug", "\n[ask][phase:augment:start] mcp=%t\n", effective.MCP.Enabled)
+	logger.debug("phase_started", "phase", "augment", "mcp", effective.MCP.Enabled)
 	for _, event := range result.AugmentEvents {
 		prefix := "augment"
 		if strings.HasPrefix(event, "mcp:") {
 			prefix = "mcp"
 		}
-		logger.logf("debug", "[ask][augment:%s] %s\n", prefix, event)
+		logger.debug("augment_event", "source", prefix, "detail", event)
 	}
-	logger.logf("debug", "[ask][phase:retrieve] chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
+	logger.debug("retrieve_summary", "phase", "retrieve", "chunks", len(result.Chunks), "dropped", len(result.DroppedChunks))
 
 	if decision.LLMPolicy == askintent.LLMRequired && !canUseLLM(effective) {
 		return fmt.Errorf("missing ask credentials for provider %q; set %s, %s, or run `deck ask config set --api-key ...` / `deck ask config set --oauth-token ...`", effective.Provider, "DECK_ASK_API_KEY", "DECK_ASK_OAUTH_TOKEN")
@@ -256,7 +256,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			return fmt.Errorf("route %s requires model access; configure provider credentials first", decision.Route)
 		}
 		progress.status("planning authoring workflow")
-		logger.logf("basic", "\n[ask][phase:plan:start] route=%s\n", decision.Route)
+		logger.info("phase_started", "phase", "plan", "route", decision.Route)
 		cfg := askconfigSettings{provider: effective.Provider, model: effective.Model, apiKey: effective.APIKey, oauthToken: effective.OAuthToken, accountID: effective.AccountID, endpoint: effective.Endpoint}
 		planned, reviewedCritic, usedFallback, planErr := buildPlanWithReview(ctx, client, cfg, decision, retrieval, requestText, workspace, requirements, logger)
 		planCritic = reviewedCritic
@@ -264,20 +264,20 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			return planErr
 		}
 		if usedFallback {
-			logger.logf("debug", "[ask][phase:plan:fallback] using defaults after planner failure\n")
+			logger.debug("phase_fallback", "phase", "plan", "reason", "using defaults after planner failure")
 		}
 		plan = planned
 		result.Plan = &plan
 		if planCritic.Summary != "" || len(planCritic.Blocking) > 0 || len(planCritic.Advisory) > 0 || len(planCritic.MissingContracts) > 0 || len(planCritic.SuggestedFixes) > 0 {
 			result.PlanCritic = &planCritic
 		}
-		logger.logf("basic", "[ask][phase:plan:done] files=%d blockers=%d\n", len(plan.Files), len(plan.Blockers))
+		logger.info("phase_succeeded", "phase", "plan", "files", len(plan.Files), "blockers", len(plan.Blockers))
 		planMD := renderPlanMarkdown(plan, ".deck/plan/latest.md")
 		planMDPath, planJSONPath, saveErr := savePlanArtifact(resolvedRoot, opts, plan, planMD)
 		if saveErr != nil {
 			return saveErr
 		}
-		logger.logf("basic", "[ask][phase:plan:save] markdown=%s json=%s\n", planMDPath, planJSONPath)
+		logger.info("artifact_saved", "phase", "plan", "markdown", planMDPath, "json", planJSONPath)
 		result.PlanMarkdown = planMDPath
 		result.PlanJSON = planJSONPath
 		planMarkdownFinal := renderPlanMarkdown(plan, planMDPath)
@@ -345,7 +345,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		}
 		result.Chunks = retrieval.Chunks
 		result.DroppedChunks = retrieval.Dropped
-		logger.logf("debug", "[ask][phase:retrieve:second-pass] chunks=%d dropped=%d\n", len(result.Chunks), len(result.DroppedChunks))
+		logger.debug("retrieve_summary", "phase", "retrieve-second-pass", "chunks", len(result.Chunks), "dropped", len(result.DroppedChunks))
 	} else if resumedPlan != nil {
 		progress.status("resuming saved plan")
 		plan = *resumedPlan
@@ -418,7 +418,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		}
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: "generation", SystemPrompt: generationRequest.SystemPrompt, UserPrompt: generationRequest.Prompt})
 		progress.status("generating workflow output")
-		logger.logf("basic", "\n[ask][phase:generation:start] route=%s attempts=%d\n", decision.Route, attempts)
+		logger.info("phase_started", "phase", "generation", "route", decision.Route, "max_attempts", attempts)
 		gen, files, lintSummary, critic, judge, retriesUsed, genErr := generateWithValidation(ctx, client, generationRequest, resolvedRoot, attempts, logger, decision, plan, authoringBrief, retrieval, planCritic)
 		if genErr != nil {
 			return genErr
@@ -427,7 +427,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 			postSummary, postErr := maybePostProcessGeneration(ctx, client, generationRequest, resolvedRoot, logger, decision, plan, authoringBrief, retrieval, gen, files, lintSummary, critic, judge, planCritic)
 			switch {
 			case postErr != nil:
-				logger.logf("debug", "[ask][phase:postprocess:skip] error=%v\n", postErr)
+				logger.debug("phase_skipped", "phase", "postprocess", "error", postErr)
 			case postSummary.Applied:
 				gen = postSummary.Generation
 				files = postSummary.Files
@@ -439,7 +439,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 				result.ReviewLines = append(result.ReviewLines, postSummary.Notes...)
 			}
 		}
-		logger.logf("basic", "[ask][phase:generation:done] files=%d lint=%s\n", len(files), lintSummary)
+		logger.info("phase_succeeded", "phase", "generation", "files", len(files), "lint", lintSummary)
 		result.LLMUsed = true
 		result.RetriesUsed = retriesUsed
 		result.Files = files
@@ -471,7 +471,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 				systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, workspace, requestText)
 				result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
 				progress.status("answering %s request", phaseLabel(string(decision.Route)))
-				logger.logf("basic", "\n[ask][phase:answer:start] route=%s\n", decision.Route)
+				logger.info("phase_started", "phase", "answer", "route", decision.Route)
 				info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)
 				if infoErr == nil {
 					result.LLMUsed = true
@@ -480,10 +480,10 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 					result.ReviewLines = append(result.ReviewLines, info.Suggestions...)
 					result.ReviewLines = append(result.ReviewLines, info.Findings...)
 					result.ReviewLines = append(result.ReviewLines, info.SuggestedChange...)
-					logger.logf("basic", "[ask][phase:answer:done] route=%s\n", decision.Route)
+					logger.info("phase_succeeded", "phase", "answer", "route", decision.Route)
 				} else {
 					result.ReviewLines = append(result.ReviewLines, "LLM response failed; using local fallback: "+infoErr.Error())
-					logger.logf("debug", "[ask][phase:answer:fallback] error=%v\n", infoErr)
+					logger.debug("phase_fallback", "phase", "answer", "error", infoErr)
 				}
 			}
 		case askintent.RouteClarify:
@@ -493,7 +493,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 				systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, workspace, requestText)
 				result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
 				progress.status("answering %s request", phaseLabel(string(decision.Route)))
-				logger.logf("basic", "\n[ask][phase:answer:start] route=%s\n", decision.Route)
+				logger.info("phase_started", "phase", "answer", "route", decision.Route)
 				info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)
 				if infoErr == nil {
 					result.LLMUsed = true
@@ -502,10 +502,10 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 					result.ReviewLines = append(result.ReviewLines, info.Suggestions...)
 					result.ReviewLines = append(result.ReviewLines, info.Findings...)
 					result.ReviewLines = append(result.ReviewLines, info.SuggestedChange...)
-					logger.logf("basic", "[ask][phase:answer:done] route=%s\n", decision.Route)
+					logger.info("phase_succeeded", "phase", "answer", "route", decision.Route)
 				} else {
 					result.ReviewLines = append(result.ReviewLines, "LLM response failed; using local fallback: "+infoErr.Error())
-					logger.logf("debug", "[ask][phase:answer:fallback] error=%v\n", infoErr)
+					logger.debug("phase_fallback", "phase", "answer", "error", infoErr)
 					applyLocalFallback(&result, resolvedRoot, workspace, requestText)
 				}
 			} else {

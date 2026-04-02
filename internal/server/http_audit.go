@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,13 +29,22 @@ type auditLoggerOptions struct {
 }
 
 const (
-	auditSchemaVersion = 1
+	auditSchemaVersion = 2
 	auditSourceServer  = "server"
 	auditEventRequest  = "http_request"
 
 	defaultAuditMaxSizeMB = 50
 	defaultAuditMaxFiles  = 10
 )
+
+var reservedAuditKeys = map[string]struct{}{
+	"ts":             {},
+	"schema_version": {},
+	"component":      {},
+	"event":          {},
+	"level":          {},
+	"message":        {},
+}
 
 type statusRecorder struct {
 	http.ResponseWriter
@@ -122,11 +132,15 @@ func (a *auditLogger) rotateLocked() error {
 }
 
 func buildServerAuditRecord(ts time.Time, eventType, level, message string) map[string]any {
+	event := strings.TrimSpace(eventType)
+	if event == auditEventRequest {
+		event = "request"
+	}
 	return map[string]any{
 		"ts":             ts.UTC().Format(time.RFC3339Nano),
 		"schema_version": auditSchemaVersion,
-		"source":         auditSourceServer,
-		"event_type":     eventType,
+		"component":      auditSourceServer,
+		"event":          event,
 		"level":          level,
 		"message":        message,
 	}
@@ -136,7 +150,12 @@ func addExtra(entry map[string]any, extra map[string]any) {
 	if len(extra) == 0 {
 		return
 	}
-	entry["extra"] = extra
+	for key, value := range extra {
+		if _, reserved := reservedAuditKeys[key]; reserved {
+			continue
+		}
+		entry[key] = value
+	}
 }
 
 func (r *statusRecorder) WriteHeader(code int) {

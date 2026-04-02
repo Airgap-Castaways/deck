@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 	"github.com/Airgap-Castaways/deck/internal/userdirs"
 )
 
@@ -28,14 +29,14 @@ func executeCacheList(output string) error {
 	if err != nil {
 		return err
 	}
-	if err := verbosef(1, "deck: cache list root=%s output=%s\n", root, strings.TrimSpace(output)); err != nil {
+	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "list_requested", Attrs: map[string]any{"root": root, "output": strings.TrimSpace(output)}}); err != nil {
 		return err
 	}
 	entries, err := listCacheEntries(root)
 	if err != nil {
 		return err
 	}
-	if err := verbosef(1, "deck: cache list entries=%d\n", len(entries)); err != nil {
+	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "list_loaded", Attrs: map[string]any{"entries": len(entries)}}); err != nil {
 		return err
 	}
 	if resolvedOutput == "json" {
@@ -55,7 +56,7 @@ func executeCacheClean(olderThan string, dryRun bool) error {
 	if err != nil {
 		return err
 	}
-	if err := verbosef(1, "deck: cache clean root=%s olderThan=%s dryRun=%t\n", root, strings.TrimSpace(olderThan), dryRun); err != nil {
+	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "clean_requested", Attrs: map[string]any{"root": root, "older_than": strings.TrimSpace(olderThan), "dry_run": dryRun}}); err != nil {
 		return err
 	}
 	cutoff, hasCutoff, err := parseOlderThan(olderThan)
@@ -66,11 +67,11 @@ func executeCacheClean(olderThan string, dryRun bool) error {
 	if err != nil {
 		return err
 	}
-	if err := verbosef(1, "deck: cache clean matches=%d\n", len(plan)); err != nil {
+	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "clean_planned", Attrs: map[string]any{"matches": len(plan)}}); err != nil {
 		return err
 	}
 	for _, p := range plan {
-		if err := verbosef(2, "deck: cache clean path=%s\n", p); err != nil {
+		if err := verboseCLIEvent(2, ctrllogs.CLIEvent{Component: "cache", Event: "clean_match", Attrs: map[string]any{"path": p}}); err != nil {
 			return err
 		}
 		if err := stdoutPrintln(p); err != nil {

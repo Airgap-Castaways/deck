@@ -35,10 +35,47 @@ func NormalizeJSONLine(line []byte) (LogRecord, error) {
 }
 
 func NormalizeAuditRecord(raw map[string]any) LogRecord {
+	if isStructuredAuditRecord(raw) {
+		return normalizeStructuredAudit(raw)
+	}
 	if isAuditSchemaV1(raw) {
 		return normalizeSchemaV1(raw)
 	}
 	return normalizeLegacyAudit(raw)
+}
+
+func isStructuredAuditRecord(raw map[string]any) bool {
+	component := strings.TrimSpace(valueAsString(raw["component"]))
+	event := strings.TrimSpace(valueAsString(raw["event"]))
+	return component != "" || event != ""
+}
+
+func normalizeStructuredAudit(raw map[string]any) LogRecord {
+	record := LogRecord{
+		TS:        strings.TrimSpace(valueAsString(raw["ts"])),
+		Source:    strings.TrimSpace(valueAsString(raw["component"])),
+		EventType: strings.TrimSpace(valueAsString(raw["event"])),
+		Level:     strings.TrimSpace(valueAsString(raw["level"])),
+		Message:   strings.TrimSpace(valueAsString(raw["message"])),
+		Status:    strings.TrimSpace(valueAsString(raw["status"])),
+	}
+	if record.Source == "" {
+		record.Source = strings.TrimSpace(valueAsString(raw["source"]))
+	}
+	if record.EventType == "" {
+		record.EventType = strings.TrimSpace(valueAsString(raw["event_type"]))
+	}
+	if record.Message == "" {
+		record.Message = eventTypeToMessage(record.EventType)
+	}
+	extra := cloneMap(raw)
+	for _, key := range []string{"ts", "schema_version", "component", "event", "level", "message", "status", "source", "event_type"} {
+		delete(extra, key)
+	}
+	if len(extra) > 0 {
+		record.Extra = extra
+	}
+	return record
 }
 
 func NormalizeJournalRecord(raw map[string]any) LogRecord {

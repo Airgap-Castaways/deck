@@ -10,6 +10,7 @@ const (
 func newRootCommand() *cobra.Command {
 	cobra.EnableCommandSorting = false
 	setCLIVerbosity(0)
+	setCLILogFormat("text")
 
 	cmd := &cobra.Command{
 		Use:                "deck",
@@ -18,8 +19,17 @@ func newRootCommand() *cobra.Command {
 		SilenceErrors:      true,
 		SilenceUsage:       true,
 		DisableSuggestions: true,
+		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
+			resolved, err := resolveCLILogFormat(cliLogFormat)
+			if err != nil {
+				return err
+			}
+			setCLILogFormat(resolved)
+			return nil
+		},
 	}
 	cmd.PersistentFlags().IntVar(&cliVerbosity, "v", 0, "diagnostic verbosity level")
+	cmd.PersistentFlags().StringVar(&cliLogFormat, "log-format", "text", "diagnostic log format (text|json)")
 
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	cmd.SetHelpCommandGroupID(commandGroupAdditional)

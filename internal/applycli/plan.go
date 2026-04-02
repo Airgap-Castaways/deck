@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/install"
+	"github.com/Airgap-Castaways/deck/internal/logs"
 )
 
 type PlanOptions struct {
@@ -67,10 +68,10 @@ func ExecutePlan(ctx context.Context, opts PlanOptions) error {
 		workflowVarKeys = append(workflowVarKeys, key)
 	}
 	slices.Sort(workflowVarKeys)
-	if err := verbosef(opts.Verbosef, 1, "deck: plan workflow=%s phase=%s state=%s\n", report.WorkflowPath, report.SelectedPhase, report.StatePath); err != nil {
+	if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "plan", Event: "plan_requested", Attrs: map[string]any{"workflow": report.WorkflowPath, "phase": report.SelectedPhase, "state": report.StatePath}}); err != nil {
 		return err
 	}
-	if err := verbosef(opts.Verbosef, 3, "deck: plan workflowVars=%s runtimeVars=%s completedPhases=%d\n", joinOrDash(workflowVarKeys), joinOrDash(report.RuntimeVarKeys), report.Summary.CompletedPhases); err != nil {
+	if err := verboseEvent(opts.Verbosef, 3, logs.CLIEvent{Level: "debug", Component: "plan", Event: "plan_context", Attrs: map[string]any{"workflow_vars": joinOrDash(workflowVarKeys), "runtime_vars": joinOrDash(report.RuntimeVarKeys), "completed_phases": report.Summary.CompletedPhases}}); err != nil {
 		return err
 	}
 	if err := logPlanDetails(opts.Verbosef, report); err != nil {
@@ -179,10 +180,10 @@ func writePlanText(stdoutPrintf func(format string, args ...any) error, report P
 
 func logPlanDetails(verbose func(level int, format string, args ...any) error, report PlanReport) error {
 	for _, step := range report.Steps {
-		if err := verbosef(verbose, 2, "deck: plan step=%s kind=%s phase=%s action=%s reason=%s when=%q retry=%d timeout=%q register=%d\n", step.ID, step.Kind, step.Phase, step.Action, step.Reason, step.When, step.Retry, step.Timeout, len(step.Register)); err != nil {
+		if err := verboseEvent(verbose, 2, logs.CLIEvent{Level: "debug", Component: "plan", Event: "plan_step", Attrs: map[string]any{"step": step.ID, "kind": step.Kind, "phase": step.Phase, "action": step.Action, "reason": step.Reason, "when": step.When, "retry": step.Retry, "timeout": step.Timeout, "register": len(step.Register)}}); err != nil {
 			return err
 		}
-		if err := verbosef(verbose, 3, "deck: plan stepEval step=%s whenEvaluated=%t registerKeys=%s\n", step.ID, step.WhenEvaluated, joinOrDash(sortedRegisterKeys(step.Register))); err != nil {
+		if err := verboseEvent(verbose, 3, logs.CLIEvent{Level: "debug", Component: "plan", Event: "plan_step_eval", Attrs: map[string]any{"step": step.ID, "when_evaluated": step.WhenEvaluated, "register_keys": joinOrDash(sortedRegisterKeys(step.Register))}}); err != nil {
 			return err
 		}
 	}

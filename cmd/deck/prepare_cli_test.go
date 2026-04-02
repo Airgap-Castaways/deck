@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -136,7 +137,7 @@ func TestRunPrepareVerboseDiagnostics(t *testing.T) {
 	if !strings.Contains(res.stdout, "PREPARE_WORKFLOW=") {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
-	for _, want := range []string{"deck: prepare root=", "deck: prepare workflow=", "deck: prepare vars=", "deck: prepare apply=", "deck: prepare preparedRoot=", "deck: prepare dry-run outputsRoot="} {
+	for _, want := range []string{"component=prepare", "event=run_requested", "root=outputs", "event=workflow_selected", "event=vars_selected", "event=apply_selected", "event=prepared_root", "event=dry_run"} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 		}
@@ -146,7 +147,7 @@ func TestRunPrepareVerboseDiagnostics(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	for _, want := range []string{"deck: prepare workflowIncludes=3", "deck: prepare cacheArtifact step=seed type=file action=FETCH", "deck: prepare cachePlan fetch=1 reuse=0"} {
+	for _, want := range []string{"component=prepare", "event=workflow_includes", "count=3", "event=cache_artifact", "step=seed", "type=file", "action=FETCH", "event=cache_plan", "fetch=1", "reuse=0"} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 		}
@@ -181,8 +182,13 @@ func TestRunPrepareVerboseStepDiagnostics(t *testing.T) {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
 	for _, want := range []string{
-		"deck: prepare step=seed kind=DownloadFile phase=prepare status=started attempt=1",
-		"deck: prepare step=seed kind=DownloadFile phase=prepare status=succeeded attempt=1 duration=",
+		"component=prepare event=batch_started",
+		"component=prepare event=step_started",
+		"step=seed",
+		"batch=prepare",
+		"component=prepare event=step_succeeded",
+		"duration_ms=",
+		"component=prepare event=batch_succeeded batch=prepare",
 	} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
@@ -214,11 +220,47 @@ func TestRunPrepareEmitsDefaultProgressLog(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "deck: prepare step=seed kind=DownloadFile phase=prepare status=started attempt=1") {
+	if !strings.Contains(res.stderr, "component=prepare event=step_started") || !strings.Contains(res.stderr, "step=seed") || !strings.Contains(res.stderr, "batch=prepare") {
 		t.Fatalf("expected default step progress on stderr, got %q", res.stderr)
 	}
-	if !strings.Contains(res.stderr, "deck: prepare step=seed kind=DownloadFile phase=prepare status=succeeded attempt=1 duration=") {
+	if !strings.Contains(res.stderr, "component=prepare event=batch_succeeded batch=prepare") || !strings.Contains(res.stderr, "duration_ms=") {
 		t.Fatalf("expected completion progress with duration, got %q", res.stderr)
+	}
+}
+
+func TestRunPrepareSupportsJSONLogFormat(t *testing.T) {
+	root := t.TempDir()
+	workflowsDir := filepath.Join(root, "workflows")
+	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	writePrepareDownloadWorkflowFixture(t, root, "files/seed.bin")
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("version: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+
+	originalCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(originalCWD) })
+
+	res := execute([]string{"prepare", "--root", filepath.Join(root, "outputs"), "--bundle-binary-source", "local", "--log-format=json"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	lines := strings.Split(strings.TrimSpace(res.stderr), "\n")
+	if len(lines) == 0 {
+		t.Fatalf("expected stderr log lines")
+	}
+	for _, line := range lines {
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("expected JSON log line, got %q: %v", line, err)
+		}
 	}
 }
 

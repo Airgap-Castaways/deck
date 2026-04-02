@@ -52,7 +52,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 							continue
 						}
 					}
-					logger.logf("debug", "[ask][phase:repair:auto] applied=%d\n", len(autoNotes))
+					logger.debug("repair_auto_applied", "phase", "repair", "applied", len(autoNotes))
 					return autoGen, repairedFiles, lintSummary, critic, lastJudge, attempt - 1, nil
 				}
 				lastValidation = validateErr.Error()
@@ -62,7 +62,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			} else {
 				repairDiags = append(repairDiags, askdiagnostic.FromPlanCritic(planCritic)...)
 				repairDiags = append(repairDiags, askdiagnostic.FromCritic(lastCritic)...)
-				logger.logf("debug", "\n[ask][phase:repair:diagnostics]\n%s\n", askdiagnostic.JSON(repairDiags))
+				logger.trace("repair_diagnostics", "phase", "repair", "content", askdiagnostic.JSON(repairDiags))
 				if decision.Route == askintent.RouteDraft && !legacyAuthoringFallbackEnabled() {
 					currentPrompt = draftSelectionRetryPrompt(req.Prompt, lastValidation, repairDiags)
 				} else {
@@ -71,7 +71,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 				}
 			}
 		}
-		logger.logf("basic", "[ask][phase:generation:attempt] attempt=%d/%d\n", attempt, attempts)
+		logger.info("attempt_started", "phase", "generation", "attempt", attempt, "max_attempts", attempts)
 		logger.prompt("generation", currentSystemPrompt, currentPrompt)
 		resp, err := client.Generate(ctx, askprovider.Request{
 			Kind:         req.Kind,
@@ -93,7 +93,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 		if err != nil {
 			lastValidation = err.Error()
 			lastValidationErr = err
-			logger.logf("debug", "[ask][phase:generation:parse-error] error=%s\n", lastValidation)
+			logger.debug("attempt_failed", "phase", "generation", "attempt", attempt, "reason", "parse-error", "error", lastValidation)
 			if !repairableValidationError(lastValidation) {
 				return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation stopped without repair: %s", lastValidation)
 			}
@@ -110,7 +110,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 							lastJudge = judge
 							critic = mergeJudgeIntoCritic(critic, judge, true)
 						}
-						logger.logf("debug", "[ask][phase:repair:auto-from-parse] applied=%d\n", len(autoNotes))
+						logger.debug("repair_auto_applied", "phase", "repair", "source", "parse", "applied", len(autoNotes))
 						return autoGen, repairedFiles, lintSummary, critic, lastJudge, attempt - 1, nil
 					}
 				}
@@ -136,7 +136,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 		if err != nil {
 			lastValidation = err.Error()
 			lastValidationErr = err
-			logger.logf("debug", "[ask][phase:generation:materialize-error] error=%s\n", lastValidation)
+			logger.debug("attempt_failed", "phase", "generation", "attempt", attempt, "reason", "materialize-error", "error", lastValidation)
 			if attempt < attempts {
 				continue
 			}
@@ -147,7 +147,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 		}
 		files = normalizeGeneratedFiles(files)
 		gen.Files = append([]askcontract.GeneratedFile(nil), files...)
-		logger.logf("debug", "[ask][phase:semantic-validate] attempt=%d/%d\n", attempt, attempts)
+		logger.debug("phase_started", "phase", "semantic-validate", "attempt", attempt, "max_attempts", attempts)
 		lastFiles = files
 		lintSummary, critic, err := validateGeneration(ctx, root, gen, files, decision, plan, brief, retrieval)
 		lastCritic = critic
@@ -160,17 +160,17 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 					lastValidation = "semantic judge requested revision: " + strings.Join(judge.Blocking, "; ")
 					lastValidationErr = nil
 					lastCritic = critic
-					logger.logf("debug", "[ask][phase:judge:retry] blocking=%d\n", len(judge.Blocking))
+					logger.debug("phase_retry", "phase", "judge", "blocking", len(judge.Blocking))
 					continue
 				}
 			} else {
-				logger.logf("debug", "[ask][phase:judge:skip] error=%v\n", judgeErr)
+				logger.debug("phase_skipped", "phase", "judge", "error", judgeErr)
 			}
 			return gen, files, lintSummary, critic, lastJudge, attempt - 1, nil
 		}
 		lastValidation = err.Error()
 		lastValidationErr = err
-		logger.logf("debug", "[ask][phase:generation:validation-error] error=%s\n", lastValidation)
+		logger.debug("attempt_failed", "phase", "generation", "attempt", attempt, "reason", "validation-error", "error", lastValidation)
 		if !repairableValidationError(lastValidation) {
 			return askcontract.GenerationResponse{}, nil, lastValidation, critic, lastJudge, attempt - 1, fmt.Errorf("ask generation stopped without repair: %s", lastValidation)
 		}
@@ -191,7 +191,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 					lastJudge = judge
 					critic = mergeJudgeIntoCritic(critic, judge, true)
 				}
-				logger.logf("debug", "[ask][phase:repair:auto-final] applied=%d\n", len(autoNotes))
+				logger.debug("repair_auto_applied", "phase", "repair", "source", "final", "applied", len(autoNotes))
 				return autoGen, repairedFiles, lintSummary, critic, lastJudge, attempts - 1, nil
 			}
 			lastValidation = validateErr.Error()

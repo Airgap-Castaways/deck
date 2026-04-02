@@ -57,6 +57,8 @@ You can override `provider`, `model`, and `endpoint` per run, or save defaults w
 - `debug`: `basic` plus the user command and MCP events
 - `trace`: `debug` plus classifier/route system prompts and user prompts
 
+At `trace`, `ask` also writes prompt and response payload artifacts under `.deck/ask/runs/<run-id>/` and logs their paths on stderr. Prompt and response bodies stay hidden outside `trace`.
+
 `ask.mcp.servers[]` keeps the same config shape, but it now selects built-in external-docs providers rather than arbitrary first-class MCP semantics. Current built-in provider ids are:
 
 - `context7`: upstream library and API documentation lookup
@@ -76,6 +78,8 @@ These commands are additive. They do not replace the default local execution pat
 
 `deck server health -o json` returns the resolved server URL, `/healthz` URL, and HTTP status.
 
+`deck server up` writes structured audit records under `.deck/logs/server-audit.log`. The current audit schema is version 2 and uses top-level fields such as `component`, `event`, `method`, `path`, `status`, and `duration_ms`. Older consumers that expected `source`, `event_type`, or nested `extra` fields must be updated.
+
 `deck bundle verify -o json` returns the verified bundle path and final status.
 
 `deck cache list -o json` and `deck server logs -o json` keep machine-readable output on stdout while `--v=<n>` sends path and count diagnostics to stderr.
@@ -92,6 +96,27 @@ In practice:
 - `deck plan --v=3` adds workflow/runtime var traces and per-step evaluation details
 - `deck prepare --v=2` adds artifact group and cache reuse/fetch diagnostics
 - `deck bundle build --v=2` and `deck bundle verify --v=2` add manifest entry breakdowns
+
+Global `--log-format=text|json` controls how migrated diagnostic logs are rendered on stderr.
+
+- `--log-format=text`: one-line structured text logs intended for humans
+- `--log-format=json`: JSON Lines on stderr with the same event schema for machine processing
+
+Current migrated command families include `ask`, `prepare`, `apply`, `server`, `list`, and `cache`.
+
+Example text diagnostics:
+
+```text
+ts=2026-04-02T09:20:00Z level=info component=prepare event=batch_started phase=prepare batch=prepare:downloads parallel_group=downloads batch_size=2 max_parallelism=2 status=started
+ts=2026-04-02T09:20:00Z level=info component=prepare event=step_started phase=prepare batch=prepare:downloads step=download-runc kind=DownloadFile attempt=1 status=started
+```
+
+Example JSON diagnostics:
+
+```json
+{"ts":"2026-04-02T09:20:00Z","level":"info","component":"prepare","event":"batch_started","phase":"prepare","batch":"prepare:downloads","parallel_group":"downloads","batch_size":2,"max_parallelism":2,"status":"started"}
+{"ts":"2026-04-02T09:20:00Z","level":"info","component":"prepare","event":"step_started","phase":"prepare","batch":"prepare:downloads","step":"download-runc","kind":"DownloadFile","attempt":1,"status":"started"}
+```
 
 ## Shell completion
 
