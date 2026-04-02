@@ -3,6 +3,7 @@ package askcli
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -167,7 +168,7 @@ func (l askLogger) writePayloadArtifact(event string, label string, stream strin
 	l.state.mu.Lock()
 	defer l.state.mu.Unlock()
 	if l.state.runDir == "" {
-		runName := time.Now().UTC().Format("2006-01-02-150405.000000000")
+		runName := fmt.Sprintf("%s-%d", time.Now().UTC().Format("2006-01-02-150405.000000000"), os.Getpid())
 		runDir := filepath.Join(l.state.root, ".deck", "ask", "runs", runName)
 		if err := filemode.EnsureDir(runDir, filemode.PrivateState); err != nil {
 			return ""

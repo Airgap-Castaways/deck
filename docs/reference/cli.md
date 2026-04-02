@@ -78,6 +78,8 @@ These commands are additive. They do not replace the default local execution pat
 
 `deck server health -o json` returns the resolved server URL, `/healthz` URL, and HTTP status.
 
+`deck server up` writes structured audit records under `.deck/logs/server-audit.log`. The current audit schema is version 2 and uses top-level fields such as `component`, `event`, `method`, `path`, `status`, and `duration_ms`. Older consumers that expected `source`, `event_type`, or nested `extra` fields must be updated.
+
 `deck bundle verify -o json` returns the verified bundle path and final status.
 
 `deck cache list -o json` and `deck server logs -o json` keep machine-readable output on stdout while `--v=<n>` sends path and count diagnostics to stderr.
