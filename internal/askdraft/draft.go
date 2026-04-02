@@ -140,10 +140,11 @@ func buildWorkflowTarget(catalog askcatalog.Catalog, path string, target askcont
 		if !ok {
 			return nil, fmt.Errorf("unsupported draft builder %q for %s", selected.ID, path)
 		}
-		if err := validateOverrideKeys(builder, selected.Overrides); err != nil {
+		overrides := normalizeBuilderOverrides(builder, selected.Overrides)
+		if err := validateOverrideKeys(builder, overrides); err != nil {
 			return nil, err
 		}
-		phase, step, err := buildStep(builder, selected.Overrides, program, variables)
+		phase, step, err := buildStep(builder, overrides, program, variables)
 		if err != nil {
 			return nil, err
 		}
@@ -295,6 +296,10 @@ func deriveValue(name string, overrides map[string]any, program askcontract.Auth
 		return "/tmp/deck/join.txt", true
 	case "cluster.podCIDR":
 		return "10.244.0.0/16", true
+	case "cluster.kubernetesVersion":
+		return "stable", true
+	case "cluster.criSocket":
+		return "unix:///run/containerd/containerd.sock", true
 	case "cluster.roleWhen.control-plane":
 		return roleWhen(program, "control-plane")
 	case "cluster.roleWhen.worker":
@@ -426,6 +431,47 @@ func validateOverrideKeys(builder askcatalog.Builder, overrides map[string]any) 
 		}
 	}
 	return nil
+}
+
+func normalizeBuilderOverrides(builder askcatalog.Builder, overrides map[string]any) map[string]any {
+	if len(overrides) == 0 {
+		return nil
+	}
+	normalized := map[string]any{}
+	for key, value := range overrides {
+		clean := strings.TrimSpace(key)
+		if clean == "" || value == nil || ignoredBuilderOverrideKey(clean) {
+			continue
+		}
+		if text, ok := value.(string); ok && strings.TrimSpace(text) == "" {
+			continue
+		}
+		if alias := builderOverrideAlias(builder.ID, clean); alias != "" {
+			clean = alias
+		}
+		normalized[clean] = value
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
+}
+
+func ignoredBuilderOverrideKey(key string) bool {
+	switch strings.TrimSpace(key) {
+	case "phase", "step", "stepKind", "summary", "action", "path", "kind":
+		return true
+	default:
+		return false
+	}
+}
+
+func builderOverrideAlias(builderID string, key string) string {
+	key = strings.TrimSpace(key)
+	if strings.TrimSpace(builderID) == "apply.init-kubeadm" && key == "outputJoinFile" {
+		return "joinFile"
+	}
+	return ""
 }
 
 func deprecatedOverrideAllowed(builderID string, key string) bool {

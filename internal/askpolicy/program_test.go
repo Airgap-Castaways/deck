@@ -36,4 +36,10 @@ func TestNormalizeAuthoringProgramUsesPreinstalledDefaultsForMinimalSingleNodeBo
 	if program.Cluster.RoleSelector != "" {
 		t.Fatalf("expected no role selector for single-node flow, got %#v", program.Cluster)
 	}
+	if program.Cluster.KubernetesVersion != "v1.35.1" {
+		t.Fatalf("expected inferred kubernetes version for minimal flow, got %#v", program.Cluster)
+	}
+	if program.Cluster.CriSocket != "unix:///run/containerd/containerd.sock" {
+		t.Fatalf("expected default cri socket for kubeadm flow, got %#v", program.Cluster)
+	}
 }

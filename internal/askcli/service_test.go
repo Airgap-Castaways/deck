@@ -414,6 +414,32 @@ func TestBuildPlanWithReviewFallsBackOnPlannerFailure(t *testing.T) {
 	}
 }
 
+func TestBuildPlanWithReviewRecoversPartialPlannerResponse(t *testing.T) {
+	client := &stubClient{
+		responses: []string{
+			`{"version":1,"request":"Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker","intent":"draft","authoringProgram":{"platform":{"family":"rhel","release":"9"},"artifacts":{"packages":["kubeadm","kubelet","kubectl","cri-tools","containerd"],"images":["registry.k8s.io/kube-apiserver:v1.30.0"]},"cluster":{"joinFile":"/tmp/deck/join.txt","roleSelector":"vars.role","controlPlaneCount":1,"workerCount":1},"verification":{"expectedNodeCount":2,"expectedReadyCount":2,"expectedControlPlaneReady":1}},"entryScenario":"Execute prepare first, then apply","files":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"create","purpose":"prepare"},{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"apply"},{"path":"workflows/vars.yaml","kind":"vars","action":"create","purpose":"vars"}],"validationChecklist":["lint"]}`,
+			`{"summary":"plan critic skipped","blocking":[],"advisory":[],"missingContracts":[],"suggestedFixes":[]}`,
+		},
+	}
+	req := askpolicy.BuildScenarioRequirements("Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker", askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
+	plan, critic, usedFallback, err := buildPlanWithReview(context.Background(), client, askconfigSettings{provider: "openai", model: "gpt-5.4", apiKey: "test-key"}, askintent.Decision{Route: askintent.RouteDraft}, askretrieve.RetrievalResult{}, "Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker", askretrieve.WorkspaceSummary{}, req, newAskLogger(io.Discard, "trace"))
+	if err != nil {
+		t.Fatalf("buildPlanWithReview recovery: %v", err)
+	}
+	if usedFallback {
+		t.Fatalf("expected partial planner response to recover without fallback")
+	}
+	if plan.EntryScenario != "workflows/scenarios/apply.yaml" {
+		t.Fatalf("expected normalized entry scenario, got %#v", plan.EntryScenario)
+	}
+	if len(plan.AuthoringProgram.Artifacts.Packages) != 5 || len(plan.AuthoringProgram.Artifacts.Images) != 1 {
+		t.Fatalf("expected recovered artifact program, got %#v", plan.AuthoringProgram)
+	}
+	if len(critic.Blocking) != 0 {
+		t.Fatalf("expected non-blocking critic result, got %#v", critic)
+	}
+}
+
 func TestNormalizeArtifactKindsDropsPlannerNoise(t *testing.T) {
 	kinds := askpolicy.NormalizeArtifactKinds([]string{"workflow", "scenario", "image", "vars", "package"})
 	if strings.Join(kinds, ",") != "image,package" {
@@ -1033,7 +1059,7 @@ func TestGenerationSystemPromptAddsVarsTransformHintsForRefine(t *testing.T) {
 	}
 	scaffold := askscaffold.Build(req, workspace, askintent.Decision{Route: askintent.RouteRefine}, plan, askknowledge.Current())
 	prompt := generationSystemPrompt(askintent.RouteRefine, askintent.Target{Kind: "scenario", Path: "workflows/scenarios/control-plane-bootstrap.yaml"}, "refactor workflows/scenarios/control-plane-bootstrap.yaml to use workflows/vars.yaml for repeated values", askretrieve.RetrievalResult{}, req, plan, plan.AuthoringBrief, askcontract.ExecutionModel{}, scaffold)
-	for _, want := range []string{"Refine transform contract:", "Approved target paths: workflows/scenarios/control-plane-bootstrap.yaml, workflows/vars.yaml", "update the scenario file and vars file together as one transform", "vars advisory:"} {
+	for _, want := range []string{"Refine transform contract:", "Approved target paths: workflows/scenarios/control-plane-bootstrap.yaml, workflows/vars.yaml", "update the scenario file and vars file together as one transform", "For `extract-var`, put the variable key in `varName`.", "Only extract values into workflows/vars.yaml when they are explicitly recommended or genuinely repeated.", "vars advisory:"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in refine transform prompt, got %q", want, prompt)
 		}
@@ -1147,6 +1173,27 @@ func TestValidatePrimaryRefineContractAllowsRawVarsCompanionTransform(t *testing
 	err := validatePrimaryRefineContract(askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "set-field", Candidate: "set-field|workflows/scenarios/apply.yaml|steps[0].spec.outputJoinFile", Value: "{{ .vars.joinFilePath }}"}}}, {Path: "workflows/vars.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "set-field", Path: "vars.joinFilePath", Value: "/tmp/deck/join.txt"}}}}})
 	if err != nil {
 		t.Fatalf("expected raw vars companion transform to be allowed, got %v", err)
+	}
+}
+
+func TestValidatePrimaryRefineContractAllowsRawScenarioTransform(t *testing.T) {
+	err := validatePrimaryRefineContract(askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "set-field", RawPath: "steps[0].timeout", Value: "10m"}}}}})
+	if err != nil {
+		t.Fatalf("expected raw scenario transform to be allowed, got %v", err)
+	}
+}
+
+func TestValidatePrimaryRefineContractRejectsRawTransformWithoutTargetPath(t *testing.T) {
+	err := validatePrimaryRefineContract(askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "set-field", Value: "10m"}}}}})
+	if err == nil || !strings.Contains(err.Error(), "explicit target path") {
+		t.Fatalf("expected raw transform without target path to be rejected, got %v", err)
+	}
+}
+
+func TestValidatePrimaryRefineContractRejectsExtractComponentWithoutSourceRawPath(t *testing.T) {
+	err := validatePrimaryRefineContract(askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "extract-component", Path: "workflows/components/bootstrap.yaml"}}}}})
+	if err == nil || !strings.Contains(err.Error(), "explicit target path") {
+		t.Fatalf("expected extract-component without raw path to be rejected, got %v", err)
 	}
 }
 

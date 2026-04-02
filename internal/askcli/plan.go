@@ -125,6 +125,21 @@ func planWithLLM(ctx context.Context, client askprovider.Client, cfg askconfigSe
 	logger.response("plan", resp.Content)
 	planned, err := askcontract.ParsePlan(resp.Content)
 	if err != nil {
+		partial, partialErr := askcontract.ParsePlanPartial(resp.Content)
+		if partialErr != nil {
+			return askcontract.PlanResponse{}, err
+		}
+		if strings.TrimSpace(partial.Request) == "" {
+			partial.Request = strings.TrimSpace(prompt)
+		}
+		if strings.TrimSpace(partial.Intent) == "" {
+			partial.Intent = string(decision.Route)
+		}
+		planned = askpolicy.NormalizePlan(partial, prompt, retrieval, workspace, decision)
+		if validateErr := askpolicy.ValidatePlanStructure(planned); validateErr == nil {
+			logger.logf("debug", "[ask][phase:plan:recover] error=%v\n", err)
+			return planned, nil
+		}
 		return askcontract.PlanResponse{}, err
 	}
 	planned = askpolicy.NormalizePlan(planned, prompt, retrieval, workspace, decision)

@@ -11,6 +11,39 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
+type flexStrings []string
+
+func (f *flexStrings) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		*f = nil
+		return nil
+	}
+	var single string
+	if err := json.Unmarshal(data, &single); err == nil {
+		single = strings.TrimSpace(single)
+		if single == "" {
+			*f = nil
+		} else {
+			*f = []string{single}
+		}
+		return nil
+	}
+	var many []string
+	if err := json.Unmarshal(data, &many); err != nil {
+		return err
+	}
+	out := make([]string, 0, len(many))
+	for _, item := range many {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			out = append(out, item)
+		}
+	}
+	*f = out
+	return nil
+}
+
 type GeneratedFile struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
@@ -217,6 +250,89 @@ type ProgramVerification struct {
 	FinalVerificationRole     string `json:"finalVerificationRole,omitempty"`
 	Interval                  string `json:"interval,omitempty"`
 	Timeout                   string `json:"timeout,omitempty"`
+}
+
+type planResponseLoose struct {
+	Version                 int                   `json:"version"`
+	Request                 string                `json:"request"`
+	Intent                  string                `json:"intent"`
+	Complexity              string                `json:"complexity"`
+	AuthoringBrief          authoringBriefLoose   `json:"authoringBrief,omitempty"`
+	AuthoringProgram        authoringProgramLoose `json:"authoringProgram,omitempty"`
+	ExecutionModel          executionModelLoose   `json:"executionModel,omitempty"`
+	OfflineAssumption       string                `json:"offlineAssumption,omitempty"`
+	NeedsPrepare            bool                  `json:"needsPrepare,omitempty"`
+	ArtifactKinds           flexStrings           `json:"artifactKinds,omitempty"`
+	VarsRecommendation      flexStrings           `json:"varsRecommendation,omitempty"`
+	ComponentRecommendation flexStrings           `json:"componentRecommendation,omitempty"`
+	Blockers                flexStrings           `json:"blockers"`
+	TargetOutcome           string                `json:"targetOutcome"`
+	Assumptions             flexStrings           `json:"assumptions"`
+	OpenQuestions           flexStrings           `json:"openQuestions"`
+	Clarifications          []planClarification   `json:"clarifications,omitempty"`
+	EntryScenario           string                `json:"entryScenario"`
+	Files                   []PlanFile            `json:"files"`
+	ValidationChecklist     flexStrings           `json:"validationChecklist"`
+}
+
+type authoringBriefLoose struct {
+	RouteIntent              string      `json:"routeIntent,omitempty"`
+	TargetScope              string      `json:"targetScope,omitempty"`
+	TargetPaths              flexStrings `json:"targetPaths,omitempty"`
+	AnchorPaths              flexStrings `json:"anchorPaths,omitempty"`
+	AllowedCompanionPaths    flexStrings `json:"allowedCompanionPaths,omitempty"`
+	DisallowedExpansionPaths flexStrings `json:"disallowedExpansionPaths,omitempty"`
+	ModeIntent               string      `json:"modeIntent,omitempty"`
+	Connectivity             string      `json:"connectivity,omitempty"`
+	CompletenessTarget       string      `json:"completenessTarget,omitempty"`
+	Topology                 string      `json:"topology,omitempty"`
+	NodeCount                int         `json:"nodeCount,omitempty"`
+	PlatformFamily           string      `json:"platformFamily,omitempty"`
+	EscapeHatchMode          string      `json:"escapeHatchMode,omitempty"`
+	RequiredCapabilities     flexStrings `json:"requiredCapabilities,omitempty"`
+}
+
+type authoringProgramLoose struct {
+	Platform     ProgramPlatform       `json:"platform,omitempty"`
+	Artifacts    programArtifactsLoose `json:"artifacts,omitempty"`
+	Cluster      ProgramCluster        `json:"cluster,omitempty"`
+	Verification ProgramVerification   `json:"verification,omitempty"`
+}
+
+type programArtifactsLoose struct {
+	Packages         flexStrings `json:"packages,omitempty"`
+	Images           flexStrings `json:"images,omitempty"`
+	PackageOutputDir string      `json:"packageOutputDir,omitempty"`
+	ImageOutputDir   string      `json:"imageOutputDir,omitempty"`
+}
+
+type executionModelLoose struct {
+	ArtifactContracts    []ArtifactContract         `json:"artifactContracts,omitempty"`
+	SharedStateContracts []sharedStateContractLoose `json:"sharedStateContracts,omitempty"`
+	RoleExecution        RoleExecutionModel         `json:"roleExecution,omitempty"`
+	Verification         VerificationStrategy       `json:"verification,omitempty"`
+	ApplyAssumptions     flexStrings                `json:"applyAssumptions,omitempty"`
+}
+
+type sharedStateContractLoose struct {
+	Name              string      `json:"name,omitempty"`
+	ProducerPath      string      `json:"producerPath,omitempty"`
+	ConsumerPaths     flexStrings `json:"consumerPaths,omitempty"`
+	AvailabilityModel string      `json:"availabilityModel,omitempty"`
+	Description       string      `json:"description,omitempty"`
+}
+
+type planClarification struct {
+	ID                 string      `json:"id"`
+	Question           string      `json:"question"`
+	Kind               string      `json:"kind,omitempty"`
+	Reason             string      `json:"reason,omitempty"`
+	Decision           string      `json:"decision,omitempty"`
+	Options            flexStrings `json:"options,omitempty"`
+	RecommendedDefault string      `json:"recommendedDefault,omitempty"`
+	Answer             string      `json:"answer,omitempty"`
+	BlocksGeneration   bool        `json:"blocksGeneration,omitempty"`
+	Affects            flexStrings `json:"affects,omitempty"`
 }
 
 func (p AuthoringProgram) Value(path string) (any, bool) {
@@ -542,6 +658,7 @@ func ParseGeneration(raw string) (GenerationResponse, error) {
 		for j := range resp.Documents[i].Edits {
 			resp.Documents[i].Edits[j].Op = normalizeEditOp(resp.Documents[i].Edits[j].Op)
 			resp.Documents[i].Edits[j].RawPath = normalizeEditPath(resp.Documents[i].Edits[j].RawPath, resp.Documents[i].Edits[j].Path, firstNonEmpty(resp.Documents[i].Edits[j].StepID, resp.Documents[i].Edits[j].TargetStepID), resp.Documents[i].Edits[j].Target)
+			resp.Documents[i].Edits[j].RawPath = normalizeVarsDocumentRawPath(resp.Documents[i].Path, resp.Documents[i].Edits[j].RawPath)
 			resp.Documents[i].Edits[j].Path = ""
 			resp.Documents[i].Edits[j].StepID = ""
 			resp.Documents[i].Edits[j].TargetStepID = ""
@@ -553,10 +670,13 @@ func ParseGeneration(raw string) (GenerationResponse, error) {
 			resp.Documents[i].Transforms[j].RawPath = strings.TrimSpace(resp.Documents[i].Transforms[j].RawPath)
 			resp.Documents[i].Transforms[j].VarName = strings.TrimSpace(resp.Documents[i].Transforms[j].VarName)
 			resp.Documents[i].Transforms[j].VarsPath = strings.TrimSpace(resp.Documents[i].Transforms[j].VarsPath)
+			normalizeExtractVarShape(&resp.Documents[i].Transforms[j])
 			resp.Documents[i].Transforms[j].Path = strings.TrimSpace(resp.Documents[i].Transforms[j].Path)
 			if resp.Documents[i].Transforms[j].RawPath == "" && resp.Documents[i].Transforms[j].Type != "extract-component" {
 				resp.Documents[i].Transforms[j].RawPath = resp.Documents[i].Transforms[j].Path
 			}
+			resp.Documents[i].Transforms[j].RawPath = normalizeVarsDocumentRawPath(resp.Documents[i].Path, resp.Documents[i].Transforms[j].RawPath)
+			resp.Documents[i].Transforms[j].Path = normalizeVarsDocumentRawPath(resp.Documents[i].Path, resp.Documents[i].Transforms[j].Path)
 		}
 	}
 	if resp.Selection != nil {
@@ -896,9 +1016,23 @@ func normalizeEvidenceDecision(value string) string {
 }
 
 func ParsePlan(raw string) (PlanResponse, error) {
+	return parsePlan(raw, true)
+}
+
+func ParsePlanPartial(raw string) (PlanResponse, error) {
+	return parsePlan(raw, false)
+}
+
+func parsePlan(raw string, validate bool) (PlanResponse, error) {
 	cleaned := clean(raw)
 	if cleaned == "" {
 		return PlanResponse{}, fmt.Errorf("plan response is empty")
+	}
+	if !validate {
+		resp, err := parseLoosePlan(cleaned)
+		if err == nil {
+			return resp, nil
+		}
 	}
 	var resp PlanResponse
 	if err := json.Unmarshal([]byte(cleaned), &resp); err != nil {
@@ -998,6 +1132,9 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	for i := range resp.ExecutionModel.ApplyAssumptions {
 		resp.ExecutionModel.ApplyAssumptions[i] = strings.TrimSpace(resp.ExecutionModel.ApplyAssumptions[i])
 	}
+	if !validate {
+		return resp, nil
+	}
 	if resp.Request == "" {
 		return PlanResponse{}, fmt.Errorf("plan response is missing request")
 	}
@@ -1064,6 +1201,108 @@ func ParsePlan(raw string) (PlanResponse, error) {
 	return resp, nil
 }
 
+func parseLoosePlan(cleaned string) (PlanResponse, error) {
+	var loose planResponseLoose
+	if err := json.Unmarshal([]byte(cleaned), &loose); err != nil {
+		repaired := repairLooseJSON(cleaned)
+		if repaired == cleaned || json.Unmarshal([]byte(repaired), &loose) != nil {
+			return PlanResponse{}, err
+		}
+	}
+	resp := PlanResponse{
+		Version:                 loose.Version,
+		Request:                 loose.Request,
+		Intent:                  loose.Intent,
+		Complexity:              loose.Complexity,
+		AuthoringBrief:          loose.AuthoringBrief.toStrict(),
+		AuthoringProgram:        loose.AuthoringProgram.toStrict(),
+		ExecutionModel:          loose.ExecutionModel.toStrict(),
+		OfflineAssumption:       loose.OfflineAssumption,
+		NeedsPrepare:            loose.NeedsPrepare,
+		ArtifactKinds:           []string(loose.ArtifactKinds),
+		VarsRecommendation:      []string(loose.VarsRecommendation),
+		ComponentRecommendation: []string(loose.ComponentRecommendation),
+		Blockers:                []string(loose.Blockers),
+		TargetOutcome:           loose.TargetOutcome,
+		Assumptions:             []string(loose.Assumptions),
+		OpenQuestions:           []string(loose.OpenQuestions),
+		EntryScenario:           loose.EntryScenario,
+		Files:                   loose.Files,
+		ValidationChecklist:     []string(loose.ValidationChecklist),
+	}
+	for _, item := range loose.Clarifications {
+		resp.Clarifications = append(resp.Clarifications, item.toStrict())
+	}
+	return resp, nil
+}
+
+func (b authoringBriefLoose) toStrict() AuthoringBrief {
+	return AuthoringBrief{
+		RouteIntent:              b.RouteIntent,
+		TargetScope:              b.TargetScope,
+		TargetPaths:              []string(b.TargetPaths),
+		AnchorPaths:              []string(b.AnchorPaths),
+		AllowedCompanionPaths:    []string(b.AllowedCompanionPaths),
+		DisallowedExpansionPaths: []string(b.DisallowedExpansionPaths),
+		ModeIntent:               b.ModeIntent,
+		Connectivity:             b.Connectivity,
+		CompletenessTarget:       b.CompletenessTarget,
+		Topology:                 b.Topology,
+		NodeCount:                b.NodeCount,
+		PlatformFamily:           b.PlatformFamily,
+		EscapeHatchMode:          b.EscapeHatchMode,
+		RequiredCapabilities:     []string(b.RequiredCapabilities),
+	}
+}
+
+func (p authoringProgramLoose) toStrict() AuthoringProgram {
+	return AuthoringProgram{
+		Platform: p.Platform,
+		Artifacts: ProgramArtifacts{
+			Packages:         []string(p.Artifacts.Packages),
+			Images:           []string(p.Artifacts.Images),
+			PackageOutputDir: p.Artifacts.PackageOutputDir,
+			ImageOutputDir:   p.Artifacts.ImageOutputDir,
+		},
+		Cluster:      p.Cluster,
+		Verification: p.Verification,
+	}
+}
+
+func (m executionModelLoose) toStrict() ExecutionModel {
+	out := ExecutionModel{
+		ArtifactContracts: append([]ArtifactContract(nil), m.ArtifactContracts...),
+		RoleExecution:     m.RoleExecution,
+		Verification:      m.Verification,
+		ApplyAssumptions:  []string(m.ApplyAssumptions),
+	}
+	for _, item := range m.SharedStateContracts {
+		out.SharedStateContracts = append(out.SharedStateContracts, SharedStateContract{
+			Name:              item.Name,
+			ProducerPath:      item.ProducerPath,
+			ConsumerPaths:     []string(item.ConsumerPaths),
+			AvailabilityModel: item.AvailabilityModel,
+			Description:       item.Description,
+		})
+	}
+	return out
+}
+
+func (c planClarification) toStrict() PlanClarification {
+	return PlanClarification{
+		ID:                 c.ID,
+		Question:           c.Question,
+		Kind:               c.Kind,
+		Reason:             c.Reason,
+		Decision:           c.Decision,
+		Options:            []string(c.Options),
+		RecommendedDefault: c.RecommendedDefault,
+		Answer:             c.Answer,
+		BlocksGeneration:   c.BlocksGeneration,
+		Affects:            []string(c.Affects),
+	}
+}
+
 func resolvePlannedEntryScenario(entry string, files []PlanFile) string {
 	entry = filepath.ToSlash(strings.TrimSpace(entry))
 	if strings.HasPrefix(entry, "workflows/scenarios/") {
@@ -1084,6 +1323,34 @@ func resolvePlannedEntryScenario(entry string, files []PlanFile) string {
 		return matches[0]
 	}
 	return ""
+}
+
+func normalizeVarsDocumentRawPath(docPath string, rawPath string) string {
+	if filepath.ToSlash(strings.TrimSpace(docPath)) != filepath.ToSlash(filepath.Join(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowVarsRel)) {
+		return strings.TrimSpace(rawPath)
+	}
+	rawPath = strings.TrimSpace(rawPath)
+	if rawPath == "vars" {
+		return ""
+	}
+	if strings.HasPrefix(rawPath, "vars.") {
+		return strings.TrimPrefix(rawPath, "vars.")
+	}
+	return rawPath
+}
+
+func normalizeExtractVarShape(transform *RefineTransformAction) {
+	if transform == nil || strings.TrimSpace(transform.Type) != "extract-var" {
+		return
+	}
+	varsPath := strings.TrimSpace(transform.VarsPath)
+	if varsPath == "" || strings.HasPrefix(filepath.ToSlash(varsPath), workspacepaths.WorkflowRootDir+"/") {
+		return
+	}
+	if strings.TrimSpace(transform.VarName) == "" {
+		transform.VarName = varsPath
+	}
+	transform.VarsPath = ""
 }
 
 func ParseJudge(raw string) (JudgeResponse, error) {

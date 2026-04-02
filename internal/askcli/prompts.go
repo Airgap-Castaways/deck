@@ -213,19 +213,23 @@ func refineTransformPromptBlock(plan askcontract.PlanResponse, brief askcontract
 	b.WriteString("Refine transform contract:\n")
 	b.WriteString("- Treat refine as a targeted transform over existing documents, not a full workspace rewrite.\n")
 	b.WriteString("- Only touch plan-approved target paths unless the plan explicitly requires another file.\n")
-	b.WriteString("- Prefer transform candidate ids over model-authored raw paths. Only provide override values when the selected candidate needs one.\n")
+	b.WriteString("- Prefer transform candidate ids over model-authored raw paths. Raw code-owned transforms are allowed only when they still point at an explicit target path.\n")
 	if len(paths) > 0 {
 		b.WriteString("- Approved target paths: ")
 		b.WriteString(strings.Join(paths, ", "))
 		b.WriteString("\n")
 	}
-	b.WriteString("- Primary refine generation should use `edit` actions with transform candidate ids only. Full replacement documents are fallback-only.\n")
+	b.WriteString("- Primary refine generation should use `edit` actions with code-owned transforms. Candidate ids are preferred when available; otherwise include explicit raw paths. Full replacement documents are fallback-only.\n")
 	b.WriteString("- Prefer `transforms` with type `extract-var` for repeated literal extraction into workflows/vars.yaml when the request is about hoisting repeated values.\n")
 	b.WriteString("- Prefer `transforms` with type `set-field` or `delete-field` for narrow step field changes instead of broad document rewrites.\n")
 	b.WriteString("- Prefer `transforms` with type `extract-component` when moving inline phase steps into workflows/components/ while preserving the scenario phase layout.\n")
 	b.WriteString("- Do not use model-authored `replace` output on the primary refine path.\n")
 	if promptContainsTrimmed(paths, "workflows/vars.yaml") {
 		b.WriteString("- When extracting repeated values into workflows/vars.yaml, update the scenario file and vars file together as one transform.\n")
+	}
+	b.WriteString("- For `extract-var`, put the variable key in `varName`. Use `varsPath` only for the companion file path such as `workflows/vars.yaml`.\n")
+	if len(plan.VarsRecommendation) > 0 {
+		b.WriteString("- Only extract values into workflows/vars.yaml when they are explicitly recommended or genuinely repeated. Keep other literals inline.\n")
 	}
 	if len(paths) > 1 {
 		b.WriteString("- Keep cross-file transforms coordinated: do not update one target path while silently dropping required companion edits in another approved target path.\n")
@@ -255,7 +259,7 @@ func promptContainsTrimmed(values []string, want string) bool {
 
 func generationResponseShapeRule(route askintent.Route) string {
 	if route == askintent.RouteRefine {
-		return "JSON shape: {\"summary\":string,\"review\":[]string,\"documents\":[{\"path\":string,\"kind\":string,\"action\":string,\"transforms\":[{\"type\":string,\"candidate\":string,\"value\":any?,\"varName\":string?,\"varsPath\":string?,\"path\":string?}]}]}. On the primary refine path, use actions preserve|delete|edit and prefer transform candidate ids over raw paths."
+		return "JSON shape: {\"summary\":string,\"review\":[]string,\"documents\":[{\"path\":string,\"kind\":string,\"action\":string,\"transforms\":[{\"type\":string,\"candidate\":string?,\"rawPath\":string?,\"value\":any?,\"varName\":string?,\"varsPath\":string?,\"path\":string?}]}]}. For `extract-var`, `varName` is the variable key and `varsPath` is only the file path like `workflows/vars.yaml`. On the primary refine path, use actions preserve|delete|edit and prefer transform candidate ids over raw paths."
 	}
 	return "JSON shape: {\"summary\":string,\"review\":[]string,\"selection\":{\"patterns\":[]string,\"targets\":[{\"path\":string,\"kind\":string,\"builders\":[{\"id\":string,\"overrides\":object}],\"vars\":object}],\"vars\":object}}. On the primary draft path, return builder selection only and let code compile the workflow documents."
 }

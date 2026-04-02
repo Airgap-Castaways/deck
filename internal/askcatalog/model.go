@@ -68,6 +68,7 @@ type Field struct {
 	Type               string
 	Requirement        schemafacts.RequirementLevel
 	Default            string
+	Pattern            string
 	Enum               []string
 	Description        string
 	Example            string

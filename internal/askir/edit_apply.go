@@ -1,17 +1,21 @@
 package askir
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askrefine"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
 	"github.com/Airgap-Castaways/deck/internal/stepspec"
 	"github.com/Airgap-Castaways/deck/internal/structurededit"
+	"github.com/Airgap-Castaways/deck/internal/structuredpath"
 )
 
 func applyDocumentEdits(root string, baseContent map[string]string, path string, doc askcontract.GeneratedDocument) (string, []askcontract.GeneratedFile, error) {
@@ -73,6 +77,10 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 		parsedDoc = currentDoc
 		resolved, err := askrefine.ResolveCandidate(parsedDoc, transform)
 		if err != nil {
+			var unknown askrefine.UnknownCandidateError
+			if errors.As(err, &unknown) && unknown.Ignorable {
+				continue
+			}
 			return "", nil, err
 		}
 		transform = resolved
@@ -89,6 +97,9 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 			rawPath := resolveStructuredEditPath(strings.TrimSpace(transform.RawPath), parsedDoc)
 			if rawPath == "" {
 				return "", nil, fmt.Errorf("transform extract-var on %s requires rawPath", path)
+			}
+			if transform.Value == nil {
+				transform.Value = currentDocumentValue([]byte(content), rawPath, parsedDoc)
 			}
 			updatedTarget, err := applyStructuredEdits([]byte(content), []stepspec.StructuredEdit{{Op: "set", RawPath: rawPath, Value: fmt.Sprintf("{{ .vars.%s }}", varName)}})
 			if err != nil {
@@ -190,6 +201,10 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 			return "", nil, fmt.Errorf("unsupported refine transform %q for %s", transform.Type, path)
 		}
 	}
+	content, err := normalizeEmptyWorkflowVars(content, path)
+	if err != nil {
+		return "", nil, err
+	}
 	extraFiles := make([]askcontract.GeneratedFile, 0, len(orderedExtraPaths))
 	for _, extraPath := range orderedExtraPaths {
 		extraFiles = append(extraFiles, askcontract.GeneratedFile{Path: extraPath, Content: pending[extraPath]})
@@ -254,4 +269,102 @@ func renderedFileContentMap(files []askcontract.GeneratedFile) map[string]string
 
 func applyStructuredEdits(raw []byte, edits []stepspec.StructuredEdit) ([]byte, error) {
 	return structurededit.Apply(structurededit.FormatYAML, raw, edits)
+}
+
+func currentDocumentValue(raw []byte, rawPath string, doc askcontract.GeneratedDocument) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var model any
+	if err := yaml.Unmarshal(raw, &model); err != nil {
+		return nil
+	}
+	normalized := normalizeEditableValue(model)
+	rawPath = strings.TrimSpace(rawPath)
+	if rawPath == "" {
+		return nil
+	}
+	segments, err := structuredpath.Parse(rawPath)
+	if err != nil {
+		segments, err = structuredpath.Parse(resolveStructuredEditPath(rawPath, doc))
+		if err != nil {
+			return nil
+		}
+	}
+	value, ok := valueAtStructuredPath(normalized, segments)
+	if ok {
+		return value
+	}
+	resolvedPath := resolveStructuredEditPath(rawPath, doc)
+	if strings.TrimSpace(resolvedPath) == "" || resolvedPath == rawPath {
+		return nil
+	}
+	segments, err = structuredpath.Parse(resolvedPath)
+	if err != nil {
+		return nil
+	}
+	value, ok = valueAtStructuredPath(normalized, segments)
+	if !ok {
+		return nil
+	}
+	return value
+}
+
+func normalizeEditableValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := map[string]any{}
+		for key, item := range typed {
+			out[key] = normalizeEditableValue(item)
+		}
+		return out
+	case map[any]any:
+		out := map[string]any{}
+		for key, item := range typed {
+			out[fmt.Sprint(key)] = normalizeEditableValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, normalizeEditableValue(item))
+		}
+		return out
+	default:
+		return typed
+	}
+}
+
+func valueAtStructuredPath(current any, segments []structuredpath.Segment) (any, bool) {
+	for _, segment := range segments {
+		if segment.IsIndex {
+			items, ok := current.([]any)
+			if !ok || segment.Index < 0 || segment.Index >= len(items) {
+				return nil, false
+			}
+			current = items[segment.Index]
+			continue
+		}
+		values, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		next, ok := values[segment.Key]
+		if !ok {
+			return nil, false
+		}
+		current = next
+	}
+	return current, true
+}
+
+func normalizeEmptyWorkflowVars(content string, path string) (string, error) {
+	doc, parseErr := ParseDocument(path, []byte(content))
+	if parseErr == nil && doc.Workflow != nil && len(doc.Workflow.Vars) == 0 {
+		updated, applyErr := applyStructuredEdits([]byte(content), []stepspec.StructuredEdit{{Op: "delete", RawPath: "vars"}})
+		if applyErr == nil {
+			return normalizeRenderedContent(updated), nil
+		}
+	}
+	return content, nil
 }

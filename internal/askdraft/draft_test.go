@@ -112,3 +112,36 @@ func TestCompileIgnoresDeprecatedLowLevelOverrides(t *testing.T) {
 		t.Fatalf("expected LoadImage step in apply workflow")
 	}
 }
+
+func TestCompileUsesKubeadmOverrideAliasesAndDropsStructuralNoise(t *testing.T) {
+	selection := askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{
+		Path: "workflows/scenarios/apply.yaml",
+		Builders: []askcontract.DraftBuilderSelection{
+			{ID: "apply.init-kubeadm", Overrides: map[string]any{"outputJoinFile": "/custom/join.txt", "kubernetesVersion": "v1.35.1", "criSocket": "unix:///run/containerd/containerd.sock", "phase": "ignored"}},
+			{ID: "apply.check-cluster", Overrides: map[string]any{"nodeCount": 1, "readyCount": 1, "controlPlaneReady": 1, "phase": "ignored"}},
+		},
+	}}}
+	docs, err := CompileWithProgram(askcontract.AuthoringProgram{}, selection)
+	if err != nil {
+		t.Fatalf("compile with kubeadm overrides: %v", err)
+	}
+	if len(docs) != 1 || docs[0].Workflow == nil {
+		t.Fatalf("expected single workflow document, got %#v", docs)
+	}
+	apply := docs[0].Workflow
+	joined := map[string]askcontract.WorkflowStep{}
+	for _, phase := range apply.Phases {
+		for _, step := range phase.Steps {
+			joined[step.Kind] = step
+		}
+	}
+	init := joined["InitKubeadm"]
+	if init.Spec["outputJoinFile"] != "/custom/join.txt" || init.Spec["kubernetesVersion"] != "v1.35.1" || init.Spec["criSocket"] != "unix:///run/containerd/containerd.sock" {
+		t.Fatalf("expected init-kubeadm overrides to materialize, got %#v", init.Spec)
+	}
+	check := joined["CheckCluster"]
+	nodes, _ := check.Spec["nodes"].(map[string]any)
+	if nodes["total"] != 1 || nodes["ready"] != 1 || nodes["controlPlaneReady"] != 1 {
+		t.Fatalf("expected check-cluster overrides to materialize, got %#v", check.Spec)
+	}
+}

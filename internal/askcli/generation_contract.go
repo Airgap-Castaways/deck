@@ -50,7 +50,7 @@ func validatePrimaryDraftContract(gen askcontract.GenerationResponse) error {
 
 func validatePrimaryRefineContract(gen askcontract.GenerationResponse) error {
 	if len(gen.Documents) == 0 {
-		return fmt.Errorf("refine primary path requires edit documents with transform candidate ids")
+		return fmt.Errorf("refine primary path requires edit documents with code-owned transforms")
 	}
 	for _, doc := range gen.Documents {
 		action := strings.ToLower(strings.TrimSpace(doc.Action))
@@ -65,11 +65,11 @@ func validatePrimaryRefineContract(gen askcontract.GenerationResponse) error {
 				return fmt.Errorf("refine primary path must not use raw structured edits; select transform candidate ids instead")
 			}
 			if len(doc.Transforms) == 0 {
-				return fmt.Errorf("refine primary path edit documents must include transform candidate ids")
+				return fmt.Errorf("refine primary path edit documents must include transforms")
 			}
 			for _, transform := range doc.Transforms {
-				if strings.TrimSpace(transform.Candidate) == "" && !refineAllowsRawCompanionTransform(doc, transform) {
-					return fmt.Errorf("refine primary path must use transform candidate ids instead of raw transform payloads")
+				if strings.TrimSpace(transform.Candidate) == "" && !refineAllowsRawTransform(doc, transform) {
+					return fmt.Errorf("refine primary path raw transforms must use a supported code-owned transform with an explicit target path")
 				}
 			}
 		default:
@@ -79,13 +79,22 @@ func validatePrimaryRefineContract(gen askcontract.GenerationResponse) error {
 	return nil
 }
 
-func refineAllowsRawCompanionTransform(doc askcontract.GeneratedDocument, transform askcontract.RefineTransformAction) bool {
-	if strings.TrimSpace(doc.Path) != "workflows/vars.yaml" {
-		return false
+func refineAllowsRawTransform(doc askcontract.GeneratedDocument, transform askcontract.RefineTransformAction) bool {
+	typeName := strings.TrimSpace(transform.Type)
+	rawPath := strings.TrimSpace(transform.RawPath)
+	if rawPath == "" {
+		rawPath = strings.TrimSpace(transform.Path)
 	}
-	switch strings.TrimSpace(transform.Type) {
+	switch typeName {
 	case "set-field", "delete-field":
-		return strings.TrimSpace(transform.RawPath) != "" || strings.TrimSpace(transform.Path) != ""
+		return rawPath != ""
+	case "extract-var":
+		return rawPath != "" && strings.TrimSpace(transform.VarName) != ""
+	case "extract-component":
+		if strings.TrimSpace(doc.Path) == "workflows/vars.yaml" {
+			return false
+		}
+		return strings.TrimSpace(transform.RawPath) != "" && strings.TrimSpace(transform.Path) != ""
 	default:
 		return false
 	}

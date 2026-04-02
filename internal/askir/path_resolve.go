@@ -8,6 +8,7 @@ import (
 )
 
 func resolveStructuredEditPath(rawPath string, doc askcontract.GeneratedDocument) string {
+	rawPath = normalizeVarsDocumentEditPath(rawPath, doc)
 	segments, err := structuredpath.Parse(rawPath)
 	if err != nil {
 		return strings.TrimSpace(rawPath)
@@ -38,4 +39,18 @@ func rewriteWorkflowStepPath(segments []structuredpath.Segment, doc askcontract.
 		}
 	}
 	return segments
+}
+
+func normalizeVarsDocumentEditPath(rawPath string, doc askcontract.GeneratedDocument) string {
+	rawPath = strings.TrimSpace(rawPath)
+	if doc.Vars == nil {
+		return rawPath
+	}
+	if rawPath == "vars" {
+		return ""
+	}
+	if strings.HasPrefix(rawPath, "vars.") {
+		return strings.TrimPrefix(rawPath, "vars.")
+	}
+	return rawPath
 }
