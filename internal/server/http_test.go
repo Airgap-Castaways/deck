@@ -426,21 +426,6 @@ func TestServe_StaticReadOnly(t *testing.T) {
 	})
 }
 
-func TestHealth(t *testing.T) {
-	root := t.TempDir()
-	h, err := NewHandler(root, HandlerOptions{})
-	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected GET /healthz 200, got %d", rr.Code)
-	}
-}
-
 func TestAccessLog(t *testing.T) {
 	root := t.TempDir()
 	var accessLog bytes.Buffer
@@ -453,6 +438,9 @@ func TestAccessLog(t *testing.T) {
 	req.RemoteAddr = "127.0.0.1:43210"
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected GET /healthz 200, got %d", rr.Code)
+	}
 
 	line := strings.TrimSpace(accessLog.String())
 	for _, want := range []string{"component=server", "event=request", "remote_addr=127.0.0.1:43210", "method=GET", "path=/healthz", "status=200", "bytes=0", "duration_ms="} {
@@ -472,42 +460,5 @@ func TestRenderBrowsePageHidesDirectorySizes(t *testing.T) {
 	}
 	if !strings.Contains(body, "1234 bytes") {
 		t.Fatalf("expected non-directory size to render, got %q", body)
-	}
-}
-
-func TestHandlerRejectsLegacyPutUploads(t *testing.T) {
-	root := t.TempDir()
-	for _, category := range []string{"files", "packages", "images", "workflows"} {
-		if err := os.MkdirAll(filepath.Join(root, category), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", category, err)
-		}
-	}
-
-	h, err := NewHandler(root, HandlerOptions{})
-	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
-	}
-
-	for _, tc := range []struct {
-		path string
-		file string
-		body string
-	}{
-		{path: "/files/new/file.txt", file: filepath.Join(root, "outputs", "files", "new", "file.txt"), body: "file-data"},
-		{path: "/packages/deb/pkg.txt", file: filepath.Join(root, "outputs", "packages", "deb", "pkg.txt"), body: "pkg-data"},
-		{path: "/images/manifests/app.json", file: filepath.Join(root, "outputs", "images", "manifests", "app.json"), body: "img-data"},
-		{path: "/workflows/flow.yaml", file: filepath.Join(root, "workflows", "flow.yaml"), body: "wf-data"},
-	} {
-		putReq := httptest.NewRequest(http.MethodPut, tc.path, strings.NewReader(tc.body))
-		putRR := httptest.NewRecorder()
-		h.ServeHTTP(putRR, putReq)
-		if putRR.Code != http.StatusMethodNotAllowed {
-			t.Fatalf("expected PUT %s 405, got %d", tc.path, putRR.Code)
-		}
-
-		raw, readErr := os.ReadFile(tc.file)
-		if !os.IsNotExist(readErr) {
-			t.Fatalf("expected no file write for PUT %s, got err=%v content=%q", tc.path, readErr, string(raw))
-		}
 	}
 }

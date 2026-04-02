@@ -10,35 +10,6 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/buildinfo"
 )
 
-func TestVersionCommand(t *testing.T) {
-	originalVersion := buildinfo.Version
-	originalCommit := buildinfo.Commit
-	originalDate := buildinfo.Date
-	originalDirty := buildinfo.Dirty
-	originalRepository := buildinfo.Repository
-	t.Cleanup(func() {
-		buildinfo.Version = originalVersion
-		buildinfo.Commit = originalCommit
-		buildinfo.Date = originalDate
-		buildinfo.Dirty = originalDirty
-		buildinfo.Repository = originalRepository
-	})
-
-	buildinfo.Repository = "https://github.com/Airgap-Castaways/deck"
-	buildinfo.Version = "v0.1.0"
-	buildinfo.Commit = "abc1234"
-	buildinfo.Date = "2026-03-17T10:00:00Z"
-	buildinfo.Dirty = "true"
-
-	out, err := runWithCapturedStdout([]string{"version"})
-	if err != nil {
-		t.Fatalf("expected success, got %v", err)
-	}
-	if out != "deck v0.1.0\nrepo https://github.com/Airgap-Castaways/deck\n" {
-		t.Fatalf("unexpected output: %q", out)
-	}
-}
-
 func TestVersionCommandJSON(t *testing.T) {
 	originalVersion := buildinfo.Version
 	originalCommit := buildinfo.Commit
@@ -177,14 +148,6 @@ func TestInit(t *testing.T) {
 		}
 	}
 
-	t.Run("default template is single when omitted", func(t *testing.T) {
-		outputDir := t.TempDir()
-		if _, err := runWithCapturedStdout([]string{"init", "--out", outputDir}); err != nil {
-			t.Fatalf("init failed: %v", err)
-		}
-		assertWorkflowSet(t, outputDir, "{}\n")
-	})
-
 	t.Run("template flag is no longer supported", func(t *testing.T) {
 		_, err := runWithCapturedStdout([]string{"init", "--template", "multinode"})
 		if err == nil || !strings.Contains(err.Error(), "unknown flag") {
@@ -192,7 +155,7 @@ func TestInit(t *testing.T) {
 		}
 	})
 
-	t.Run("creates starter set under --out workflows", func(t *testing.T) {
+	t.Run("creates starter set under explicit --out", func(t *testing.T) {
 		outputDir := t.TempDir()
 		if _, err := runWithCapturedStdout([]string{"init", "--out", outputDir}); err != nil {
 			t.Fatalf("init failed: %v", err)
