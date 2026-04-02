@@ -7,6 +7,8 @@ import (
 
 const Name = "deck"
 
+const Repository = "https://github.com/Airgap-Castaways/deck"
+
 var (
 	Version = "dev"
 	Commit  = "unknown"
@@ -20,6 +22,7 @@ type Info struct {
 	Commit  string `json:"commit"`
 	Date    string `json:"date"`
 	Dirty   bool   `json:"dirty"`
+	Repo    string `json:"repository"`
 }
 
 func Current() Info {
@@ -29,6 +32,7 @@ func Current() Info {
 		Commit:  normalizedValue(Commit, "unknown"),
 		Date:    normalizedValue(Date, "unknown"),
 		Dirty:   parseDirty(Dirty),
+		Repo:    Repository,
 	}
 }
 

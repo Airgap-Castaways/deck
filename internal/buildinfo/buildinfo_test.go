@@ -35,6 +35,9 @@ func TestCurrentUsesFallbacksAndParsesDirty(t *testing.T) {
 	if !info.Dirty {
 		t.Fatalf("expected dirty build info")
 	}
+	if info.Repo != Repository {
+		t.Fatalf("unexpected repository: %q", info.Repo)
+	}
 	if Summary() != "deck dev" {
 		t.Fatalf("unexpected summary: %q", Summary())
 	}
