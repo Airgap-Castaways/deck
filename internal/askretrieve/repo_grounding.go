@@ -2,9 +2,13 @@ package askretrieve
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
@@ -64,23 +68,20 @@ func repoGroundingChunk(root string, id string, label string, path string, body 
 }
 
 func buildStepmetaSummary(root string) string {
-	path := filepath.Join(root, "internal", "stepmeta", "registry.go")
-	raw, err := os.ReadFile(path) //nolint:gosec // repository-owned source file
+	metadata, err := parseStepspecMetadata(root)
 	if err != nil {
 		return ""
 	}
-	text := string(raw)
 	b := &strings.Builder{}
 	b.WriteString("- file: internal/stepmeta/registry.go\n")
 	b.WriteString("- role: central registry for typed step metadata, ask builder definitions, and schema-backed source-of-truth\n")
-	_, _ = fmt.Fprintf(b, "- registered builder metadata blocks observed: %d\n", strings.Count(text, "Builders"))
-	_, _ = fmt.Fprintf(b, "- validation hints observed: %d\n", strings.Count(text, "ValidationHints"))
+	_, _ = fmt.Fprintf(b, "- registered builder metadata blocks observed: %d\n", metadata.totalBuilders())
+	_, _ = fmt.Fprintf(b, "- validation hints observed: %d\n", metadata.totalValidationHints())
 	return strings.TrimSpace(b.String())
 }
 
 func buildStepspecSummary(root string, lowerPrompt string) string {
-	patternDir := filepath.Join(root, "internal", "stepspec")
-	entries, err := os.ReadDir(patternDir)
+	metadata, err := parseStepspecMetadata(root)
 	if err != nil {
 		return ""
 	}
@@ -90,25 +91,20 @@ func buildStepspecSummary(root string, lowerPrompt string) string {
 		score   int
 	}
 	items := make([]item, 0)
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_meta.go") {
-			continue
-		}
-		raw, readErr := os.ReadFile(filepath.Join(patternDir, entry.Name())) //nolint:gosec // repository-owned source file
-		if readErr != nil {
-			continue
-		}
-		text := string(raw)
-		lowerText := strings.ToLower(text)
-		kind := extractQuotedValue(text, "Kind:")
-		builder := extractQuotedValue(text, "ID:")
+	for _, entry := range metadata.entries {
 		score := 0
 		for _, token := range strings.Fields(lowerPrompt) {
-			if token != "" && strings.Contains(lowerText, token) {
+			if token != "" && strings.Contains(entry.lowerText, token) {
 				score++
 			}
 		}
-		items = append(items, item{kind: kind, builder: builder, score: score})
+		if len(entry.builders) == 0 {
+			items = append(items, item{kind: entry.kind, score: score})
+			continue
+		}
+		for _, builder := range entry.builders {
+			items = append(items, item{kind: entry.kind, builder: builder, score: score})
+		}
 	}
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].score == items[j].score {
@@ -144,6 +140,248 @@ func buildStepspecSummary(root string, lowerPrompt string) string {
 	return strings.TrimSpace(b.String())
 }
 
+type stepspecMetadata struct {
+	entries []stepspecEntry
+}
+
+func (m stepspecMetadata) totalBuilders() int {
+	total := 0
+	for _, entry := range m.entries {
+		total += len(entry.builders)
+	}
+	return total
+}
+
+func (m stepspecMetadata) totalValidationHints() int {
+	total := 0
+	for _, entry := range m.entries {
+		total += entry.validationHints
+	}
+	return total
+}
+
+type stepspecEntry struct {
+	kind            string
+	builders        []string
+	validationHints int
+	lowerText       string
+}
+
+func parseStepspecMetadata(root string) (stepspecMetadata, error) {
+	patternDir := filepath.Join(root, "internal", "stepspec")
+	entries, err := os.ReadDir(patternDir)
+	if err != nil {
+		return stepspecMetadata{}, err
+	}
+	metadata := stepspecMetadata{entries: make([]stepspecEntry, 0, len(entries))}
+	fset := token.NewFileSet()
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_meta.go") {
+			continue
+		}
+		fullPath := filepath.Join(patternDir, entry.Name())
+		raw, readErr := os.ReadFile(fullPath) //nolint:gosec // repository-owned source file
+		if readErr != nil {
+			continue
+		}
+		file, parseErr := parser.ParseFile(fset, fullPath, raw, 0)
+		if parseErr != nil {
+			continue
+		}
+		lowerText := strings.ToLower(string(raw))
+		for _, parsed := range parseMetadataFile(file, lowerText) {
+			if parsed.kind == "" {
+				continue
+			}
+			metadata.entries = append(metadata.entries, parsed)
+		}
+	}
+	return metadata, nil
+}
+
+func parseMetadataFile(file *ast.File, lowerText string) []stepspecEntry {
+	functionDefs := make(map[string]*ast.CompositeLit)
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Name == nil || fn.Body == nil {
+			continue
+		}
+		if lit := findReturnedDefinitionLiteral(fn.Body); lit != nil {
+			functionDefs[fn.Name.Name] = lit
+		}
+	}
+	entries := make([]stepspecEntry, 0)
+	for _, decl := range file.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			valueSpec, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for _, value := range valueSpec.Values {
+				lit := resolveDefinitionLiteral(value, functionDefs)
+				if lit == nil {
+					continue
+				}
+				entry := parseDefinitionLiteral(lit)
+				entry.lowerText = lowerText
+				entries = append(entries, entry)
+			}
+		}
+	}
+	return entries
+}
+
+func findReturnedDefinitionLiteral(body *ast.BlockStmt) *ast.CompositeLit {
+	for _, stmt := range body.List {
+		ret, ok := stmt.(*ast.ReturnStmt)
+		if !ok || len(ret.Results) != 1 {
+			continue
+		}
+		lit, ok := ret.Results[0].(*ast.CompositeLit)
+		if ok {
+			return lit
+		}
+		return nil
+	}
+	return nil
+}
+
+func resolveDefinitionLiteral(expr ast.Expr, functionDefs map[string]*ast.CompositeLit) *ast.CompositeLit {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok || len(call.Args) != 1 || !isMustRegisterCall(call.Fun) {
+		return nil
+	}
+	if lit, ok := call.Args[0].(*ast.CompositeLit); ok {
+		return lit
+	}
+	ref, ok := call.Args[0].(*ast.CallExpr)
+	if !ok {
+		return nil
+	}
+	ident, ok := ref.Fun.(*ast.Ident)
+	if !ok || len(ref.Args) != 0 {
+		return nil
+	}
+	return functionDefs[ident.Name]
+}
+
+func isMustRegisterCall(expr ast.Expr) bool {
+	switch typed := expr.(type) {
+	case *ast.IndexExpr:
+		selector, ok := typed.X.(*ast.SelectorExpr)
+		return ok && selector.Sel != nil && selector.Sel.Name == "MustRegister"
+	case *ast.IndexListExpr:
+		selector, ok := typed.X.(*ast.SelectorExpr)
+		return ok && selector.Sel != nil && selector.Sel.Name == "MustRegister"
+	case *ast.SelectorExpr:
+		return typed.Sel != nil && typed.Sel.Name == "MustRegister"
+	default:
+		return false
+	}
+}
+
+func parseDefinitionLiteral(lit *ast.CompositeLit) stepspecEntry {
+	entry := stepspecEntry{}
+	for _, element := range lit.Elts {
+		kv, ok := element.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key := exprIdentName(kv.Key)
+		switch key {
+		case "Kind":
+			entry.kind = stringLiteralValue(kv.Value)
+		case "Ask":
+			builders, hints := parseAskMetadata(kv.Value)
+			entry.builders = builders
+			entry.validationHints = hints
+		}
+	}
+	return entry
+}
+
+func parseAskMetadata(expr ast.Expr) ([]string, int) {
+	lit, ok := expr.(*ast.CompositeLit)
+	if !ok {
+		return nil, 0
+	}
+	builders := make([]string, 0)
+	hints := 0
+	for _, element := range lit.Elts {
+		kv, ok := element.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		switch exprIdentName(kv.Key) {
+		case "Builders":
+			builders = append(builders, parseBuilderIDs(kv.Value)...)
+		case "ValidationHints":
+			hints = compositeLiteralLen(kv.Value)
+		}
+	}
+	return builders, hints
+}
+
+func parseBuilderIDs(expr ast.Expr) []string {
+	lit, ok := expr.(*ast.CompositeLit)
+	if !ok {
+		return nil
+	}
+	ids := make([]string, 0, len(lit.Elts))
+	for _, element := range lit.Elts {
+		builderLit, ok := element.(*ast.CompositeLit)
+		if !ok {
+			continue
+		}
+		for _, field := range builderLit.Elts {
+			kv, ok := field.(*ast.KeyValueExpr)
+			if !ok || exprIdentName(kv.Key) != "ID" {
+				continue
+			}
+			if id := stringLiteralValue(kv.Value); id != "" {
+				ids = append(ids, id)
+			}
+		}
+	}
+	return ids
+}
+
+func compositeLiteralLen(expr ast.Expr) int {
+	lit, ok := expr.(*ast.CompositeLit)
+	if !ok {
+		return 0
+	}
+	return len(lit.Elts)
+}
+
+func exprIdentName(expr ast.Expr) string {
+	switch typed := expr.(type) {
+	case *ast.Ident:
+		return typed.Name
+	case *ast.SelectorExpr:
+		if typed.Sel != nil {
+			return typed.Sel.Name
+		}
+	}
+	return ""
+}
+
+func stringLiteralValue(expr ast.Expr) string {
+	lit, ok := expr.(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return ""
+	}
+	value, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
 func buildDirectorySummary(root string, rel string, notes []string) string {
 	entries, err := os.ReadDir(filepath.Join(root, rel))
 	if err != nil {
@@ -163,22 +401,4 @@ func buildDirectorySummary(root string, rel string, notes []string) string {
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())
-}
-
-func extractQuotedValue(text string, marker string) string {
-	idx := strings.Index(text, marker)
-	if idx < 0 {
-		return ""
-	}
-	rest := text[idx+len(marker):]
-	start := strings.Index(rest, `"`)
-	if start < 0 {
-		return ""
-	}
-	rest = rest[start+1:]
-	end := strings.Index(rest, `"`)
-	if end < 0 {
-		return ""
-	}
-	return strings.TrimSpace(rest[:end])
 }
