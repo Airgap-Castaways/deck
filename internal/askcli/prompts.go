@@ -145,13 +145,13 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, requ
 }
 
 func evidenceBoundaryPromptBlock(retrieval askretrieve.RetrievalResult) string {
-	hasRepoGrounding := false
+	hasLocalFacts := false
 	hasExternalEvidence := false
 	externalLines := make([]string, 0)
 	for _, chunk := range retrieval.Chunks {
 		switch chunk.Source {
-		case "repo-grounding":
-			hasRepoGrounding = true
+		case "local-facts":
+			hasLocalFacts = true
 		case "mcp":
 			hasExternalEvidence = true
 			if chunk.Evidence != nil {
@@ -185,13 +185,13 @@ func evidenceBoundaryPromptBlock(retrieval askretrieve.RetrievalResult) string {
 			}
 		}
 	}
-	if !hasRepoGrounding && !hasExternalEvidence {
+	if !hasLocalFacts && !hasExternalEvidence {
 		return ""
 	}
 	b := &strings.Builder{}
 	b.WriteString("Evidence boundaries:\n")
-	if hasRepoGrounding {
-		b.WriteString("- Local repo grounding is authoritative for deck workflow validity, typed step metadata, builder behavior, and repair semantics.\n")
+	if hasLocalFacts {
+		b.WriteString("- Local facts are authoritative for deck workflow validity, typed step metadata, builder behavior, and repair semantics.\n")
 	}
 	if hasExternalEvidence {
 		b.WriteString("- External evidence is only for upstream product behavior, install steps, compatibility, versions, or troubleshooting recency.\n")

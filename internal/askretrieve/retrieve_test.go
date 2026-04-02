@@ -58,16 +58,16 @@ func TestRetrieveIncludesStructuredMCPEvidenceChunk(t *testing.T) {
 	}
 }
 
-func TestRetrieveIncludesLocalRepoGroundingChunks(t *testing.T) {
+func TestRetrieveIncludesLocalFactChunks(t *testing.T) {
 	result := Retrieve(askintent.RouteDraft, "create kubeadm workflow using builder selection", askintent.Target{}, WorkspaceSummary{}, askstate.Context{}, nil)
 	found := false
 	for _, chunk := range result.Chunks {
-		if chunk.Source == "repo-grounding" {
+		if chunk.Source == "local-facts" {
 			found = true
-			if !strings.Contains(chunk.Content, "Local repo grounding:") {
-				t.Fatalf("expected repo grounding prefix, got %q", chunk.Content)
+			if !strings.Contains(chunk.Content, "Local facts:") {
+				t.Fatalf("expected local facts prefix, got %q", chunk.Content)
 			}
-			if chunk.ID == "repo-grounding-stepspec" {
+			if chunk.ID == "local-facts-stepspec" {
 				if chunk.Label != "stepspec-facts" {
 					t.Fatalf("expected fact-oriented stepspec label, got %#v", chunk)
 				}
@@ -78,7 +78,7 @@ func TestRetrieveIncludesLocalRepoGroundingChunks(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("expected repo-grounding chunks, got %#v", result.Chunks)
+		t.Fatalf("expected local-facts chunks, got %#v", result.Chunks)
 	}
 }
 
@@ -118,9 +118,9 @@ func TestRetrieveQuestionIncludesInformationalFactAssembly(t *testing.T) {
 	}
 }
 
-func TestBuildChunkTextSeparatesRepoGroundingAndExternalEvidence(t *testing.T) {
-	text := BuildChunkText(RetrievalResult{Chunks: []Chunk{{ID: "repo-1", Source: "repo-grounding", Label: "source-of-truth-stepmeta", Topic: "repo-grounding:stepmeta", Content: "Local repo grounding:\n- path: internal/stepmeta/registry.go"}, {ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Topic: "mcp:web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}"}, {ID: "workspace-1", Source: "workspace", Label: "workflows/scenarios/apply.yaml", Topic: "workspace:workflows/scenarios/apply.yaml", Content: "version: v1alpha1"}}})
-	for _, want := range []string{"Local repo grounding:", "External evidence:", "Retrieved context:", "[chunk:repo-1,source:repo-grounding", "[chunk:mcp-1,source:mcp", "[chunk:workspace-1,source:workspace"} {
+func TestBuildChunkTextSeparatesLocalFactsAndExternalEvidence(t *testing.T) {
+	text := BuildChunkText(RetrievalResult{Chunks: []Chunk{{ID: "facts-1", Source: "local-facts", Label: "source-of-truth-stepmeta", Topic: "local-facts:stepmeta", Content: "Local facts:\n- path: internal/stepmeta/registry.go"}, {ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Topic: "mcp:web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}"}, {ID: "workspace-1", Source: "workspace", Label: "workflows/scenarios/apply.yaml", Topic: "workspace:workflows/scenarios/apply.yaml", Content: "version: v1alpha1"}}})
+	for _, want := range []string{"Local facts:", "External evidence:", "Retrieved context:", "[chunk:facts-1,source:local-facts", "[chunk:mcp-1,source:mcp", "[chunk:workspace-1,source:workspace"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("expected %q in grouped chunk text, got %q", want, text)
 		}

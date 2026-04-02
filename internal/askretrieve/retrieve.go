@@ -139,24 +139,24 @@ func routeFactGroups(route askintent.Route, lowerPrompt string, target askintent
 	groups := make([]factGroup, 0, 6)
 	info := factGroup{chunks: informationalFactChunks(route, lowerPrompt)}
 	workspaceGroup := factGroup{chunks: workspaceFactChunks(route, lowerPrompt, target, workspace)}
-	repo := factGroup{chunks: repoGroundingFacts(route, lowerPrompt, target)}
+	localFacts := factGroup{chunks: localFactsForRoute(route, lowerPrompt, target)}
 	examples := factGroup{chunks: exampleReferenceChunks(route, lowerPrompt), limit: 2}
 	stateGroup := factGroup{chunks: stateFactChunks(route, state), limit: 1}
 	externalGroup := factGroup{chunks: externalFactChunks(external)}
 	switch route {
 	case askintent.RouteDraft, askintent.RouteRefine:
-		groups = appendFactGroup(groups, workspaceGroup, repo, examples, externalGroup)
+		groups = appendFactGroup(groups, workspaceGroup, localFacts, examples, externalGroup)
 	default:
-		groups = appendFactGroup(groups, info, externalGroup, workspaceGroup, repo, stateGroup)
+		groups = appendFactGroup(groups, info, externalGroup, workspaceGroup, localFacts, stateGroup)
 	}
 	return groups
 }
 
-func repoGroundingFacts(route askintent.Route, lowerPrompt string, target askintent.Target) []Chunk {
-	if !shouldIncludeRepoGrounding(route, lowerPrompt, target) {
+func localFactsForRoute(route askintent.Route, lowerPrompt string, target askintent.Target) []Chunk {
+	if !shouldIncludeLocalFacts(route, lowerPrompt, target) {
 		return nil
 	}
-	return repoGroundingChunks(route, lowerPrompt)
+	return localFactChunks(route, lowerPrompt)
 }
 
 func appendFactGroup(groups []factGroup, items ...factGroup) []factGroup {
@@ -234,7 +234,7 @@ func workspaceFactChunks(route askintent.Route, lowerPrompt string, target askin
 	return chunks
 }
 
-func shouldIncludeRepoGrounding(route askintent.Route, lowerPrompt string, target askintent.Target) bool {
+func shouldIncludeLocalFacts(route askintent.Route, lowerPrompt string, target askintent.Target) bool {
 	switch route {
 	case askintent.RouteDraft, askintent.RouteRefine, askintent.RouteReview:
 		return true
@@ -425,7 +425,7 @@ func BuildChunkTextWithoutTopics(retrieval RetrievalResult, excluded ...askconte
 			}
 		}
 	}
-	repoChunks := make([]Chunk, 0)
+	localFactChunks := make([]Chunk, 0)
 	externalChunks := make([]Chunk, 0)
 	otherChunks := make([]Chunk, 0)
 	for _, chunk := range retrieval.Chunks {
@@ -433,15 +433,15 @@ func BuildChunkTextWithoutTopics(retrieval RetrievalResult, excluded ...askconte
 			continue
 		}
 		switch chunk.Source {
-		case "repo-grounding":
-			repoChunks = append(repoChunks, chunk)
+		case "local-facts":
+			localFactChunks = append(localFactChunks, chunk)
 		case "mcp", "external-evidence":
 			externalChunks = append(externalChunks, chunk)
 		default:
 			otherChunks = append(otherChunks, chunk)
 		}
 	}
-	appendChunkGroup("Local repo grounding:", repoChunks)
+	appendChunkGroup("Local facts:", localFactChunks)
 	appendChunkGroup("External evidence:", externalChunks)
 	appendChunkGroup("Retrieved context:", otherChunks)
 	return b.String()

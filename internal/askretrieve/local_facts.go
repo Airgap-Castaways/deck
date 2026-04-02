@@ -16,7 +16,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 )
 
-func repoGroundingChunks(route askintent.Route, lowerPrompt string) []Chunk {
+func localFactChunks(route askintent.Route, lowerPrompt string) []Chunk {
 	if route != askintent.RouteDraft && route != askintent.RouteRefine && route != askintent.RouteExplain && route != askintent.RouteReview {
 		return nil
 	}
@@ -25,25 +25,25 @@ func repoGroundingChunks(route askintent.Route, lowerPrompt string) []Chunk {
 		return nil
 	}
 	chunks := []Chunk{}
-	if chunk := repoGroundingChunk(root, "repo-grounding-stepmeta", "source-of-truth-stepmeta", filepath.Join("internal", "stepmeta", "registry.go"), buildStepmetaSummary(root)); chunk != nil {
+	if chunk := localFactChunk(root, "local-facts-stepmeta", "source-of-truth-stepmeta", filepath.Join("internal", "stepmeta", "registry.go"), buildStepmetaSummary(root)); chunk != nil {
 		chunks = append(chunks, *chunk)
 	}
-	if chunk := repoGroundingChunk(root, "repo-grounding-stepspec", "stepspec-facts", filepath.Join("internal", "stepspec"), buildStepspecSummary(root, lowerPrompt)); chunk != nil {
+	if chunk := localFactChunk(root, "local-facts-stepspec", "stepspec-facts", filepath.Join("internal", "stepspec"), buildStepspecSummary(root, lowerPrompt)); chunk != nil {
 		chunks = append(chunks, *chunk)
 	}
-	if chunk := repoGroundingChunk(root, "repo-grounding-askdraft", "askdraft-compiler", filepath.Join("internal", "askdraft"), buildDirectorySummary(root, filepath.Join("internal", "askdraft"), []string{
+	if chunk := localFactChunk(root, "local-facts-askdraft", "askdraft-compiler", filepath.Join("internal", "askdraft"), buildDirectorySummary(root, filepath.Join("internal", "askdraft"), []string{
 		"Local source-of-truth for draft builder selection compilation.",
 		"Draft generation selects builders first; code compiles workflow documents afterwards.",
 	})); chunk != nil {
 		chunks = append(chunks, *chunk)
 	}
-	if chunk := repoGroundingChunk(root, "repo-grounding-askpolicy", "askpolicy-requirements", filepath.Join("internal", "askpolicy"), buildDirectorySummary(root, filepath.Join("internal", "askpolicy"), []string{
+	if chunk := localFactChunk(root, "local-facts-askpolicy", "askpolicy-requirements", filepath.Join("internal", "askpolicy"), buildDirectorySummary(root, filepath.Join("internal", "askpolicy"), []string{
 		"Local source-of-truth for authoring requirements, defaults, and plan shaping.",
 		"Use policy-derived requirements to infer prepare/apply structure, topology, and validation expectations.",
 	})); chunk != nil {
 		chunks = append(chunks, *chunk)
 	}
-	if chunk := repoGroundingChunk(root, "repo-grounding-askrepair", "askrepair-validation", filepath.Join("internal", "askrepair"), buildDirectorySummary(root, filepath.Join("internal", "askrepair"), []string{
+	if chunk := localFactChunk(root, "local-facts-askrepair", "askrepair-validation", filepath.Join("internal", "askrepair"), buildDirectorySummary(root, filepath.Join("internal", "askrepair"), []string{
 		"Local source-of-truth for code-owned repair and auto-fix behavior.",
 		"Repair follows validator and transform constraints instead of external docs.",
 	})); chunk != nil {
@@ -52,17 +52,17 @@ func repoGroundingChunks(route askintent.Route, lowerPrompt string) []Chunk {
 	return chunks
 }
 
-func repoGroundingChunk(root string, id string, label string, path string, body string) *Chunk {
+func localFactChunk(root string, id string, label string, path string, body string) *Chunk {
 	if strings.TrimSpace(body) == "" {
 		return nil
 	}
 	clean := filepath.ToSlash(strings.TrimSpace(path))
-	content := "Local repo grounding:\n- authoritative for deck workflow validity and ask behavior\n- path: " + clean + "\n" + strings.TrimSpace(body)
+	content := "Local facts:\n- authoritative for deck workflow validity and ask behavior\n- path: " + clean + "\n" + strings.TrimSpace(body)
 	return &Chunk{
 		ID:      id,
-		Source:  "repo-grounding",
+		Source:  "local-facts",
 		Label:   label,
-		Topic:   askcontext.Topic(string(askcontext.TopicRepoGrounding) + ":" + id),
+		Topic:   askcontext.Topic(string(askcontext.TopicLocalFacts) + ":" + id),
 		Content: strings.TrimSpace(content),
 		Score:   58,
 	}
