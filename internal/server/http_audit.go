@@ -38,7 +38,9 @@ const (
 
 type statusRecorder struct {
 	http.ResponseWriter
-	status int
+	status      int
+	wroteHeader bool
+	bytes       int64
 }
 
 func newAuditLogger(root string, opts auditLoggerOptions) (*auditLogger, error) {
@@ -139,5 +141,15 @@ func addExtra(entry map[string]any, extra map[string]any) {
 
 func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
+	r.wroteHeader = true
 	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusRecorder) Write(p []byte) (int, error) {
+	if !r.wroteHeader {
+		r.WriteHeader(http.StatusOK)
+	}
+	n, err := r.ResponseWriter.Write(p)
+	r.bytes += int64(n)
+	return n, err
 }

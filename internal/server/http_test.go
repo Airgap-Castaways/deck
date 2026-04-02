@@ -432,6 +432,27 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestAccessLog(t *testing.T) {
+	root := t.TempDir()
+	var accessLog bytes.Buffer
+	h, err := NewHandler(root, HandlerOptions{AccessLog: &accessLog})
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req.RemoteAddr = "127.0.0.1:43210"
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	line := strings.TrimSpace(accessLog.String())
+	for _, want := range []string{"127.0.0.1:43210", `"GET /healthz HTTP/1.1"`, " 200 ", " 0 ", "ms"} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("expected %q in access log, got %q", want, line)
+		}
+	}
+}
+
 func TestHandlerRejectsLegacyPutUploads(t *testing.T) {
 	root := t.TempDir()
 	for _, category := range []string{"files", "packages", "images", "workflows"} {

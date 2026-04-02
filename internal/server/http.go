@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -10,6 +11,7 @@ import (
 type HandlerOptions struct {
 	AuditMaxSizeMB int
 	AuditMaxFiles  int
+	AccessLog      io.Writer
 }
 
 type serverHandler struct {
@@ -39,6 +41,7 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 	}
 	h := &serverHandler{rootAbs: resolvedRoot, logger: logger}
 	h.base = http.HandlerFunc(h.routeRequest)
+	accessLog := opts.AccessLog
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now().UTC()
@@ -59,6 +62,7 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 			"duration_ms": time.Since(start).Milliseconds(),
 		})
 		logger.Write(entry)
+		writeAccessLog(accessLog, start, r, rw)
 	}), nil
 }
 
@@ -68,4 +72,22 @@ func (h *serverHandler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func writeAccessLog(w io.Writer, start time.Time, r *http.Request, rw *statusRecorder) {
+	if w == nil {
+		return
+	}
+	_, _ = fmt.Fprintf(
+		w,
+		"%s - [%s] \"%s %s %s\" %d %d %dms\n",
+		r.RemoteAddr,
+		start.UTC().Format(time.RFC3339),
+		r.Method,
+		r.URL.RequestURI(),
+		r.Proto,
+		rw.status,
+		rw.bytes,
+		time.Since(start).Milliseconds(),
+	)
 }

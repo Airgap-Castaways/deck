@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -59,7 +60,7 @@ func executeServe(ctx context.Context, root string, addr string, auditMaxSizeMB 
 		}
 	}
 
-	h, err := server.NewHandler(resolvedRoot, server.HandlerOptions{AuditMaxSizeMB: auditMaxSizeMB, AuditMaxFiles: auditMaxFiles})
+	h, err := server.NewHandler(resolvedRoot, server.HandlerOptions{AuditMaxSizeMB: auditMaxSizeMB, AuditMaxFiles: auditMaxFiles, AccessLog: os.Stdout})
 	if err != nil {
 		return fmt.Errorf("init server handler: %w", err)
 	}
@@ -81,14 +82,12 @@ func executeServe(ctx context.Context, root string, addr string, auditMaxSizeMB 
 		}
 		errCh <- httpServer.ListenAndServe()
 	}()
-	if certPath != "" {
-		if err := stdoutPrintf("server start: listening on https://%s (root=%s)\n", resolvedAddr, resolvedRoot); err != nil {
-			return err
-		}
-	} else {
-		if err := stdoutPrintf("server start: listening on http://%s (root=%s)\n", resolvedAddr, resolvedRoot); err != nil {
-			return err
-		}
+	serverURL := displayServerURL(resolvedAddr, certPath != "")
+	if err := stdoutPrintf("server start: listening on %s (bind=%s root=%s)\n", serverURL, resolvedAddr, resolvedRoot); err != nil {
+		return err
+	}
+	if err := stdoutPrintf("open: %s/\n", strings.TrimRight(serverURL, "/")); err != nil {
+		return err
 	}
 	select {
 	case <-ctx.Done():
@@ -108,6 +107,38 @@ func executeServe(ctx context.Context, root string, addr string, auditMaxSizeMB 
 		}
 		return nil
 	}
+}
+
+func displayServerURL(addr string, tlsEnabled bool) string {
+	scheme := "http"
+	if tlsEnabled {
+		scheme = "https"
+	}
+	host, port := splitServerAddr(addr)
+	if host == "" || host == "0.0.0.0" || host == "::" || host == "[::]" {
+		host = "localhost"
+	}
+	if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
+		host = "[" + host + "]"
+	}
+	if port == "" {
+		return fmt.Sprintf("%s://%s", scheme, host)
+	}
+	return fmt.Sprintf("%s://%s:%s", scheme, host, port)
+}
+
+func splitServerAddr(addr string) (string, string) {
+	trimmed := strings.TrimSpace(addr)
+	if trimmed == "" {
+		return "localhost", ""
+	}
+	if strings.HasPrefix(trimmed, ":") {
+		return "localhost", strings.TrimPrefix(trimmed, ":")
+	}
+	if host, port, err := net.SplitHostPort(trimmed); err == nil {
+		return host, port
+	}
+	return trimmed, ""
 }
 
 type healthReport struct {
