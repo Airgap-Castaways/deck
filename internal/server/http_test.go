@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -65,6 +66,10 @@ func TestServe_StaticReadOnly(t *testing.T) {
 	registryTarPath := filepath.Join(root, "outputs", "images", "registry.k8s.io_kube-apiserver_v1.30.1.tar")
 	if err := tarball.WriteToFile(registryTarPath, registryTag, registryImage); err != nil {
 		t.Fatalf("tarball.WriteToFile: %v", err)
+	}
+	registryTarInfo, err := os.Stat(registryTarPath)
+	if err != nil {
+		t.Fatalf("stat registry tar: %v", err)
 	}
 	rawManifest, err := registryImage.RawManifest()
 	if err != nil {
@@ -146,6 +151,10 @@ func TestServe_StaticReadOnly(t *testing.T) {
 			{path: "/browse/workflows/", want: "scenarios"},
 			{path: "/browse/images/", want: "kube-apiserver"},
 			{path: "/browse/images/coredns/coredns/", want: "v1.11.1"},
+			{path: "/browse/images/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", registryTarInfo.Size())},
+			{path: "/browse/images/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", len(rawManifest))},
+			{path: "/browse/images/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", manifest.Config.Size)},
+			{path: "/browse/images/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", manifest.Layers[0].Size)},
 		} {
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			rr := httptest.NewRecorder()
@@ -450,6 +459,19 @@ func TestAccessLog(t *testing.T) {
 		if !strings.Contains(line, want) {
 			t.Fatalf("expected %q in access log, got %q", want, line)
 		}
+	}
+}
+
+func TestRenderBrowsePageHidesDirectorySizes(t *testing.T) {
+	body, err := renderBrowsePage("/browse/files/", []browseEntry{{Name: "linux", Kind: "dir", Size: 4096}, {Name: "archive", Kind: "meta", Size: 1234}})
+	if err != nil {
+		t.Fatalf("renderBrowsePage: %v", err)
+	}
+	if strings.Contains(body, "4096 bytes") {
+		t.Fatalf("expected directory size to stay hidden, got %q", body)
+	}
+	if !strings.Contains(body, "1234 bytes") {
+		t.Fatalf("expected non-directory size to render, got %q", body)
 	}
 }
 
