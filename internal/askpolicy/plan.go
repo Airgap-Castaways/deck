@@ -14,6 +14,11 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
 
+var (
+	roleModelCPWorkersRE = regexp.MustCompile(`^(\d+)cp-(\d+)workers?$`)
+	roleModelCPHARE      = regexp.MustCompile(`^(\d+)cp-ha$`)
+)
+
 func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) askcontract.PlanResponse {
 	req := BuildScenarioRequirements(prompt, retrieval, workspace, decision)
 	fallbackBrief := BriefFromRequirements(req, decision)
@@ -41,6 +46,7 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 	plan = applyClarificationAnswers(plan)
 	plan = normalizeRefineScope(plan, prompt, workspace, decision)
 	plan.AuthoringProgram = normalizeAuthoringProgram(plan.AuthoringProgram, plan.AuthoringBrief, plan.ExecutionModel, prompt)
+	plan = ensureRoleVarsPlanned(plan, decision)
 	plan.Blockers = dedupeStrings(append(plan.Blockers, coverageBoundaryBlockers(prompt, req, decision)...))
 	plan.EntryScenario = normalizeEntryScenario(plan.EntryScenario, req, plan.Files, plan.AuthoringBrief, decision)
 	for i := range plan.Files {
@@ -61,45 +67,85 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 	return plan
 }
 
+func ensureRoleVarsPlanned(plan askcontract.PlanResponse, decision askintent.Decision) askcontract.PlanResponse {
+	if decision.Route != askintent.RouteDraft {
+		return plan
+	}
+	if !planNeedsMultiRoleTopology(plan) {
+		return plan
+	}
+	roleSelector := strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector)
+	if roleSelector == "" {
+		roleSelector = strings.TrimSpace(plan.AuthoringProgram.Cluster.RoleSelector)
+	}
+	if roleSelector == "" {
+		return plan
+	}
+	if !containsString(plan.AuthoringBrief.TargetPaths, "workflows/vars.yaml") {
+		plan.AuthoringBrief.TargetPaths = append(plan.AuthoringBrief.TargetPaths, "workflows/vars.yaml")
+	}
+	if !planHasFilePath(plan.Files, "workflows/vars.yaml") {
+		plan.Files = append(plan.Files, askcontract.PlanFile{Path: "workflows/vars.yaml", Kind: "vars", Action: "create", Purpose: "Role selector values for multi-role draft execution"})
+	}
+	if !containsString(plan.VarsRecommendation, "role") {
+		plan.VarsRecommendation = append(plan.VarsRecommendation, "role")
+	}
+	return plan
+}
+
+func planHasFilePath(files []askcontract.PlanFile, want string) bool {
+	want = filepath.ToSlash(strings.TrimSpace(want))
+	for _, file := range files {
+		if filepath.ToSlash(strings.TrimSpace(file.Path)) == want {
+			return true
+		}
+	}
+	return false
+}
+
 func normalizeClarifications(items []askcontract.PlanClarification, req ScenarioRequirements, prompt string, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) []askcontract.PlanClarification {
 	facts := askauthoring.InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
 	defaults := planClarificationsFromRequirements(prompt, req, decision, workspace)
 	byID := map[string]askcontract.PlanClarification{}
+	defaultIDs := map[string]bool{}
 	for _, item := range defaults {
 		byID[strings.TrimSpace(item.ID)] = item
+		defaultIDs[strings.TrimSpace(item.ID)] = true
 	}
 	for _, item := range items {
-		id := strings.TrimSpace(item.ID)
+		id := canonicalClarificationID(item, defaultIDs)
 		if id == "" {
 			continue
 		}
 		base := byID[id]
-		if strings.TrimSpace(item.Question) != "" {
-			base.Question = strings.TrimSpace(item.Question)
-		}
-		if strings.TrimSpace(item.Kind) != "" {
-			base.Kind = strings.TrimSpace(item.Kind)
-		}
-		if strings.TrimSpace(item.Reason) != "" {
-			base.Reason = strings.TrimSpace(item.Reason)
-		}
-		if strings.TrimSpace(item.Decision) != "" {
-			base.Decision = strings.TrimSpace(item.Decision)
-		}
-		if len(item.Options) > 0 {
-			base.Options = normalizeStringList(item.Options)
-		}
-		if strings.TrimSpace(item.RecommendedDefault) != "" {
-			base.RecommendedDefault = strings.TrimSpace(item.RecommendedDefault)
+		if !clarificationUsesCodeOwnedShape(id, defaults) {
+			if strings.TrimSpace(item.Question) != "" {
+				base.Question = strings.TrimSpace(item.Question)
+			}
+			if strings.TrimSpace(item.Kind) != "" {
+				base.Kind = strings.TrimSpace(item.Kind)
+			}
+			if strings.TrimSpace(item.Reason) != "" {
+				base.Reason = strings.TrimSpace(item.Reason)
+			}
+			if strings.TrimSpace(item.Decision) != "" {
+				base.Decision = strings.TrimSpace(item.Decision)
+			}
+			if len(item.Options) > 0 {
+				base.Options = normalizeStringList(item.Options)
+			}
+			if strings.TrimSpace(item.RecommendedDefault) != "" {
+				base.RecommendedDefault = strings.TrimSpace(item.RecommendedDefault)
+			}
+			if len(item.Affects) > 0 {
+				base.Affects = normalizeStringList(item.Affects)
+			}
+			if item.BlocksGeneration {
+				base.BlocksGeneration = true
+			}
 		}
 		if strings.TrimSpace(item.Answer) != "" {
-			base.Answer = strings.TrimSpace(item.Answer)
-		}
-		if len(item.Affects) > 0 {
-			base.Affects = normalizeStringList(item.Affects)
-		}
-		if item.BlocksGeneration {
-			base.BlocksGeneration = true
+			base.Answer = normalizeClarificationAnswer(id, item.Answer)
 		}
 		applyClarificationHints(&base, facts)
 		byID[id] = base
@@ -109,6 +155,68 @@ func normalizeClarifications(items []askcontract.PlanClarification, req Scenario
 		out = append(out, item)
 	}
 	return sortClarifications(out)
+}
+
+func canonicalClarificationID(item askcontract.PlanClarification, defaults map[string]bool) string {
+	id := strings.TrimSpace(item.ID)
+	if defaults[id] {
+		return id
+	}
+	text := strings.ToLower(strings.TrimSpace(item.Question + " " + strings.Join(item.Options, " ")))
+	switch {
+	case strings.Contains(text, "control-plane") || strings.Contains(text, "control plane"):
+		if strings.Contains(text, "worker") {
+			return "topology.roleModel"
+		}
+	case strings.Contains(text, "node count") || strings.Contains(text, "how many nodes") || strings.Contains(text, "total node count"):
+		return "topology.nodeCount"
+	case strings.Contains(text, "single-node") || strings.Contains(text, "multi-node") || strings.Contains(text, "topology") || strings.Contains(text, "ha"):
+		return "topology.kind"
+	case strings.Contains(text, "implementation") && strings.Contains(text, "kubeadm"):
+		return "cluster.implementation"
+	}
+	return id
+}
+
+func normalizeClarificationAnswer(id string, answer string) string {
+	answer = strings.TrimSpace(answer)
+	lower := strings.ToLower(answer)
+	switch strings.TrimSpace(id) {
+	case "topology.kind":
+		switch {
+		case strings.Contains(lower, "single"):
+			return "single-node"
+		case strings.Contains(lower, "multi"):
+			return "multi-node"
+		case lower == "ha" || strings.Contains(lower, "high availability"):
+			return "ha"
+		}
+	case "topology.roleModel":
+		switch {
+		case strings.Contains(lower, "1 control-plane") && strings.Contains(lower, "1 worker"):
+			return "1cp-1worker"
+		case strings.Contains(lower, "1 control-plane") && strings.Contains(lower, "2 worker"):
+			return "1cp-2workers"
+		case strings.Contains(lower, "2 control-plane"):
+			return "2cp-ha"
+		case strings.Contains(lower, "3 control-plane") || strings.Contains(lower, "3 control plane"):
+			return "3cp-ha"
+		}
+	}
+	return answer
+}
+
+func clarificationUsesCodeOwnedShape(id string, defaults []askcontract.PlanClarification) bool {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false
+	}
+	for _, item := range defaults {
+		if strings.TrimSpace(item.ID) == id {
+			return true
+		}
+	}
+	return false
 }
 
 func sortClarifications(items []askcontract.PlanClarification) []askcontract.PlanClarification {
@@ -140,27 +248,11 @@ func applyClarificationAnswers(plan askcontract.PlanResponse) askcontract.PlanRe
 		if strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) == "" {
 			plan.ExecutionModel.RoleExecution.RoleSelector = "vars.role"
 		}
-		switch strings.TrimSpace(answer) {
-		case "3cp-ha":
-			if plan.AuthoringBrief.NodeCount < 3 {
-				plan.AuthoringBrief.NodeCount = 3
-			}
-			plan.AuthoringBrief.Topology = "ha"
-			if plan.ExecutionModel.Verification.ExpectedNodeCount <= 0 {
-				plan.ExecutionModel.Verification.ExpectedNodeCount = plan.AuthoringBrief.NodeCount
-			}
-			plan.ExecutionModel.Verification.ExpectedControlPlaneReady = maxInt(plan.ExecutionModel.Verification.ExpectedControlPlaneReady, plan.AuthoringBrief.NodeCount)
-		case "1cp-2workers":
-			if plan.AuthoringBrief.NodeCount < 3 {
-				plan.AuthoringBrief.NodeCount = 3
-			}
-			if plan.AuthoringBrief.Topology == "unspecified" {
-				plan.AuthoringBrief.Topology = "multi-node"
-			}
-			if plan.ExecutionModel.Verification.ExpectedNodeCount <= 0 {
-				plan.ExecutionModel.Verification.ExpectedNodeCount = plan.AuthoringBrief.NodeCount
-			}
-			plan.ExecutionModel.Verification.ExpectedControlPlaneReady = maxInt(plan.ExecutionModel.Verification.ExpectedControlPlaneReady, 1)
+		if modeled, ok := parseRoleModelAnswer(answer); ok {
+			plan.AuthoringProgram.Cluster.ControlPlaneCount = modeled.controlPlaneCount
+			plan.AuthoringProgram.Cluster.WorkerCount = modeled.workerCount
+			plan.AuthoringBrief.NodeCount = modeled.nodeCount
+			plan.AuthoringBrief.Topology = modeled.topology
 		}
 	}
 	if answer := byID["refine.anchorPath"]; answer != "" {
@@ -212,7 +304,132 @@ func applyClarificationAnswers(plan askcontract.PlanResponse) askcontract.PlanRe
 	if answer := byID["coverage.escapeHatch"]; answer != "" {
 		plan.AuthoringBrief.EscapeHatchMode = strings.TrimSpace(answer)
 	}
+	plan = reconcilePlanTopology(plan)
 	return plan
+}
+
+type roleModel struct {
+	topology          string
+	nodeCount         int
+	controlPlaneCount int
+	workerCount       int
+}
+
+func parseRoleModelAnswer(answer string) (roleModel, bool) {
+	answer = strings.ToLower(strings.TrimSpace(answer))
+	switch answer {
+	case "1cp-1worker":
+		return roleModel{topology: "multi-node", nodeCount: 2, controlPlaneCount: 1, workerCount: 1}, true
+	case "1cp-2workers":
+		return roleModel{topology: "multi-node", nodeCount: 3, controlPlaneCount: 1, workerCount: 2}, true
+	case "3cp-ha":
+		return roleModel{topology: "ha", nodeCount: 3, controlPlaneCount: 3, workerCount: 0}, true
+	}
+	if match := roleModelCPWorkersRE.FindStringSubmatch(answer); len(match) == 3 {
+		cp, _ := strconv.Atoi(match[1])
+		workers, _ := strconv.Atoi(match[2])
+		if cp > 0 && workers >= 0 {
+			return roleModel{topology: "multi-node", nodeCount: cp + workers, controlPlaneCount: cp, workerCount: workers}, true
+		}
+	}
+	if match := roleModelCPHARE.FindStringSubmatch(answer); len(match) == 2 {
+		cp, _ := strconv.Atoi(match[1])
+		if cp > 0 {
+			return roleModel{topology: "ha", nodeCount: cp, controlPlaneCount: cp, workerCount: 0}, true
+		}
+	}
+	return roleModel{}, false
+}
+
+func reconcilePlanTopology(plan askcontract.PlanResponse) askcontract.PlanResponse {
+	cluster := plan.AuthoringProgram.Cluster
+	verification := plan.ExecutionModel.Verification
+	if cluster.ControlPlaneCount == 0 && cluster.WorkerCount == 0 {
+		if plan.AuthoringBrief.NodeCount == 2 && planNeedsMultiRoleTopology(plan) {
+			cluster.ControlPlaneCount = 1
+			cluster.WorkerCount = 1
+		}
+	}
+	if cluster.ControlPlaneCount > 0 || cluster.WorkerCount > 0 {
+		nodeCount := cluster.ControlPlaneCount + cluster.WorkerCount
+		if nodeCount > 0 {
+			plan.AuthoringBrief.NodeCount = nodeCount
+			verification.ExpectedNodeCount = nodeCount
+			plan.AuthoringProgram.Verification.ExpectedNodeCount = nodeCount
+		}
+		if cluster.WorkerCount > 0 {
+			plan.AuthoringBrief.Topology = "multi-node"
+			verification.ExpectedControlPlaneReady = maxInt(cluster.ControlPlaneCount, 1)
+			plan.AuthoringProgram.Verification.ExpectedControlPlaneReady = verification.ExpectedControlPlaneReady
+			if strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) == "" {
+				plan.ExecutionModel.RoleExecution.RoleSelector = "vars.role"
+			}
+			plan.ExecutionModel.RoleExecution.PerNodeInvocation = true
+			if strings.TrimSpace(plan.ExecutionModel.RoleExecution.ControlPlaneFlow) == "" {
+				plan.ExecutionModel.RoleExecution.ControlPlaneFlow = "bootstrap"
+			}
+			if strings.TrimSpace(plan.ExecutionModel.RoleExecution.WorkerFlow) == "" {
+				plan.ExecutionModel.RoleExecution.WorkerFlow = "join"
+			}
+		} else if cluster.ControlPlaneCount >= 3 {
+			plan.AuthoringBrief.Topology = "ha"
+			verification.ExpectedControlPlaneReady = maxInt(verification.ExpectedControlPlaneReady, cluster.ControlPlaneCount)
+			plan.AuthoringProgram.Verification.ExpectedControlPlaneReady = verification.ExpectedControlPlaneReady
+		}
+	}
+	if plan.AuthoringBrief.NodeCount > 1 && strings.TrimSpace(plan.AuthoringBrief.Topology) == "unspecified" {
+		plan.AuthoringBrief.Topology = "multi-node"
+	}
+	if plan.AuthoringBrief.NodeCount > 1 && verification.ExpectedNodeCount <= 0 {
+		verification.ExpectedNodeCount = plan.AuthoringBrief.NodeCount
+	}
+	if plan.AuthoringBrief.NodeCount > 1 && verification.ExpectedControlPlaneReady <= 0 {
+		verification.ExpectedControlPlaneReady = 1
+	}
+	if plan.AuthoringBrief.NodeCount <= 1 && strings.TrimSpace(plan.AuthoringBrief.Topology) == "unspecified" {
+		plan.AuthoringBrief.Topology = "single-node"
+	}
+	if plan.AuthoringBrief.NodeCount > 1 && strings.TrimSpace(plan.AuthoringProgram.Cluster.RoleSelector) == "" && strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) != "" {
+		plan.AuthoringProgram.Cluster.RoleSelector = strings.TrimPrefix(strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector), "vars.")
+	}
+	if verification.ExpectedNodeCount > 0 {
+		plan.AuthoringProgram.Verification.ExpectedNodeCount = verification.ExpectedNodeCount
+	}
+	if verification.ExpectedControlPlaneReady > 0 {
+		plan.AuthoringProgram.Verification.ExpectedControlPlaneReady = verification.ExpectedControlPlaneReady
+	}
+	if strings.TrimSpace(verification.FinalVerificationRole) == "" {
+		verification.FinalVerificationRole = strings.TrimSpace(plan.AuthoringProgram.Verification.FinalVerificationRole)
+	}
+	if strings.TrimSpace(verification.FinalVerificationRole) == "" {
+		if plan.AuthoringBrief.NodeCount > 1 {
+			verification.FinalVerificationRole = "control-plane"
+		} else {
+			verification.FinalVerificationRole = "local"
+		}
+	}
+	plan.AuthoringProgram.Cluster = cluster
+	plan.ExecutionModel.Verification = verification
+	if strings.TrimSpace(plan.AuthoringProgram.Verification.FinalVerificationRole) == "" {
+		plan.AuthoringProgram.Verification.FinalVerificationRole = verification.FinalVerificationRole
+	}
+	return plan
+}
+
+func planNeedsMultiRoleTopology(plan askcontract.PlanResponse) bool {
+	if plan.AuthoringBrief.NodeCount > 1 {
+		return true
+	}
+	switch strings.TrimSpace(plan.AuthoringBrief.Topology) {
+	case "multi-node", "ha":
+		return true
+	}
+	for _, capability := range plan.AuthoringBrief.RequiredCapabilities {
+		if strings.TrimSpace(capability) == "kubeadm-join" {
+			return true
+		}
+	}
+	return strings.TrimSpace(plan.ExecutionModel.RoleExecution.WorkerFlow) != "" || plan.ExecutionModel.RoleExecution.PerNodeInvocation
 }
 
 func maxInt(current int, candidate int) int {
@@ -258,6 +475,7 @@ func normalizeExecutionModel(model askcontract.ExecutionModel, fallback askcontr
 		model.ApplyAssumptions = dedupeStrings(append(normalizeStringList(model.ApplyAssumptions), fallback.ApplyAssumptions...))
 	}
 	model = normalizeExecutionModelGuardrails(model, brief)
+	model = normalizeSharedStateGuardrails(model, fallback, brief)
 	return model
 }
 
@@ -286,6 +504,79 @@ func normalizeExecutionModelGuardrails(model askcontract.ExecutionModel, brief a
 	if brief.Topology == "single-node" && model.Verification.ExpectedControlPlaneReady <= 0 && hasBriefCapability(brief, "cluster-verification") {
 		model.Verification.ExpectedControlPlaneReady = 1
 	}
+	return model
+}
+
+func normalizeSharedStateGuardrails(model askcontract.ExecutionModel, fallback askcontract.ExecutionModel, brief askcontract.AuthoringBrief) askcontract.ExecutionModel {
+	if !briefNeedsWorkerRole(brief) {
+		return model
+	}
+	fallbackJoin, hasFallbackJoin := sharedStateContractByName(fallback.SharedStateContracts, "join-file")
+	if !hasFallbackJoin {
+		return model
+	}
+	currentJoin, hasCurrentJoin := sharedStateContractByName(model.SharedStateContracts, "join-file")
+	if !hasCurrentJoin {
+		model.SharedStateContracts = append(model.SharedStateContracts, fallbackJoin)
+		return dedupeSharedStateContractModel(model)
+	}
+	if joinSharedStateContractLooksLocalOnly(currentJoin) || joinSharedStateContractUsesWorkflowPaths(currentJoin) {
+		model.SharedStateContracts = replaceSharedStateContract(model.SharedStateContracts, fallbackJoin)
+	}
+	return dedupeSharedStateContractModel(model)
+}
+
+func sharedStateContractByName(contracts []askcontract.SharedStateContract, name string) (askcontract.SharedStateContract, bool) {
+	for _, item := range contracts {
+		if canonicalSharedStateName(item.Name) == canonicalSharedStateName(name) {
+			return item, true
+		}
+	}
+	return askcontract.SharedStateContract{}, false
+}
+
+func joinSharedStateContractLooksLocalOnly(contract askcontract.SharedStateContract) bool {
+	return strings.TrimSpace(contract.AvailabilityModel) == "local-only"
+}
+
+func joinSharedStateContractUsesWorkflowPaths(contract askcontract.SharedStateContract) bool {
+	if looksLikeWorkflowPath(contract.ProducerPath) {
+		return true
+	}
+	for _, path := range contract.ConsumerPaths {
+		if looksLikeWorkflowPath(path) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeWorkflowPath(path string) bool {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	return strings.HasPrefix(path, "workflows/")
+}
+
+func replaceSharedStateContract(contracts []askcontract.SharedStateContract, replacement askcontract.SharedStateContract) []askcontract.SharedStateContract {
+	out := make([]askcontract.SharedStateContract, 0, len(contracts))
+	replaced := false
+	for _, item := range contracts {
+		if canonicalSharedStateName(item.Name) == canonicalSharedStateName(replacement.Name) {
+			if !replaced {
+				out = append(out, replacement)
+				replaced = true
+			}
+			continue
+		}
+		out = append(out, item)
+	}
+	if !replaced {
+		out = append(out, replacement)
+	}
+	return out
+}
+
+func dedupeSharedStateContractModel(model askcontract.ExecutionModel) askcontract.ExecutionModel {
+	model.SharedStateContracts = dedupeSharedStateContracts(model.SharedStateContracts)
 	return model
 }
 
@@ -829,7 +1120,14 @@ func isCanonicalTopology(value string) bool {
 }
 
 func askcontractPathAllowed(path string) bool {
-	return path == "workflows/prepare.yaml" || path == "workflows/vars.yaml" || strings.HasPrefix(path, "workflows/scenarios/") || strings.HasPrefix(path, "workflows/components/")
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	if path == "workflows/prepare.yaml" || path == "workflows/vars.yaml" {
+		return true
+	}
+	if strings.HasSuffix(path, "/") || filepath.Ext(path) == "" {
+		return false
+	}
+	return strings.HasPrefix(path, "workflows/scenarios/") || strings.HasPrefix(path, "workflows/components/")
 }
 
 func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.GenerationResponse, decision askintent.Decision) EvaluationResult {
@@ -913,6 +1211,12 @@ func ValidatePlanStructure(plan askcontract.PlanResponse) error {
 	if hasBriefCapability(plan.AuthoringBrief, "package-staging") && strings.TrimSpace(plan.AuthoringProgram.Platform.Family) == "" {
 		return fmt.Errorf("plan response package authoring requires authoringProgram.platform.family")
 	}
+	if planNeedsArtifactPayload(plan, "package") && len(normalizeStringList(plan.AuthoringProgram.Artifacts.Packages)) == 0 {
+		return fmt.Errorf("plan response package staging requires non-empty authoringProgram.artifacts.packages")
+	}
+	if planNeedsArtifactPayload(plan, "image") && len(normalizeStringList(plan.AuthoringProgram.Artifacts.Images)) == 0 {
+		return fmt.Errorf("plan response image staging requires non-empty authoringProgram.artifacts.images")
+	}
 	if hasBriefCapability(plan.AuthoringBrief, "cluster-verification") && plan.AuthoringProgram.Verification.ExpectedNodeCount <= 0 {
 		return fmt.Errorf("plan response cluster verification requires authoringProgram.verification.expectedNodeCount")
 	}
@@ -920,6 +1224,25 @@ func ValidatePlanStructure(plan askcontract.PlanResponse) error {
 		return fmt.Errorf("plan response kubeadm authoring requires authoringProgram.cluster.joinFile")
 	}
 	return nil
+}
+
+func planNeedsArtifactPayload(plan askcontract.PlanResponse, kind string) bool {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if kind == "" {
+		return false
+	}
+	if containsString(plan.ArtifactKinds, kind) {
+		return true
+	}
+	if hasBriefCapability(plan.AuthoringBrief, kind+"-staging") {
+		return true
+	}
+	for _, contract := range plan.ExecutionModel.ArtifactContracts {
+		if strings.ToLower(strings.TrimSpace(contract.Kind)) == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func containsPlannedPath(files []askcontract.PlanFile, want string) bool {

@@ -36,7 +36,7 @@ func MaterializeWithBase(root string, base []askcontract.GeneratedFile, gen askc
 	if len(gen.Documents) == 0 {
 		return nil, nil
 	}
-	gen.Documents = pruneUnusedVarsDocumentTransforms(gen.Documents, base)
+	gen.Documents = pruneUnusedVarsDocumentTransforms(root, gen.Documents, base)
 	baseContent := renderedFileContentMap(base)
 	materialized := append([]askcontract.GeneratedFile(nil), base...)
 	index := map[string]int{}
@@ -61,9 +61,12 @@ func MaterializeWithBase(root string, base []askcontract.GeneratedFile, gen askc
 	return materialized, nil
 }
 
-func pruneUnusedVarsDocumentTransforms(documents []askcontract.GeneratedDocument, base []askcontract.GeneratedFile) []askcontract.GeneratedDocument {
-	used := referencedVarNames(documents, base)
-	if len(used) == 0 {
+func pruneUnusedVarsDocumentTransforms(root string, documents []askcontract.GeneratedDocument, base []askcontract.GeneratedFile) []askcontract.GeneratedDocument {
+	used, previewOK := referencedVarNamesAfterMaterialization(root, documents, base)
+	if !previewOK {
+		used = referencedVarNames(documents, base)
+	}
+	if len(used) == 0 && !documentsContainNonVarsEdits(documents) {
 		return documents
 	}
 	out := append([]askcontract.GeneratedDocument(nil), documents...)
@@ -98,6 +101,52 @@ func pruneUnusedVarsDocumentTransforms(documents []askcontract.GeneratedDocument
 		filteredDocs = append(filteredDocs, doc)
 	}
 	return filteredDocs
+}
+
+func documentsContainNonVarsEdits(documents []askcontract.GeneratedDocument) bool {
+	varsPath := filepath.ToSlash(filepath.Join(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowVarsRel))
+	for _, doc := range documents {
+		if filepath.ToSlash(strings.TrimSpace(doc.Path)) != varsPath {
+			return true
+		}
+	}
+	return false
+}
+
+func referencedVarNamesAfterMaterialization(root string, documents []askcontract.GeneratedDocument, base []askcontract.GeneratedFile) (map[string]bool, bool) {
+	baseContent := renderedFileContentMap(base)
+	finalFiles := map[string]askcontract.GeneratedFile{}
+	for _, file := range base {
+		path := filepath.ToSlash(strings.TrimSpace(file.Path))
+		if path == "" || file.Delete {
+			continue
+		}
+		finalFiles[path] = askcontract.GeneratedFile{Path: path, Content: file.Content}
+	}
+	for _, doc := range documents {
+		files, err := materializeDocument(root, baseContent, doc)
+		if err != nil {
+			return nil, false
+		}
+		for _, file := range files {
+			path := filepath.ToSlash(strings.TrimSpace(file.Path))
+			if path == "" || path == filepath.ToSlash(filepath.Join(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowVarsRel)) {
+				continue
+			}
+			if file.Delete {
+				delete(finalFiles, path)
+				continue
+			}
+			finalFiles[path] = askcontract.GeneratedFile{Path: path, Content: file.Content}
+		}
+	}
+	used := map[string]bool{}
+	for _, file := range finalFiles {
+		for _, match := range varTemplateMatches(file.Content) {
+			used[match] = true
+		}
+	}
+	return used, true
 }
 
 func referencedVarNames(documents []askcontract.GeneratedDocument, base []askcontract.GeneratedFile) map[string]bool {

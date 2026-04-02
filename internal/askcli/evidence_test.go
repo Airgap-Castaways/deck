@@ -14,6 +14,7 @@ import (
 	mcpaugment "github.com/Airgap-Castaways/deck/internal/askaugment/mcp"
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
+	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/askstate"
@@ -111,6 +112,22 @@ func TestQuestionPromptIncludesExternalEvidenceFailureGuidance(t *testing.T) {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in question prompt, got %q", want, prompt)
 		}
+	}
+}
+
+func TestQuestionPromptIncludesWeakExternalEvidenceBoundaries(t *testing.T) {
+	prompt := questionSystemPrompt(askintent.Target{}, askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "weak-status", Source: "external-evidence", Label: "weak-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: "External evidence status:\n- official source retrieval was incomplete for this install/setup question", Score: 90}}})
+	for _, want := range []string{"official source retrieval was incomplete", "general guidance only", "Do not present distro-specific or version-specific install steps as verified"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("expected %q in weak-evidence prompt, got %q", want, prompt)
+		}
+	}
+}
+
+func TestWeakExternalEvidenceMessageFlagsMissingOfficialInstallSources(t *testing.T) {
+	message := weakExternalEvidenceMessage(askcontract.EvidencePlan{Decision: "optional", InstallEvidence: true}, []askretrieve.Chunk{{ID: "mcp-1", Source: "mcp", Label: "web-search:community", Content: "No search results found", Evidence: &askretrieve.EvidenceSummary{Official: false, TrustLevel: "medium"}}}, []string{"mcp:web-search no search results found"})
+	if !strings.Contains(message, "official install-source retrieval was incomplete") {
+		t.Fatalf("expected weak install-evidence message, got %q", message)
 	}
 }
 

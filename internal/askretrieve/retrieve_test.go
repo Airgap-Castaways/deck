@@ -82,6 +82,33 @@ func TestRetrieveIncludesLocalFactChunks(t *testing.T) {
 	}
 }
 
+func TestRetrieveRepoBehaviorExplainPrefersLocalFactsOverWorkspace(t *testing.T) {
+	workspace := WorkspaceSummary{Files: []WorkspaceFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps: []\n"}}}
+	result := Retrieve(askintent.RouteExplain, "Explain how InitKubeadm and CheckCluster are assembled for ask draft generation in this repo", askintent.Target{Kind: "workspace"}, workspace, askstate.Context{}, nil)
+	if len(result.Chunks) == 0 {
+		t.Fatalf("expected retrieval chunks")
+	}
+	firstLocal := -1
+	firstWorkspace := -1
+	for i, chunk := range result.Chunks {
+		if firstLocal == -1 && chunk.Source == "local-facts" {
+			firstLocal = i
+		}
+		if firstWorkspace == -1 && chunk.Source == "workspace" {
+			firstWorkspace = i
+		}
+	}
+	if firstLocal == -1 {
+		t.Fatalf("expected local facts for repo-behavior explain, got %#v", result.Chunks)
+	}
+	if firstWorkspace != -1 && firstLocal > firstWorkspace {
+		t.Fatalf("expected local facts before workspace chunks for repo-behavior explain, got %#v", result.Chunks)
+	}
+	if chunk := findChunk(result, "local-facts-askdraft"); chunk == nil || !strings.Contains(chunk.Content, "CompileWithProgram") {
+		t.Fatalf("expected askdraft compiler facts with function detail, got %#v", result.Chunks)
+	}
+}
+
 func TestRetrieveDraftUsesAuthoringFactAssemblyWithoutAskContextOrState(t *testing.T) {
 	result := Retrieve(
 		askintent.RouteDraft,

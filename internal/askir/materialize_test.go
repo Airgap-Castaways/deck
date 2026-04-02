@@ -454,6 +454,49 @@ func TestMaterializePrunesUnusedVarsCompanionWrites(t *testing.T) {
 	}
 }
 
+func TestMaterializePrunesVarsCompanionWriteWhenExtractVarIsOverwritten(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      kubernetesVersion: 1.35.1\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{
+		{
+			Path:   "workflows/scenarios/apply.yaml",
+			Action: "edit",
+			Transforms: []askcontract.RefineTransformAction{
+				{Type: "extract-var", RawPath: "steps[0].spec.kubernetesVersion", VarName: "kubernetesVersion", VarsPath: "workflows/vars.yaml", Value: "1.35.1"},
+				{Type: "set-field", RawPath: "steps[0].spec.kubernetesVersion", Value: "v1.36.0"},
+			},
+		},
+		{
+			Path:       "workflows/vars.yaml",
+			Action:     "edit",
+			Transforms: []askcontract.RefineTransformAction{{Type: "set-field", RawPath: "kubernetesVersion", Value: "1.35.1"}},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("materialize overwritten extract-var: %v", err)
+	}
+	byPath := map[string]string{}
+	for _, file := range files {
+		byPath[file.Path] = file.Content
+	}
+	if strings.Contains(byPath["workflows/scenarios/apply.yaml"], "{{ .vars.kubernetesVersion }}") {
+		t.Fatalf("expected later set-field to win over extract-var, got %q", byPath["workflows/scenarios/apply.yaml"])
+	}
+	if !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "kubernetesVersion: v1.36.0") {
+		t.Fatalf("expected scenario to keep final literal value, got %q", byPath["workflows/scenarios/apply.yaml"])
+	}
+	if _, ok := byPath["workflows/vars.yaml"]; ok {
+		t.Fatalf("expected orphan vars companion write to be pruned, got %#v", byPath)
+	}
+}
+
 func TestMaterializeRefineDeleteFieldTransform(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
@@ -520,6 +563,49 @@ func TestMaterializeRefineExtractComponentTransform(t *testing.T) {
 	}
 }
 
+func TestMaterializeKeepsVarsCompanionWriteWhenExtractComponentMovesConsumer(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        kind: InitKubeadm\n        spec:\n          kubernetesVersion: 1.35.1\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{
+		{
+			Path:   "workflows/scenarios/apply.yaml",
+			Action: "edit",
+			Transforms: []askcontract.RefineTransformAction{
+				{Type: "extract-var", RawPath: "phases[0].steps[0].spec.kubernetesVersion", VarName: "kubernetesVersion", VarsPath: "workflows/vars.yaml", Value: "1.35.1"},
+				{Type: "extract-component", RawPath: "phases.bootstrap", Path: "workflows/components/bootstrap.yaml"},
+			},
+		},
+		{
+			Path:       "workflows/vars.yaml",
+			Action:     "edit",
+			Transforms: []askcontract.RefineTransformAction{{Type: "set-field", RawPath: "kubernetesVersion", Value: "1.35.1"}},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("materialize extract-component vars handoff: %v", err)
+	}
+	byPath := map[string]string{}
+	for _, file := range files {
+		byPath[file.Path] = file.Content
+	}
+	if !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "path: bootstrap.yaml") {
+		t.Fatalf("expected scenario to import extracted component, got %q", byPath["workflows/scenarios/apply.yaml"])
+	}
+	if !strings.Contains(byPath["workflows/components/bootstrap.yaml"], "{{ .vars.kubernetesVersion }}") {
+		t.Fatalf("expected extracted component to keep vars consumer, got %q", byPath["workflows/components/bootstrap.yaml"])
+	}
+	if !strings.Contains(byPath["workflows/vars.yaml"], "kubernetesVersion: 1.35.1") {
+		t.Fatalf("expected vars companion write to survive after consumer moved to component, got %#v", byPath)
+	}
+}
+
 func TestMaterializeDeleteDocument(t *testing.T) {
 	files, err := Materialize(t.TempDir(), askcontract.GenerationResponse{
 		Documents: []askcontract.GeneratedDocument{{Path: "workflows/components/old.yaml", Action: "delete"}},
@@ -539,6 +625,58 @@ func TestMaterializeCompilesBuilderSelection(t *testing.T) {
 	}
 	if len(files) != 1 || !strings.Contains(files[0].Content, "kind: InitKubeadm") || !strings.Contains(files[0].Content, "kind: CheckCluster") {
 		t.Fatalf("expected builder selection to render typed workflow content, got %#v", files)
+	}
+}
+
+func TestMaterializeCompilesCompleteTwoNodeOfflineBuilderSelection(t *testing.T) {
+	program := &askcontract.AuthoringProgram{
+		Platform: askcontract.ProgramPlatform{Family: "rhel", Release: "9", RepoType: "rpm", BackendImage: "rockylinux:9"},
+		Artifacts: askcontract.ProgramArtifacts{
+			Packages:         []string{"kubeadm", "kubelet", "kubectl", "cri-tools", "containerd"},
+			Images:           []string{"registry.k8s.io/kube-apiserver:v1.30.0", "registry.k8s.io/kube-controller-manager:v1.30.0"},
+			PackageOutputDir: "packages/rpm/9",
+			ImageOutputDir:   "images/control-plane",
+		},
+		Cluster:      askcontract.ProgramCluster{JoinFile: "/tmp/deck/join.txt", PodCIDR: "10.244.0.0/16", KubernetesVersion: "v1.30.0", CriSocket: "unix:///run/containerd/containerd.sock", RoleSelector: "role", ControlPlaneCount: 1, WorkerCount: 1},
+		Verification: askcontract.ProgramVerification{ExpectedNodeCount: 2, ExpectedReadyCount: 2, ExpectedControlPlaneReady: 1, FinalVerificationRole: "control-plane", Interval: "5s", Timeout: "10m"},
+	}
+	selection := &askcontract.DraftSelection{
+		Targets: []askcontract.DraftTargetSelection{
+			{Path: "workflows/prepare.yaml", Kind: "workflow", Builders: []askcontract.DraftBuilderSelection{{ID: "prepare.download-package"}, {ID: "prepare.download-image"}}},
+			{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.install-package"}, {ID: "apply.load-image"}, {ID: "apply.init-kubeadm"}, {ID: "apply.join-kubeadm"}, {ID: "apply.check-cluster"}}},
+		},
+		Vars: map[string]any{"role": "control-plane", "joinFile": "/tmp/deck/join.txt"},
+	}
+	files, err := Materialize(t.TempDir(), askcontract.GenerationResponse{Program: program, Selection: selection})
+	if err != nil {
+		t.Fatalf("materialize complete builder selection: %v", err)
+	}
+	if len(files) != 3 {
+		t.Fatalf("expected prepare, apply, and vars files, got %#v", files)
+	}
+	byPath := map[string]string{}
+	for _, file := range files {
+		byPath[file.Path] = file.Content
+	}
+	for _, path := range []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml", "workflows/vars.yaml"} {
+		if strings.TrimSpace(byPath[path]) == "" {
+			t.Fatalf("expected rendered file %s, got %#v", path, files)
+		}
+	}
+	for _, want := range []string{"kind: DownloadPackage", "kind: DownloadImage", "packages:", "images:", "outputDir: packages/rpm/9", "outputDir: images/control-plane"} {
+		if !strings.Contains(byPath["workflows/prepare.yaml"], want) {
+			t.Fatalf("expected %q in prepare workflow, got %q", want, byPath["workflows/prepare.yaml"])
+		}
+	}
+	for _, want := range []string{"kind: InstallPackage", "kind: LoadImage", "kind: InitKubeadm", "kind: JoinKubeadm", "kind: CheckCluster", `when: vars.role == "control-plane"`, `when: vars.role == "worker"`, "path: packages/rpm/9", "sourceDir: images/control-plane", "joinFile: /tmp/deck/join.txt", "outputJoinFile: /tmp/deck/join.txt", "total: 2", "ready: 2", "controlPlaneReady: 1"} {
+		if !strings.Contains(byPath["workflows/scenarios/apply.yaml"], want) {
+			t.Fatalf("expected %q in apply workflow, got %q", want, byPath["workflows/scenarios/apply.yaml"])
+		}
+	}
+	for _, want := range []string{"role: control-plane", "joinFile: /tmp/deck/join.txt"} {
+		if !strings.Contains(byPath["workflows/vars.yaml"], want) {
+			t.Fatalf("expected %q in vars file, got %q", want, byPath["workflows/vars.yaml"])
+		}
 	}
 }
 

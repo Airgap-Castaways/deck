@@ -172,6 +172,10 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		externalChunks = append(externalChunks, externalEvidenceFailureChunk(failure))
 		mcpEvents = append(mcpEvents, "mcp: required external evidence unavailable")
 	}
+	if warning := weakExternalEvidenceMessage(evidencePlan, mcpChunks, mcpEvents); warning != "" {
+		externalChunks = append(externalChunks, weakExternalEvidenceChunk(warning))
+		mcpEvents = append(mcpEvents, "mcp: weak install evidence fallback enabled")
+	}
 	if !isAuthoringRoute(decision.Route) {
 		externalChunks = append(externalChunks, projectContextChunk(resolvedRoot))
 	}

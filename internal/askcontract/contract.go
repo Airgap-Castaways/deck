@@ -29,9 +29,35 @@ func (f *flexStrings) UnmarshalJSON(data []byte) error {
 		}
 		return nil
 	}
+	var singleObject map[string]any
+	if err := json.Unmarshal(data, &singleObject); err == nil {
+		if extracted, ok := flexStringFromObject(singleObject); ok {
+			*f = []string{extracted}
+			return nil
+		}
+	}
 	var many []string
 	if err := json.Unmarshal(data, &many); err != nil {
-		return err
+		var items []any
+		if err := json.Unmarshal(data, &items); err != nil {
+			return err
+		}
+		out := make([]string, 0, len(items))
+		for _, item := range items {
+			switch typed := item.(type) {
+			case string:
+				typed = strings.TrimSpace(typed)
+				if typed != "" {
+					out = append(out, typed)
+				}
+			case map[string]any:
+				if extracted, ok := flexStringFromObject(typed); ok {
+					out = append(out, extracted)
+				}
+			}
+		}
+		*f = out
+		return nil
 	}
 	out := make([]string, 0, len(many))
 	for _, item := range many {
@@ -42,6 +68,24 @@ func (f *flexStrings) UnmarshalJSON(data []byte) error {
 	}
 	*f = out
 	return nil
+}
+
+func flexStringFromObject(value map[string]any) (string, bool) {
+	for _, key := range []string{"question", "text", "message", "title", "label"} {
+		raw, ok := value[key]
+		if !ok {
+			continue
+		}
+		text, ok := raw.(string)
+		if !ok {
+			continue
+		}
+		text = strings.TrimSpace(text)
+		if text != "" {
+			return text, true
+		}
+	}
+	return "", false
 }
 
 type GeneratedFile struct {
@@ -1031,6 +1075,7 @@ func parsePlan(raw string, validate bool) (PlanResponse, error) {
 	if !validate {
 		resp, err := parseLoosePlan(cleaned)
 		if err == nil {
+			normalizePlanResponse(&resp)
 			return resp, nil
 		}
 	}
@@ -1038,8 +1083,23 @@ func parsePlan(raw string, validate bool) (PlanResponse, error) {
 	if err := json.Unmarshal([]byte(cleaned), &resp); err != nil {
 		repaired := repairLooseJSON(cleaned)
 		if repaired == cleaned || json.Unmarshal([]byte(repaired), &resp) != nil {
-			return PlanResponse{}, fmt.Errorf("parse plan response: %w", err)
+			loose, looseErr := parseLoosePlan(cleaned)
+			if looseErr != nil {
+				return PlanResponse{}, fmt.Errorf("parse plan response: %w", err)
+			}
+			resp = loose
 		}
+	}
+	normalizePlanResponse(&resp)
+	if !validate {
+		return resp, nil
+	}
+	return validatePlanResponse(resp)
+}
+
+func normalizePlanResponse(resp *PlanResponse) {
+	if resp == nil {
+		return
 	}
 	if resp.Version == 0 {
 		resp.Version = 1
@@ -1132,9 +1192,30 @@ func parsePlan(raw string, validate bool) (PlanResponse, error) {
 	for i := range resp.ExecutionModel.ApplyAssumptions {
 		resp.ExecutionModel.ApplyAssumptions[i] = strings.TrimSpace(resp.ExecutionModel.ApplyAssumptions[i])
 	}
-	if !validate {
-		return resp, nil
+	for i := range resp.Blockers {
+		resp.Blockers[i] = strings.TrimSpace(resp.Blockers[i])
 	}
+	for i := range resp.Assumptions {
+		resp.Assumptions[i] = strings.TrimSpace(resp.Assumptions[i])
+	}
+	for i := range resp.OpenQuestions {
+		resp.OpenQuestions[i] = strings.TrimSpace(resp.OpenQuestions[i])
+	}
+	for i := range resp.ValidationChecklist {
+		resp.ValidationChecklist[i] = strings.TrimSpace(resp.ValidationChecklist[i])
+	}
+	for i := range resp.ArtifactKinds {
+		resp.ArtifactKinds[i] = strings.TrimSpace(resp.ArtifactKinds[i])
+	}
+	for i := range resp.VarsRecommendation {
+		resp.VarsRecommendation[i] = strings.TrimSpace(resp.VarsRecommendation[i])
+	}
+	for i := range resp.ComponentRecommendation {
+		resp.ComponentRecommendation[i] = strings.TrimSpace(resp.ComponentRecommendation[i])
+	}
+}
+
+func validatePlanResponse(resp PlanResponse) (PlanResponse, error) {
 	if resp.Request == "" {
 		return PlanResponse{}, fmt.Errorf("plan response is missing request")
 	}

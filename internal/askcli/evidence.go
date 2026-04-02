@@ -170,6 +170,53 @@ func externalEvidenceFailureChunk(message string) askretrieve.Chunk {
 	return askretrieve.Chunk{ID: "external-evidence-status", Source: "external-evidence", Label: "required-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: content, Score: 85}
 }
 
+func weakExternalEvidenceMessage(plan askcontract.EvidencePlan, chunks []askretrieve.Chunk, events []string) string {
+	if !plan.InstallEvidence || len(chunks) == 0 {
+		return ""
+	}
+	if hasStrongOfficialInstallEvidence(chunks) {
+		return ""
+	}
+	reasons := []string{"official install-source retrieval was incomplete"}
+	for _, chunk := range chunks {
+		if strings.Contains(strings.ToLower(chunk.Content), "no search results found") {
+			reasons = append(reasons, "search returned no strong official install result")
+			break
+		}
+	}
+	for _, event := range events {
+		if strings.Contains(strings.ToLower(event), "no search results") {
+			reasons = append(reasons, strings.TrimSpace(event))
+			break
+		}
+	}
+	return strings.Join(dedupe(reasons), "; ")
+}
+
+func weakExternalEvidenceChunk(message string) askretrieve.Chunk {
+	message = strings.TrimSpace(message)
+	content := "External evidence status:\n- official source retrieval was incomplete for this install/setup question\n- answer with narrowly bounded general guidance only\n- do not claim distro-specific verified steps unless the retrieved evidence supports them\n- detail: " + message
+	return askretrieve.Chunk{ID: "weak-external-evidence-status", Source: "external-evidence", Label: "weak-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: content, Score: 82}
+}
+
+func hasStrongOfficialInstallEvidence(chunks []askretrieve.Chunk) bool {
+	for _, chunk := range chunks {
+		if chunk.Evidence == nil {
+			continue
+		}
+		if !chunk.Evidence.Official {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(chunk.Evidence.TrustLevel), "high") {
+			support := strings.TrimSpace(chunk.Evidence.VersionSupport)
+			if support == "" || strings.EqualFold(support, "direct") || strings.EqualFold(support, "compatible") || strings.EqualFold(support, "supported") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func externalEvidenceWarningEvents(chunks []askretrieve.Chunk) []string {
 	events := make([]string, 0)
 	for _, chunk := range chunks {

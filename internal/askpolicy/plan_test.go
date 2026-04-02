@@ -144,8 +144,8 @@ func TestNormalizePlanCanonicalizesPlannerAuthoringBrief(t *testing.T) {
 	if brief.TargetScope != "workspace" || brief.ModeIntent != "prepare+apply" || brief.Topology != "multi-node" || brief.CompletenessTarget != "complete" {
 		t.Fatalf("expected canonical brief fields, got %#v", brief)
 	}
-	if len(brief.TargetPaths) != 2 {
-		t.Fatalf("expected fallback target paths, got %#v", brief)
+	if len(brief.TargetPaths) != 3 || !containsString(brief.TargetPaths, "workflows/prepare.yaml") || !containsString(brief.TargetPaths, "workflows/scenarios/apply.yaml") || !containsString(brief.TargetPaths, "workflows/vars.yaml") {
+		t.Fatalf("expected canonical fallback target paths including vars companion, got %#v", brief)
 	}
 	for _, want := range []string{"kubeadm-bootstrap", "kubeadm-join", "prepare-artifacts"} {
 		found := false
@@ -191,6 +191,43 @@ func TestNormalizePlanCanonicalizesExecutionModel(t *testing.T) {
 	}
 	if plan.ExecutionModel.RoleExecution.RoleSelector != "vars.role" || plan.ExecutionModel.Verification.ExpectedNodeCount != 3 || plan.ExecutionModel.Verification.FinalVerificationRole != "control-plane" {
 		t.Fatalf("expected fallback execution details, got %#v", plan.ExecutionModel)
+	}
+}
+
+func TestNormalizePlanReplacesLocalOnlyJoinContractForMultiNodeFlow(t *testing.T) {
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request: "create 2-node kubeadm workflow",
+		Intent:  "draft",
+		AuthoringBrief: askcontract.AuthoringBrief{
+			Topology:             "multi-node",
+			NodeCount:            2,
+			ModeIntent:           "prepare+apply",
+			RequiredCapabilities: []string{"kubeadm-bootstrap", "kubeadm-join", "cluster-verification"},
+		},
+		ExecutionModel: askcontract.ExecutionModel{
+			SharedStateContracts: []askcontract.SharedStateContract{{
+				Name:              "join-file",
+				ProducerPath:      "workflows/scenarios/apply.yaml",
+				ConsumerPaths:     []string{"workflows/scenarios/apply.yaml"},
+				AvailabilityModel: "local-only",
+				Description:       "worker reuses the same local path",
+			}},
+			RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role", PerNodeInvocation: true},
+		},
+		Files: []askcontract.PlanFile{{Path: "workflows/prepare.yaml"}, {Path: "workflows/scenarios/apply.yaml"}, {Path: "workflows/vars.yaml"}},
+	}, "Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker. Generate both workflows/prepare.yaml and workflows/scenarios/apply.yaml.", askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "workspace"}})
+	if len(plan.ExecutionModel.SharedStateContracts) == 0 {
+		t.Fatalf("expected normalized shared-state contract, got %#v", plan.ExecutionModel)
+	}
+	join := plan.ExecutionModel.SharedStateContracts[0]
+	if join.AvailabilityModel != "published-for-worker-consumption" {
+		t.Fatalf("expected published join contract, got %#v", join)
+	}
+	if join.ProducerPath != "/tmp/deck/join.txt" {
+		t.Fatalf("expected canonical join producer path, got %#v", join)
+	}
+	if len(join.ConsumerPaths) != 1 || join.ConsumerPaths[0] != "/tmp/deck/join.txt" {
+		t.Fatalf("expected canonical join consumer paths, got %#v", join)
 	}
 }
 
@@ -295,6 +332,122 @@ func TestNormalizePlanTracksRefineAnchorAndCompanionScope(t *testing.T) {
 	}
 }
 
+func TestNormalizePlanUsesCodeOwnedTwoNodeRoleClarificationShape(t *testing.T) {
+	prompt := "Create an offline RHEL 9 kubeadm workflow for 2 nodes"
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request: prompt,
+		Intent:  "draft",
+		Clarifications: []askcontract.PlanClarification{{
+			ID:                 "topology.roleModel",
+			Question:           "Planner drifted into a vague role-model question",
+			Kind:               "enum",
+			Options:            []string{"weird-option", "custom"},
+			RecommendedDefault: "weird-option",
+		}},
+		Files: []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}},
+	}, prompt, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
+	var roleClarification askcontract.PlanClarification
+	for _, item := range plan.Clarifications {
+		if item.ID == "topology.roleModel" {
+			roleClarification = item
+			break
+		}
+	}
+	if roleClarification.ID == "" {
+		t.Fatalf("expected role-model clarification, got %#v", plan.Clarifications)
+	}
+	if strings.Join(roleClarification.Options, ",") != "1cp-1worker,custom" {
+		t.Fatalf("expected code-owned two-node options, got %#v", roleClarification)
+	}
+	if roleClarification.RecommendedDefault != "1cp-1worker" {
+		t.Fatalf("expected code-owned two-node default, got %#v", roleClarification)
+	}
+	if !strings.Contains(strings.ToLower(roleClarification.Question), "role") {
+		t.Fatalf("expected canonical role-model question, got %#v", roleClarification)
+	}
+}
+
+func TestNormalizePlanReconcilesTwoNodeClarificationAnswers(t *testing.T) {
+	prompt := "Create an offline RHEL 9 kubeadm workflow for 2 nodes"
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request: prompt,
+		Intent:  "draft",
+		AuthoringBrief: askcontract.AuthoringBrief{
+			Topology:             "unspecified",
+			NodeCount:            3,
+			ModeIntent:           "prepare+apply",
+			RequiredCapabilities: []string{"kubeadm-bootstrap", "kubeadm-join", "cluster-verification"},
+		},
+		AuthoringProgram: askcontract.AuthoringProgram{
+			Cluster:      askcontract.ProgramCluster{ControlPlaneCount: 2, WorkerCount: 1},
+			Verification: askcontract.ProgramVerification{ExpectedNodeCount: 3, ExpectedControlPlaneReady: 2},
+		},
+		ExecutionModel: askcontract.ExecutionModel{
+			RoleExecution: askcontract.RoleExecutionModel{PerNodeInvocation: false},
+			Verification:  askcontract.VerificationStrategy{ExpectedNodeCount: 3, ExpectedControlPlaneReady: 2},
+		},
+		Clarifications: []askcontract.PlanClarification{{ID: "topology.nodeCount", Answer: "2"}, {ID: "topology.roleModel", Answer: "1cp-1worker"}},
+		Files:          []askcontract.PlanFile{{Path: "workflows/prepare.yaml", Action: "create"}, {Path: "workflows/scenarios/apply.yaml", Action: "create"}},
+		EntryScenario:  "workflows/scenarios/apply.yaml",
+	}, prompt, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
+	if plan.AuthoringBrief.Topology != "multi-node" || plan.AuthoringBrief.NodeCount != 2 {
+		t.Fatalf("expected reconciled two-node topology, got %#v", plan.AuthoringBrief)
+	}
+	if plan.AuthoringProgram.Cluster.ControlPlaneCount != 1 || plan.AuthoringProgram.Cluster.WorkerCount != 1 {
+		t.Fatalf("expected reconciled cluster counts, got %#v", plan.AuthoringProgram.Cluster)
+	}
+	if plan.ExecutionModel.Verification.ExpectedNodeCount != 2 || plan.ExecutionModel.Verification.ExpectedControlPlaneReady != 1 {
+		t.Fatalf("expected reconciled verification counts, got %#v", plan.ExecutionModel.Verification)
+	}
+	if plan.AuthoringProgram.Verification.ExpectedNodeCount != 2 || plan.AuthoringProgram.Verification.ExpectedControlPlaneReady != 1 {
+		t.Fatalf("expected reconciled program verification counts, got %#v", plan.AuthoringProgram.Verification)
+	}
+	if plan.ExecutionModel.RoleExecution.RoleSelector != "vars.role" || !plan.ExecutionModel.RoleExecution.PerNodeInvocation {
+		t.Fatalf("expected reconciled role execution, got %#v", plan.ExecutionModel.RoleExecution)
+	}
+}
+
+func TestNormalizePlanDropsDirectoryLikePlannerPaths(t *testing.T) {
+	prompt := "Create an offline RHEL 9 kubeadm workflow for 2 nodes"
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request: prompt,
+		Intent:  "draft",
+		AuthoringBrief: askcontract.AuthoringBrief{
+			TargetPaths:           []string{"workflows/scenarios/apply.yaml"},
+			AnchorPaths:           []string{"workflows/components/"},
+			AllowedCompanionPaths: []string{"workflows/components/", "workflows/scenarios/"},
+		},
+		Files: []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}},
+	}, prompt, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
+	if len(plan.AuthoringBrief.AnchorPaths) != 1 || plan.AuthoringBrief.AnchorPaths[0] != "workflows/scenarios/apply.yaml" {
+		t.Fatalf("expected directory-like anchor path to be dropped in favor of scenario target, got %#v", plan.AuthoringBrief)
+	}
+	if len(plan.AuthoringBrief.AllowedCompanionPaths) != 0 {
+		t.Fatalf("expected directory-like companion paths to be dropped, got %#v", plan.AuthoringBrief)
+	}
+}
+
+func TestNormalizePlanAddsVarsFileForRoleGatedDrafts(t *testing.T) {
+	prompt := "Create an offline RHEL 9 kubeadm workflow for 2 nodes"
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request:        prompt,
+		Intent:         "draft",
+		AuthoringBrief: askcontract.AuthoringBrief{Topology: "multi-node", NodeCount: 2, ModeIntent: "apply-only", TargetPaths: []string{"workflows/scenarios/apply.yaml"}},
+		ExecutionModel: askcontract.ExecutionModel{RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role", PerNodeInvocation: true, WorkerFlow: "join"}},
+		Files:          []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}},
+		EntryScenario:  "workflows/scenarios/apply.yaml",
+	}, prompt, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
+	if !containsString(plan.AuthoringBrief.TargetPaths, "workflows/vars.yaml") {
+		t.Fatalf("expected role-gated draft to plan vars companion, got %#v", plan.AuthoringBrief)
+	}
+	if !planHasFilePath(plan.Files, "workflows/vars.yaml") {
+		t.Fatalf("expected role-gated draft to include vars file in plan, got %#v", plan.Files)
+	}
+	if !containsString(plan.VarsRecommendation, "role") {
+		t.Fatalf("expected role vars recommendation, got %#v", plan.VarsRecommendation)
+	}
+}
+
 func TestNormalizePlanDropsSpuriousClusterClarificationsForJoinFileRefine(t *testing.T) {
 	workspace := askretrieve.WorkspaceSummary{HasWorkflowTree: true, Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/apply.yaml"}, {Path: "workflows/vars.yaml"}}}
 	plan := NormalizePlan(askcontract.PlanResponse{
@@ -353,6 +506,38 @@ func TestValidatePlanStructureRejectsMissingViableEntryScenario(t *testing.T) {
 	}
 	if err := ValidatePlanStructure(plan); err == nil {
 		t.Fatalf("expected missing entry scenario to fail viability check")
+	}
+}
+
+func TestValidatePlanStructureRejectsPackageStagingWithoutPackages(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		NeedsPrepare:        true,
+		ArtifactKinds:       []string{"package"},
+		AuthoringBrief:      askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Topology: "multi-node", NodeCount: 2, RequiredCapabilities: []string{"prepare-artifacts", "package-staging", "kubeadm-bootstrap", "cluster-verification"}},
+		AuthoringProgram:    askcontract.AuthoringProgram{Platform: askcontract.ProgramPlatform{Family: "rhel", Release: "9"}, Cluster: askcontract.ProgramCluster{JoinFile: "/tmp/deck/join.txt"}, Verification: askcontract.ProgramVerification{ExpectedNodeCount: 2}},
+		ExecutionModel:      askcontract.ExecutionModel{ArtifactContracts: []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}}, Verification: askcontract.VerificationStrategy{ExpectedNodeCount: 2}},
+		Files:               []askcontract.PlanFile{{Path: "workflows/prepare.yaml"}, {Path: "workflows/scenarios/apply.yaml"}},
+		EntryScenario:       "workflows/scenarios/apply.yaml",
+		ValidationChecklist: []string{"lint"},
+	}
+	if err := ValidatePlanStructure(plan); err == nil || !strings.Contains(err.Error(), "artifacts.packages") {
+		t.Fatalf("expected missing package payload to fail viability check, got %v", err)
+	}
+}
+
+func TestValidatePlanStructureRejectsImageStagingWithoutImages(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		NeedsPrepare:        true,
+		ArtifactKinds:       []string{"image"},
+		AuthoringBrief:      askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Topology: "multi-node", NodeCount: 2, RequiredCapabilities: []string{"prepare-artifacts", "image-staging", "kubeadm-bootstrap", "cluster-verification"}},
+		AuthoringProgram:    askcontract.AuthoringProgram{Platform: askcontract.ProgramPlatform{Family: "rhel", Release: "9"}, Cluster: askcontract.ProgramCluster{JoinFile: "/tmp/deck/join.txt"}, Verification: askcontract.ProgramVerification{ExpectedNodeCount: 2}},
+		ExecutionModel:      askcontract.ExecutionModel{ArtifactContracts: []askcontract.ArtifactContract{{Kind: "image", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}}, Verification: askcontract.VerificationStrategy{ExpectedNodeCount: 2}},
+		Files:               []askcontract.PlanFile{{Path: "workflows/prepare.yaml"}, {Path: "workflows/scenarios/apply.yaml"}},
+		EntryScenario:       "workflows/scenarios/apply.yaml",
+		ValidationChecklist: []string{"lint"},
+	}
+	if err := ValidatePlanStructure(plan); err == nil || !strings.Contains(err.Error(), "artifacts.images") {
+		t.Fatalf("expected missing image payload to fail viability check, got %v", err)
 	}
 }
 
