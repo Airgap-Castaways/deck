@@ -424,6 +424,28 @@ func TestRunServerAuditRotationFlagValidation(t *testing.T) {
 	}
 }
 
+func TestDisplayServerURL(t *testing.T) {
+	tests := []struct {
+		name string
+		addr string
+		tls  bool
+		want string
+	}{
+		{name: "default bind", addr: ":8080", want: "http://localhost:8080"},
+		{name: "wildcard host", addr: "0.0.0.0:9090", want: "http://localhost:9090"},
+		{name: "named host", addr: "example.test:9443", tls: true, want: "https://example.test:9443"},
+		{name: "ipv6 wildcard", addr: "[::]:8080", want: "http://localhost:8080"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := displayServerURL(tc.addr, tc.tls); got != tc.want {
+				t.Fatalf("unexpected display url\nwant: %q\ngot : %q", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestRunLegacyTopLevelCommandsAreRemoved(t *testing.T) {
 	for _, cmd := range []string{"run", "resume", "diagnose", "agent", "workflow", "control", "strategy", "ManageService", "serve", "health", "logs"} {
 		t.Run(cmd, func(t *testing.T) {
