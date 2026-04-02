@@ -178,7 +178,9 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		externalChunks = append(externalChunks, externalEvidenceFailureChunk(failure))
 		mcpEvents = append(mcpEvents, "mcp: required external evidence unavailable")
 	}
-	externalChunks = append(externalChunks, projectContextChunk(resolvedRoot))
+	if !isAuthoringRoute(decision.Route) {
+		externalChunks = append(externalChunks, projectContextChunk(resolvedRoot))
+	}
 	retrieval := askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, externalChunks)
 	requirements := askpolicy.BuildScenarioRequirements(requestText, retrieval, workspace, decision)
 	authoringBrief := askpolicy.BriefFromRequirements(requirements, decision)

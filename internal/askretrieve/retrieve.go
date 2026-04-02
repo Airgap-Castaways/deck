@@ -16,6 +16,11 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
+type factGroup struct {
+	chunks []Chunk
+	limit  int
+}
+
 type WorkspaceSummary struct {
 	Root            string
 	HasWorkflowTree bool
@@ -124,36 +129,73 @@ func InspectWorkspace(root string) (WorkspaceSummary, error) {
 
 func Retrieve(route askintent.Route, prompt string, target askintent.Target, workspace WorkspaceSummary, state askstate.Context, external []Chunk) RetrievalResult {
 	budget, maxChunks := routeBudget(route, prompt)
-	complex := isComplexAuthoringPrompt(route, prompt)
 	lowerPrompt := strings.ToLower(strings.TrimSpace(prompt))
-	related := relatedWorkspaceTargets(workspace, target)
-	chunks := make([]Chunk, 0, 32)
+	groups := routeFactGroups(route, lowerPrompt, target, workspace, state, external)
+	selected, dropped := selectFactGroups(lowerPrompt, groups, budget, maxChunks)
+	return RetrievalResult{Chunks: selected, Dropped: dropped, MaxBytes: budget}
+}
+
+func routeFactGroups(route askintent.Route, lowerPrompt string, target askintent.Target, workspace WorkspaceSummary, state askstate.Context, external []Chunk) []factGroup {
+	groups := make([]factGroup, 0, 6)
+	info := factGroup{chunks: informationalFactChunks(route, lowerPrompt)}
+	workspaceGroup := factGroup{chunks: workspaceFactChunks(route, lowerPrompt, target, workspace)}
+	repo := factGroup{chunks: repoGroundingFacts(route, lowerPrompt, target)}
+	examples := factGroup{chunks: exampleReferenceChunks(route, lowerPrompt), limit: 2}
+	stateGroup := factGroup{chunks: stateFactChunks(route, state), limit: 1}
+	externalGroup := factGroup{chunks: externalFactChunks(external)}
+	switch route {
+	case askintent.RouteDraft, askintent.RouteRefine:
+		groups = appendFactGroup(groups, workspaceGroup, repo, examples, externalGroup)
+	default:
+		groups = appendFactGroup(groups, info, externalGroup, workspaceGroup, repo, stateGroup)
+	}
+	return groups
+}
+
+func repoGroundingFacts(route askintent.Route, lowerPrompt string, target askintent.Target) []Chunk {
+	if !shouldIncludeRepoGrounding(route, lowerPrompt, target) {
+		return nil
+	}
+	return repoGroundingChunks(route, lowerPrompt)
+}
+
+func appendFactGroup(groups []factGroup, items ...factGroup) []factGroup {
+	for _, item := range items {
+		if len(item.chunks) == 0 {
+			continue
+		}
+		groups = append(groups, item)
+	}
+	return groups
+}
+
+func informationalFactChunks(route askintent.Route, prompt string) []Chunk {
 	bundle := askknowledge.Current()
-	chunks = append(chunks, Chunk{
-		ID:      "workflow-meta",
-		Source:  "askcontext",
-		Label:   "workflow-summary",
-		Topic:   askcontext.TopicWorkflowInvariants,
-		Content: bundle.WorkflowPromptBlock(),
-		Score:   50,
-	})
-	chunks = append(chunks, Chunk{
-		ID:      "philosophy",
-		Source:  "askcontext",
-		Label:   "authoring-rules",
-		Topic:   askcontext.TopicPolicy,
-		Content: bundle.PolicyPromptBlock(),
-		Score:   45,
-	})
-	chunks = append(chunks,
-		Chunk{ID: "topology", Source: "askcontext", Label: "workspace-topology", Topic: askcontext.TopicWorkspaceTopology, Content: askcontext.WorkspaceTopologyBlock(), Score: 52},
-		Chunk{ID: "role-guidance", Source: "askcontext", Label: "prepare-apply-guidance", Topic: askcontext.TopicPrepareApplyGuidance, Content: askcontext.RoleGuidanceBlock(), Score: roleGuidanceScore(prompt)},
-		Chunk{ID: "component-guidance", Source: "askcontext", Label: "components-imports", Topic: askcontext.TopicComponentsImports, Content: bundle.ComponentPromptBlock(), Score: 52},
-		Chunk{ID: "vars-guidance", Source: "askcontext", Label: "vars-guidance", Topic: askcontext.TopicVarsGuidance, Content: bundle.VarsPromptBlock(), Score: 52},
-		Chunk{ID: "cli-guidance", Source: "askcontext", Label: "cli-hints", Topic: askcontext.TopicCLIHints, Content: askcontext.CLIHintsBlock(), Score: 25},
-	)
-	chunks = append(chunks, repoGroundingChunks(route, lowerPrompt)...)
-	chunks = append(chunks, exampleReferenceChunks(route, lowerPrompt)...)
+	switch route {
+	case askintent.RouteQuestion:
+		return []Chunk{{ID: "workflow-meta", Source: "askcontext", Label: "workflow-summary", Topic: askcontext.TopicWorkflowInvariants, Content: bundle.WorkflowPromptBlock(), Score: 50}}
+	case askintent.RouteExplain:
+		return []Chunk{
+			{ID: "workflow-meta", Source: "askcontext", Label: "workflow-summary", Topic: askcontext.TopicWorkflowInvariants, Content: bundle.WorkflowPromptBlock(), Score: 50},
+			{ID: "topology", Source: "askcontext", Label: "workspace-topology", Topic: askcontext.TopicWorkspaceTopology, Content: askcontext.WorkspaceTopologyBlock(), Score: 52},
+		}
+	case askintent.RouteReview:
+		return []Chunk{
+			{ID: "workflow-meta", Source: "askcontext", Label: "workflow-summary", Topic: askcontext.TopicWorkflowInvariants, Content: bundle.WorkflowPromptBlock(), Score: 50},
+			{ID: "topology", Source: "askcontext", Label: "workspace-topology", Topic: askcontext.TopicWorkspaceTopology, Content: askcontext.WorkspaceTopologyBlock(), Score: 52},
+			{ID: "role-guidance", Source: "askcontext", Label: "prepare-apply-guidance", Topic: askcontext.TopicPrepareApplyGuidance, Content: askcontext.RoleGuidanceBlock(), Score: roleGuidanceScore(prompt)},
+		}
+	default:
+		return nil
+	}
+}
+
+func workspaceFactChunks(route askintent.Route, lowerPrompt string, target askintent.Target, workspace WorkspaceSummary) []Chunk {
+	if !shouldIncludeWorkspaceFacts(route, lowerPrompt, target) {
+		return nil
+	}
+	related := relatedWorkspaceTargets(workspace, target)
+	chunks := make([]Chunk, 0, len(workspace.Files))
 	for _, file := range workspace.Files {
 		if !workspaceFileAllowed(file.Path) {
 			continue
@@ -183,121 +225,115 @@ func Retrieve(route askintent.Route, prompt string, target askintent.Target, wor
 			Score:   score,
 		})
 	}
-	if state.LastLint != "" {
-		chunks = append(chunks, Chunk{
-			ID:      "state-last-lint",
-			Source:  "state",
-			Label:   "last-lint",
-			Topic:   askcontext.Topic("state:last-lint"),
-			Content: state.LastLint,
-			Score:   20,
-		})
+	sort.SliceStable(chunks, func(i, j int) bool {
+		if chunks[i].Score == chunks[j].Score {
+			return chunks[i].ID < chunks[j].ID
+		}
+		return chunks[i].Score > chunks[j].Score
+	})
+	return chunks
+}
+
+func shouldIncludeRepoGrounding(route askintent.Route, lowerPrompt string, target askintent.Target) bool {
+	switch route {
+	case askintent.RouteDraft, askintent.RouteRefine, askintent.RouteReview:
+		return true
+	case askintent.RouteExplain:
+		if strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(target.Path)), "internal/") {
+			return true
+		}
+		for _, token := range []string{"internal/", "stepspec", "stepmeta", "askdraft", "askpolicy", "askrepair", "typed step", "builder selection", "source-of-truth"} {
+			if strings.Contains(lowerPrompt, token) {
+				return true
+			}
+		}
 	}
+	return false
+}
+
+func shouldIncludeWorkspaceFacts(route askintent.Route, lowerPrompt string, target askintent.Target) bool {
+	if route == askintent.RouteDraft || route == askintent.RouteRefine {
+		return true
+	}
+	cleanTarget := filepath.ToSlash(strings.TrimSpace(target.Path))
+	if strings.HasPrefix(cleanTarget, "workflows/") {
+		return true
+	}
+	for _, token := range []string{"workflows/", "scenario", "component", "vars.yaml", "prepare.yaml", "apply.yaml"} {
+		if strings.Contains(lowerPrompt, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func stateFactChunks(route askintent.Route, state askstate.Context) []Chunk {
+	if route == askintent.RouteDraft || route == askintent.RouteRefine || strings.TrimSpace(state.LastLint) == "" {
+		return nil
+	}
+	return []Chunk{{
+		ID:      "state-last-lint",
+		Source:  "state",
+		Label:   "last-lint",
+		Topic:   askcontext.Topic("state:last-lint"),
+		Content: state.LastLint,
+		Score:   20,
+	}}
+}
+
+func externalFactChunks(external []Chunk) []Chunk {
+	chunks := make([]Chunk, 0, len(external))
 	for _, chunk := range external {
 		if strings.TrimSpace(chunk.Content) == "" {
 			continue
 		}
 		chunks = append(chunks, chunk)
 	}
+	return chunks
+}
 
-	chunks = dedupeChunksByTopic(chunks)
-	sort.Slice(chunks, func(i, j int) bool {
-		if chunks[i].Score == chunks[j].Score {
-			return chunks[i].ID < chunks[j].ID
-		}
-		return chunks[i].Score > chunks[j].Score
-	})
-
+func selectFactGroups(lowerPrompt string, groups []factGroup, budget int, maxChunks int) ([]Chunk, []string) {
 	selected := make([]Chunk, 0, maxChunks)
 	dropped := make([]string, 0)
 	remaining := budget
-	reservedIDs := map[string]bool{}
-	if complex {
-		selected, remaining, reservedIDs, dropped = reserveComplexAuthoringChunks(chunks, selected, remaining, maxChunks, dropped)
-	}
-	for _, chunk := range chunks {
-		if reservedIDs[chunk.ID] {
-			continue
-		}
-		if len(selected) >= maxChunks {
-			dropped = append(dropped, chunk.ID)
-			continue
-		}
-		content := chunk.Content
-		size := len(content)
-		if size > remaining && shouldCompressChunk(chunk.Label, chunk.Content) {
-			content = compressChunkContent(lowerPrompt, chunk.Label, chunk.Content, remaining)
-			size = len(content)
-		}
-		if size > remaining {
-			dropped = append(dropped, chunk.ID)
-			continue
-		}
-		chunk.Content = content
-		selected = append(selected, chunk)
-		remaining -= size
-	}
-
-	return RetrievalResult{Chunks: selected, Dropped: dropped, MaxBytes: budget}
-}
-
-func reserveComplexAuthoringChunks(chunks []Chunk, selected []Chunk, remaining int, maxChunks int, dropped []string) ([]Chunk, int, map[string]bool, []string) {
-	reserved := map[string]bool{}
-	keptExamples := 0
-	for _, chunk := range chunks {
-		if len(selected) >= maxChunks {
-			break
-		}
-		want := false
-		if chunk.Source == "example" && keptExamples < 2 {
-			want = true
-		}
-		if !want {
-			continue
-		}
-		size := len(chunk.Content)
-		if size > remaining && shouldCompressChunk(chunk.Label, chunk.Content) {
-			chunk.Content = compressChunkContent("", chunk.Label, chunk.Content, remaining)
-			size = len(chunk.Content)
-		}
-		if size > remaining {
-			dropped = append(dropped, chunk.ID)
-			continue
-		}
-		selected = append(selected, chunk)
-		remaining -= size
-		reserved[chunk.ID] = true
-		if chunk.Source == "example" {
-			keptExamples++
+	seenTopics := map[askcontext.Topic]bool{}
+	for _, group := range groups {
+		keptInGroup := 0
+		for _, chunk := range group.chunks {
+			if len(selected) >= maxChunks {
+				dropped = append(dropped, chunk.ID)
+				continue
+			}
+			topic := chunk.Topic
+			if topic == "" {
+				topic = askcontext.Topic("id:" + chunk.ID)
+				chunk.Topic = topic
+			}
+			if seenTopics[topic] {
+				continue
+			}
+			if group.limit > 0 && keptInGroup >= group.limit {
+				dropped = append(dropped, chunk.ID)
+				continue
+			}
+			content := chunk.Content
+			size := len(content)
+			if size > remaining && shouldCompressChunk(chunk.Label, chunk.Content) {
+				content = compressChunkContent(lowerPrompt, chunk.Label, chunk.Content, remaining)
+				size = len(content)
+			}
+			if size > remaining {
+				dropped = append(dropped, chunk.ID)
+				continue
+			}
+			chunk.Content = content
+			selected = append(selected, chunk)
+			seenTopics[topic] = true
+			remaining -= size
+			keptInGroup++
 		}
 	}
-	return selected, remaining, reserved, dropped
-}
-
-func dedupeChunksByTopic(chunks []Chunk) []Chunk {
-	best := make(map[askcontext.Topic]Chunk, len(chunks))
-	ordered := make([]askcontext.Topic, 0, len(chunks))
-	for _, chunk := range chunks {
-		topic := chunk.Topic
-		if topic == "" {
-			topic = askcontext.Topic("id:" + chunk.ID)
-			chunk.Topic = topic
-		}
-		current, ok := best[topic]
-		if !ok {
-			best[topic] = chunk
-			ordered = append(ordered, topic)
-			continue
-		}
-		if chunk.Score > current.Score || (chunk.Score == current.Score && chunk.ID < current.ID) {
-			best[topic] = chunk
-		}
-	}
-	out := make([]Chunk, 0, len(best))
-	for _, topic := range ordered {
-		out = append(out, best[topic])
-	}
-	return out
+	return selected, dropped
 }
 
 func roleGuidanceScore(prompt string) int {

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
@@ -348,17 +347,6 @@ func compactRelevantSchemaPromptBlock(requestText string, target askintent.Targe
 }
 
 func generationRetrievalPromptBlock(retrieval askretrieve.RetrievalResult) string {
-	priority := map[string]int{
-		"workspace":      0,
-		"plan-workspace": 1,
-		"example":        2,
-		"repo-map":       3,
-		"plan":           4,
-		"state":          5,
-		"project":        6,
-		"mcp":            7,
-		"lsp":            8,
-	}
 	excludedTopics := map[askcontext.Topic]bool{
 		askcontext.TopicWorkflowInvariants:   true,
 		askcontext.TopicPolicy:               true,
@@ -389,23 +377,6 @@ func generationRetrievalPromptBlock(retrieval askretrieve.RetrievalResult) strin
 		}
 		chunks = append(chunks, chunk)
 	}
-	sort.SliceStable(chunks, func(i, j int) bool {
-		pi, okI := priority[chunks[i].Source]
-		pj, okJ := priority[chunks[j].Source]
-		if !okI {
-			pi = 50
-		}
-		if !okJ {
-			pj = 50
-		}
-		if pi == pj {
-			if chunks[i].Score == chunks[j].Score {
-				return chunks[i].ID < chunks[j].ID
-			}
-			return chunks[i].Score > chunks[j].Score
-		}
-		return pi < pj
-	})
 	return askretrieve.BuildChunkText(askretrieve.RetrievalResult{Chunks: chunks})
 }
 
