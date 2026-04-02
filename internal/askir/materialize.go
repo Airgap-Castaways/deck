@@ -11,7 +11,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
-var varsTemplateRefRE = regexp.MustCompile(`\$?\{\{\s*\.?vars\.([a-zA-Z0-9_.-]+)\s*\}\}`)
+var varsTemplateRefRE = regexp.MustCompile(`\$?\{\{\s*\.?vars\.([a-zA-Z0-9_.\[\]-]+)\s*\}\}`)
 
 func Materialize(root string, gen askcontract.GenerationResponse) ([]askcontract.GeneratedFile, error) {
 	return MaterializeWithBase(root, nil, gen)
@@ -182,6 +182,9 @@ func varTemplateMatches(text string) []string {
 		name := strings.TrimSpace(match[1])
 		if name != "" {
 			out = append(out, name)
+			if idx := strings.IndexAny(name, ".["); idx > 0 {
+				out = append(out, strings.TrimSpace(name[:idx]))
+			}
 		}
 	}
 	return out

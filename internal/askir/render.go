@@ -70,7 +70,7 @@ func renderDocument(path string, doc askcontract.GeneratedDocument) (string, err
 	}
 }
 
-var templateAliasRE = regexp.MustCompile(`\$?\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}`)
+var templateAliasRE = regexp.MustCompile(`\$?\{\{\s*([a-zA-Z0-9_.\[\]-]+)\s*\}\}`)
 
 func normalizeWorkflowDocument(doc *askcontract.WorkflowDocument) *askcontract.WorkflowDocument {
 	if doc == nil {
@@ -230,6 +230,10 @@ func renderYAML(doc any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal document yaml: %w", err)
 	}
+	raw, err = quoteWholeValueTemplateScalars(raw)
+	if err != nil {
+		return "", err
+	}
 	return normalizeRenderedContent(raw), nil
 }
 
@@ -238,41 +242,43 @@ func normalizeRenderedContent(raw []byte) string {
 	if trimmed == "" {
 		return ""
 	}
-	return quoteWholeValueTemplates(trimmed) + "\n"
+	return trimmed + "\n"
 }
 
-func quoteWholeValueTemplates(content string) string {
-	lines := strings.Split(content, "\n")
-	for i, line := range lines {
-		lines[i] = quoteWholeValueTemplateLine(line)
+func quoteWholeValueTemplateScalars(raw []byte) ([]byte, error) {
+	var node yaml.Node
+	if err := yaml.Unmarshal(raw, &node); err != nil {
+		return nil, fmt.Errorf("parse rendered yaml for template quoting: %w", err)
 	}
-	return strings.Join(lines, "\n")
+	markWholeValueTemplateScalars(&node)
+	var out strings.Builder
+	encoder := yaml.NewEncoder(&out)
+	encoder.SetIndent(4)
+	if err := encoder.Encode(&node); err != nil {
+		_ = encoder.Close()
+		return nil, fmt.Errorf("encode rendered yaml with quoted templates: %w", err)
+	}
+	if err := encoder.Close(); err != nil {
+		return nil, fmt.Errorf("close rendered yaml encoder: %w", err)
+	}
+	return []byte(out.String()), nil
 }
 
-func quoteWholeValueTemplateLine(line string) string {
-	trimmed := strings.TrimSpace(line)
-	if trimmed == "" || strings.Contains(trimmed, `"{{`) || strings.Contains(trimmed, `'{{`) {
-		return line
+func markWholeValueTemplateScalars(node *yaml.Node) {
+	if node == nil {
+		return
 	}
-	if idx := strings.Index(line, ":"); idx >= 0 {
-		prefix := line[:idx+1]
-		rhs := strings.TrimSpace(line[idx+1:])
-		if expr, ok := wholeValueTemplate(rhs); ok {
-			return prefix + ` "` + expr + `"`
+	if node.Kind == yaml.ScalarNode {
+		if expr, ok := wholeValueTemplate(node.Value); ok {
+			node.Value = expr
+			node.Tag = "!!str"
+			node.Style = yaml.DoubleQuotedStyle
 		}
+		return
 	}
-	if strings.HasPrefix(trimmed, "- ") {
-		idx := strings.Index(line, "-")
-		if idx < 0 {
-			return line
-		}
-		indent := line[:idx]
-		rhs := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
-		if expr, ok := wholeValueTemplate(rhs); ok {
-			return indent + `- "` + expr + `"`
-		}
+	for i := range node.Content {
+		markWholeValueTemplateScalars(node.Content[i])
 	}
-	return line
 }
 
 func wholeValueTemplate(value string) (string, bool) {

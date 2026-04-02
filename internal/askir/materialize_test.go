@@ -608,6 +608,17 @@ func TestVarTemplateMatchesAcceptAliasForms(t *testing.T) {
 	}
 }
 
+func TestVarTemplateMatchesIncludeBracketPathsAndRootKeys(t *testing.T) {
+	text := "{{ .vars.nodes[0].ip }}"
+	matches := varTemplateMatches(text)
+	joined := strings.Join(matches, ",")
+	for _, want := range []string{"nodes[0].ip", "nodes"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected %q in bracket matches, got %q", want, joined)
+		}
+	}
+}
+
 func TestParseDocumentWorkflow(t *testing.T) {
 	doc, err := ParseDocument("workflows/scenarios/apply.yaml", []byte("version: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [true]\n"))
 	if err != nil {
