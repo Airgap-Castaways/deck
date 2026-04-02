@@ -34,7 +34,7 @@ var pageTemplates = template.Must(template.New("pages").Funcs(template.FuncMap{
 		return "open"
 	},
 	"entrySize": func(entry browseEntry) string {
-		if entry.Size > 0 {
+		if entry.Kind != "dir" && entry.Size > 0 {
 			return fmt.Sprintf("%d bytes", entry.Size)
 		}
 		return "-"

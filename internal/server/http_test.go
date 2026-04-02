@@ -462,6 +462,19 @@ func TestAccessLog(t *testing.T) {
 	}
 }
 
+func TestRenderBrowsePageHidesDirectorySizes(t *testing.T) {
+	body, err := renderBrowsePage("/browse/files/", []browseEntry{{Name: "linux", Kind: "dir", Size: 4096}, {Name: "archive", Kind: "meta", Size: 1234}})
+	if err != nil {
+		t.Fatalf("renderBrowsePage: %v", err)
+	}
+	if strings.Contains(body, "4096 bytes") {
+		t.Fatalf("expected directory size to stay hidden, got %q", body)
+	}
+	if !strings.Contains(body, "1234 bytes") {
+		t.Fatalf("expected non-directory size to render, got %q", body)
+	}
+}
+
 func TestHandlerRejectsLegacyPutUploads(t *testing.T) {
 	root := t.TempDir()
 	for _, category := range []string{"files", "packages", "images", "workflows"} {
