@@ -54,7 +54,7 @@ You can override `provider`, `model`, and `endpoint` per run, or save defaults w
 `ask.logLevel` controls terminal diagnostics on stderr:
 
 - `basic`: route and provider summary
-- `debug`: `basic` plus the user command and MCP/LSP events
+- `debug`: `basic` plus the user command and MCP events
 - `trace`: `debug` plus classifier/route system prompts and user prompts
 
 `ask.mcp.servers[]` keeps the same config shape, but it now selects built-in external-docs providers rather than arbitrary first-class MCP semantics. Current built-in provider ids are:
@@ -194,13 +194,6 @@ Optional ask augmentation config example:
           "name": "web-search"
         }
       ]
-    },
-    "lsp": {
-      "enabled": true,
-      "yaml": {
-        "command": "yaml-language-server",
-        "args": ["--stdio"]
-      }
     }
   }
 }
@@ -242,8 +235,8 @@ Optional transport override example:
 - `deck ask plan` writes plan artifacts under `./.deck/plan/` by default (`<timestamp>-<slug>.md`, `<timestamp>-<slug>.json`, `latest.md`, `latest.json`).
 - `deck ask --from .deck/plan/<name>.md "implement this plan"` prefers the same-basename `.json` artifact when present.
 - complex one-shot authoring requests may stop after planning or clarification if blockers remain; in that case `deck ask` prints the saved plan paths and follow-up commands instead of writing weak output.
-- `ask config set --log-level trace` is the quickest way to see the effective `deck ask` command, MCP/LSP events, and prompt text in terminal logs.
-- optional augmentation config can be defined under `ask.mcp` and `ask.lsp` in the same config file.
+- `ask config set --log-level trace` is the quickest way to see the effective `deck ask` command, MCP events, and prompt text in terminal logs.
+- optional augmentation config can be defined under `ask.mcp` in the same config file.
 - `ask config show` includes the configured built-in MCP provider ids, effective transport commands, and capability lists.
 - `ask config health` checks whether configured built-in MCP providers can start, initialize, list tools, and satisfy their required capabilities.
 - external docs evidence is used for upstream install, compatibility, version, and troubleshooting facts; local deck workflow validity still comes from local metadata and validation.

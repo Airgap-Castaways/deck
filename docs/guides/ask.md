@@ -344,7 +344,7 @@ When the request still has blockers or unresolved clarifications, `deck ask` may
 `ask.logLevel` controls terminal diagnostics on stderr:
 
 - `basic`: route and provider summary
-- `debug`: `basic` plus the user command and MCP/LSP events
+- `debug`: `basic` plus the user command and MCP events
 - `trace`: `debug` plus classifier and route prompt text
 
 Set it with:

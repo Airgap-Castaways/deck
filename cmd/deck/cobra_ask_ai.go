@@ -258,9 +258,6 @@ func newAskConfigShowCommand() *cobra.Command {
 					return err
 				}
 			}
-			if err := stdoutPrintf("lspEnabled=%t\n", effective.LSP.Enabled); err != nil {
-				return err
-			}
 			if err := stdoutPrintf("apiKey=%s\n", askconfig.MaskAPIKey(effective.APIKey)); err != nil {
 				return err
 			}
