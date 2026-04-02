@@ -20,21 +20,36 @@ This document describes the current `deck ask` authoring architecture for contri
 
 ## High-level flow
 
-For `draft` and `refine`, the pipeline is:
+The current runtime pipeline is still more detailed than the simplified target architecture.
+
+For `draft` and `refine`, the current flow is:
 
 1. classify the request
-2. gather workspace and schema-derived context
-3. build an execution plan
-4. normalize an `AuthoringProgram`
-5. stop for clarification when the plan still has blocking gaps
-6. collect constrained draft builder or refine transform candidates
-7. let the model choose among those candidates
-8. compile or transform workflow documents in code
-9. validate the result
-10. apply automatic repair when structured issues permit it
-11. write files only after validation succeeds
+2. build an external evidence plan
+3. gather route-specific facts (`workspace`, `local-facts`, `examples`, `external evidence`, local state)
+4. build an execution plan
+5. run `plan critic`
+6. stop for clarification or plan-review gating when the plan is not ready to execute
+7. run a second retrieval pass after clarification answers when needed
+8. collect constrained draft builder or refine transform candidates
+9. let the model choose among those candidates
+10. compile or transform workflow documents in code
+11. validate the result
+12. apply automatic repair when structured issues permit it
+13. optionally run `judge`
+14. optionally run targeted `postprocess` review/edit for blocking operational issues
+15. write files only after validation succeeds
+
+For `question`, `explain`, and `review`, the current flow is:
+
+1. classify the request
+2. build an external evidence plan
+3. gather route-specific facts
+4. answer with explicit evidence boundaries
 
 Non-authoring routes do not enter the compile path.
+
+The target simplification direction is still to reduce the number of overlapping review and prompt-reinterpretation stages, but the list above reflects the current code path more accurately than the simplified end-state.
 
 ## Core rule: source-of-truth stays outside ask
 
@@ -78,6 +93,17 @@ Important fields include:
 
 Treat this plan as executable input, not as documentation text for the model to reinterpret later.
 
+## Current runtime notes
+
+The contributor-facing intent and the current runtime still differ in a few places.
+
+- `plan critic` can still stop authoring even when the planner returned no explicit blockers.
+- a second retrieval pass can happen after clarification answers are applied.
+- `judge` and targeted `postprocess` still exist on the default authoring path, even after structural cleanup removal.
+- `required external evidence` on authoring routes still stops execution immediately when the evidence planner marks the request as externally dependent.
+
+When updating this document, prefer describing the actual runtime first and the desired simplification second.
+
 ## AuthoringProgram
 
 `AuthoringProgram` exists to carry stable authoring facts that should not be repeatedly re-authored by the model.
@@ -118,6 +144,8 @@ Refine is selection-based as well.
 
 Refine should keep anchor files stable and only expand into allowed companion files declared by plan policy.
 
+In the current runtime, refine still has a known sharp edge: the model can return raw transform payloads instead of transform candidate ids, which then fails the primary refine contract. The intended contract is selection-by-candidate-id, but this remains an active quality gap rather than a fully solved property.
+
 ## Evidence planning and external docs
 
 External docs are not gathered blindly.
@@ -127,6 +155,8 @@ External docs are not gathered blindly.
 - A small LLM evidence-planning pass may refine ambiguous external entity selection when heuristics cannot identify the upstream technology cleanly.
 
 This keeps ask off a raw tool-calling loop while still letting unfamiliar products route into external evidence lookup.
+
+Known limitation: evidence heuristics are intentionally conservative, but they can still misclassify some prompts. Current work has reduced false positives for local refine/code-explain requests, but evidence planning should still be treated as a place where regressions are possible and should be covered by live quality checks.
 
 ## Built-in MCP providers and capability adapters
 
@@ -187,6 +217,8 @@ When required external evidence cannot be fetched:
 
 This failure mode is intentional. It is safer than silently continuing with weak external assumptions.
 
+The important distinction is between a true external-facts dependency and a heuristic false positive. If a local workspace request is incorrectly marked `required`, that is a planner bug and should be fixed rather than normalized as expected behavior.
+
 ## Repair path
 
 Repair is automatic first.
@@ -197,6 +229,17 @@ Repair is automatic first.
 - Model selection should only be needed when multiple valid repair operations remain.
 
 Avoid broad document replacement when a narrow structured repair exists.
+
+Current runtime note: automatic repair is more reliable on draft schema/field errors than on refine contract violations. Refine failures that come from candidate-id contract mismatch still often require prompt or generation-contract fixes rather than repair-only fixes.
+
+## Known quality gaps
+
+These are current runtime gaps that contributors should treat as known limitations, not intended guarantees:
+
+- local code explain can still have shallow fact coverage when `local-facts` blocks do not surface enough structured detail
+- some draft builder selections still produce unsupported overrides or null-required fields and fail after retries
+- refine can still stop on contract violations when model output uses raw transforms instead of transform candidate ids
+- authoring plan review can still feel over-conservative relative to the user request, especially in multi-node cases where intent is mostly implied but not fully explicit
 
 ## Prompting boundary
 

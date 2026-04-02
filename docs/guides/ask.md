@@ -67,7 +67,7 @@ After routing, `deck ask` gathers the context needed for that request. The retri
 
 - workflow files from the current workspace
 - built-in deck authoring knowledge about workflow topology, components, vars, and step usage
-- route-specific guidance for typed steps
+- local facts projected from deck source-of-truth such as step metadata, builder behavior, planning defaults, and repair behavior
 - saved local state such as the last lint summary when available
 
 This is where `deck ask` becomes more than a generic model wrapper. It does not rely only on the user's sentence. It combines the sentence with deck's workflow rules and with the actual workspace contents.
@@ -78,7 +78,7 @@ When a request needs upstream product facts such as current install steps, compa
 
 The key boundary is:
 
-- local repo grounding is authoritative for deck workflow validity and ask behavior
+- local facts are authoritative for deck workflow validity and ask behavior
 - external docs are only for upstream product behavior and recency
 
 ### Step 4: Build the authoring plan
@@ -92,9 +92,11 @@ For `draft` and `refine`, `deck ask` turns the request and retrieved context int
 - which topology and role facts later compilation will rely on
 - which companion files are allowed for refine
 
-Non-authoring routes do not go through this stage because they return an answer rather than candidate files. Authoring routes now always build an internal plan first, even when you do not run `deck ask plan` explicitly.
+Non-authoring routes do not go through this stage because they return an answer rather than candidate files. Authoring routes always build an internal plan first, even when you do not run `deck ask plan` explicitly.
 
 Part of that plan is an authoring program: normalized platform, artifact, cluster, and verification facts that code can later use when assembling workflow steps. This is how details such as node counts, role selectors, join-file paths, output directories, and verification expectations stay consistent across generation and repair.
+
+In the current implementation, plan construction is followed by a `plan critic` review stage. That review can still stop execution when it considers the plan too weak to continue, even if the planner did not emit explicit blockers.
 
 If the evidence plan says a freshness-sensitive authoring request requires upstream docs and those docs cannot be fetched, `deck ask` stops instead of inventing stale install or version facts.
 
@@ -103,6 +105,8 @@ If the evidence plan says a freshness-sensitive authoring request requires upstr
 For authoring routes, `deck ask` checks whether the plan is strong enough to execute. If required details are still missing, it asks clarification questions before generation starts. In an interactive terminal, these clarification questions happen inline. In non-interactive environments, `deck ask` saves a plan artifact and tells you how to resume.
 
 Clarification is part of the normal pipeline, not a fallback after a bad generation attempt. If the request is ambiguous about topology, execution role layout, refine scope, or supported coverage, `deck ask` blocks authoring until that ambiguity is resolved.
+
+Current limitation: plan review and clarification gating are still conservative. In some cases, `deck ask` can stop at plan time even when the user intent feels mostly implied.
 
 ### Step 6: Select candidates, then compile
 
@@ -120,6 +124,8 @@ Route output still differs by route:
 - answer text for `question`, `explain`, and `review`
 - compiled workflow files for `draft` and `refine`
 
+Current limitation: refine still expects the model to return transform candidate ids on the primary path. Some refine failures still happen because model output uses raw transform payloads instead of those candidate ids.
+
 ### Step 7: Validate and auto-repair
 
 When `deck ask` generates files, it validates the result against deck's rules. That includes generated path checks, YAML shape checks, and workflow/schema validation.
@@ -129,6 +135,8 @@ If validation fails, `deck ask` uses structured diagnostics to run a repair pass
 Repair is automatic first. When the validator reports a missing required field, invalid literal, or similar structured issue, code tries to repair it from the same source-of-truth projection and authoring program used during compilation. Model involvement is reserved for cases where multiple valid repair choices remain.
 
 This validation-and-repair loop is one of the main reasons generated output is more reliable than a single unvalidated model response.
+
+In the current implementation, authoring may still go through a `judge` step and a targeted `postprocess` step after validation. The optional structural-cleanup loop has been removed, but not every post-generation review stage has been eliminated yet.
 
 ### Step 8: Write files or save the plan
 
@@ -167,6 +175,8 @@ The config shape still uses `ask.mcp.servers[]`, but the meaning has changed:
 - troubleshooting or error-driven requests
 
 Local deck source-of-truth still comes from the repo, not from external docs. External docs do not override deck path rules, schema constraints, typed step validity, or repair behavior.
+
+Current limitation: evidence planning is heuristic-driven. False positives for local code/workspace prompts have been reduced, but they are still quality-sensitive and should not be treated as impossible.
 
 ### How `plan` fits into the pipeline
 
