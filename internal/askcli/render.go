@@ -191,9 +191,8 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 		}
 	}
 	if shouldLogAsk(result.ConfigSource.LogLevel, "basic") {
-		if _, err := fmt.Fprintf(stderr, "\n[ask][phase:done] route=%s reason=%s target=%s classifierLlmUsed=%t llmUsed=%t retries=%d termination=%s\n", result.Route, result.Reason, result.Target.Path, result.ClassifierLLM, result.LLMUsed, result.RetriesUsed, result.Termination); err != nil {
-			return err
-		}
+		logger := newAskLogger(stderr, result.ConfigSource.LogLevel)
+		logger.info("completed", "route", result.Route, "reason", result.Reason, "target", result.Target.Path, "classifier_llm_used", result.ClassifierLLM, "llm_used", result.LLMUsed, "retries", result.RetriesUsed, "termination", result.Termination)
 	}
 	return nil
 }

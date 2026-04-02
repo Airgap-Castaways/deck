@@ -889,15 +889,30 @@ func TestLocalExplainDescribesScenarioStructure(t *testing.T) {
 
 func TestAskLoggerDebugAndTrace(t *testing.T) {
 	var buf flushBuffer
-	logger := newAskLogger(&buf, "trace")
-	logger.logf("debug", "[ask][command] %s\n", `deck ask "explain apply"`)
+	root := t.TempDir()
+	logger := newAskLogger(&buf, "trace", root)
+	logger.debug("command", "command", `deck ask "explain apply"`)
 	logger.prompt("explain", "system text", "user text")
 	logger.response("explain", `{"summary":"ok"}`)
 	logText := buf.String()
-	for _, want := range []string{"[ask][command] deck ask \"explain apply\"", "[ask][prompt:explain][system]\nsystem text", "[ask][prompt:explain][user]\nuser text", "[ask][response:explain]\n{\"summary\":\"ok\"}"} {
+	for _, want := range []string{"component=ask event=command", `command="deck ask \"explain apply\""`, "event=prompt", `content="system text"`, `content="user text"`, "event=response", `{\"summary\":\"ok\"}`, "path=.deck/ask/runs/"} {
 		if !strings.Contains(logText, want) {
 			t.Fatalf("expected %q in log output, got %q", want, logText)
 		}
+	}
+	entries, err := filepath.Glob(filepath.Join(root, ".deck", "ask", "runs", "*", "prompts", "*.txt"))
+	if err != nil {
+		t.Fatalf("glob prompt artifacts: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 prompt artifacts, got %d", len(entries))
+	}
+	responses, err := filepath.Glob(filepath.Join(root, ".deck", "ask", "runs", "*", "responses", "*.json"))
+	if err != nil {
+		t.Fatalf("glob response artifacts: %v", err)
+	}
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response artifact, got %d", len(responses))
 	}
 	if buf.flushes == 0 {
 		t.Fatalf("expected logger to flush output")

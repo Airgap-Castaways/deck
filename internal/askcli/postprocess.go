@@ -49,7 +49,7 @@ func maybePostProcessGeneration(ctx context.Context, client askprovider.Client, 
 	}
 	newJudge, err := maybeJudgeGeneration(ctx, client, req, edited, editedFiles, newLint, newCritic, plan, brief, logger)
 	if err != nil {
-		logger.logf("debug", "[ask][phase:postprocess:judge-skip] error=%v\n", err)
+		logger.debug("phase_skipped", "phase", "postprocess-judge", "error", err)
 		newJudge = judge
 	}
 	return postProcessSummary{Applied: true, Generation: edited, Files: editedFiles, LintSummary: newLint, Critic: newCritic, Judge: newJudge, Notes: append([]string{"post-process: applied targeted operational refinement"}, notes...)}, nil
