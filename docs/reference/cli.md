@@ -147,13 +147,13 @@ deck apply --scenario apply --source local
 Prepare runtime binary notes:
 
 - `prepare` always writes a root `./deck` launcher and stores real runtime binaries under `outputs/bin/<os>/<arch>/deck`
-- by default `prepare` includes every supported runtime tuple in the bundle
+- by default `prepare` includes every supported runtime tuple in release mode; dev builds without explicit runtime-binary flags keep bundling the current host tuple so local iteration keeps working
 - `--bundle-binary` is repeatable and overrides the default set with an explicit include list
 - `--bundle-binary-exclude` is repeatable and removes runtime tuples from the default or explicit include set
 - `--bundle-binary-source=local` reads from the current executable or from `--bundle-binary-dir`
-- `--bundle-binary-source=local` without `--bundle-binary-dir` cannot satisfy the default all-platform set, so use `--bundle-binary-dir`, `--bundle-binary-source=release`, or an explicit `--bundle-binary` list
+- `--bundle-binary-source=local` without `--bundle-binary-dir` uses the current executable for the current host tuple unless you explicitly request other targets
 - `--bundle-binary-source=release` downloads matching GitHub Release archives and extracts `deck`
-- `auto` defaults to `release` for the default all-platform bundle, and keeps using `local` for dev builds when you provide `--bundle-binary-dir` or an explicit `--bundle-binary` list
+- `auto` defaults to `release` for tagged builds and `local` for `dev` builds
 
 Optional site-local helper example:
 

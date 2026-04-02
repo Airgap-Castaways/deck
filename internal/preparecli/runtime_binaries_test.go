@@ -137,21 +137,16 @@ func TestRunStagesLocalRuntimeBinariesWithDefaultTargetsFromDirectory(t *testing
 	}
 }
 
-func TestRunLocalSourceWithoutDirRejectsImplicitAllTargets(t *testing.T) {
-	root := prepareWorkspaceForRuntimeTests(t)
-	err := Run(context.Background(), Options{
-		PreparedRoot: filepath.Join(root, "outputs"),
-		BinarySource: binarySourceLocal,
-		runtimeBinaryDeps: runtimeBinaryDeps{
-			currentGOOS:   func() string { return "darwin" },
-			currentGOARCH: func() string { return "arm64" },
-			readFile:      os.ReadFile,
-			osExecutable:  os.Executable,
-			fetchRelease:  fetchReleaseRuntimeBinary,
-		},
+func TestResolveBinaryTargetsUsesCurrentHostForImplicitLocalTarget(t *testing.T) {
+	targets, err := resolveBinaryTargets(Options{}, binarySourceLocal, runtimeBinaryDeps{
+		currentGOOS:   func() string { return "darwin" },
+		currentGOARCH: func() string { return "arm64" },
 	})
-	if err == nil || !strings.Contains(err.Error(), "default runtime bundle includes all supported platforms") {
-		t.Fatalf("expected implicit all-targets error, got %v", err)
+	if err != nil {
+		t.Fatalf("resolve binary targets: %v", err)
+	}
+	if len(targets) != 1 || targets[0].OS != "darwin" || targets[0].Arch != "arm64" {
+		t.Fatalf("unexpected implicit local targets: %#v", targets)
 	}
 }
 
@@ -201,7 +196,7 @@ func TestResolveBinaryTargetsRejectsEmptyAfterExclude(t *testing.T) {
 	}
 }
 
-func TestResolveBinarySourceAutoUsesReleaseForImplicitAllTargetsOnDev(t *testing.T) {
+func TestResolveBinarySourceAutoUsesLocalOnDev(t *testing.T) {
 	oldVersion := buildinfo.Version
 	buildinfo.Version = "dev"
 	t.Cleanup(func() { buildinfo.Version = oldVersion })
@@ -210,8 +205,8 @@ func TestResolveBinarySourceAutoUsesReleaseForImplicitAllTargetsOnDev(t *testing
 	if err != nil {
 		t.Fatalf("resolve binary source: %v", err)
 	}
-	if source != binarySourceRelease {
-		t.Fatalf("unexpected source: got %q want %q", source, binarySourceRelease)
+	if source != binarySourceLocal {
+		t.Fatalf("unexpected source: got %q want %q", source, binarySourceLocal)
 	}
 }
 

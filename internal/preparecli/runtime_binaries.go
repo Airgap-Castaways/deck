@@ -117,10 +117,7 @@ func resolveBinarySource(opts Options, deps runtimeBinaryDeps) (string, error) {
 	switch requested {
 	case binarySourceAuto:
 		if buildinfo.Current().Version == "dev" {
-			if strings.TrimSpace(opts.BinaryDir) != "" || len(opts.Binaries) > 0 {
-				return binarySourceLocal, nil
-			}
-			return binarySourceRelease, nil
+			return binarySourceLocal, nil
 		}
 		return binarySourceRelease, nil
 	case binarySourceLocal, binarySourceRelease:
@@ -134,7 +131,7 @@ func resolveBinaryTargets(opts Options, source string, deps runtimeBinaryDeps) (
 	baseTargets := opts.Binaries
 	if len(baseTargets) == 0 {
 		if source == binarySourceLocal && strings.TrimSpace(opts.BinaryDir) == "" {
-			return nil, fmt.Errorf("default runtime bundle includes all supported platforms, but --bundle-binary-source=local without --bundle-binary-dir only provides the current host binary; set --bundle-binary-dir, switch to --bundle-binary-source=release, or narrow targets with --bundle-binary")
+			return []runtimeBinaryTarget{{OS: deps.currentGOOS(), Arch: deps.currentGOARCH()}}, nil
 		}
 		baseTargets = make([]string, 0, len(supportedRuntimeBinaryTargets))
 		for _, target := range supportedRuntimeBinaryTargets {
