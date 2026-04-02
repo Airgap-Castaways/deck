@@ -2,6 +2,7 @@ package askcli
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -21,14 +22,17 @@ func buildPlanWithReview(ctx context.Context, client askprovider.Client, cfg ask
 	for attempt := 1; attempt <= 2; attempt++ {
 		current, planErr := planWithLLM(ctx, client, cfg, decision, retrieval, currentPrompt, workspace, logger)
 		if planErr != nil {
-			logger.debug("phase_fallback", "phase", "plan", "error", planErr)
-			planned = askpolicy.BuildPlanDefaults(requirements, requestText, decision, workspace)
+			planned = askpolicy.NormalizePlan(askpolicy.BuildPlanDefaults(requirements, requestText, decision, workspace), requestText, retrieval, workspace, decision)
+			if validateErr := askpolicy.ValidatePlanStructure(planned); validateErr != nil {
+				return askcontract.PlanResponse{}, askcontract.PlanCriticResponse{}, false, fmt.Errorf("planner failed and fallback plan is not viable: %w", validateErr)
+			}
+			logger.logf("debug", "[ask][phase:plan:fallback] error=%v\n", planErr)
 			return planned, askcontract.PlanCriticResponse{}, true, nil
 		}
 		planned = current
 		criticResp, criticErr := critiquePlanWithLLM(ctx, client, cfg, planned, logger)
 		if criticErr != nil {
-			logger.debug("phase_skipped", "phase", "plan-critic", "error", criticErr)
+			logger.logf("debug", "[ask][phase:plan-critic:skip] error=%v\n", criticErr)
 			return planned, askcontract.PlanCriticResponse{}, false, nil
 		}
 		critic = criticResp
@@ -36,7 +40,7 @@ func buildPlanWithReview(ctx context.Context, client askprovider.Client, cfg ask
 		if len(critic.Blocking) == 0 && len(critic.MissingContracts) == 0 {
 			return planned, critic, false, nil
 		}
-		logger.debug("phase_retry", "phase", "plan-critic", "attempt", attempt, "blocking", len(critic.Blocking), "missing", len(critic.MissingContracts))
+		logger.logf("debug", "[ask][phase:plan-critic:retry] attempt=%d blocking=%d missing=%d\n", attempt, len(critic.Blocking), len(critic.MissingContracts))
 		if attempt == 2 {
 			return planned, critic, false, nil
 		}
@@ -279,7 +283,15 @@ func normalizedPlanCriticFindings(plan askcontract.PlanResponse, critic askcontr
 	appendLegacy(critic.Blocking, workflowissues.SeverityBlocking)
 	appendLegacy(critic.Advisory, workflowissues.SeverityAdvisory)
 	appendLegacy(critic.MissingContracts, workflowissues.SeverityMissingContract)
-	return dedupePlanCriticFindings(findings)
+	findings = dedupePlanCriticFindings(findings)
+	filtered := make([]askcontract.PlanCriticFinding, 0, len(findings))
+	for _, finding := range findings {
+		if planCriticFindingSatisfiedByNormalizedPlan(plan, finding) {
+			continue
+		}
+		filtered = append(filtered, finding)
+	}
+	return filtered
 }
 
 func dedupePlanCriticFindings(findings []askcontract.PlanCriticFinding) []askcontract.PlanCriticFinding {
@@ -324,6 +336,9 @@ func planCriticFindingIsFatal(finding askcontract.PlanCriticFinding) bool {
 }
 
 func planCriticFindingNeedsExecutionGate(plan askcontract.PlanResponse, finding askcontract.PlanCriticFinding) bool {
+	if planReviewAllowsRecoverableRefineGaps(plan) {
+		return false
+	}
 	switch finding.Code {
 	case workflowissues.CodeMissingArtifactConsumer,
 		workflowissues.CodeArtifactContractGap:
@@ -341,6 +356,13 @@ func planCriticFindingNeedsExecutionGate(plan askcontract.PlanResponse, finding 
 	default:
 		return false
 	}
+}
+
+func planReviewAllowsRecoverableRefineGaps(plan askcontract.PlanResponse) bool {
+	if askintent.ParseRoute(plan.Intent) == askintent.RouteRefine {
+		return true
+	}
+	return askintent.ParseRoute(plan.AuthoringBrief.RouteIntent) == askintent.RouteRefine
 }
 
 func planNeedsArtifactContracts(plan askcontract.PlanResponse) bool {
@@ -392,6 +414,202 @@ func planCriticFindingIsRecoverable(finding askcontract.PlanCriticFinding) bool 
 		return spec.DefaultRecoverable
 	}
 	return finding.Recoverable
+}
+
+func planCriticFindingSatisfiedByNormalizedPlan(plan askcontract.PlanResponse, finding askcontract.PlanCriticFinding) bool {
+	switch finding.Code {
+	case workflowissues.CodeArtifactContractGap,
+		workflowissues.CodeMissingArtifactConsumer:
+		return planHasSufficientArtifactContractCoverage(plan)
+	case workflowissues.CodeAmbiguousJoinContract,
+		workflowissues.CodeWorkerJoinFanoutGap:
+		return planHasSufficientJoinHandoff(plan)
+	case workflowissues.CodeRoleCardinalityGap:
+		return planHasExplicitRoleCardinality(plan)
+	case workflowissues.CodeWeakVerificationStaging:
+		return planHasSufficientFinalVerificationStaging(plan)
+	case workflowissues.CodeAskUnclassifiedCriticFinding:
+		return legacyPlanCriticMessageSatisfiedByNormalizedPlan(plan, finding.Message)
+	default:
+		return false
+	}
+}
+
+func legacyPlanCriticMessageSatisfiedByNormalizedPlan(plan askcontract.PlanResponse, message string) bool {
+	lower := strings.ToLower(strings.TrimSpace(message))
+	if lower == "" {
+		return false
+	}
+	if planHasSufficientArtifactContractCoverage(plan) {
+		if strings.Contains(lower, "artifact contract") || strings.Contains(lower, "artifact contract identifiers") || strings.Contains(lower, "consumer bindings") || strings.Contains(lower, "artifact consumer") {
+			return true
+		}
+	}
+	if planHasSufficientJoinHandoff(plan) {
+		if strings.Contains(lower, "ambiguous_join_contract") || strings.Contains(lower, "join handoff") || strings.Contains(lower, "join publication") || strings.Contains(lower, "join-file") || strings.Contains(lower, "publish/consume") || strings.Contains(lower, "worker joins") {
+			return true
+		}
+	}
+	if planHasExplicitRoleCardinality(plan) {
+		if strings.Contains(lower, "role_cardinality_gap") || strings.Contains(lower, "role cardinality") || strings.Contains(lower, "1 control-plane") || strings.Contains(lower, "1 worker") || strings.Contains(lower, "role-count") {
+			return true
+		}
+	}
+	if planHasSufficientFinalVerificationStaging(plan) {
+		if strings.Contains(lower, "weak_verification_staging") || strings.Contains(lower, "checkcluster") || strings.Contains(lower, "final cluster validation") || strings.Contains(lower, "final verification") || strings.Contains(lower, "execution order") {
+			return true
+		}
+	}
+	return false
+}
+
+func planHasSufficientArtifactContractCoverage(plan askcontract.PlanResponse) bool {
+	requiredKinds := normalizedRequiredArtifactKinds(plan)
+	if len(requiredKinds) == 0 {
+		return false
+	}
+	for _, kind := range requiredKinds {
+		if !planHasCanonicalArtifactContract(plan, kind) {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizedRequiredArtifactKinds(plan askcontract.PlanResponse) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, kind := range plan.ArtifactKinds {
+		kind = strings.ToLower(strings.TrimSpace(kind))
+		if kind == "package" || kind == "image" {
+			if !seen[kind] {
+				seen[kind] = true
+				out = append(out, kind)
+			}
+		}
+	}
+	for _, contract := range plan.ExecutionModel.ArtifactContracts {
+		kind := strings.ToLower(strings.TrimSpace(contract.Kind))
+		if kind == "package" || kind == "image" {
+			if !seen[kind] {
+				seen[kind] = true
+				out = append(out, kind)
+			}
+		}
+	}
+	return out
+}
+
+func planHasCanonicalArtifactContract(plan askcontract.PlanResponse, kind string) bool {
+	entryScenario := filepath.ToSlash(strings.TrimSpace(plan.EntryScenario))
+	if entryScenario == "" {
+		entryScenario = "workflows/scenarios/apply.yaml"
+	}
+	for _, contract := range plan.ExecutionModel.ArtifactContracts {
+		if strings.ToLower(strings.TrimSpace(contract.Kind)) != kind {
+			continue
+		}
+		producer := filepath.ToSlash(strings.TrimSpace(contract.ProducerPath))
+		consumer := filepath.ToSlash(strings.TrimSpace(contract.ConsumerPath))
+		if producer != "workflows/prepare.yaml" {
+			continue
+		}
+		if consumer == entryScenario || consumer == "workflows/scenarios/apply.yaml" {
+			return true
+		}
+	}
+	return false
+}
+
+func planHasSufficientJoinHandoff(plan askcontract.PlanResponse) bool {
+	if !planNeedsMultiRoleExecution(plan) {
+		return false
+	}
+	if strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) == "" {
+		return false
+	}
+	if strings.TrimSpace(plan.AuthoringProgram.Cluster.JoinFile) == "" {
+		return false
+	}
+	for _, contract := range plan.ExecutionModel.SharedStateContracts {
+		if canonicalSharedStateName(contract.Name) != "join-file" {
+			continue
+		}
+		if strings.TrimSpace(contract.AvailabilityModel) != "published-for-worker-consumption" {
+			continue
+		}
+		producer := strings.TrimSpace(contract.ProducerPath)
+		if producer == "" || looksLikeWorkflowPath(producer) {
+			continue
+		}
+		consumers := normalizeStringList(contract.ConsumerPaths)
+		if len(consumers) == 0 {
+			continue
+		}
+		allConcrete := true
+		for _, consumer := range consumers {
+			if looksLikeWorkflowPath(consumer) {
+				allConcrete = false
+				break
+			}
+		}
+		if allConcrete {
+			return true
+		}
+	}
+	return false
+}
+
+func planHasExplicitRoleCardinality(plan askcontract.PlanResponse) bool {
+	if !planNeedsMultiRoleExecution(plan) {
+		return false
+	}
+	cluster := plan.AuthoringProgram.Cluster
+	if cluster.ControlPlaneCount <= 0 || cluster.WorkerCount <= 0 {
+		return false
+	}
+	if plan.AuthoringBrief.NodeCount > 0 && cluster.ControlPlaneCount+cluster.WorkerCount != plan.AuthoringBrief.NodeCount {
+		return false
+	}
+	return strings.TrimSpace(plan.ExecutionModel.RoleExecution.RoleSelector) != ""
+}
+
+func planHasSufficientFinalVerificationStaging(plan askcontract.PlanResponse) bool {
+	verification := plan.ExecutionModel.Verification
+	if verification.ExpectedNodeCount <= 0 || verification.ExpectedControlPlaneReady <= 0 {
+		return false
+	}
+	if strings.TrimSpace(verification.FinalVerificationRole) != "control-plane" {
+		return false
+	}
+	if !planHasSufficientJoinHandoff(plan) {
+		return false
+	}
+	return planHasExplicitRoleCardinality(plan)
+}
+
+func canonicalSharedStateName(name string) string {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	if strings.Contains(lower, "join") {
+		return "join-file"
+	}
+	return strings.TrimSpace(name)
+}
+
+func looksLikeWorkflowPath(path string) bool {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	return strings.HasPrefix(path, "workflows/")
+}
+
+func normalizeStringList(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func legacyPlanCriticFinding(text string, severity workflowissues.Severity) askcontract.PlanCriticFinding {

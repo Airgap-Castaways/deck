@@ -126,10 +126,62 @@ func CompileWithProgram(program askcontract.AuthoringProgram, selection askcontr
 	if len(selection.Vars) > 0 && !hasVarsTarget(selection.Targets) {
 		documents = append(documents, askcontract.GeneratedDocument{Path: "workflows/vars.yaml", Kind: "vars", Vars: cloneMap(selection.Vars)})
 	}
+	documents = ensureRoleVarInDraftDocuments(documents)
 	if len(documents) == 0 {
 		return nil, fmt.Errorf("draft builder selection did not produce any documents")
 	}
 	return documents, nil
+}
+
+func ensureRoleVarInDraftDocuments(documents []askcontract.GeneratedDocument) []askcontract.GeneratedDocument {
+	if !draftDocumentsReferenceRoleVar(documents) {
+		return documents
+	}
+	hasVarsDoc := false
+	for i := range documents {
+		if documentKind(documents[i].Path, documents[i].Kind) != "vars" {
+			continue
+		}
+		hasVarsDoc = true
+		if documents[i].Vars == nil {
+			documents[i].Vars = map[string]any{}
+		}
+		if _, ok := documents[i].Vars["role"]; !ok {
+			documents[i].Vars["role"] = "control-plane"
+		}
+	}
+	if !hasVarsDoc {
+		documents = append(documents, askcontract.GeneratedDocument{Path: "workflows/vars.yaml", Kind: "vars", Vars: map[string]any{"role": "control-plane"}})
+	}
+	return documents
+}
+
+func draftDocumentsReferenceRoleVar(documents []askcontract.GeneratedDocument) bool {
+	for _, doc := range documents {
+		if doc.Workflow == nil {
+			continue
+		}
+		if workflowReferencesRoleVar(*doc.Workflow) {
+			return true
+		}
+	}
+	return false
+}
+
+func workflowReferencesRoleVar(workflow askcontract.WorkflowDocument) bool {
+	for _, step := range workflow.Steps {
+		if strings.Contains(strings.TrimSpace(step.When), "vars.role") {
+			return true
+		}
+	}
+	for _, phase := range workflow.Phases {
+		for _, step := range phase.Steps {
+			if strings.Contains(strings.TrimSpace(step.When), "vars.role") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func buildWorkflowTarget(catalog askcatalog.Catalog, path string, target askcontract.DraftTargetSelection, program askcontract.AuthoringProgram, variables map[string]any) (*askcontract.WorkflowDocument, error) {
@@ -254,6 +306,9 @@ func resolveBindingValue(source string, overrides map[string]any, program askcon
 func normalizeWhenRoleOverride(value any, program askcontract.AuthoringProgram) (any, bool) {
 	text := strings.TrimSpace(fmt.Sprint(value))
 	if text == "" || text == "<nil>" || text == "nil" {
+		return nil, false
+	}
+	if strings.Contains(text, "{{") || strings.Contains(text, "${{") {
 		return nil, false
 	}
 	if strings.Contains(text, "==") || strings.HasPrefix(text, "vars.") || strings.HasPrefix(text, "runtime.") {
@@ -673,14 +728,14 @@ func sanitizeStepID(value string) string {
 
 func documentKind(path string, kind string) string {
 	clean := filepath.ToSlash(strings.TrimSpace(path))
-	if strings.TrimSpace(kind) != "" {
-		return strings.ToLower(strings.TrimSpace(kind))
-	}
 	if clean == "workflows/vars.yaml" {
 		return "vars"
 	}
 	if strings.HasPrefix(clean, "workflows/components/") {
 		return "component"
+	}
+	if strings.TrimSpace(kind) != "" {
+		return strings.ToLower(strings.TrimSpace(kind))
 	}
 	return "workflow"
 }

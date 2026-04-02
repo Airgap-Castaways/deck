@@ -283,17 +283,14 @@ func buildClarifications(f Facts) []askcontract.PlanClarification {
 		})
 	}
 	if contains(f.Ambiguities, "role-model") {
-		defaultRole := "1cp-2workers"
-		if f.Topology == "ha" {
-			defaultRole = "3cp-ha"
-		}
+		options, defaultRole := roleModelClarificationOptions(f)
 		items = append(items, askcontract.PlanClarification{
 			ID:                 "topology.roleModel",
 			Question:           "The request implies multiple nodes, but the role model is unclear. Which node role layout should the plan use?",
 			Kind:               "enum",
 			Reason:             "Multi-node plans need an explicit control-plane and worker layout before execution contracts can be assembled safely.",
 			Decision:           "topology",
-			Options:            []string{"1cp-2workers", "3cp-ha", "custom"},
+			Options:            options,
 			RecommendedDefault: defaultRole,
 			BlocksGeneration:   true,
 			Affects:            []string{"executionModel.roleExecution", "executionModel.sharedStateContracts", "executionModel.verification"},
@@ -325,6 +322,26 @@ func buildClarifications(f Facts) []askcontract.PlanClarification {
 		})
 	}
 	return items
+}
+
+func roleModelClarificationOptions(f Facts) ([]string, string) {
+	defaultRole := "1cp-2workers"
+	options := []string{"1cp-2workers", "3cp-ha", "custom"}
+	if f.Topology == "ha" || (f.NodeCount >= 3 && f.WorkerCount == 0 && f.ControlPlaneCount == f.NodeCount) {
+		defaultRole = "3cp-ha"
+		options = []string{"3cp-ha", "1cp-2workers", "custom"}
+	}
+	if f.NodeCount == 2 {
+		defaultRole = "1cp-1worker"
+		options = []string{"1cp-1worker", "custom"}
+	}
+	if f.ControlPlaneCount == 1 && f.WorkerCount == 1 {
+		defaultRole = "1cp-1worker"
+		if f.NodeCount <= 2 {
+			options = []string{"1cp-1worker", "custom"}
+		}
+	}
+	return options, defaultRole
 }
 
 func hasAny(lower string, items ...string) bool {

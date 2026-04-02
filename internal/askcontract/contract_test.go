@@ -202,6 +202,35 @@ func TestParsePlanPartialKeepsUsefulFieldsWhenEntryScenarioIsDescriptive(t *test
 	}
 }
 
+func TestParsePlanAcceptsOpenQuestionObjects(t *testing.T) {
+	resp, err := ParsePlan(`{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","authoringProgram":{"artifacts":{"packages":["kubeadm","kubelet"],"images":["registry.k8s.io/kube-apiserver:v1.30.0"]}},"blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[{"question":"Which package mirror should prepare use?"},{"text":"Should images be grouped by role?"}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`)
+	if err != nil {
+		t.Fatalf("expected strict parse to accept open question objects, got %v", err)
+	}
+	if len(resp.OpenQuestions) != 2 {
+		t.Fatalf("expected normalized open questions, got %#v", resp.OpenQuestions)
+	}
+	if len(resp.AuthoringProgram.Artifacts.Packages) != 2 || len(resp.AuthoringProgram.Artifacts.Images) != 1 {
+		t.Fatalf("expected artifact payloads to survive strict parse fallback, got %#v", resp.AuthoringProgram)
+	}
+	if resp.OpenQuestions[0] != "Which package mirror should prepare use?" || resp.OpenQuestions[1] != "Should images be grouped by role?" {
+		t.Fatalf("unexpected normalized open questions: %#v", resp.OpenQuestions)
+	}
+}
+
+func TestParsePlanPartialAcceptsMixedOpenQuestionShapes(t *testing.T) {
+	resp, err := ParsePlanPartial(`{"version":1,"request":"create workflow","intent":"draft","authoringProgram":{"artifacts":{"packages":["kubeadm"],"images":["registry.k8s.io/kube-apiserver:v1.30.0"]}},"openQuestions":["Which release?",{"question":"Which package mirror should prepare use?"},{"text":"Should images be grouped by role?"}],"entryScenario":"the apply scenario for this workspace","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`)
+	if err != nil {
+		t.Fatalf("expected partial parse to accept mixed open question shapes, got %v", err)
+	}
+	if strings.Join(resp.OpenQuestions, "|") != "Which release?|Which package mirror should prepare use?|Should images be grouped by role?" {
+		t.Fatalf("unexpected mixed open questions: %#v", resp.OpenQuestions)
+	}
+	if len(resp.AuthoringProgram.Artifacts.Packages) != 1 || len(resp.AuthoringProgram.Artifacts.Images) != 1 {
+		t.Fatalf("expected artifact payloads to survive partial parse, got %#v", resp.AuthoringProgram)
+	}
+}
+
 func TestParsePlanResolvesShortEntryScenarioToPlannedPath(t *testing.T) {
 	resp, err := ParsePlan(`{"version":1,"request":"refine workflow","intent":"refine","complexity":"simple","blockers":[],"targetOutcome":"refine files","assumptions":[],"openQuestions":[],"entryScenario":"apply","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"update","purpose":"entry"},{"path":"workflows/vars.yaml","kind":"vars","action":"create","purpose":"vars"}],"validationChecklist":["lint"]}`)
 	if err != nil {
