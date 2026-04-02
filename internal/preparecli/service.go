@@ -25,6 +25,7 @@ type Options struct {
 	BinaryDir         string
 	BinaryVer         string
 	Binaries          []string
+	BinaryExcludes    []string
 	VarOverrides      map[string]any
 	Stdout            io.Writer
 	Diagnosticf       func(level int, format string, args ...any) error

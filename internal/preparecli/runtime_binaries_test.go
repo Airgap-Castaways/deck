@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/Airgap-Castaways/deck/internal/buildinfo"
 )
 
 func TestRunStagesLocalRuntimeBinariesFromDirectory(t *testing.T) {
@@ -71,13 +73,82 @@ func TestRunStagesReleaseRuntimeBinariesWithDefaultTargets(t *testing.T) {
 			currentGOARCH: func() string { return runtime.GOARCH },
 			readFile:      os.ReadFile,
 			osExecutable:  os.Executable,
+			latestRelease: func(context.Context) (string, error) { return "v9.9.9", nil },
 			fetchRelease:  fetcher,
+			cacheRoot:     func() (string, error) { return t.TempDir(), nil },
 		},
 	}); err != nil {
 		t.Fatalf("prepare run failed: %v", err)
 	}
-	if len(got) != 2 || got[0] != "v1.2.3:linux/amd64" || got[1] != "v1.2.3:linux/arm64" {
-		t.Fatalf("unexpected fetched targets: %#v", got)
+	want := []string{"v1.2.3:linux/amd64", "v1.2.3:linux/arm64", "v1.2.3:darwin/amd64", "v1.2.3:darwin/arm64"}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected fetched target count: got %#v want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unexpected fetched targets: got %#v want %#v", got, want)
+		}
+	}
+	for _, rel := range []string{
+		filepath.Join("outputs", "bin", "linux", "amd64", "deck"),
+		filepath.Join("outputs", "bin", "linux", "arm64", "deck"),
+		filepath.Join("outputs", "bin", "darwin", "amd64", "deck"),
+		filepath.Join("outputs", "bin", "darwin", "arm64", "deck"),
+	} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+			t.Fatalf("expected runtime binary %s: %v", rel, err)
+		}
+	}
+}
+
+func TestRunStagesLocalRuntimeBinariesWithDefaultTargetsFromDirectory(t *testing.T) {
+	root := prepareWorkspaceForRuntimeTests(t)
+	binDir := t.TempDir()
+	for name, body := range map[string]string{
+		"deck-linux-amd64":  "linux-amd64",
+		"deck-linux-arm64":  "linux-arm64",
+		"deck-darwin-amd64": "darwin-amd64",
+		"deck-darwin-arm64": "darwin-arm64",
+	} {
+		if err := os.WriteFile(filepath.Join(binDir, name), []byte(body), 0o755); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	if err := Run(context.Background(), Options{
+		PreparedRoot: filepath.Join(root, "outputs"),
+		BinarySource: binarySourceLocal,
+		BinaryDir:    binDir,
+	}); err != nil {
+		t.Fatalf("prepare run failed: %v", err)
+	}
+
+	for rel, want := range map[string]string{
+		filepath.Join("outputs", "bin", "linux", "amd64", "deck"):  "linux-amd64",
+		filepath.Join("outputs", "bin", "linux", "arm64", "deck"):  "linux-arm64",
+		filepath.Join("outputs", "bin", "darwin", "amd64", "deck"): "darwin-amd64",
+		filepath.Join("outputs", "bin", "darwin", "arm64", "deck"): "darwin-arm64",
+	} {
+		raw, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		if string(raw) != want {
+			t.Fatalf("unexpected %s content: %q", rel, string(raw))
+		}
+	}
+}
+
+func TestResolveBinaryTargetsUsesCurrentHostForImplicitLocalTarget(t *testing.T) {
+	targets, err := resolveBinaryTargets(Options{}, binarySourceLocal, runtimeBinaryDeps{
+		currentGOOS:   func() string { return "darwin" },
+		currentGOARCH: func() string { return "arm64" },
+	})
+	if err != nil {
+		t.Fatalf("resolve binary targets: %v", err)
+	}
+	if len(targets) != 1 || targets[0].OS != "darwin" || targets[0].Arch != "arm64" {
+		t.Fatalf("unexpected implicit local targets: %#v", targets)
 	}
 }
 
@@ -92,11 +163,181 @@ func TestRunLocalSourceWithoutDirRejectsForeignTarget(t *testing.T) {
 			currentGOARCH: func() string { return "arm64" },
 			readFile:      os.ReadFile,
 			osExecutable:  os.Executable,
+			latestRelease: func(context.Context) (string, error) { return "v9.9.9", nil },
 			fetchRelease:  fetchReleaseRuntimeBinary,
+			cacheRoot:     func() (string, error) { return t.TempDir(), nil },
 		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "only supports the current host target darwin/arm64") {
 		t.Fatalf("expected foreign target error, got %v", err)
+	}
+}
+
+func TestResolveBinaryTargetsAppliesExcludes(t *testing.T) {
+	targets, err := resolveBinaryTargets(Options{BinaryExcludes: []string{"darwin/amd64", "darwin/arm64"}}, binarySourceRelease, defaultRuntimeBinaryDeps())
+	if err != nil {
+		t.Fatalf("resolve binary targets: %v", err)
+	}
+	got := make([]string, 0, len(targets))
+	for _, target := range targets {
+		got = append(got, target.OS+"/"+target.Arch)
+	}
+	want := []string{"linux/amd64", "linux/arm64"}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected targets: got %#v want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unexpected targets: got %#v want %#v", got, want)
+		}
+	}
+}
+
+func TestResolveBinaryTargetsRejectsEmptyAfterExclude(t *testing.T) {
+	_, err := resolveBinaryTargets(Options{Binaries: []string{"linux/amd64"}, BinaryExcludes: []string{"linux/amd64"}}, binarySourceRelease, defaultRuntimeBinaryDeps())
+	if err == nil || !strings.Contains(err.Error(), "no runtime binaries selected") {
+		t.Fatalf("expected empty-target error, got %v", err)
+	}
+}
+
+func TestResolveBinarySourceAutoUsesReleaseOnDevWithoutLocalDirectory(t *testing.T) {
+	oldVersion := buildinfo.Version
+	buildinfo.Version = "dev"
+	t.Cleanup(func() { buildinfo.Version = oldVersion })
+
+	source, err := resolveBinarySource(Options{}, defaultRuntimeBinaryDeps())
+	if err != nil {
+		t.Fatalf("resolve binary source: %v", err)
+	}
+	if source != binarySourceRelease {
+		t.Fatalf("unexpected source: got %q want %q", source, binarySourceRelease)
+	}
+}
+
+func TestResolveBinarySourceAutoKeepsLocalWithBinaryDirectoryOnDev(t *testing.T) {
+	oldVersion := buildinfo.Version
+	buildinfo.Version = "dev"
+	t.Cleanup(func() { buildinfo.Version = oldVersion })
+
+	source, err := resolveBinarySource(Options{BinaryDir: "/tmp/bin"}, defaultRuntimeBinaryDeps())
+	if err != nil {
+		t.Fatalf("resolve binary source: %v", err)
+	}
+	if source != binarySourceLocal {
+		t.Fatalf("unexpected source: got %q want %q", source, binarySourceLocal)
+	}
+}
+
+func TestResolveRuntimeBinaryReleaseVersionUsesLatestReleaseOnDev(t *testing.T) {
+	oldVersion := buildinfo.Version
+	buildinfo.Version = "dev"
+	t.Cleanup(func() { buildinfo.Version = oldVersion })
+
+	version, err := resolveRuntimeBinaryReleaseVersion(context.Background(), Options{}, runtimeBinaryDeps{
+		latestRelease: func(context.Context) (string, error) { return "v1.2.3", nil },
+	}, binarySourceRelease)
+	if err != nil {
+		t.Fatalf("resolve runtime binary release version: %v", err)
+	}
+	if version != "v1.2.3" {
+		t.Fatalf("unexpected version: got %q want %q", version, "v1.2.3")
+	}
+}
+
+func TestRunUsesLatestReleaseDefaultsOnDev(t *testing.T) {
+	oldVersion := buildinfo.Version
+	buildinfo.Version = "dev"
+	t.Cleanup(func() { buildinfo.Version = oldVersion })
+
+	root := prepareWorkspaceForRuntimeTests(t)
+	var got []string
+	if err := Run(context.Background(), Options{
+		PreparedRoot: filepath.Join(root, "outputs"),
+		runtimeBinaryDeps: runtimeBinaryDeps{
+			currentGOOS:   func() string { return runtime.GOOS },
+			currentGOARCH: func() string { return runtime.GOARCH },
+			readFile:      os.ReadFile,
+			osExecutable:  os.Executable,
+			latestRelease: func(context.Context) (string, error) { return "v1.2.3", nil },
+			fetchRelease: func(_ context.Context, version string, target runtimeBinaryTarget) ([]byte, error) {
+				got = append(got, version+":"+target.OS+"/"+target.Arch)
+				return []byte(target.OS + "-" + target.Arch), nil
+			},
+			cacheRoot: func() (string, error) { return t.TempDir(), nil },
+		},
+	}); err != nil {
+		t.Fatalf("prepare run failed: %v", err)
+	}
+	want := []string{"v1.2.3:linux/amd64", "v1.2.3:linux/arm64", "v1.2.3:darwin/amd64", "v1.2.3:darwin/arm64"}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected fetched targets: got %#v want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unexpected fetched targets: got %#v want %#v", got, want)
+		}
+	}
+}
+
+func TestLoadCachedReleaseRuntimeBinaryReusesCache(t *testing.T) {
+	cacheRoot := t.TempDir()
+	fetchCount := 0
+	deps := runtimeBinaryDeps{
+		readFile: os.ReadFile,
+		fetchRelease: func(_ context.Context, version string, target runtimeBinaryTarget) ([]byte, error) {
+			fetchCount++
+			return []byte(version + ":" + target.OS + "/" + target.Arch), nil
+		},
+		cacheRoot: func() (string, error) { return cacheRoot, nil },
+	}
+	target := runtimeBinaryTarget{OS: "linux", Arch: "amd64"}
+
+	raw1, err := loadCachedReleaseRuntimeBinary(context.Background(), deps, "v1.2.3", target)
+	if err != nil {
+		t.Fatalf("load cached release runtime binary first: %v", err)
+	}
+	raw2, err := loadCachedReleaseRuntimeBinary(context.Background(), deps, "v1.2.3", target)
+	if err != nil {
+		t.Fatalf("load cached release runtime binary second: %v", err)
+	}
+	if fetchCount != 1 {
+		t.Fatalf("expected one fetch, got %d", fetchCount)
+	}
+	if string(raw1) != "v1.2.3:linux/amd64" || string(raw2) != string(raw1) {
+		t.Fatalf("unexpected cached payloads: %q %q", string(raw1), string(raw2))
+	}
+	cachePath, err := runtimeBinaryCachePath(deps, "v1.2.3", target)
+	if err != nil {
+		t.Fatalf("runtime binary cache path: %v", err)
+	}
+	if _, err := os.Stat(cachePath); err != nil {
+		t.Fatalf("expected cache file: %v", err)
+	}
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(cachePath), ".deck.tmp-*"))
+	if err != nil {
+		t.Fatalf("glob temp files: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("unexpected temp files left behind: %#v", matches)
+	}
+}
+
+func TestFetchLatestReleaseVersionFollowsRedirectTarget(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/releases/latest" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		http.Redirect(w, r, srv.URL+"/releases/tag/v1.2.3", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	version, err := fetchLatestReleaseVersionFromURL(context.Background(), srv.URL+"/releases/latest")
+	if err != nil {
+		t.Fatalf("fetch latest release version: %v", err)
+	}
+	if version != "v1.2.3" {
+		t.Fatalf("unexpected version: got %q want %q", version, "v1.2.3")
 	}
 }
 

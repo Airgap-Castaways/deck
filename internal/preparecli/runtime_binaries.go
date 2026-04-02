@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,8 +15,10 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/buildinfo"
+	"github.com/Airgap-Castaways/deck/internal/filemode"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
 	"github.com/Airgap-Castaways/deck/internal/httpfetch"
+	"github.com/Airgap-Castaways/deck/internal/userdirs"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
@@ -32,12 +35,21 @@ type runtimeBinaryTarget struct {
 	Arch string
 }
 
+var supportedRuntimeBinaryTargets = []runtimeBinaryTarget{
+	{OS: "linux", Arch: "amd64"},
+	{OS: "linux", Arch: "arm64"},
+	{OS: "darwin", Arch: "amd64"},
+	{OS: "darwin", Arch: "arm64"},
+}
+
 type runtimeBinaryDeps struct {
 	currentGOOS   func() string
 	currentGOARCH func() string
 	readFile      func(string) ([]byte, error)
 	osExecutable  func() (string, error)
+	latestRelease func(ctx context.Context) (string, error)
 	fetchRelease  func(ctx context.Context, version string, target runtimeBinaryTarget) ([]byte, error)
+	cacheRoot     func() (string, error)
 }
 
 func defaultRuntimeBinaryDeps() runtimeBinaryDeps {
@@ -46,7 +58,9 @@ func defaultRuntimeBinaryDeps() runtimeBinaryDeps {
 		currentGOARCH: func() string { return runtime.GOARCH },
 		readFile:      fsutil.ReadFile,
 		osExecutable:  os.Executable,
+		latestRelease: fetchLatestReleaseVersion,
 		fetchRelease:  fetchReleaseRuntimeBinary,
+		cacheRoot:     userdirs.CacheRoot,
 	}
 }
 
@@ -55,10 +69,14 @@ func stageRuntimeBinariesWithContext(ctx context.Context, preparedRootAbs string
 		return fmt.Errorf("context is nil")
 	}
 	deps := opts.runtimeBinaryDeps
-	if deps.currentGOOS == nil || deps.currentGOARCH == nil || deps.readFile == nil || deps.osExecutable == nil || deps.fetchRelease == nil {
+	if deps.currentGOOS == nil || deps.currentGOARCH == nil || deps.readFile == nil || deps.osExecutable == nil || deps.latestRelease == nil || deps.fetchRelease == nil || deps.cacheRoot == nil {
 		deps = defaultRuntimeBinaryDeps()
 	}
 	source, err := resolveBinarySource(opts, deps)
+	if err != nil {
+		return err
+	}
+	releaseVersion, err := resolveRuntimeBinaryReleaseVersion(ctx, opts, deps, source)
 	if err != nil {
 		return err
 	}
@@ -67,7 +85,7 @@ func stageRuntimeBinariesWithContext(ctx context.Context, preparedRootAbs string
 		return err
 	}
 	for _, target := range targets {
-		raw, err := loadRuntimeBinary(ctx, opts, deps, source, target)
+		raw, err := loadRuntimeBinary(ctx, opts, deps, source, releaseVersion, target)
 		if err != nil {
 			return err
 		}
@@ -84,7 +102,7 @@ func stageRuntimeBinariesWithContext(ctx context.Context, preparedRootAbs string
 
 func dryRunRuntimeBinaryWrites(preparedRootAbs string, opts Options) ([]string, error) {
 	deps := opts.runtimeBinaryDeps
-	if deps.currentGOOS == nil || deps.currentGOARCH == nil || deps.readFile == nil || deps.osExecutable == nil || deps.fetchRelease == nil {
+	if deps.currentGOOS == nil || deps.currentGOARCH == nil || deps.readFile == nil || deps.osExecutable == nil || deps.latestRelease == nil || deps.fetchRelease == nil || deps.cacheRoot == nil {
 		deps = defaultRuntimeBinaryDeps()
 	}
 	source, err := resolveBinarySource(opts, deps)
@@ -110,7 +128,10 @@ func resolveBinarySource(opts Options, deps runtimeBinaryDeps) (string, error) {
 	switch requested {
 	case binarySourceAuto:
 		if buildinfo.Current().Version == "dev" {
-			return binarySourceLocal, nil
+			if strings.TrimSpace(opts.BinaryDir) != "" {
+				return binarySourceLocal, nil
+			}
+			return binarySourceRelease, nil
 		}
 		return binarySourceRelease, nil
 	case binarySourceLocal, binarySourceRelease:
@@ -121,27 +142,60 @@ func resolveBinarySource(opts Options, deps runtimeBinaryDeps) (string, error) {
 }
 
 func resolveBinaryTargets(opts Options, source string, deps runtimeBinaryDeps) ([]runtimeBinaryTarget, error) {
-	if len(opts.Binaries) > 0 {
-		seen := map[string]bool{}
-		targets := make([]runtimeBinaryTarget, 0, len(opts.Binaries))
-		for _, raw := range opts.Binaries {
-			target, err := parseRuntimeBinaryTarget(raw)
-			if err != nil {
-				return nil, err
-			}
-			key := target.OS + "/" + target.Arch
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			targets = append(targets, target)
+	baseTargets := opts.Binaries
+	if len(baseTargets) == 0 {
+		if source == binarySourceLocal && strings.TrimSpace(opts.BinaryDir) == "" {
+			return []runtimeBinaryTarget{{OS: deps.currentGOOS(), Arch: deps.currentGOARCH()}}, nil
 		}
+		baseTargets = make([]string, 0, len(supportedRuntimeBinaryTargets))
+		for _, target := range supportedRuntimeBinaryTargets {
+			baseTargets = append(baseTargets, target.OS+"/"+target.Arch)
+		}
+	}
+	targets, err := parseRuntimeBinaryTargets(baseTargets)
+	if err != nil {
+		return nil, err
+	}
+	excludes, err := parseRuntimeBinaryTargets(opts.BinaryExcludes)
+	if err != nil {
+		return nil, fmt.Errorf("parse --bundle-binary-exclude: %w", err)
+	}
+	if len(excludes) == 0 {
 		return targets, nil
 	}
-	if source == binarySourceRelease {
-		return []runtimeBinaryTarget{{OS: "linux", Arch: "amd64"}, {OS: "linux", Arch: "arm64"}}, nil
+	excluded := make(map[string]bool, len(excludes))
+	for _, target := range excludes {
+		excluded[target.OS+"/"+target.Arch] = true
 	}
-	return []runtimeBinaryTarget{{OS: deps.currentGOOS(), Arch: deps.currentGOARCH()}}, nil
+	filtered := make([]runtimeBinaryTarget, 0, len(targets))
+	for _, target := range targets {
+		if excluded[target.OS+"/"+target.Arch] {
+			continue
+		}
+		filtered = append(filtered, target)
+	}
+	if len(filtered) == 0 {
+		return nil, fmt.Errorf("no runtime binaries selected after applying --bundle-binary-exclude")
+	}
+	return filtered, nil
+}
+
+func parseRuntimeBinaryTargets(rawTargets []string) ([]runtimeBinaryTarget, error) {
+	seen := map[string]bool{}
+	targets := make([]runtimeBinaryTarget, 0, len(rawTargets))
+	for _, raw := range rawTargets {
+		target, err := parseRuntimeBinaryTarget(raw)
+		if err != nil {
+			return nil, err
+		}
+		key := target.OS + "/" + target.Arch
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		targets = append(targets, target)
+	}
+	return targets, nil
 }
 
 func parseRuntimeBinaryTarget(raw string) (runtimeBinaryTarget, error) {
@@ -157,22 +211,110 @@ func parseRuntimeBinaryTarget(raw string) (runtimeBinaryTarget, error) {
 	return runtimeBinaryTarget{OS: osVal, Arch: archVal}, nil
 }
 
-func loadRuntimeBinary(ctx context.Context, opts Options, deps runtimeBinaryDeps, source string, target runtimeBinaryTarget) ([]byte, error) {
+func resolveRuntimeBinaryReleaseVersion(ctx context.Context, opts Options, deps runtimeBinaryDeps, source string) (string, error) {
+	if source != binarySourceRelease {
+		return "", nil
+	}
+	version := strings.TrimSpace(opts.BinaryVer)
+	if version != "" {
+		return version, nil
+	}
+	version = buildinfo.Current().Version
+	if version != "" && version != "dev" {
+		return version, nil
+	}
+	version, err := deps.latestRelease(ctx)
+	if err != nil {
+		return "", fmt.Errorf("resolve latest deck release: %w", err)
+	}
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return "", fmt.Errorf("resolve latest deck release: empty version")
+	}
+	return version, nil
+}
+
+func loadRuntimeBinary(ctx context.Context, opts Options, deps runtimeBinaryDeps, source string, releaseVersion string, target runtimeBinaryTarget) ([]byte, error) {
 	switch source {
 	case binarySourceLocal:
 		return loadLocalRuntimeBinary(opts, deps, target)
 	case binarySourceRelease:
-		version := strings.TrimSpace(opts.BinaryVer)
-		if version == "" {
-			version = buildinfo.Current().Version
+		if strings.TrimSpace(releaseVersion) == "" {
+			return nil, fmt.Errorf("release version is required")
 		}
-		if version == "" || version == "dev" {
-			return nil, fmt.Errorf("--bundle-binary-source=release requires a release build or --bundle-binary-version")
-		}
-		return deps.fetchRelease(ctx, version, target)
+		return loadCachedReleaseRuntimeBinary(ctx, deps, releaseVersion, target)
 	default:
 		return nil, fmt.Errorf("unsupported binary source %s", source)
 	}
+}
+
+func loadCachedReleaseRuntimeBinary(ctx context.Context, deps runtimeBinaryDeps, version string, target runtimeBinaryTarget) ([]byte, error) {
+	cachePath, err := runtimeBinaryCachePath(deps, version, target)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := deps.readFile(cachePath)
+	if err == nil {
+		return raw, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read runtime binary cache %s: %w", cachePath, err)
+	}
+	raw, err = deps.fetchRelease(ctx, version, target)
+	if err != nil {
+		return nil, err
+	}
+	if err := writeBytesAtomically(cachePath, raw, 0o755); err != nil {
+		return nil, fmt.Errorf("cache runtime binary %s: %w", cachePath, err)
+	}
+	return raw, nil
+}
+
+func runtimeBinaryCachePath(deps runtimeBinaryDeps, version string, target runtimeBinaryTarget) (string, error) {
+	cacheRoot, err := deps.cacheRoot()
+	if err != nil {
+		return "", err
+	}
+	v := strings.TrimPrefix(strings.TrimSpace(version), "v")
+	if v == "" {
+		return "", fmt.Errorf("release version is required")
+	}
+	return filepath.Join(cacheRoot, "artifacts", "runtime-binary", "v"+v, target.OS, target.Arch, "deck"), nil
+}
+
+func writeBytesAtomically(path string, data []byte, mode fs.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), filemode.ArtifactDirMode); err != nil {
+		return fmt.Errorf("create parent directory: %w", err)
+	}
+	base := filepath.Base(path)
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		base = "runtime-binary"
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+base+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	published := false
+	defer func() {
+		_ = tmp.Close()
+		if !published {
+			_ = os.Remove(tmp.Name())
+		}
+	}()
+	if _, err := tmp.Write(data); err != nil {
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return fmt.Errorf("publish temp file: %w", err)
+	}
+	published = true
+	return nil
 }
 
 func loadLocalRuntimeBinary(opts Options, deps runtimeBinaryDeps, target runtimeBinaryTarget) ([]byte, error) {
@@ -218,6 +360,45 @@ func fetchReleaseRuntimeBinary(ctx context.Context, version string, target runti
 
 	url := fmt.Sprintf("https://github.com/Airgap-Castaways/deck/releases/download/v%s/deck_%s_%s_%s.tar.gz", v, v, target.OS, target.Arch)
 	return downloadArchiveDeckBinary(ctx, url)
+}
+
+func fetchLatestReleaseVersion(ctx context.Context) (string, error) {
+	return fetchLatestReleaseVersionFromURL(ctx, "https://github.com/Airgap-Castaways/deck/releases/latest")
+}
+
+func fetchLatestReleaseVersionFromURL(ctx context.Context, rawURL string) (string, error) {
+	if ctx == nil {
+		return "", fmt.Errorf("context is nil")
+	}
+	client := *runtimeBinaryDownloadHTTPClient
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	parsed, err := urlpkgParseHTTPS(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("resolve latest release URL: %w", err)
+	}
+	resp, err := httpfetch.Do(ctx, &client, http.MethodGet, parsed.String(), nil, "resolve latest release")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusMovedPermanently && resp.StatusCode != http.StatusTemporaryRedirect && resp.StatusCode != http.StatusPermanentRedirect {
+		return "", fmt.Errorf("resolve latest release: unexpected status %d", resp.StatusCode)
+	}
+	location := strings.TrimSpace(resp.Header.Get("Location"))
+	if location == "" {
+		return "", fmt.Errorf("resolve latest release: missing redirect location")
+	}
+	redirectURL, err := urlpkgParseHTTPS(location)
+	if err != nil {
+		return "", fmt.Errorf("resolve latest release redirect: %w", err)
+	}
+	version := pathBase(redirectURL.Path)
+	if version == "" || version == "latest" {
+		return "", fmt.Errorf("resolve latest release: invalid redirect target %s", redirectURL.String())
+	}
+	return version, nil
 }
 
 func downloadArchiveDeckBinary(ctx context.Context, url string) ([]byte, error) {

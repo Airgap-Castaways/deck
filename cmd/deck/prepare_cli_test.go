@@ -45,7 +45,7 @@ func TestRunPrepareCreatesPreparedBundleDir(t *testing.T) {
 	})
 
 	preparedRoot := filepath.Join(root, "outputs")
-	if _, err := runWithCapturedStdout([]string{"prepare", "--root", preparedRoot}); err != nil {
+	if _, err := runWithCapturedStdout([]string{"prepare", "--root", preparedRoot, "--bundle-binary-source", "local"}); err != nil {
 		t.Fatalf("prepare failed: %v", err)
 	}
 	for _, required := range []string{
@@ -95,7 +95,7 @@ func TestRunPrepareDryRunDoesNotWrite(t *testing.T) {
 	})
 
 	preparedRoot := filepath.Join(root, "outputs")
-	planOut, err := runWithCapturedStdout([]string{"prepare", "--dry-run"})
+	planOut, err := runWithCapturedStdout([]string{"prepare", "--dry-run", "--bundle-binary-source", "local"})
 	if err != nil {
 		t.Fatalf("prepare dry-run failed: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestRunPrepareVerboseDiagnostics(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(originalCWD) })
 
-	res := execute([]string{"prepare", "--dry-run", "--v=1"})
+	res := execute([]string{"prepare", "--dry-run", "--v=1", "--bundle-binary-source", "local"})
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
@@ -142,7 +142,7 @@ func TestRunPrepareVerboseDiagnostics(t *testing.T) {
 		}
 	}
 
-	res = execute([]string{"prepare", "--dry-run", "--v=2"})
+	res = execute([]string{"prepare", "--dry-run", "--v=2", "--bundle-binary-source", "local"})
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
@@ -173,7 +173,7 @@ func TestRunPrepareVerboseStepDiagnostics(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(originalCWD) })
 
-	res := execute([]string{"prepare", "--root", filepath.Join(root, "outputs"), "--v=1"})
+	res := execute([]string{"prepare", "--root", filepath.Join(root, "outputs"), "--v=1", "--bundle-binary-source", "local"})
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
@@ -210,7 +210,7 @@ func TestRunPrepareEmitsDefaultProgressLog(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(originalCWD) })
 
-	res := execute([]string{"prepare", "--root", filepath.Join(root, "outputs")})
+	res := execute([]string{"prepare", "--root", filepath.Join(root, "outputs"), "--bundle-binary-source", "local"})
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
@@ -245,7 +245,7 @@ func TestRunPrepareSucceedsWithoutApplyWorkflow(t *testing.T) {
 	})
 
 	preparedRoot := filepath.Join(root, "outputs")
-	out, err := runWithCapturedStdout([]string{"prepare", "--root", preparedRoot})
+	out, err := runWithCapturedStdout([]string{"prepare", "--root", preparedRoot, "--bundle-binary-source", "local"})
 	if err != nil {
 		t.Fatalf("prepare failed without apply workflow: %v", err)
 	}
@@ -313,7 +313,7 @@ phases:
 	})
 
 	preparedRoot := filepath.Join(root, "outputs")
-	if _, err := runWithCapturedStdout([]string{"prepare", "--root", preparedRoot, "--var", "relPath=override.bin"}); err != nil {
+	if _, err := runWithCapturedStdout([]string{"prepare", "--root", preparedRoot, "--bundle-binary-source", "local", "--var", "relPath=override.bin"}); err != nil {
 		t.Fatalf("prepare failed: %v", err)
 	}
 
