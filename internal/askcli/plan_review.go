@@ -26,13 +26,13 @@ func buildPlanWithReview(ctx context.Context, client askprovider.Client, cfg ask
 			if validateErr := askpolicy.ValidatePlanStructure(planned); validateErr != nil {
 				return askcontract.PlanResponse{}, askcontract.PlanCriticResponse{}, false, fmt.Errorf("planner failed and fallback plan is not viable: %w", validateErr)
 			}
-			logger.logf("debug", "[ask][phase:plan:fallback] error=%v\n", planErr)
+			logger.debug("phase_fallback", "phase", "plan", "error", planErr)
 			return planned, askcontract.PlanCriticResponse{}, true, nil
 		}
 		planned = current
 		criticResp, criticErr := critiquePlanWithLLM(ctx, client, cfg, planned, logger)
 		if criticErr != nil {
-			logger.logf("debug", "[ask][phase:plan-critic:skip] error=%v\n", criticErr)
+			logger.debug("phase_skipped", "phase", "plan-critic", "error", criticErr)
 			return planned, askcontract.PlanCriticResponse{}, false, nil
 		}
 		critic = criticResp
@@ -40,7 +40,7 @@ func buildPlanWithReview(ctx context.Context, client askprovider.Client, cfg ask
 		if len(critic.Blocking) == 0 && len(critic.MissingContracts) == 0 {
 			return planned, critic, false, nil
 		}
-		logger.logf("debug", "[ask][phase:plan-critic:retry] attempt=%d blocking=%d missing=%d\n", attempt, len(critic.Blocking), len(critic.MissingContracts))
+		logger.debug("phase_retry", "phase", "plan-critic", "attempt", attempt, "blocking", len(critic.Blocking), "missing", len(critic.MissingContracts))
 		if attempt == 2 {
 			return planned, critic, false, nil
 		}
