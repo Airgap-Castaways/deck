@@ -14,6 +14,11 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
 
+var (
+	roleModelCPWorkersRE = regexp.MustCompile(`^(\d+)cp-(\d+)workers?$`)
+	roleModelCPHARE      = regexp.MustCompile(`^(\d+)cp-ha$`)
+)
+
 func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) askcontract.PlanResponse {
 	req := BuildScenarioRequirements(prompt, retrieval, workspace, decision)
 	fallbackBrief := BriefFromRequirements(req, decision)
@@ -320,14 +325,14 @@ func parseRoleModelAnswer(answer string) (roleModel, bool) {
 	case "3cp-ha":
 		return roleModel{topology: "ha", nodeCount: 3, controlPlaneCount: 3, workerCount: 0}, true
 	}
-	if match := regexp.MustCompile(`^(\d+)cp-(\d+)workers?$`).FindStringSubmatch(answer); len(match) == 3 {
+	if match := roleModelCPWorkersRE.FindStringSubmatch(answer); len(match) == 3 {
 		cp, _ := strconv.Atoi(match[1])
 		workers, _ := strconv.Atoi(match[2])
 		if cp > 0 && workers >= 0 {
 			return roleModel{topology: "multi-node", nodeCount: cp + workers, controlPlaneCount: cp, workerCount: workers}, true
 		}
 	}
-	if match := regexp.MustCompile(`^(\d+)cp-ha$`).FindStringSubmatch(answer); len(match) == 2 {
+	if match := roleModelCPHARE.FindStringSubmatch(answer); len(match) == 2 {
 		cp, _ := strconv.Atoi(match[1])
 		if cp > 0 {
 			return roleModel{topology: "ha", nodeCount: cp, controlPlaneCount: cp, workerCount: 0}, true

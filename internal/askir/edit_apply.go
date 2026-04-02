@@ -234,9 +234,6 @@ func prunePendingVarsWrites(root string, baseContent map[string]string, currentP
 		}
 		collectReferencedVarsFromString(used, content)
 	}
-	if len(used) == 0 {
-		used = map[string]bool{}
-	}
 	filteredPending := map[string]string{}
 	filteredOrder := make([]string, 0, len(orderedExtraPaths))
 	existingVarsKeys, err := existingVarsKeys(root, baseContent, varsPath)
