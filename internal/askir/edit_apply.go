@@ -205,11 +205,103 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 	if err != nil {
 		return "", nil, err
 	}
+	pending, orderedExtraPaths, err = prunePendingVarsWrites(root, baseContent, path, content, pending, orderedExtraPaths)
+	if err != nil {
+		return "", nil, err
+	}
 	extraFiles := make([]askcontract.GeneratedFile, 0, len(orderedExtraPaths))
 	for _, extraPath := range orderedExtraPaths {
 		extraFiles = append(extraFiles, askcontract.GeneratedFile{Path: extraPath, Content: pending[extraPath]})
 	}
 	return content, extraFiles, nil
+}
+
+func prunePendingVarsWrites(root string, baseContent map[string]string, currentPath string, currentContent string, pending map[string]string, orderedExtraPaths []string) (map[string]string, []string, error) {
+	varsPath := filepath.ToSlash("workflows/vars.yaml")
+	used := map[string]bool{}
+	for path, content := range baseContent {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path == "" || path == varsPath || path == filepath.ToSlash(strings.TrimSpace(currentPath)) {
+			continue
+		}
+		collectReferencedVarsFromString(used, content)
+	}
+	collectReferencedVarsFromString(used, currentContent)
+	for path, content := range pending {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path == "" || path == varsPath {
+			continue
+		}
+		collectReferencedVarsFromString(used, content)
+	}
+	if len(used) == 0 {
+		used = map[string]bool{}
+	}
+	filteredPending := map[string]string{}
+	filteredOrder := make([]string, 0, len(orderedExtraPaths))
+	existingVarsKeys, err := existingVarsKeys(root, baseContent, varsPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, extraPath := range orderedExtraPaths {
+		normalized := filepath.ToSlash(strings.TrimSpace(extraPath))
+		content, ok := pending[extraPath]
+		if !ok {
+			content, ok = pending[normalized]
+		}
+		if !ok {
+			continue
+		}
+		if normalized != varsPath {
+			filteredPending[extraPath] = content
+			filteredOrder = append(filteredOrder, extraPath)
+			continue
+		}
+		varsDoc, err := ParseDocument(normalized, []byte(content))
+		if err != nil {
+			return nil, nil, err
+		}
+		filteredVars := map[string]any{}
+		for key, value := range varsDoc.Vars {
+			if used[strings.TrimSpace(key)] || existingVarsKeys[strings.TrimSpace(key)] {
+				filteredVars[key] = value
+			}
+		}
+		if len(filteredVars) == 0 {
+			continue
+		}
+		rendered, err := renderDocument(normalized, askcontract.GeneratedDocument{Path: normalized, Kind: "vars", Vars: filteredVars})
+		if err != nil {
+			return nil, nil, err
+		}
+		filteredPending[extraPath] = rendered
+		filteredOrder = append(filteredOrder, extraPath)
+	}
+	return filteredPending, filteredOrder, nil
+}
+
+func existingVarsKeys(root string, baseContent map[string]string, varsPath string) (map[string]bool, error) {
+	keys := map[string]bool{}
+	content, ok := baseContent[varsPath]
+	if !ok {
+		resolved := filepath.Join(root, filepath.FromSlash(varsPath))
+		raw, err := os.ReadFile(resolved) //nolint:gosec
+		if err != nil {
+			if os.IsNotExist(err) {
+				return keys, nil
+			}
+			return nil, err
+		}
+		content = string(raw)
+	}
+	varsDoc, err := ParseDocument(varsPath, []byte(content))
+	if err != nil {
+		return nil, err
+	}
+	for key := range varsDoc.Vars {
+		keys[strings.TrimSpace(key)] = true
+	}
+	return keys, nil
 }
 
 func componentPhaseIndex(rawPath string, workflow askcontract.WorkflowDocument) (int, error) {
