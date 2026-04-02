@@ -10,6 +10,17 @@
 
 The first planned release is `v0.1.0`.
 
+## Pre-1.0 compatibility policy
+
+Until `v1.0.0`, `deck` should be treated as a fast-moving pre-stable tool.
+
+- Minor and patch releases in the `v0.x.y` line may still change workflow schema details, CLI output, bundle layout, audit records, and other user-facing contracts.
+- The project does not promise broad legacy compatibility across pre-1.0 releases.
+- When a simpler canonical shape is identified, prefer converging on it instead of carrying long-lived compatibility shims for abandoned pre-1.0 designs.
+- Compatibility code that does exist in the `v0.x.y` line should stay narrow and intentional, typically only where it protects a real on-disk migration path or a clearly documented upgrade flow.
+
+In practice, users and downstream automation should pin exact `v0.x.y` releases and expect that upgrading between pre-1.0 versions may require workflow, script, or integration updates.
+
 ## Build metadata
 
 `deck version` reports build metadata embedded at build time through Go linker flags.
@@ -59,6 +70,8 @@ deck dev
 ```
 
 Release builds should report the tagged semver instead of `dev`.
+
+The `version` command reports build identity, but it does not imply pre-`v1.0.0` compatibility guarantees for CLI text, JSON output, workflow schema, or bundle structure.
 
 ## Release notes and automation
 

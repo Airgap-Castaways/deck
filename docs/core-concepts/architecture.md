@@ -243,6 +243,8 @@ This reduces the need for broad security suppressions in feature code and keeps 
 
 That means transitional wrappers, duplicate command surfaces, legacy step kinds, and temporary compatibility shims are expected to be removed once the preferred shape becomes clear. The goal is to keep the architecture understandable before release rather than accumulating historical layers that would have to be supported indefinitely.
 
+For the same reason, pre-`v1.0.0` releases are allowed to make breaking changes to workflow schemas, CLI contracts, bundle structure, and other published shapes when that is the clearest way to converge on the intended model.
+
 After release, the compatibility posture is expected to change. At that stage, published contracts should be stabilized through explicit version boundaries such as `apiVersion`, with compatibility managed at those documented edges rather than through implicit support for every previous internal structure.
 
 In other words, compatibility should live at clear boundaries such as workflow schemas, bundle contracts, and published APIs. Internal package layout and transitional implementation details are not the main stability target.
