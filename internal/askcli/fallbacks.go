@@ -25,7 +25,11 @@ func applyLocalFallback(result *runResult, root string, workspace askretrieve.Wo
 		result.Termination = "explained-locally"
 	case askintent.RouteQuestion:
 		result.Summary = "Question received"
-		result.Answer = "I need model access for a complete answer."
+		if promptLooksInstallQuestion(prompt) {
+			result.Answer = "Official source retrieval could not be verified locally, so I can only offer bounded general guidance. If you want distro-specific install steps, rerun with model and external evidence access."
+		} else {
+			result.Answer = "I need model access for a complete answer."
+		}
 		result.ReviewLines = append(result.ReviewLines, clarificationSuggestions()...)
 		result.Termination = "answered-locally"
 	default:
@@ -52,6 +56,9 @@ func clarificationSuggestions() []string {
 }
 
 func localExplain(workspace askretrieve.WorkspaceSummary, prompt string, target askintent.Target) (string, string) {
+	if isRepoBehaviorPrompt(prompt, target) {
+		return "Repository explanation", "This looks like a repo-behavior question. Without model help, the safest local explanation path is to inspect `internal/stepmeta/registry.go`, `internal/stepspec/*_meta.go`, and `internal/askdraft/draft.go`, then trace `CompileWithProgram`, `buildWorkflowTarget`, `buildStep`, and `resolveBindings`."
+	}
 	resolved := resolveExplainTarget(workspace, target, prompt)
 	if resolved.Path != "" {
 		if summary, answer := explainWorkspaceFile(workspace, resolved); strings.TrimSpace(answer) != "" {
@@ -73,6 +80,29 @@ func localExplain(workspace askretrieve.WorkspaceSummary, prompt string, target 
 		b.WriteString("Prompt interpreted as explain request for current workspace.\n")
 	}
 	return "Workspace explanation", strings.TrimSpace(b.String())
+}
+
+func isRepoBehaviorPrompt(prompt string, target askintent.Target) bool {
+	if strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(target.Path)), "internal/") {
+		return true
+	}
+	lower := strings.ToLower(strings.TrimSpace(prompt))
+	for _, token := range []string{"this repo", "repo behavior", "assembled", "assembly", "draft generation", "builder", "stepmeta", "stepspec", "askdraft", "internal/"} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func promptLooksInstallQuestion(prompt string) bool {
+	lower := strings.ToLower(strings.TrimSpace(prompt))
+	for _, token := range []string{"install ", " install", "setup", "set up", "configure", "rhel", "debian", "ubuntu", "air-gapped", "air gapped", "kubeadm"} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveExplainTarget(workspace askretrieve.WorkspaceSummary, target askintent.Target, prompt string) askintent.Target {

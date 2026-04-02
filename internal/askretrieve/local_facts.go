@@ -31,10 +31,7 @@ func localFactChunks(route askintent.Route, lowerPrompt string) []Chunk {
 	if chunk := localFactChunk(root, "local-facts-stepspec", "stepspec-facts", filepath.Join("internal", "stepspec"), buildStepspecSummary(root, lowerPrompt)); chunk != nil {
 		chunks = append(chunks, *chunk)
 	}
-	if chunk := localFactChunk(root, "local-facts-askdraft", "askdraft-compiler", filepath.Join("internal", "askdraft"), buildDirectorySummary(root, filepath.Join("internal", "askdraft"), []string{
-		"Local source-of-truth for draft builder selection compilation.",
-		"Draft generation selects builders first; code compiles workflow documents afterwards.",
-	})); chunk != nil {
+	if chunk := localFactChunk(root, "local-facts-askdraft", "askdraft-compiler", filepath.Join("internal", "askdraft", "draft.go"), buildAskdraftSummary(root)); chunk != nil {
 		chunks = append(chunks, *chunk)
 	}
 	if chunk := localFactChunk(root, "local-facts-askpolicy", "askpolicy-requirements", filepath.Join("internal", "askpolicy"), buildDirectorySummary(root, filepath.Join("internal", "askpolicy"), []string{
@@ -50,6 +47,45 @@ func localFactChunks(route askintent.Route, lowerPrompt string) []Chunk {
 		chunks = append(chunks, *chunk)
 	}
 	return chunks
+}
+
+func buildAskdraftSummary(root string) string {
+	path := filepath.Join(root, "internal", "askdraft", "draft.go")
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		return ""
+	}
+	functions := map[string]bool{}
+	ast.Inspect(file, func(node ast.Node) bool {
+		decl, ok := node.(*ast.FuncDecl)
+		if !ok || decl.Name == nil {
+			return true
+		}
+		functions[decl.Name.Name] = true
+		return true
+	})
+	b := &strings.Builder{}
+	b.WriteString("- file: internal/askdraft/draft.go\n")
+	b.WriteString("- role: draft builder selection compiler and workflow assembly path\n")
+	for _, item := range []struct {
+		name string
+		desc string
+	}{
+		{name: "CompileWithProgram", desc: "entrypoint that turns builder selection plus authoring program into generated documents"},
+		{name: "buildWorkflowTarget", desc: "assembles each workflow target from selected builders"},
+		{name: "buildStep", desc: "materializes a typed workflow step from builder metadata and bindings"},
+		{name: "resolveBindings", desc: "maps authoring program fields into builder binding values before step assembly"},
+	} {
+		if functions[item.name] {
+			b.WriteString("- function: ")
+			b.WriteString(item.name)
+			b.WriteString(" - ")
+			b.WriteString(item.desc)
+			b.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func localFactChunk(root string, id string, label string, path string, body string) *Chunk {

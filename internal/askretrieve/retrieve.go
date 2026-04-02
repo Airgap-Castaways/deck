@@ -146,6 +146,12 @@ func routeFactGroups(route askintent.Route, lowerPrompt string, target askintent
 	switch route {
 	case askintent.RouteDraft, askintent.RouteRefine:
 		groups = appendFactGroup(groups, workspaceGroup, localFacts, examples, externalGroup)
+	case askintent.RouteExplain:
+		if promptTargetsRepoBehavior(lowerPrompt, target) {
+			groups = appendFactGroup(groups, info, localFacts, externalGroup, workspaceGroup, stateGroup)
+		} else {
+			groups = appendFactGroup(groups, info, externalGroup, workspaceGroup, localFacts, stateGroup)
+		}
 	default:
 		groups = appendFactGroup(groups, info, externalGroup, workspaceGroup, localFacts, stateGroup)
 	}
@@ -239,10 +245,10 @@ func shouldIncludeLocalFacts(route askintent.Route, lowerPrompt string, target a
 	case askintent.RouteDraft, askintent.RouteRefine, askintent.RouteReview:
 		return true
 	case askintent.RouteExplain:
-		if strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(target.Path)), "internal/") {
+		if promptTargetsRepoBehavior(lowerPrompt, target) || strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(target.Path)), "internal/") {
 			return true
 		}
-		for _, token := range []string{"internal/", "stepspec", "stepmeta", "askdraft", "askpolicy", "askrepair", "typed step", "builder selection", "source-of-truth"} {
+		for _, token := range []string{"internal/", "stepspec", "stepmeta", "askdraft", "askpolicy", "askrepair", "typed step", "builder selection", "source-of-truth", "assembled", "assembly", "draft generation", "this repo", "repo behavior", "compilewithprogram", "buildworkflowtarget"} {
 			if strings.Contains(lowerPrompt, token) {
 				return true
 			}
@@ -255,11 +261,26 @@ func shouldIncludeWorkspaceFacts(route askintent.Route, lowerPrompt string, targ
 	if route == askintent.RouteDraft || route == askintent.RouteRefine {
 		return true
 	}
+	if route == askintent.RouteExplain && promptTargetsRepoBehavior(lowerPrompt, target) && !strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(target.Path)), "workflows/") {
+		return false
+	}
 	cleanTarget := filepath.ToSlash(strings.TrimSpace(target.Path))
 	if strings.HasPrefix(cleanTarget, "workflows/") {
 		return true
 	}
 	for _, token := range []string{"workflows/", "scenario", "component", "vars.yaml", "prepare.yaml", "apply.yaml"} {
+		if strings.Contains(lowerPrompt, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func promptTargetsRepoBehavior(lowerPrompt string, target askintent.Target) bool {
+	if strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(target.Path)), "internal/") {
+		return true
+	}
+	for _, token := range []string{"this repo", "repo behavior", "assembled", "assembly", "draft generation", "builder", "stepmeta", "stepspec", "askdraft", "internal/", "compilewithprogram", "buildworkflowtarget", "resolvebindings"} {
 		if strings.Contains(lowerPrompt, token) {
 			return true
 		}
