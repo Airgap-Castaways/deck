@@ -14,23 +14,28 @@ var (
 	repoEntityPattern            = regexp.MustCompile(`(?i)\b(?:github\.com|gitlab\.com|golang\.org)/[^\s)]+`)
 	tokenPattern                 = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+._/-]*`)
 	versionAttachedEntityPattern = regexp.MustCompile(`(?i)\b([A-Za-z][A-Za-z0-9+._/-]*)\s+v?\d+\.\d+(?:\.\d+)?\b`)
+	pathLikePattern              = regexp.MustCompile(`(?i)(?:\b[a-z0-9_.-]+/)+[a-z0-9_.-]+\b|\b[a-z0-9_.-]+\.ya?ml\b`)
+	installCuePattern            = regexp.MustCompile(`(?i)\b(?:install|setup|set up|bootstrap|upgrade|deploy)\b`)
+	compatibilityCuePattern      = regexp.MustCompile(`(?i)\b(?:compatible|compatibility|requirement|requirements|prerequisite|prerequisites)\b|supported on|support matrix`)
+	troubleshootingCuePattern    = regexp.MustCompile(`(?i)\b(?:troubleshoot|debug|failing|fails|error|issue|problem|crash)\b|not working|cannot|can't|unable`)
 )
 
 func BuildEvidencePlan(prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) askcontract.EvidencePlan {
 	trimmed := strings.TrimSpace(prompt)
 	lower := strings.ToLower(trimmed)
+	cuePrompt := cueRelevantPrompt(lower)
 	plan := askcontract.EvidencePlan{Decision: "unnecessary", Reason: "request does not require external documentation evidence"}
 	if trimmed == "" {
 		return plan
 	}
-	if looksLikeLocalDeckPrompt(lower, decision, workspace) && !mentionsExternalEvidenceNeed(lower) {
+	if looksLikeLocalDeckPrompt(lower, decision, workspace) && !mentionsExternalEvidenceNeed(cuePrompt) {
 		plan.Reason = "request is grounded in the local deck workspace"
 		return plan
 	}
-	plan.FreshnessSensitive = promptNeedsFreshnessEvidence(lower)
-	plan.InstallEvidence = promptNeedsInstallEvidence(lower)
-	plan.CompatibilityEvidence = promptNeedsCompatibilityEvidence(lower)
-	plan.TroubleshootingEvidence = promptNeedsTroubleshootingEvidence(lower)
+	plan.FreshnessSensitive = promptNeedsFreshnessEvidence(cuePrompt)
+	plan.InstallEvidence = promptNeedsInstallEvidence(cuePrompt)
+	plan.CompatibilityEvidence = promptNeedsCompatibilityEvidence(cuePrompt)
+	plan.TroubleshootingEvidence = promptNeedsTroubleshootingEvidence(cuePrompt)
 	plan.Entities = extractEvidenceEntities(trimmed)
 	if !plan.FreshnessSensitive && !plan.InstallEvidence && !plan.CompatibilityEvidence && !plan.TroubleshootingEvidence {
 		if len(plan.Entities) > 0 && !looksLikeLocalDeckPrompt(lower, decision, workspace) {
@@ -83,30 +88,15 @@ func promptNeedsFreshnessEvidence(lower string) bool {
 }
 
 func promptNeedsInstallEvidence(lower string) bool {
-	for _, token := range []string{"install", "setup", "set up", "bootstrap", "upgrade", "deploy"} {
-		if strings.Contains(lower, token) {
-			return true
-		}
-	}
-	return false
+	return installCuePattern.MatchString(lower)
 }
 
 func promptNeedsCompatibilityEvidence(lower string) bool {
-	for _, token := range []string{"compatible", "compatibility", "requirement", "requirements", "prerequisite", "prerequisites", "supported on", "support matrix"} {
-		if strings.Contains(lower, token) {
-			return true
-		}
-	}
-	return false
+	return compatibilityCuePattern.MatchString(lower)
 }
 
 func promptNeedsTroubleshootingEvidence(lower string) bool {
-	for _, token := range []string{"troubleshoot", "debug", "not working", "cannot", "can't", "unable", "failing", "fails", "error", "issue", "problem", "crash"} {
-		if strings.Contains(lower, token) {
-			return true
-		}
-	}
-	return false
+	return troubleshootingCuePattern.MatchString(lower)
 }
 
 func mentionsExternalEvidenceNeed(lower string) bool {
@@ -114,7 +104,14 @@ func mentionsExternalEvidenceNeed(lower string) bool {
 }
 
 func looksLikeLocalDeckPrompt(lower string, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) bool {
-	if strings.Contains(lower, "workflows/") || strings.Contains(lower, ".yaml") || strings.Contains(lower, "this workspace") || strings.Contains(lower, "current workspace") || strings.Contains(lower, "deck ask") {
+	if strings.Contains(lower, "workflows/") || strings.Contains(lower, "internal/") || strings.Contains(lower, "cmd/") || strings.Contains(lower, "docs/") || strings.Contains(lower, ".yaml") || strings.Contains(lower, "this workspace") || strings.Contains(lower, "current workspace") || strings.Contains(lower, "deck ask") {
+		return true
+	}
+	targetPath := strings.ToLower(strings.TrimSpace(decision.Target.Path))
+	if strings.HasPrefix(targetPath, "workflows/") || strings.HasPrefix(targetPath, "internal/") || strings.HasPrefix(targetPath, "cmd/") || strings.HasPrefix(targetPath, "docs/") {
+		return true
+	}
+	if decision.Route == askintent.RouteRefine {
 		return true
 	}
 	if decision.Route == askintent.RouteReview && !mentionsExternalEvidenceNeed(lower) {
@@ -124,6 +121,13 @@ func looksLikeLocalDeckPrompt(lower string, decision askintent.Decision, workspa
 		return true
 	}
 	return false
+}
+
+func cueRelevantPrompt(lower string) string {
+	cleaned := pathLikePattern.ReplaceAllString(lower, " ")
+	cleaned = strings.ReplaceAll(cleaned, "_", " ")
+	cleaned = strings.ReplaceAll(cleaned, "-", " ")
+	return cleaned
 }
 
 func extractEvidenceEntities(prompt string) []askcontract.EvidenceEntity {
@@ -232,7 +236,7 @@ func looksGenericEntityName(value string) bool {
 		return true
 	}
 	switch lower {
-	case "latest", "current", "version", "release", "requirements", "prerequisites", "install", "setup", "upgrade", "debug", "troubleshoot", "issue", "problem", "project", "application", "tool", "cluster", "workflow", "workspace", "ubuntu", "debian", "rhel", "rocky", "almalinux", "fedora", "linux", "macos", "windows":
+	case "latest", "current", "version", "release", "requirements", "prerequisites", "install", "setup", "upgrade", "debug", "troubleshoot", "issue", "problem", "project", "application", "tool", "cluster", "workflow", "workspace", "ubuntu", "debian", "rhel", "rocky", "almalinux", "fedora", "linux", "macos", "windows", "explain", "review", "refactor", "create":
 		return true
 	default:
 		return false
