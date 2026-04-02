@@ -197,7 +197,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 
 	progress.status("loading workspace context")
-	logger.debug("phase_started", "phase", "augment", "mcp", effective.MCP.Enabled, "lsp", effective.LSP.Enabled)
+	logger.debug("phase_started", "phase", "augment", "mcp", effective.MCP.Enabled)
 	for _, event := range result.AugmentEvents {
 		prefix := "augment"
 		if strings.HasPrefix(event, "mcp:") {

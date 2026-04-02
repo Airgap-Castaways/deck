@@ -16,6 +16,14 @@ var (
 	defaultCLIFormat = "text"
 )
 
+var reservedCLIAttrKeys = map[string]struct{}{
+	"ts":        {},
+	"level":     {},
+	"component": {},
+	"event":     {},
+	"message":   {},
+}
+
 type CLIEvent struct {
 	TS        time.Time
 	Level     string
@@ -134,6 +142,9 @@ func normalizeCLIAttrs(attrs map[string]any) map[string]any {
 	for key, value := range attrs {
 		trimmedKey := strings.TrimSpace(key)
 		if trimmedKey == "" || omitCLIAttrValue(value) {
+			continue
+		}
+		if _, reserved := reservedCLIAttrKeys[trimmedKey]; reserved {
 			continue
 		}
 		normalized[trimmedKey] = normalizeCLIAttrValue(value)

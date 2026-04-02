@@ -137,7 +137,7 @@ func planWithLLM(ctx context.Context, client askprovider.Client, cfg askconfigSe
 		}
 		planned = askpolicy.NormalizePlan(partial, prompt, retrieval, workspace, decision)
 		if validateErr := askpolicy.ValidatePlanStructure(planned); validateErr == nil {
-			logger.logf("debug", "[ask][phase:plan:recover] error=%v\n", err)
+			logger.debug("phase_recovered", "phase", "plan", "error", err)
 			return planned, nil
 		}
 		return askcontract.PlanResponse{}, err

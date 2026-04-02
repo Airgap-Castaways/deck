@@ -179,7 +179,11 @@ func (l askLogger) writePayloadArtifact(event string, label string, stream strin
 	if event == "prompt" {
 		kindDir = "prompts"
 	}
-	absPath := filepath.Join(l.state.runDir, kindDir, fileName)
+	kindPath := filepath.Join(l.state.runDir, kindDir)
+	if err := filemode.EnsureDir(kindPath, filemode.PrivateState); err != nil {
+		return ""
+	}
+	absPath := filepath.Join(kindPath, fileName)
 	if err := filemode.WriteFile(absPath, []byte(content+"\n"), filemode.PrivateState); err != nil {
 		return ""
 	}

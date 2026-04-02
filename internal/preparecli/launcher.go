@@ -13,7 +13,8 @@ log_error() {
 	shift
 	printf 'level=%s component=%s event=%s' "$level" "$component" "$event" >&2
 	while [ "$#" -gt 1 ]; do
-		printf ' %s=%s' "$1" "$2" >&2
+		escaped_value=$(printf '%s' "$2" | sed 's/["\\]/\\&/g')
+		printf ' %s="%s"' "$1" "$escaped_value" >&2
 		shift 2
 	done
 	printf '\n' >&2

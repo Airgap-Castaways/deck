@@ -37,6 +37,15 @@ const (
 	defaultAuditMaxFiles  = 10
 )
 
+var reservedAuditKeys = map[string]struct{}{
+	"ts":             {},
+	"schema_version": {},
+	"component":      {},
+	"event":          {},
+	"level":          {},
+	"message":        {},
+}
+
 type statusRecorder struct {
 	http.ResponseWriter
 	status      int
@@ -142,6 +151,9 @@ func addExtra(entry map[string]any, extra map[string]any) {
 		return
 	}
 	for key, value := range extra {
+		if _, reserved := reservedAuditKeys[key]; reserved {
+			continue
+		}
 		entry[key] = value
 	}
 }

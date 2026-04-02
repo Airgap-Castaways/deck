@@ -9,6 +9,7 @@ func TestRenderLauncherScriptUsesStructuredErrors(t *testing.T) {
 	script := renderLauncherScript()
 	for _, want := range []string{
 		`component="launcher"`,
+		`printf ' %s="%s"' "$1" "$escaped_value" >&2`,
 		`log_error unsupported_os os "$os_name"`,
 		`log_error unsupported_arch architecture "$arch_name"`,
 		`log_error runtime_binary_not_executable path "outputs/bin/$deck_os/$deck_arch/deck"`,
