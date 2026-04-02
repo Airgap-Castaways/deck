@@ -67,6 +67,14 @@ func TestRetrieveIncludesLocalRepoGroundingChunks(t *testing.T) {
 			if !strings.Contains(chunk.Content, "Local repo grounding:") {
 				t.Fatalf("expected repo grounding prefix, got %q", chunk.Content)
 			}
+			if chunk.ID == "repo-grounding-stepspec" {
+				if chunk.Label != "stepspec-facts" {
+					t.Fatalf("expected fact-oriented stepspec label, got %#v", chunk)
+				}
+				if strings.Contains(chunk.Content, "candidate step kind") {
+					t.Fatalf("expected stepspec chunk to avoid ranking language, got %q", chunk.Content)
+				}
+			}
 		}
 	}
 	if !found {

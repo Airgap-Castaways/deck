@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
@@ -27,7 +28,7 @@ func repoGroundingChunks(route askintent.Route, lowerPrompt string) []Chunk {
 	if chunk := repoGroundingChunk(root, "repo-grounding-stepmeta", "source-of-truth-stepmeta", filepath.Join("internal", "stepmeta", "registry.go"), buildStepmetaSummary(root)); chunk != nil {
 		chunks = append(chunks, *chunk)
 	}
-	if chunk := repoGroundingChunk(root, "repo-grounding-stepspec", "typed-step-builders", filepath.Join("internal", "stepspec"), buildStepspecSummary(root, lowerPrompt)); chunk != nil {
+	if chunk := repoGroundingChunk(root, "repo-grounding-stepspec", "stepspec-facts", filepath.Join("internal", "stepspec"), buildStepspecSummary(root, lowerPrompt)); chunk != nil {
 		chunks = append(chunks, *chunk)
 	}
 	if chunk := repoGroundingChunk(root, "repo-grounding-askdraft", "askdraft-compiler", filepath.Join("internal", "askdraft"), buildDirectorySummary(root, filepath.Join("internal", "askdraft"), []string{
@@ -85,59 +86,172 @@ func buildStepspecSummary(root string, lowerPrompt string) string {
 	if err != nil {
 		return ""
 	}
-	type item struct {
-		kind    string
-		builder string
-		score   int
+	facts := collectStepspecFacts(metadata)
+	if len(facts) == 0 {
+		return ""
 	}
-	items := make([]item, 0)
-	for _, entry := range metadata.entries {
-		score := 0
-		for _, token := range strings.Fields(lowerPrompt) {
-			if token != "" && strings.Contains(entry.lowerText, token) {
-				score++
-			}
-		}
-		if len(entry.builders) == 0 {
-			items = append(items, item{kind: entry.kind, score: score})
-			continue
-		}
-		for _, builder := range entry.builders {
-			items = append(items, item{kind: entry.kind, builder: builder, score: score})
-		}
-	}
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].score == items[j].score {
-			if items[i].kind == items[j].kind {
-				return items[i].builder < items[j].builder
-			}
-			return items[i].kind < items[j].kind
-		}
-		return items[i].score > items[j].score
-	})
-	if len(items) > 5 {
-		items = items[:5]
-	}
+	matched := requestedStepspecFacts(facts, lowerPrompt)
+	kindCount, builderCount := stepspecFactCounts(facts)
 	b := &strings.Builder{}
 	b.WriteString("- directory: internal/stepspec/*_meta.go\n")
 	b.WriteString("- role: typed step metadata and builder source-of-truth used by ask draft/refine compilation\n")
-	for _, item := range items {
-		if item.kind == "" && item.builder == "" {
-			continue
+	_, _ = fmt.Fprintf(b, "- observed typed step kinds: %d\n", kindCount)
+	_, _ = fmt.Fprintf(b, "- observed ask builders: %d\n", builderCount)
+	if len(matched) == 0 {
+		for _, fact := range sampleStepspecFacts(facts, 5) {
+			appendStepspecFactLine(b, "observed step fact", fact)
 		}
-		b.WriteString("- candidate step kind: ")
-		if item.kind != "" {
-			b.WriteString(item.kind)
-		} else {
-			b.WriteString("unknown")
-		}
-		if item.builder != "" {
-			b.WriteString(" builder=")
-			b.WriteString(item.builder)
-		}
-		b.WriteString("\n")
+		return strings.TrimSpace(b.String())
+	}
+	for _, fact := range matched {
+		appendStepspecFactLine(b, "step fact", fact)
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func collectStepspecFacts(metadata stepspecMetadata) []stepspecFact {
+	type item struct {
+		kind    string
+		builder string
+	}
+	items := make([]item, 0)
+	for _, entry := range metadata.entries {
+		if len(entry.builders) == 0 {
+			items = append(items, item{kind: entry.kind})
+			continue
+		}
+		for _, builder := range entry.builders {
+			items = append(items, item{kind: entry.kind, builder: builder})
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].kind == items[j].kind {
+			return items[i].builder < items[j].builder
+		}
+		return items[i].kind < items[j].kind
+	})
+	facts := make([]stepspecFact, 0, len(items))
+	for _, item := range items {
+		facts = append(facts, newStepspecFact(item.kind, item.builder))
+	}
+	return facts
+}
+
+type stepspecFact struct {
+	kind        string
+	builder     string
+	normKind    string
+	normBuilder string
+}
+
+func newStepspecFact(kind string, builder string) stepspecFact {
+	kind = strings.TrimSpace(kind)
+	builder = strings.TrimSpace(builder)
+	return stepspecFact{
+		kind:        kind,
+		builder:     builder,
+		normKind:    normalizeFactTerm(kind),
+		normBuilder: normalizeFactTerm(builder),
+	}
+}
+
+func requestedStepspecFacts(facts []stepspecFact, lowerPrompt string) []stepspecFact {
+	promptTerms := promptFactTerms(lowerPrompt)
+	if len(promptTerms) == 0 {
+		return nil
+	}
+	matches := make([]stepspecFact, 0)
+	for _, fact := range facts {
+		if fact.normKind != "" && promptTerms[fact.normKind] {
+			matches = append(matches, fact)
+			continue
+		}
+		if fact.normBuilder != "" && promptTerms[fact.normBuilder] {
+			matches = append(matches, fact)
+		}
+	}
+	if len(matches) == 0 {
+		return nil
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].kind == matches[j].kind {
+			return matches[i].builder < matches[j].builder
+		}
+		return matches[i].kind < matches[j].kind
+	})
+	return matches
+}
+
+func sampleStepspecFacts(facts []stepspecFact, limit int) []stepspecFact {
+	if len(facts) == 0 || limit <= 0 {
+		return nil
+	}
+	sorted := append([]stepspecFact(nil), facts...)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].kind == sorted[j].kind {
+			return sorted[i].builder < sorted[j].builder
+		}
+		return sorted[i].kind < sorted[j].kind
+	})
+	if len(sorted) > limit {
+		sorted = sorted[:limit]
+	}
+	return sorted
+}
+
+func appendStepspecFactLine(b *strings.Builder, prefix string, fact stepspecFact) {
+	b.WriteString("- ")
+	b.WriteString(prefix)
+	b.WriteString(": ")
+	if fact.kind != "" {
+		b.WriteString(fact.kind)
+	} else {
+		b.WriteString("unknown")
+	}
+	if fact.builder != "" {
+		b.WriteString(" builders=")
+		b.WriteString(fact.builder)
+	}
+	b.WriteString("\n")
+}
+
+func stepspecFactCounts(facts []stepspecFact) (int, int) {
+	kinds := map[string]bool{}
+	builders := map[string]bool{}
+	for _, fact := range facts {
+		if fact.kind != "" {
+			kinds[fact.kind] = true
+		}
+		if fact.builder != "" {
+			builders[fact.builder] = true
+		}
+	}
+	return len(kinds), len(builders)
+}
+
+func promptFactTerms(prompt string) map[string]bool {
+	terms := map[string]bool{}
+	for _, raw := range strings.Fields(prompt) {
+		normalized := normalizeFactTerm(raw)
+		if normalized == "" {
+			continue
+		}
+		terms[normalized] = true
+	}
+	return terms
+}
+
+func normalizeFactTerm(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	b := strings.Builder{}
+	for _, r := range strings.ToLower(value) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 type stepspecMetadata struct {
