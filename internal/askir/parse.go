@@ -21,6 +21,7 @@ func ParseDocument(path string, raw []byte) (askcontract.GeneratedDocument, erro
 		if err := yaml.Unmarshal(raw, &vars); err != nil {
 			return askcontract.GeneratedDocument{}, fmt.Errorf("parse vars document %s: %w", clean, err)
 		}
+		vars = unwrapVarsDocument(vars)
 		return askcontract.GeneratedDocument{Path: clean, Kind: "vars", Vars: vars}, nil
 	}
 	if workspacepaths.IsComponentWorkflowPath(clean) {

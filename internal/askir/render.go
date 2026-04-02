@@ -2,6 +2,7 @@ package askir
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -51,20 +52,124 @@ func renderDocument(path string, doc askcontract.GeneratedDocument) (string, err
 		if doc.Workflow == nil {
 			return "", fmt.Errorf("document %s is missing workflow content", path)
 		}
+		doc.Workflow = normalizeWorkflowDocument(doc.Workflow)
 		return renderYAML(workflowFromIR(*doc.Workflow))
 	case "component":
 		if doc.Component == nil {
 			return "", fmt.Errorf("document %s is missing component content", path)
 		}
+		doc.Component = normalizeComponentDocument(doc.Component)
 		return renderYAML(componentFromIR(*doc.Component))
 	case "vars":
 		if doc.Vars == nil {
 			return "", fmt.Errorf("document %s is missing vars content", path)
 		}
-		return renderYAML(doc.Vars)
+		return renderYAML(unwrapVarsDocument(normalizeMapValues(doc.Vars)))
 	default:
 		return "", fmt.Errorf("document %s uses unsupported kind %q", path, doc.Kind)
 	}
+}
+
+var templateAliasRE = regexp.MustCompile(`\$?\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}`)
+
+func normalizeWorkflowDocument(doc *askcontract.WorkflowDocument) *askcontract.WorkflowDocument {
+	if doc == nil {
+		return nil
+	}
+	copyDoc := *doc
+	copyDoc.Vars = unwrapVarsDocument(normalizeMapValues(doc.Vars))
+	copyDoc.Phases = make([]askcontract.WorkflowPhase, 0, len(doc.Phases))
+	for _, phase := range doc.Phases {
+		phaseCopy := phase
+		phaseCopy.Steps = normalizeSteps(phase.Steps)
+		copyDoc.Phases = append(copyDoc.Phases, phaseCopy)
+	}
+	copyDoc.Steps = normalizeSteps(doc.Steps)
+	return &copyDoc
+}
+
+func normalizeComponentDocument(doc *askcontract.ComponentDocument) *askcontract.ComponentDocument {
+	if doc == nil {
+		return nil
+	}
+	copyDoc := *doc
+	copyDoc.Steps = normalizeSteps(doc.Steps)
+	return &copyDoc
+}
+
+func normalizeSteps(items []askcontract.WorkflowStep) []askcontract.WorkflowStep {
+	out := make([]askcontract.WorkflowStep, 0, len(items))
+	for _, item := range items {
+		step := item
+		step.When = normalizeTemplateAliases(step.When)
+		step.Timeout = normalizeTemplateAliases(step.Timeout)
+		step.Metadata = normalizeMapValues(step.Metadata)
+		step.Spec = normalizeMapValues(step.Spec)
+		out = append(out, step)
+	}
+	return out
+}
+
+func normalizeMapValues(values map[string]any) map[string]any {
+	if len(values) == 0 {
+		return values
+	}
+	out := map[string]any{}
+	for key, value := range values {
+		out[key] = normalizeValue(value)
+	}
+	return out
+}
+
+func normalizeSliceValues(values []any) []any {
+	out := make([]any, 0, len(values))
+	for _, value := range values {
+		out = append(out, normalizeValue(value))
+	}
+	return out
+}
+
+func normalizeValue(value any) any {
+	switch typed := value.(type) {
+	case string:
+		return normalizeTemplateAliases(typed)
+	case map[string]any:
+		return normalizeMapValues(typed)
+	case []any:
+		return normalizeSliceValues(typed)
+	default:
+		return value
+	}
+}
+
+func unwrapVarsDocument(values map[string]any) map[string]any {
+	if len(values) != 1 {
+		return values
+	}
+	nested, ok := values["vars"].(map[string]any)
+	if !ok {
+		return values
+	}
+	return normalizeMapValues(nested)
+}
+
+func normalizeTemplateAliases(input string) string {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return ""
+	}
+	return templateAliasRE.ReplaceAllStringFunc(input, func(match string) string {
+		parts := templateAliasRE.FindStringSubmatch(match)
+		if len(parts) != 2 {
+			return match
+		}
+		expr := strings.TrimSpace(parts[1])
+		expr = strings.TrimPrefix(expr, ".")
+		if strings.HasPrefix(expr, "vars.") || strings.HasPrefix(expr, "runtime.") {
+			return "{{ ." + expr + " }}"
+		}
+		return match
+	})
 }
 
 func workflowFromIR(doc askcontract.WorkflowDocument) workflowRender {
@@ -133,5 +238,53 @@ func normalizeRenderedContent(raw []byte) string {
 	if trimmed == "" {
 		return ""
 	}
-	return trimmed + "\n"
+	return quoteWholeValueTemplates(trimmed) + "\n"
+}
+
+func quoteWholeValueTemplates(content string) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		lines[i] = quoteWholeValueTemplateLine(line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func quoteWholeValueTemplateLine(line string) string {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || strings.Contains(trimmed, `"{{`) || strings.Contains(trimmed, `'{{`) {
+		return line
+	}
+	if idx := strings.Index(line, ":"); idx >= 0 {
+		prefix := line[:idx+1]
+		rhs := strings.TrimSpace(line[idx+1:])
+		if expr, ok := wholeValueTemplate(rhs); ok {
+			return prefix + ` "` + expr + `"`
+		}
+	}
+	if strings.HasPrefix(trimmed, "- ") {
+		idx := strings.Index(line, "-")
+		if idx < 0 {
+			return line
+		}
+		indent := line[:idx]
+		rhs := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+		if expr, ok := wholeValueTemplate(rhs); ok {
+			return indent + `- "` + expr + `"`
+		}
+	}
+	return line
+}
+
+func wholeValueTemplate(value string) (string, bool) {
+	normalized := normalizeTemplateAliases(strings.TrimSpace(value))
+	if normalized == "" {
+		return "", false
+	}
+	if normalized != value {
+		value = normalized
+	}
+	if strings.HasPrefix(value, "{{ .") && strings.HasSuffix(value, " }}") {
+		return value, true
+	}
+	return "", false
 }

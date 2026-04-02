@@ -162,6 +162,7 @@ func collectFields(root, node map[string]any, prefix string, inherited Requireme
 			Required:    directReq[key],
 			Requirement: requirement,
 			Default:     valueString(child["default"]),
+			Pattern:     stringValue(child["pattern"]),
 			Enum:        toStrings(child["enum"]),
 			Description: stringValue(child["description"]),
 			Example:     inferExample(root, child),

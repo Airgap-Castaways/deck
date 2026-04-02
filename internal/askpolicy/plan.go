@@ -365,6 +365,12 @@ func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askco
 	if strings.TrimSpace(program.Cluster.PodCIDR) == "" {
 		program.Cluster.PodCIDR = "10.244.0.0/16"
 	}
+	if strings.TrimSpace(program.Cluster.KubernetesVersion) == "" {
+		program.Cluster.KubernetesVersion = inferKubernetesVersion(prompt)
+	}
+	if strings.TrimSpace(program.Cluster.CriSocket) == "" && hasBriefCapability(brief, "kubeadm-bootstrap") {
+		program.Cluster.CriSocket = "unix:///run/containerd/containerd.sock"
+	}
 	program.Cluster.RoleSelector = normalizeRoleSelector(firstNonEmpty(strings.TrimSpace(program.Cluster.RoleSelector), strings.TrimSpace(execution.RoleExecution.RoleSelector)))
 	if !briefNeedsRoleSelector(brief) {
 		program.Cluster.RoleSelector = ""
@@ -463,6 +469,27 @@ func inferPlatformFromPrompt(prompt string) (string, string) {
 		}
 	}
 	return "", ""
+}
+
+func inferKubernetesVersion(prompt string) string {
+	lower := strings.ToLower(strings.TrimSpace(prompt))
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`kubernetes\s*v?([0-9]+(?:\.[0-9]+){1,2})`),
+		regexp.MustCompile(`k8s\s*v?([0-9]+(?:\.[0-9]+){1,2})`),
+		regexp.MustCompile(`\bv([0-9]+(?:\.[0-9]+){1,2})\b`),
+	}
+	for _, pattern := range patterns {
+		matches := pattern.FindStringSubmatch(lower)
+		if len(matches) != 2 {
+			continue
+		}
+		version := strings.TrimSpace(matches[1])
+		if version == "" {
+			continue
+		}
+		return "v" + strings.TrimPrefix(version, "v")
+	}
+	return ""
 }
 
 func defaultRepoType(family string) string {

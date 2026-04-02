@@ -120,6 +120,7 @@ func projectFields(facts schemafacts.DocumentFacts, toolMeta schemadoc.ToolMetad
 			Type:        strings.TrimSpace(fact.Type),
 			Requirement: fact.Requirement,
 			Default:     strings.TrimSpace(fact.Default),
+			Pattern:     strings.TrimSpace(fact.Pattern),
 			Enum:        append([]string(nil), fact.Enum...),
 			Description: strings.TrimSpace(fact.Description),
 			Example:     strings.TrimSpace(fact.Example),

@@ -14,6 +14,7 @@ type FieldFact struct {
 	Required    bool
 	Requirement RequirementLevel
 	Default     string
+	Pattern     string
 	Enum        []string
 	Description string
 	Example     string

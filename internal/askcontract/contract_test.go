@@ -189,6 +189,19 @@ func TestParsePlanRejectsDescriptiveEntryScenario(t *testing.T) {
 	}
 }
 
+func TestParsePlanPartialKeepsUsefulFieldsWhenEntryScenarioIsDescriptive(t *testing.T) {
+	resp, err := ParsePlanPartial(`{"version":1,"request":"create workflow","intent":"draft","authoringProgram":{"artifacts":{"packages":["kubeadm"],"images":["registry.k8s.io/kube-apiserver:v1.30.0"]}},"entryScenario":"the apply scenario for this workspace","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`)
+	if err != nil {
+		t.Fatalf("expected partial parse to succeed, got %v", err)
+	}
+	if len(resp.AuthoringProgram.Artifacts.Packages) != 1 || len(resp.AuthoringProgram.Artifacts.Images) != 1 {
+		t.Fatalf("expected authoring program artifacts to survive partial parse, got %#v", resp.AuthoringProgram)
+	}
+	if resp.EntryScenario != "the apply scenario for this workspace" {
+		t.Fatalf("expected descriptive entry scenario to remain for later normalization, got %#v", resp.EntryScenario)
+	}
+}
+
 func TestParsePlanResolvesShortEntryScenarioToPlannedPath(t *testing.T) {
 	resp, err := ParsePlan(`{"version":1,"request":"refine workflow","intent":"refine","complexity":"simple","blockers":[],"targetOutcome":"refine files","assumptions":[],"openQuestions":[],"entryScenario":"apply","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"update","purpose":"entry"},{"path":"workflows/vars.yaml","kind":"vars","action":"create","purpose":"vars"}],"validationChecklist":["lint"]}`)
 	if err != nil {
@@ -204,8 +217,19 @@ func TestParseGenerationNormalizesRawFieldPathFromPathKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse generation: %v", err)
 	}
-	if got := resp.Documents[0].Transforms[0].RawPath; got != "vars.joinFilePath" {
+	if got := resp.Documents[0].Transforms[0].RawPath; got != "joinFilePath" {
 		t.Fatalf("expected path key to normalize into rawPath, got %#v", resp.Documents[0].Transforms[0])
+	}
+}
+
+func TestParseGenerationNormalizesExtractVarVarsPathAliasIntoVarName(t *testing.T) {
+	resp, err := ParseGeneration(`{"summary":"vars transform","review":[],"documents":[{"path":"workflows/scenarios/apply.yaml","action":"edit","transforms":[{"type":"extract-var","candidate":"extract-var|workflows/scenarios/apply.yaml|steps[0].spec.kubernetesVersion","varsPath":"kubernetesVersion"}]}]}`)
+	if err != nil {
+		t.Fatalf("parse generation: %v", err)
+	}
+	transform := resp.Documents[0].Transforms[0]
+	if transform.VarName != "kubernetesVersion" || transform.VarsPath != "" {
+		t.Fatalf("expected extract-var varsPath alias to normalize into varName, got %#v", transform)
 	}
 }
 
