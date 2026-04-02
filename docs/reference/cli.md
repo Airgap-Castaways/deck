@@ -153,7 +153,7 @@ Prepare runtime binary notes:
 - `--bundle-binary-source=local` reads from the current executable or from `--bundle-binary-dir`
 - `--bundle-binary-source=local` without `--bundle-binary-dir` cannot satisfy the default all-platform set, so use `--bundle-binary-dir`, `--bundle-binary-source=release`, or an explicit `--bundle-binary` list
 - `--bundle-binary-source=release` downloads matching GitHub Release archives and extracts `deck`
-- `auto` defaults to `release` for tagged builds and `local` for `dev` builds
+- `auto` defaults to `release` for the default all-platform bundle, and keeps using `local` for dev builds when you provide `--bundle-binary-dir` or an explicit `--bundle-binary` list
 
 Optional site-local helper example:
 

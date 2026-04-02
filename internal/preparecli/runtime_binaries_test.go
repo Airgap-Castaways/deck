@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/Airgap-Castaways/deck/internal/buildinfo"
 )
 
 func TestRunStagesLocalRuntimeBinariesFromDirectory(t *testing.T) {
@@ -196,6 +198,34 @@ func TestResolveBinaryTargetsRejectsEmptyAfterExclude(t *testing.T) {
 	_, err := resolveBinaryTargets(Options{Binaries: []string{"linux/amd64"}, BinaryExcludes: []string{"linux/amd64"}}, binarySourceRelease, defaultRuntimeBinaryDeps())
 	if err == nil || !strings.Contains(err.Error(), "no runtime binaries selected") {
 		t.Fatalf("expected empty-target error, got %v", err)
+	}
+}
+
+func TestResolveBinarySourceAutoUsesReleaseForImplicitAllTargetsOnDev(t *testing.T) {
+	oldVersion := buildinfo.Version
+	buildinfo.Version = "dev"
+	t.Cleanup(func() { buildinfo.Version = oldVersion })
+
+	source, err := resolveBinarySource(Options{}, defaultRuntimeBinaryDeps())
+	if err != nil {
+		t.Fatalf("resolve binary source: %v", err)
+	}
+	if source != binarySourceRelease {
+		t.Fatalf("unexpected source: got %q want %q", source, binarySourceRelease)
+	}
+}
+
+func TestResolveBinarySourceAutoKeepsLocalWhenTargetsAreExplicitOnDev(t *testing.T) {
+	oldVersion := buildinfo.Version
+	buildinfo.Version = "dev"
+	t.Cleanup(func() { buildinfo.Version = oldVersion })
+
+	source, err := resolveBinarySource(Options{Binaries: []string{"linux/amd64"}}, defaultRuntimeBinaryDeps())
+	if err != nil {
+		t.Fatalf("resolve binary source: %v", err)
+	}
+	if source != binarySourceLocal {
+		t.Fatalf("unexpected source: got %q want %q", source, binarySourceLocal)
 	}
 }
 

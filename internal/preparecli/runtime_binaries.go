@@ -117,7 +117,10 @@ func resolveBinarySource(opts Options, deps runtimeBinaryDeps) (string, error) {
 	switch requested {
 	case binarySourceAuto:
 		if buildinfo.Current().Version == "dev" {
-			return binarySourceLocal, nil
+			if strings.TrimSpace(opts.BinaryDir) != "" || len(opts.Binaries) > 0 {
+				return binarySourceLocal, nil
+			}
+			return binarySourceRelease, nil
 		}
 		return binarySourceRelease, nil
 	case binarySourceLocal, binarySourceRelease:
