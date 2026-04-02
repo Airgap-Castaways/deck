@@ -205,8 +205,22 @@ func TestNormalizePlanAddsBlockingClarificationsForAmbiguousClusterRequests(t *t
 	if len(plan.Clarifications) == 0 {
 		t.Fatalf("expected clarifications, got %#v", plan)
 	}
-	if len(plan.Blockers) == 0 {
-		t.Fatalf("expected blockers derived from clarifications, got %#v", plan)
+	if len(plan.Blockers) != 0 {
+		t.Fatalf("expected clarifications to stay separate from blockers, got %#v", plan)
+	}
+}
+
+func TestNormalizePlanKeepsExplicitBlockersButDoesNotMirrorClarifications(t *testing.T) {
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request:             "create air-gapped kubeadm cluster workflow",
+		Intent:              "draft",
+		Files:               []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}},
+		TargetOutcome:       "generate files",
+		ValidationChecklist: []string{"lint"},
+		Blockers:            []string{"unsupported authoring coverage"},
+	}, "create air-gapped kubeadm cluster workflow", askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
+	if len(plan.Blockers) != 1 || plan.Blockers[0] != "unsupported authoring coverage" {
+		t.Fatalf("expected explicit blocker to remain, got %#v", plan.Blockers)
 	}
 }
 

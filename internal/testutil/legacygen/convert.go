@@ -11,7 +11,7 @@ import (
 
 func MaybeConvert(kind string, raw string) string {
 	switch strings.TrimSpace(kind) {
-	case "generate", "generate-fast", "postprocess-edit", "postprocess-structural":
+	case "generate", "generate-fast", "postprocess-edit":
 		return ToDocuments(raw)
 	default:
 		return raw

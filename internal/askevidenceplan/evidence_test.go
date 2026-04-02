@@ -1,4 +1,4 @@
-package askpolicy
+package askevidenceplan
 
 import (
 	"testing"
@@ -24,6 +24,23 @@ func TestBuildEvidencePlanTreatsWorkspaceReviewAsUnnecessary(t *testing.T) {
 	}
 	if len(plan.Entities) != 0 {
 		t.Fatalf("expected no external entities, got %#v", plan.Entities)
+	}
+}
+
+func TestBuildEvidencePlanTreatsRefineBootstrapPathAsLocal(t *testing.T) {
+	plan := BuildEvidencePlan("Refactor workflows/scenarios/control-plane-bootstrap.yaml to use workflows/vars.yaml for repeated values", askretrieve.WorkspaceSummary{HasWorkflowTree: true}, askintent.Decision{Route: askintent.RouteRefine, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/control-plane-bootstrap.yaml"}})
+	if plan.Decision != "unnecessary" {
+		t.Fatalf("expected local refine prompt to avoid external docs, got %#v", plan)
+	}
+	if len(plan.Entities) != 0 {
+		t.Fatalf("expected no external entities for local refine prompt, got %#v", plan.Entities)
+	}
+}
+
+func TestBuildEvidencePlanTreatsInternalStepspecExplainAsLocal(t *testing.T) {
+	plan := BuildEvidencePlan("Explain the typed step builders defined in internal/stepspec for DownloadPackage, InstallPackage, InitKubeadm, and JoinKubeadm.", askretrieve.WorkspaceSummary{HasWorkflowTree: true}, askintent.Decision{Route: askintent.RouteExplain, Target: askintent.Target{Kind: "component", Path: "internal/stepspec"}})
+	if plan.Decision != "unnecessary" {
+		t.Fatalf("expected internal code explain prompt to avoid external docs, got %#v", plan)
 	}
 }
 

@@ -24,7 +24,7 @@ const (
 	TopicStepQuality          Topic = "step-quality-rules"
 	TopicCLIHints             Topic = "cli-hints"
 	TopicProjectPhilosophy    Topic = "project-philosophy"
-	TopicRepoGrounding        Topic = "repo-grounding"
+	TopicLocalFacts           Topic = "local-facts"
 	TopicExternalEvidence     Topic = "external-evidence"
 )
 

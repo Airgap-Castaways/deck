@@ -37,7 +37,7 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 		plan.ComponentRecommendation = append([]string(nil), req.ComponentAdvisories...)
 	}
 	plan.Clarifications = normalizeClarifications(plan.Clarifications, req, prompt, decision, workspace)
-	plan.Blockers, plan.OpenQuestions = clarificationLines(plan.Clarifications, plan.Blockers, plan.OpenQuestions)
+	plan.Blockers, plan.OpenQuestions = NormalizePlanNotes(plan.Blockers, plan.OpenQuestions, plan.Clarifications)
 	plan = applyClarificationAnswers(plan)
 	plan = normalizeRefineScope(plan, prompt, workspace, decision)
 	plan.AuthoringProgram = normalizeAuthoringProgram(plan.AuthoringProgram, plan.AuthoringBrief, plan.ExecutionModel, prompt)
@@ -115,42 +115,6 @@ func sortClarifications(items []askcontract.PlanClarification) []askcontract.Pla
 	out := append([]askcontract.PlanClarification(nil), items...)
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
-}
-
-func clarificationLines(items []askcontract.PlanClarification, existingBlockers []string, existingQuestions []string) ([]string, []string) {
-	clarificationText := map[string]bool{}
-	for _, item := range items {
-		if text := strings.TrimSpace(item.Question); text != "" {
-			clarificationText[text] = true
-		}
-	}
-	blockers := []string{}
-	for _, item := range existingBlockers {
-		text := strings.TrimSpace(item)
-		if text == "" || clarificationText[text] {
-			continue
-		}
-		blockers = append(blockers, text)
-	}
-	questions := []string{}
-	for _, item := range existingQuestions {
-		text := strings.TrimSpace(item)
-		if text == "" || clarificationText[text] {
-			continue
-		}
-		questions = append(questions, text)
-	}
-	for _, item := range items {
-		if strings.TrimSpace(item.Question) == "" || strings.TrimSpace(item.Answer) != "" {
-			continue
-		}
-		if item.BlocksGeneration {
-			blockers = append(blockers, item.Question)
-		} else {
-			questions = append(questions, item.Question)
-		}
-	}
-	return dedupeStrings(blockers), dedupeStrings(questions)
 }
 
 func applyClarificationAnswers(plan askcontract.PlanResponse) askcontract.PlanResponse {

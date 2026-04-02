@@ -167,7 +167,7 @@ func askRequestTimeout(kind string, maxIterations int, systemPrompt string, prom
 		base = 180 * time.Second
 	case "judge":
 		base = 90 * time.Second
-	case "postprocess-critic", "postprocess-edit", "postprocess-structural":
+	case "postprocess-critic", "postprocess-edit":
 		base = 120 * time.Second
 	}
 	if maxIterations > 1 {
@@ -180,7 +180,7 @@ func askRequestTimeout(kind string, maxIterations int, systemPrompt string, prom
 
 func providerRetryCount(kind string) int {
 	switch strings.TrimSpace(kind) {
-	case "generate", "generate-fast", "plan", "plan-critic", "judge", "postprocess-critic", "postprocess-edit", "postprocess-structural", "classify":
+	case "generate", "generate-fast", "plan", "plan-critic", "judge", "postprocess-critic", "postprocess-edit", "classify":
 		return 2
 	default:
 		return 1

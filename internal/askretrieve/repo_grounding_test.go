@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestBuildStepspecSummaryParsesInlineAndHelperDefinitions(t *testing.T) {
+func TestBuildStepspecSummaryParsesInlineAndHelperDefinitionsAsFacts(t *testing.T) {
 	root := t.TempDir()
 	stepspecDir := filepath.Join(root, "internal", "stepspec")
 	if err := os.MkdirAll(stepspecDir, 0o755); err != nil {
@@ -40,19 +40,20 @@ func helperDefinition() stepmeta.Definition {
 		t.Fatalf("write sample meta: %v", err)
 	}
 
-	summary := buildStepspecSummary(root, "helper apply")
+	summary := buildStepspecSummary(root, strings.ToLower("Explain HelperKind InlineKind apply.helper"))
 	for _, want := range []string{
-		"- directory: internal/stepspec/*_meta.go",
-		"- candidate step kind: HelperKind builder=apply.helper",
-		"- candidate step kind: HelperKind builder=prepare.helper",
-		"- candidate step kind: InlineKind builder=apply.inline",
+		"- observed typed step kinds: 2",
+		"- observed ask builders: 3",
+		"- step fact: HelperKind builders=apply.helper",
+		"- step fact: HelperKind builders=prepare.helper",
+		"- step fact: InlineKind builders=apply.inline",
 	} {
 		if !strings.Contains(summary, want) {
 			t.Fatalf("expected %q in summary, got %q", want, summary)
 		}
 	}
-	if strings.Index(summary, "HelperKind") > strings.Index(summary, "InlineKind") {
-		t.Fatalf("expected prompt-matching helper entries to rank before inline entry, got %q", summary)
+	if strings.Contains(summary, "candidate step kind") {
+		t.Fatalf("expected fact-only wording, got %q", summary)
 	}
 }
 
@@ -86,5 +87,35 @@ var _ = stepmeta.MustRegister[Counted](stepmeta.Definition{
 		if !strings.Contains(summary, want) {
 			t.Fatalf("expected %q in stepmeta summary, got %q", want, summary)
 		}
+	}
+}
+
+func TestBuildStepspecSummaryFallsBackToObservedFactsWithoutRankingLanguage(t *testing.T) {
+	root := t.TempDir()
+	stepspecDir := filepath.Join(root, "internal", "stepspec")
+	if err := os.MkdirAll(stepspecDir, 0o755); err != nil {
+		t.Fatalf("mkdir stepspec: %v", err)
+	}
+	content := `package stepspec
+
+import "github.com/Airgap-Castaways/deck/internal/stepmeta"
+
+var _ = stepmeta.MustRegister[Download](stepmeta.Definition{
+	Kind: "DownloadPackage",
+	Ask: stepmeta.AskMetadata{
+		Builders: []stepmeta.AuthoringBuilder{{ID: "prepare.download-package"}},
+	},
+})
+`
+	if err := os.WriteFile(filepath.Join(stepspecDir, "download_package_meta.go"), []byte(content), 0o600); err != nil {
+		t.Fatalf("write sample file: %v", err)
+	}
+
+	summary := buildStepspecSummary(root, strings.ToLower("Explain repository metadata"))
+	if !strings.Contains(summary, "- observed step fact: DownloadPackage builders=prepare.download-package") {
+		t.Fatalf("expected observed fact fallback, got %q", summary)
+	}
+	if strings.Contains(summary, "candidate step kind") {
+		t.Fatalf("expected ranking language to be removed, got %q", summary)
 	}
 }

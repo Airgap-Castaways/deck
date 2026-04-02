@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
@@ -146,13 +145,13 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, requ
 }
 
 func evidenceBoundaryPromptBlock(retrieval askretrieve.RetrievalResult) string {
-	hasRepoGrounding := false
+	hasLocalFacts := false
 	hasExternalEvidence := false
 	externalLines := make([]string, 0)
 	for _, chunk := range retrieval.Chunks {
 		switch chunk.Source {
-		case "repo-grounding":
-			hasRepoGrounding = true
+		case "local-facts":
+			hasLocalFacts = true
 		case "mcp":
 			hasExternalEvidence = true
 			if chunk.Evidence != nil {
@@ -186,13 +185,13 @@ func evidenceBoundaryPromptBlock(retrieval askretrieve.RetrievalResult) string {
 			}
 		}
 	}
-	if !hasRepoGrounding && !hasExternalEvidence {
+	if !hasLocalFacts && !hasExternalEvidence {
 		return ""
 	}
 	b := &strings.Builder{}
 	b.WriteString("Evidence boundaries:\n")
-	if hasRepoGrounding {
-		b.WriteString("- Local repo grounding is authoritative for deck workflow validity, typed step metadata, builder behavior, and repair semantics.\n")
+	if hasLocalFacts {
+		b.WriteString("- Local facts are authoritative for deck workflow validity, typed step metadata, builder behavior, and repair semantics.\n")
 	}
 	if hasExternalEvidence {
 		b.WriteString("- External evidence is only for upstream product behavior, install steps, compatibility, versions, or troubleshooting recency.\n")
@@ -348,17 +347,6 @@ func compactRelevantSchemaPromptBlock(requestText string, target askintent.Targe
 }
 
 func generationRetrievalPromptBlock(retrieval askretrieve.RetrievalResult) string {
-	priority := map[string]int{
-		"workspace":      0,
-		"plan-workspace": 1,
-		"example":        2,
-		"repo-map":       3,
-		"plan":           4,
-		"state":          5,
-		"project":        6,
-		"mcp":            7,
-		"lsp":            8,
-	}
 	excludedTopics := map[askcontext.Topic]bool{
 		askcontext.TopicWorkflowInvariants:   true,
 		askcontext.TopicPolicy:               true,
@@ -389,23 +377,6 @@ func generationRetrievalPromptBlock(retrieval askretrieve.RetrievalResult) strin
 		}
 		chunks = append(chunks, chunk)
 	}
-	sort.SliceStable(chunks, func(i, j int) bool {
-		pi, okI := priority[chunks[i].Source]
-		pj, okJ := priority[chunks[j].Source]
-		if !okI {
-			pi = 50
-		}
-		if !okJ {
-			pj = 50
-		}
-		if pi == pj {
-			if chunks[i].Score == chunks[j].Score {
-				return chunks[i].ID < chunks[j].ID
-			}
-			return chunks[i].Score > chunks[j].Score
-		}
-		return pi < pj
-	})
 	return askretrieve.BuildChunkText(askretrieve.RetrievalResult{Chunks: chunks})
 }
 
@@ -513,15 +484,9 @@ func appendPlanAdvisoryPrompt(base string, plan askcontract.PlanResponse, critic
 
 func planAdvisoryPromptBlock(plan askcontract.PlanResponse, critic askcontract.PlanCriticResponse) string {
 	items := []string{}
-	for _, item := range plan.Blockers {
-		item = strings.TrimSpace(item)
-		if item != "" {
-			items = append(items, "planner carry-forward: "+item)
-		}
-	}
 	for _, item := range plan.OpenQuestions {
 		item = strings.TrimSpace(item)
-		if item != "" && !strings.HasPrefix(strings.ToLower(item), "blocking:") {
+		if item != "" {
 			items = append(items, "planner carry-forward: "+item)
 		}
 	}
@@ -945,51 +910,6 @@ func postProcessEditSystemPrompt(brief askcontract.AuthoringBrief, plan askcontr
 	b.WriteString(executionModelPromptBlock(plan.ExecutionModel))
 	b.WriteString("\n")
 	return b.String()
-}
-
-func structuralCleanupEditSystemPrompt(brief askcontract.AuthoringBrief, plan askcontract.PlanResponse) string {
-	b := &strings.Builder{}
-	b.WriteString("You are deck ask structural cleanup editor. Return strict JSON only using the document generation response shape.\n")
-	b.WriteString("Apply only optional readability or reuse improvements after operational defects are already resolved.\n")
-	b.WriteString("Extract vars or components only when repeated values or repeated step groups clearly justify it. Preserve inline structure by default.\n")
-	b.WriteString(authoringBriefPromptBlock(brief))
-	b.WriteString("\n")
-	b.WriteString(executionModelPromptBlock(plan.ExecutionModel))
-	b.WriteString("\n")
-	return b.String()
-}
-
-func structuralCleanupEditUserPrompt(files []askcontract.GeneratedFile, findings askcontract.PostProcessResponse) string {
-	b := &strings.Builder{}
-	b.WriteString("Structural cleanup candidates:\n")
-	for _, item := range findings.UpgradeCandidates {
-		b.WriteString("- ")
-		b.WriteString(strings.TrimSpace(item))
-		b.WriteString("\n")
-	}
-	b.WriteString("Advisory guidance:\n")
-	for _, item := range findings.Advisory {
-		b.WriteString("- ")
-		b.WriteString(strings.TrimSpace(item))
-		b.WriteString("\n")
-	}
-	b.WriteString("Preserve these files unless cleanup clearly improves the result:\n")
-	for _, item := range findings.PreserveFiles {
-		b.WriteString("- ")
-		b.WriteString(strings.TrimSpace(item))
-		b.WriteString("\n")
-	}
-	b.WriteString("Rendered files from current documents:\n")
-	for _, file := range files {
-		b.WriteString("- path: ")
-		b.WriteString(strings.TrimSpace(file.Path))
-		b.WriteString("\n")
-		b.WriteString(file.Content)
-		if !strings.HasSuffix(file.Content, "\n") {
-			b.WriteString("\n")
-		}
-	}
-	return strings.TrimSpace(b.String())
 }
 
 func postProcessEditUserPrompt(files []askcontract.GeneratedFile, findings askcontract.PostProcessResponse, planCritic askcontract.PlanCriticResponse) string {

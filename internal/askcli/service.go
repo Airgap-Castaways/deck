@@ -178,7 +178,9 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		externalChunks = append(externalChunks, externalEvidenceFailureChunk(failure))
 		mcpEvents = append(mcpEvents, "mcp: required external evidence unavailable")
 	}
-	externalChunks = append(externalChunks, projectContextChunk(resolvedRoot))
+	if !isAuthoringRoute(decision.Route) {
+		externalChunks = append(externalChunks, projectContextChunk(resolvedRoot))
+	}
 	retrieval := askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, externalChunks)
 	requirements := askpolicy.BuildScenarioRequirements(requestText, retrieval, workspace, decision)
 	authoringBrief := askpolicy.BriefFromRequirements(requirements, decision)
@@ -290,7 +292,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		if updateErr := os.WriteFile(filepath.Join(resolvedRoot, filepath.FromSlash(planMDPath)), []byte(planMarkdownFinal+"\n"), 0o600); updateErr == nil {
 			_ = os.WriteFile(filepath.Join(filepath.Dir(filepath.Join(resolvedRoot, filepath.FromSlash(planMDPath))), "latest.md"), []byte(planMarkdownFinal+"\n"), 0o600)
 		}
-		if hasBlockingClarifications(plan) {
+		if askpolicy.PlanNeedsClarification(plan) {
 			progress.status("waiting for clarification")
 		}
 		updatedPlan, aborted, clarifyErr := maybeClarifyPlanInteractively(resolvedRoot, opts, &result, requestText, plan, planCritic)
@@ -358,7 +360,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		result.Plan = &plan
 		result.PlanJSON = resumedPlanJSON
 		result.PlanMarkdown = strings.TrimSuffix(resumedPlanJSON, ".json") + ".md"
-		if hasBlockingClarifications(plan) {
+		if askpolicy.PlanNeedsClarification(plan) {
 			progress.status("waiting for clarification")
 		}
 		updatedPlan, aborted, clarifyErr := maybeClarifyPlanInteractively(resolvedRoot, opts, &result, requestText, plan, askcontract.PlanCriticResponse{})
@@ -560,7 +562,7 @@ func resumedPlanDecision(plan askcontract.PlanResponse) askintent.Decision {
 }
 
 func maybeClarifyPlanInteractively(root string, opts Options, result *runResult, requestText string, plan askcontract.PlanResponse, planCritic askcontract.PlanCriticResponse) (askcontract.PlanResponse, bool, error) {
-	if !hasBlockingClarifications(plan) {
+	if !askpolicy.PlanNeedsClarification(plan) {
 		return plan, false, nil
 	}
 	if !interactiveSessionProbe(opts.Stdin, opts.Stdout) {

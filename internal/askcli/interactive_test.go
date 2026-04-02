@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 )
 
 type flushCapture struct {
@@ -35,7 +36,7 @@ func TestRunInteractiveClarificationsUsesDefaultsAndAnswers(t *testing.T) {
 	if got := updated.Clarifications[0].Answer; got != "multi-node" {
 		t.Fatalf("expected default answer, got %q", got)
 	}
-	if hasBlockingClarifications(updated) {
+	if askpolicy.PlanNeedsClarification(updated) {
 		t.Fatalf("expected all blocking clarifications resolved: %#v", updated.Clarifications)
 	}
 }
