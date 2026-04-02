@@ -71,7 +71,7 @@ deck dev
 
 Release builds should report the tagged semver instead of `dev`.
 
-The `version` command reports build identity, but it does not imply pre-`v1.0.0` compatibility guarantees for CLI text, JSON output, workflow schema, or bundle structure.
+The version command reports build identity, but it does not imply pre-v1.0.0 compatibility guarantees for CLI contracts, workflow schemas, bundle structure, or other published contracts.
 
 ## Release notes and automation
 
