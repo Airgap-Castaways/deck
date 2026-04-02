@@ -156,7 +156,7 @@ func TestAskConfigCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config show: %v", err)
 	}
-	for _, want := range []string{"provider=openrouter", "model=anthropic/claude-3.5-sonnet", "endpoint=https://openrouter.ai/api/v1", "endpointSource=config", "logLevel=debug", "mcpEnabled=false", "lspEnabled=false", "apiKey=secr****oken", "apiKeySource=config", "oauthToken=oaut***oken", "oauthTokenSource=config", "authStatus="} {
+	for _, want := range []string{"provider=openrouter", "model=anthropic/claude-3.5-sonnet", "endpoint=https://openrouter.ai/api/v1", "endpointSource=config", "logLevel=debug", "mcpEnabled=false", "apiKey=secr****oken", "apiKeySource=config", "oauthToken=oaut***oken", "oauthTokenSource=config", "authStatus="} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in config show output, got %q", want, out)
 		}
@@ -228,7 +228,7 @@ func TestAskCommandMetadataMatchesAskContext(t *testing.T) {
 	}
 }
 
-func TestAskConfigShowIncludesStoredAugmentSettings(t *testing.T) {
+func TestAskConfigShowIncludesStoredMCPSettings(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
 	if err := askconfig.SaveStored(askconfig.Settings{
 		Provider:   "openai",
@@ -237,7 +237,6 @@ func TestAskConfigShowIncludesStoredAugmentSettings(t *testing.T) {
 		OAuthToken: testOAuthToken(),
 		LogLevel:   "trace",
 		MCP:        askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{{Name: "context7", RunCommand: "context7-mcp"}}},
-		LSP:        askconfig.LSP{Enabled: true, YAML: askconfig.LSPEntry{RunCommand: "yaml-language-server", Args: []string{"--stdio"}}},
 	}); err != nil {
 		t.Fatalf("save stored config: %v", err)
 	}
@@ -245,7 +244,7 @@ func TestAskConfigShowIncludesStoredAugmentSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config show: %v", err)
 	}
-	for _, want := range []string{"logLevel=trace", "mcpEnabled=true", "mcpProviderCount=1", "mcpProvider[0].name=context7", "mcpProvider[0].id=context7", "mcpProvider[0].transport=context7-mcp", "mcpProvider[0].transportSource=config-override", "mcpProvider[0].capabilities=entity-resolve,doc-fetch,official-doc-search", "lspEnabled=true"} {
+	for _, want := range []string{"logLevel=trace", "mcpEnabled=true", "mcpProviderCount=1", "mcpProvider[0].name=context7", "mcpProvider[0].id=context7", "mcpProvider[0].transport=context7-mcp", "mcpProvider[0].transportSource=config-override", "mcpProvider[0].capabilities=entity-resolve,doc-fetch,official-doc-search"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in config show output, got %q", want, out)
 		}

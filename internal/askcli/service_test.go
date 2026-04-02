@@ -1482,7 +1482,7 @@ func TestExecutePlanResumeStopsWhenClarificationsRemain(t *testing.T) {
 	}
 }
 
-func TestExecuteAuthoringAugmentationIsGatedByEnv(t *testing.T) {
+func TestExecuteAuthoringMCPAugmentationIsGatedByEnv(t *testing.T) {
 	t.Setenv("DECK_ASK_API_KEY", "test-key")
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
 	if err := askconfig.SaveStored(askconfig.Settings{MCP: askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{{Name: "web-server", RunCommand: "/bin/sh", Args: []string{"-c", "exit 0"}}}}}); err != nil {
@@ -1499,7 +1499,6 @@ func TestExecuteAuthoringAugmentationIsGatedByEnv(t *testing.T) {
 			enabled: false,
 			want: []string{
 				"mcp: disabled for default local pipeline",
-				"lsp: disabled for default local pipeline",
 			},
 			avoid: []string{"mcp:web-search initialize failed:"},
 		},

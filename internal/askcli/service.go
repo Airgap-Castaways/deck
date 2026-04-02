@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	lspaugment "github.com/Airgap-Castaways/deck/internal/askaugment/lsp"
 	mcpaugment "github.com/Airgap-Castaways/deck/internal/askaugment/mcp"
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
@@ -154,8 +153,6 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 	mcpChunks := []askretrieve.Chunk{}
 	mcpEvents := append([]string(nil), evidenceEvents...)
-	lspChunks := []askretrieve.Chunk{}
-	lspEvents := []string{"lsp: disabled for default local pipeline"}
 	forceAuthoringAugment := isAuthoringRoute(decision.Route) && askFeatureEnabled("DECK_ASK_ENABLE_AUGMENT")
 	switch {
 	case forceAuthoringAugment || strings.TrimSpace(evidencePlan.Decision) != "unnecessary":
@@ -166,10 +163,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	default:
 		mcpEvents = append(mcpEvents, "mcp: skipped by evidence plan (unnecessary)")
 	}
-	if !isAuthoringRoute(decision.Route) || askFeatureEnabled("DECK_ASK_ENABLE_AUGMENT") {
-		lspChunks, lspEvents = lspaugment.Gather(ctx, effective.LSP, decision.Target, workspace)
-	}
-	externalChunks := append(append([]askretrieve.Chunk{}, mcpChunks...), lspChunks...)
+	externalChunks := append([]askretrieve.Chunk{}, mcpChunks...)
 	mcpEvents = append(mcpEvents, externalEvidenceWarningEvents(mcpChunks)...)
 	if failure := requiredExternalEvidenceFailure(evidencePlan, mcpChunks, mcpEvents); failure != "" {
 		if isAuthoringRoute(decision.Route) {
@@ -195,7 +189,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		DroppedChunks: retrieval.Dropped,
 		ConfigSource:  effective,
 		ClassifierLLM: classifierLLM,
-		AugmentEvents: append(mcpEvents, lspEvents...),
+		AugmentEvents: append([]string(nil), mcpEvents...),
 		UserCommand:   renderUserCommand(opts),
 	}
 	if canUseLLM(effective) {
@@ -203,13 +197,11 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 
 	progress.status("loading workspace context")
-	logger.logf("debug", "\n[ask][phase:augment:start] mcp=%t lsp=%t\n", effective.MCP.Enabled, effective.LSP.Enabled)
+	logger.logf("debug", "\n[ask][phase:augment:start] mcp=%t\n", effective.MCP.Enabled)
 	for _, event := range result.AugmentEvents {
 		prefix := "augment"
 		if strings.HasPrefix(event, "mcp:") {
 			prefix = "mcp"
-		} else if strings.HasPrefix(event, "lsp") {
-			prefix = "lsp"
 		}
 		logger.logf("debug", "[ask][augment:%s] %s\n", prefix, event)
 	}
@@ -542,7 +534,6 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		LastDroppedChunkIDs: append([]string(nil), result.DroppedChunks...),
 		LastAugmentEvents:   append([]string(nil), result.AugmentEvents...),
 		LastMCPChunkIDs:     chunkIDsBySource(result.Chunks, "mcp"),
-		LastLSPChunkIDs:     chunkIDsBySource(result.Chunks, "lsp"),
 		LastRetries:         result.RetriesUsed,
 		LastTermination:     result.Termination,
 	}, requestText, resultToMarkdown(result)); err != nil {

@@ -31,7 +31,6 @@ type Settings struct {
 	Endpoint   string `json:"endpoint,omitempty"`
 	LogLevel   string `json:"logLevel,omitempty"`
 	MCP        MCP    `json:"mcp,omitempty"`
-	LSP        LSP    `json:"lsp,omitempty"`
 }
 
 type MCP struct {
@@ -41,16 +40,6 @@ type MCP struct {
 
 type MCPServer struct {
 	Name       string   `json:"name,omitempty"`
-	RunCommand string   `json:"command,omitempty"`
-	Args       []string `json:"args,omitempty"`
-}
-
-type LSP struct {
-	Enabled bool     `json:"enabled,omitempty"`
-	YAML    LSPEntry `json:"yaml,omitempty"`
-}
-
-type LSPEntry struct {
 	RunCommand string   `json:"command,omitempty"`
 	Args       []string `json:"args,omitempty"`
 }
@@ -151,7 +140,6 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 			Endpoint:   "",
 			LogLevel:   "basic",
 			MCP:        stored.MCP,
-			LSP:        stored.LSP,
 		},
 		ProviderSource:   "default",
 		ModelSource:      "default",
@@ -346,14 +334,6 @@ func normalize(settings Settings) Settings {
 		}
 		settings.MCP.Servers[i].Args = trimmed
 	}
-	settings.LSP.YAML.RunCommand = strings.TrimSpace(settings.LSP.YAML.RunCommand)
-	trimmedLSP := make([]string, 0, len(settings.LSP.YAML.Args))
-	for _, arg := range settings.LSP.YAML.Args {
-		if value := strings.TrimSpace(arg); value != "" {
-			trimmedLSP = append(trimmedLSP, value)
-		}
-	}
-	settings.LSP.YAML.Args = trimmedLSP
 	return settings
 }
 
@@ -486,8 +466,5 @@ func isEmptyConfig(cfg fileConfig) bool {
 		cfg.Ask.OAuthToken == "" &&
 		cfg.Ask.Endpoint == "" &&
 		!cfg.Ask.MCP.Enabled &&
-		len(cfg.Ask.MCP.Servers) == 0 &&
-		!cfg.Ask.LSP.Enabled &&
-		cfg.Ask.LSP.YAML.RunCommand == "" &&
-		len(cfg.Ask.LSP.YAML.Args) == 0
+		len(cfg.Ask.MCP.Servers) == 0
 }
