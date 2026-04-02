@@ -15,13 +15,16 @@ func TestVersionCommand(t *testing.T) {
 	originalCommit := buildinfo.Commit
 	originalDate := buildinfo.Date
 	originalDirty := buildinfo.Dirty
+	originalRepository := buildinfo.Repository
 	t.Cleanup(func() {
 		buildinfo.Version = originalVersion
 		buildinfo.Commit = originalCommit
 		buildinfo.Date = originalDate
 		buildinfo.Dirty = originalDirty
+		buildinfo.Repository = originalRepository
 	})
 
+	buildinfo.Repository = "https://github.com/Airgap-Castaways/deck"
 	buildinfo.Version = "v0.1.0"
 	buildinfo.Commit = "abc1234"
 	buildinfo.Date = "2026-03-17T10:00:00Z"
@@ -31,7 +34,7 @@ func TestVersionCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
-	if out != "deck v0.1.0\n" {
+	if out != "deck v0.1.0\nrepo https://github.com/Airgap-Castaways/deck\n" {
 		t.Fatalf("unexpected output: %q", out)
 	}
 }
@@ -41,13 +44,16 @@ func TestVersionCommandJSON(t *testing.T) {
 	originalCommit := buildinfo.Commit
 	originalDate := buildinfo.Date
 	originalDirty := buildinfo.Dirty
+	originalRepository := buildinfo.Repository
 	t.Cleanup(func() {
 		buildinfo.Version = originalVersion
 		buildinfo.Commit = originalCommit
 		buildinfo.Date = originalDate
 		buildinfo.Dirty = originalDirty
+		buildinfo.Repository = originalRepository
 	})
 
+	buildinfo.Repository = "https://github.com/Airgap-Castaways/deck"
 	buildinfo.Version = "dev"
 	buildinfo.Commit = "abc1234"
 	buildinfo.Date = "2026-03-17T10:00:00Z"
@@ -77,6 +83,9 @@ func TestVersionCommandJSON(t *testing.T) {
 	dirty, ok := payload["dirty"].(bool)
 	if !ok || dirty {
 		t.Fatalf("unexpected dirty value: %#v", payload["dirty"])
+	}
+	if payload["repository"] != "https://github.com/Airgap-Castaways/deck" {
+		t.Fatalf("unexpected repository: %#v", payload["repository"])
 	}
 }
 
