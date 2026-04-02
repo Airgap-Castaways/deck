@@ -597,6 +597,41 @@ func TestMaterializeWithBaseKeepsVarsUsedByUntouchedBaseFiles(t *testing.T) {
 	}
 }
 
+func TestMaterializeWithBaseKeepsVarsUsedByUntouchedBaseExpressions(t *testing.T) {
+	base := []askcontract.GeneratedFile{{
+		Path:    "workflows/scenarios/apply.yaml",
+		Content: "version: v1alpha1\nsteps:\n  - id: init\n    when: vars.role == \"control-plane\"\n    kind: InitKubeadm\n    spec:\n      kubernetesVersion: v1.35.1\n",
+	}}
+	files, err := MaterializeWithBase(t.TempDir(), base, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/vars.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:    "set-field",
+			RawPath: "role",
+			Value:   "control-plane",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize with base expression reference: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected untouched base file plus vars update, got %#v", files)
+	}
+	byPath := map[string]string{}
+	for _, file := range files {
+		byPath[file.Path] = file.Content
+	}
+	if !strings.Contains(byPath["workflows/vars.yaml"], "role: control-plane") {
+		t.Fatalf("expected vars update to be preserved for untouched base expression, got %#v", files)
+	}
+	if byPath["workflows/scenarios/apply.yaml"] != base[0].Content {
+		t.Fatalf("expected untouched base file to remain unchanged, got %#v", files)
+	}
+	if strings.Contains(byPath["workflows/vars.yaml"], "{}") {
+		t.Fatalf("expected vars edit to survive pruning, got %#v", files)
+	}
+}
+
 func TestVarTemplateMatchesAcceptAliasForms(t *testing.T) {
 	text := "{{ vars.kubernetesVersion }} ${{ vars.joinFile }} {{ .vars.criSocket }}"
 	matches := varTemplateMatches(text)
@@ -616,6 +651,29 @@ func TestVarTemplateMatchesIncludeBracketPathsAndRootKeys(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("expected %q in bracket matches, got %q", want, joined)
 		}
+	}
+}
+
+func TestVarTemplateMatchesIncludeRawExpressions(t *testing.T) {
+	text := `.vars.role == "control-plane" && vars.upgradeKubernetesVersion != "" && {{ eq .vars.joinFile "" }}`
+	matches := varTemplateMatches(text)
+	joined := strings.Join(matches, ",")
+	for _, want := range []string{"role", "upgradeKubernetesVersion", "joinFile"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected %q in raw expression matches, got %q", want, joined)
+		}
+	}
+}
+
+func TestCurrentDocumentValueReadsRawContentWithoutRendering(t *testing.T) {
+	raw := []byte("version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        kind: InitKubeadm\n        spec:\n          kubernetesVersion: v1.35.1\n")
+	doc, err := ParseDocument("workflows/scenarios/apply.yaml", raw)
+	if err != nil {
+		t.Fatalf("parse workflow document: %v", err)
+	}
+	value := currentDocumentValue(raw, "steps.init.spec.kubernetesVersion", doc)
+	if value != "v1.35.1" {
+		t.Fatalf("expected raw document value, got %#v", value)
 	}
 }
 

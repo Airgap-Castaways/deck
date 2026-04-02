@@ -99,7 +99,7 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 				return "", nil, fmt.Errorf("transform extract-var on %s requires rawPath", path)
 			}
 			if transform.Value == nil {
-				transform.Value = currentDocumentValue(parsedDoc, rawPath)
+				transform.Value = currentDocumentValue([]byte(content), rawPath, parsedDoc)
 			}
 			updatedTarget, err := applyStructuredEdits([]byte(content), []stepspec.StructuredEdit{{Op: "set", RawPath: rawPath, Value: fmt.Sprintf("{{ .vars.%s }}", varName)}})
 			if err != nil {
@@ -271,13 +271,17 @@ func applyStructuredEdits(raw []byte, edits []stepspec.StructuredEdit) ([]byte, 
 	return structurededit.Apply(structurededit.FormatYAML, raw, edits)
 }
 
-func currentDocumentValue(doc askcontract.GeneratedDocument, rawPath string) any {
-	rendered, err := renderDocument(strings.TrimSpace(doc.Path), doc)
-	if err != nil {
+func currentDocumentValue(raw []byte, rawPath string, doc askcontract.GeneratedDocument) any {
+	if len(raw) == 0 {
 		return nil
 	}
 	var model any
-	if err := yaml.Unmarshal([]byte(rendered), &model); err != nil {
+	if err := yaml.Unmarshal(raw, &model); err != nil {
+		return nil
+	}
+	normalized := normalizeEditableValue(model)
+	rawPath = strings.TrimSpace(rawPath)
+	if rawPath == "" {
 		return nil
 	}
 	segments, err := structuredpath.Parse(rawPath)
@@ -287,7 +291,19 @@ func currentDocumentValue(doc askcontract.GeneratedDocument, rawPath string) any
 			return nil
 		}
 	}
-	value, ok := valueAtStructuredPath(normalizeEditableValue(model), segments)
+	value, ok := valueAtStructuredPath(normalized, segments)
+	if ok {
+		return value
+	}
+	resolvedPath := resolveStructuredEditPath(rawPath, doc)
+	if strings.TrimSpace(resolvedPath) == "" || resolvedPath == rawPath {
+		return nil
+	}
+	segments, err = structuredpath.Parse(resolvedPath)
+	if err != nil {
+		return nil
+	}
+	value, ok = valueAtStructuredPath(normalized, segments)
 	if !ok {
 		return nil
 	}

@@ -11,7 +11,10 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
-var varsTemplateRefRE = regexp.MustCompile(`\$?\{\{\s*\.?vars\.([a-zA-Z0-9_.\[\]-]+)\s*\}\}`)
+var (
+	varsTemplateRefRE   = regexp.MustCompile(`\$?\{\{\s*\.?vars\.([a-zA-Z0-9_.\[\]-]+)\s*\}\}`)
+	varsExpressionRefRE = regexp.MustCompile(`(?:^|[^A-Za-z0-9_])\.?vars\.([a-zA-Z0-9_-]+(?:\[[^\]]+\]|\.[a-zA-Z0-9_-]+)*)`)
+)
 
 func Materialize(root string, gen askcontract.GenerationResponse) ([]askcontract.GeneratedFile, error) {
 	return MaterializeWithBase(root, nil, gen)
@@ -170,21 +173,42 @@ func collectReferencedVarsFromString(used map[string]bool, text string) {
 }
 
 func varTemplateMatches(text string) []string {
-	matches := varsTemplateRefRE.FindAllStringSubmatch(strings.TrimSpace(text), -1)
-	if len(matches) == 0 {
+	text = strings.TrimSpace(text)
+	if text == "" {
 		return nil
 	}
-	out := make([]string, 0, len(matches))
-	for _, match := range matches {
-		if len(match) != 2 {
-			continue
+	seen := map[string]bool{}
+	out := []string{}
+	for _, match := range varsTemplateRefRE.FindAllStringSubmatch(text, -1) {
+		if len(match) == 2 {
+			out = appendVarTemplateMatch(out, seen, match[1])
 		}
-		name := strings.TrimSpace(match[1])
-		if name != "" {
-			out = append(out, name)
-			if idx := strings.IndexAny(name, ".["); idx > 0 {
-				out = append(out, strings.TrimSpace(name[:idx]))
-			}
+	}
+	for _, match := range varsExpressionRefRE.FindAllStringSubmatch(text, -1) {
+		if len(match) == 2 {
+			out = appendVarTemplateMatch(out, seen, match[1])
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func appendVarTemplateMatch(out []string, seen map[string]bool, name string) []string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return out
+	}
+	if !seen[name] {
+		seen[name] = true
+		out = append(out, name)
+	}
+	if idx := strings.IndexAny(name, ".["); idx > 0 {
+		root := strings.TrimSpace(name[:idx])
+		if root != "" && !seen[root] {
+			seen[root] = true
+			out = append(out, root)
 		}
 	}
 	return out
