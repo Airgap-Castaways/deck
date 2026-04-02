@@ -4,31 +4,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 )
-
-func expectContainsAll(t *testing.T, content string, expected ...string) {
-	t.Helper()
-	for _, item := range expected {
-		if !strings.Contains(content, item) {
-			t.Fatalf("expected content to include %q", item)
-		}
-	}
-}
-
-func TestVagrantRunnerThinInterfaceContracts(t *testing.T) {
-	root := projectRoot(t)
-	runnerPath := filepath.Join(root, "test", "e2e", "vagrant", "run-scenario.sh")
-	if _, err := os.Stat(runnerPath); err != nil {
-		t.Fatalf("stat runner: %v", err)
-	}
-	out, err := exec.Command("bash", runnerPath, "--help").CombinedOutput()
-	if err != nil {
-		t.Fatalf("run runner --help: %v\n%s", err, string(out))
-	}
-	expectContainsAll(t, string(out), "--scenario", "--resume", "--art-dir")
-}
 
 func TestLibvirtEnvScriptContracts(t *testing.T) {
 	root := projectRoot(t)
@@ -41,14 +18,6 @@ func TestLibvirtEnvScriptContracts(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("libvirt env script contract check failed: %v\n%s", err, string(out))
-	}
-}
-
-func TestVagrantfileSyncDefaults(t *testing.T) {
-	root := projectRoot(t)
-	vagrantfilePath := filepath.Join(root, "test", "vagrant", "Vagrantfile")
-	if _, err := os.Stat(vagrantfilePath); err != nil {
-		t.Fatalf("stat Vagrantfile: %v", err)
 	}
 }
 

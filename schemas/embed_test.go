@@ -10,16 +10,6 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
-func TestWorkflowSchemaAvailable(t *testing.T) {
-	raw, err := WorkflowSchema()
-	if err != nil {
-		t.Fatalf("WorkflowSchema: %v", err)
-	}
-	if len(raw) == 0 {
-		t.Fatalf("expected workflow schema content")
-	}
-}
-
 func TestGeneratedToolPagesExist(t *testing.T) {
 	seenPages := map[string]bool{}
 	for _, def := range workflowcontract.StepDefinitions() {

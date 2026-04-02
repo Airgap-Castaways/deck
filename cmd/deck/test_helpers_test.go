@@ -11,8 +11,24 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
+
+var (
+	sharedDeckBinaryOnce sync.Once
+	sharedDeckBinaryPath string
+	sharedDeckBinaryDir  string
+	errSharedDeckBinary  error
+)
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if sharedDeckBinaryDir != "" {
+		_ = os.RemoveAll(sharedDeckBinaryDir)
+	}
+	os.Exit(code)
+}
 
 func runWithCapturedStdout(args []string) (string, error) {
 	for _, name := range []string{"DECK_SERVER", "DECK_API_TOKEN"} {
@@ -85,15 +101,24 @@ type deckBinaryResult struct {
 	exitCode int
 }
 
-func buildDeckBinary(t *testing.T, name string) string {
+func buildDeckBinary(t *testing.T) string {
 	t.Helper()
-	binaryPath := filepath.Join(t.TempDir(), name)
-	buildCmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/deck")
-	buildCmd.Dir = filepath.Join("..", "..")
-	if raw, err := buildCmd.CombinedOutput(); err != nil {
-		t.Fatalf("build deck binary: %v, output=%s", err, string(raw))
+	sharedDeckBinaryOnce.Do(func() {
+		sharedDeckBinaryDir, errSharedDeckBinary = os.MkdirTemp("", "deck-cmd-test-bin-*")
+		if errSharedDeckBinary != nil {
+			return
+		}
+		sharedDeckBinaryPath = filepath.Join(sharedDeckBinaryDir, "deck")
+		buildCmd := exec.Command("go", "build", "-o", sharedDeckBinaryPath, "./cmd/deck")
+		buildCmd.Dir = filepath.Join("..", "..")
+		if raw, err := buildCmd.CombinedOutput(); err != nil {
+			errSharedDeckBinary = fmt.Errorf("build deck binary: %w, output=%s", err, string(raw))
+		}
+	})
+	if errSharedDeckBinary != nil {
+		t.Fatal(errSharedDeckBinary)
 	}
-	return binaryPath
+	return sharedDeckBinaryPath
 }
 
 func runDeckBinary(t *testing.T, binaryPath string, args ...string) deckBinaryResult {
