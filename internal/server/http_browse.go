@@ -264,17 +264,22 @@ func (h *serverHandler) renderImageBrowse(rel string) (string, error) {
 	if resolveErr != nil {
 		return "", resolveErr
 	}
+	archiveSize := int64(0)
+	if info, err := os.Stat(resolved.tarPath); err == nil && !info.IsDir() {
+		archiveSize = info.Size()
+	}
 	items := []browseEntry{{Name: "..", Href: "/browse/images/" + repo + "/", Kind: "dir"}}
 	items = append(items,
 		browseEntry{Name: "Repository", Kind: "meta", Meta: resolved.repo},
 		browseEntry{Name: "tag", Kind: "meta", Meta: resolved.tag},
 		browseEntry{Name: "digest", Kind: "meta", Meta: resolved.digest.String()},
-		browseEntry{Name: "archive", Kind: "meta", Meta: resolved.tarPath},
-		browseEntry{Name: "registry manifest", Href: "/v2/" + repo + "/manifests/" + tag, Kind: "link", Meta: "open raw manifest"},
+		browseEntry{Name: "archive", Kind: "meta", Meta: resolved.tarPath, Size: archiveSize},
+		browseEntry{Name: "registry manifest", Href: "/v2/" + repo + "/manifests/" + tag, Kind: "link", Meta: "open raw manifest", Size: int64(len(resolved.rawManifest))},
 	)
 	if resolved.manifest != nil {
+		items = append(items, browseEntry{Name: "config", Kind: "meta", Meta: resolved.manifest.Config.Digest.String(), Size: resolved.manifest.Config.Size})
 		for _, layer := range resolved.manifest.Layers {
-			items = append(items, browseEntry{Name: "layer", Kind: "meta", Meta: layer.Digest.String()})
+			items = append(items, browseEntry{Name: "layer", Kind: "meta", Meta: layer.Digest.String(), Size: layer.Size})
 		}
 	}
 	return renderBrowsePage("/browse/images/"+repo+"/"+tag+"/", items)
