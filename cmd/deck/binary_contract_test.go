@@ -99,7 +99,7 @@ func TestCLIContractUsesSingleErrorLineWithoutAutoUsage(t *testing.T) {
 			args:        []string{"unknown"},
 			wantStderr:  "component=cli event=command_failed",
 			forbidden:   []string{},
-			exactlyOnce: []string{"unknown command \"unknown\" for \"deck\""},
+			exactlyOnce: []string{`error="unknown command \"unknown\" for \"deck\""`},
 		},
 		{
 			name:        "unknown flag",
@@ -261,7 +261,7 @@ func TestCLIContractBundleInspectRemovedViaBinary(t *testing.T) {
 	if res.exitCode == 0 {
 		t.Fatalf("expected non-zero exit")
 	}
-	if !strings.Contains(res.stderr, `unknown command "inspect" for "deck bundle"`) {
+	if !strings.Contains(res.stderr, "component=cli event=command_failed") || !strings.Contains(res.stderr, `error="unknown command \"inspect\" for \"deck bundle\""`) {
 		t.Fatalf("unexpected stderr: %q", res.stderr)
 	}
 }

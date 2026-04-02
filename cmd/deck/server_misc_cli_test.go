@@ -587,7 +587,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if res.stdout != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 modes=prepare,apply topLevelModes=phases,steps\n", wf) {
 			t.Fatalf("unexpected stdout: %q", res.stdout)
 		}
-		for _, want := range []string{"component=lint", "event=lint_requested", "scenario=", fmt.Sprintf("workflow=%s", wf), "event=workflow", "event=finding", "code=W_COMMAND_OPAQUE", "severity=warning"} {
+		for _, want := range []string{"component=lint", "event=lint_requested", "file=" + wf, fmt.Sprintf("workflow=%s", wf), "event=workflow", "event=finding", "code=W_COMMAND_OPAQUE", "severity=warning"} {
 			if !strings.Contains(res.stderr, want) {
 				t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 			}
