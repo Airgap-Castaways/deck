@@ -1,4 +1,4 @@
-package askpolicy
+package askevidenceplan
 
 import (
 	"testing"
