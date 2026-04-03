@@ -32,7 +32,7 @@ Use steps and phases to show what the procedure is doing. Typical boundaries in 
 - kubeadm bootstrap or join
 - verification
 
-Prefer typed steps where possible. `Command` is available for the edges that are not modeled yet.
+Prefer typed steps where possible. `Command` is available for the edges that are not modeled yet. For shared step fields such as `when`, `parallelGroup`, `register`, `metadata`, `retry`, and `timeout`, use the [Step Envelope Contract](../reference/workflow-model.md#step-envelope-contract).
 
 Useful group entrypoints for Kubernetes workflows:
 
