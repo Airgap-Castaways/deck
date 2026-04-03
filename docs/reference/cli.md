@@ -83,7 +83,7 @@ These commands are additive. They do not replace the default local execution pat
 
 `deck server health -o json` returns the resolved server URL, `/healthz` URL, and HTTP status.
 
-`deck server up` writes structured audit records under `.deck/logs/server-audit.log`. The current audit schema is version 2 and uses top-level fields such as `component`, `event`, `method`, `path`, `status`, and `duration_ms`. Older consumers that expected `source`, `event_type`, or nested `extra` fields must be updated.
+`deck server up` writes structured audit records under `.deck/logs/server-audit.log`. The current audit schema is version 2 and uses top-level fields such as `component`, `event`, `method`, `path`, `status`, and `duration_ms`. Raw consumers that read the log file directly should expect this version-2 shape going forward.
 
 Use [Server Audit Log](server-audit-log.md) for the current emitted record shape and compatibility notes.
 
@@ -211,10 +211,14 @@ deck prepare
 deck prepare --bundle-binary-source local --bundle-binary-dir ../test/artifacts/bin --bundle-binary linux/amd64 --bundle-binary linux/arm64
 deck prepare --bundle-binary-source release --bundle-binary-exclude darwin/amd64 --bundle-binary-exclude darwin/arm64
 deck prepare --bundle-binary-source release --bundle-binary-version v0.1.0 --bundle-binary linux/amd64
+deck prepare --var registryHost=mirror.local --var kubernetesVersion=v1.30.1
 deck bundle build --out ./bundle.tar
 deck plan --scenario apply --source local
 deck plan --scenario apply --source local -o json
+deck plan --scenario apply --source local --var role=worker
 deck apply --scenario apply --source local
+deck apply --scenario apply --source local --var role=control-plane --var nodeIP=10.0.0.10
+deck cache clean --older-than 30d --dry-run
 ```
 
 Prepare runtime binary notes:
@@ -234,6 +238,7 @@ Optional site-local helper example:
 deck server remote set http://127.0.0.1:8080
 deck list --source server
 deck server up --root ./bundle --addr :8080
+deck server up --root ./bundle --addr :8443 --tls-self-signed
 deck server health --server http://127.0.0.1:8080
 deck server health --server http://127.0.0.1:8080 -o json
 deck server logs --root ./bundle --source file -o json --v=1
@@ -242,6 +247,7 @@ deck cache list -o json --v=1
 deck plan --scenario apply --source server
 
 deck ask config set --provider openai --model gpt-5.4 --endpoint https://api.openai.com/v1 --api-key "$DECK_ASK_API_KEY"
+deck ask status --provider openai
 deck ask --create "create an air-gapped rhel9 single-node kubeadm workflow"
 deck ask plan "air-gapped rhel9 kubeadm cluster with prepare/apply split"
 deck ask "explain what workflows/scenarios/apply.yaml does"

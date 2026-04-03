@@ -36,7 +36,7 @@ Authoring and validation rules still apply before the batch runs:
 
 - `parallelGroup` names must stay contiguous inside the phase
 - apply-time parallel batches only support a limited safe kind allowlist
-- same-batch steps cannot target the same literal path or consume each other's `runtime.*` outputs
+- same-batch steps cannot target the same literal path, share the same prepared output root, or consume each other's `runtime.*` outputs
 
 Use [Workflow Model](workflow-model.md#parallel-batches) for the current batching rules and constraints.
 
