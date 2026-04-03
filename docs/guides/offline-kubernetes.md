@@ -34,6 +34,14 @@ Use steps and phases to show what the procedure is doing. Typical boundaries in 
 
 Prefer typed steps where possible. `Command` is available for the edges that are not modeled yet.
 
+Useful group entrypoints for Kubernetes workflows:
+
+- [Host Prep](../reference/groups/host-prep.md)
+- [Artifact Staging](../reference/groups/artifact-staging.md)
+- [Runtime and Services](../reference/groups/runtime-services.md)
+- [Kubernetes Lifecycle](../reference/groups/kubernetes-lifecycle.md)
+- [Waits and Polling](../reference/groups/waits-polling.md)
+
 ## 4. Prepare the bundle in the connected environment
 
 Author a `prepare` workflow that gathers packages, container images, files, and templates. Then build the bundle:
@@ -41,6 +49,12 @@ Author a `prepare` workflow that gathers packages, container images, files, and 
 ```bash
 deck prepare
 deck bundle build --out ./bundle.tar
+```
+
+During local testing, use repeatable `--var key=value` overrides instead of editing shared vars files for every site-specific change:
+
+```bash
+deck prepare --var kubernetesVersion=v1.30.1 --var registryHost=mirror.local
 ```
 
 The bundle includes the canonical workspace inputs: `outputs/packages/`, `outputs/images/`, `outputs/files/`, `outputs/bin/`, `workflows/`, the root `deck` launcher, and `.deck/manifest.json` checksums.
@@ -62,6 +76,14 @@ Use the control-plane and worker workflows in your workspace as starting points 
 ## 7. Add site assistance only when it solves a real problem
 
 Some sites benefit from a temporary shared bundle source inside the air gap. That can help when several nodes need the same release inside the same air gap.
+
+Examples:
+
+```bash
+deck server up --root ./bundle --addr :8080
+deck server up --root ./bundle --addr :8443 --tls-self-signed
+deck server up --root ./bundle --addr :8080 --daemon --unit deck-server
+```
 
 Keep that choice explicit and secondary. The core workflow centers on local `deck` execution on each node.
 

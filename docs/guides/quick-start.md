@@ -30,6 +30,8 @@ This creates a starter layout with two entry workflows and a prepared output tre
 
 Prefer typed steps. They make the procedure easier to read and lint as it grows.
 
+When choosing a step, start with [Typed Steps](../reference/typed-steps.md). For shared step fields such as `when`, `parallelGroup`, `register`, and `metadata`, use the [Step Envelope Contract](../reference/workflow-model.md#step-envelope-contract).
+
 ```yaml
 version: v1alpha1
 steps:
@@ -77,11 +79,24 @@ deck apply
 
 Some sites benefit from a temporary local server inside the air gap as a shared bundle source. Use `deck server up` for this when it solves a real problem.
 
+Typical patterns:
+
+```bash
+deck server up --root ./bundle --addr :8080
+deck server up --root ./bundle --addr :8443 --tls-self-signed
+deck server up --root ./bundle --addr :8080 --daemon --unit deck-server
+```
+
+Use [CLI Reference](../reference/cli.md) for TLS and daemon flags, and [Server Audit Log](../reference/server-audit-log.md) for the current audit record shape written under `.deck/logs/server-audit.log`.
+
 That path extends the local workflow. It does not replace it.
 
 ## What to read next
 
 - [Why deck?](../core-concepts/why-deck.md)
 - [Workflow model](../reference/workflow-model.md)
+- [Apply State](../reference/apply-state.md)
+- [Typed Steps](../reference/typed-steps.md)
 - [Bundle layout](../reference/bundle-layout.md)
+- [CLI Reference](../reference/cli.md)
 - [Using deck ask](ask.md)
