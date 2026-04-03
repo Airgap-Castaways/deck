@@ -14,6 +14,8 @@ type Definition struct {
 	Kind        string
 	Family      string
 	FamilyTitle string
+	Group       string
+	GroupOrder  int
 	DocsPage    string
 	DocsOrder   int
 	Visibility  string

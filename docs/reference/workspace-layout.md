@@ -40,6 +40,43 @@ Components are **Component Fragments**—reusable sets of steps that are importe
 - They are imported via `phases[].imports` in a scenario.
 - **Example**: `workflows/components/k8s/runtime.yaml` is imported as `k8s/runtime.yaml`.
 
+<!-- BEGIN GENERATED:COMPONENT_FRAGMENT_CONTRACT -->
+#### Component Fragment Contract
+
+Reference for reusable workflow component fragments located under `workflows/components/`.
+
+- schema: `../../schemas/deck-component-fragment.schema.json`
+
+##### Example
+
+```yaml
+steps:
+  - id: write-config
+    kind: WriteFile
+    spec:
+      path: /etc/example.conf
+      content: hello
+  - id: restart-service
+    kind: ManageService
+    spec:
+      name: example
+      state: restarted
+```
+
+##### Fields
+
+| Key | Type | Required | Default | Enum | Description | Example |
+|---|---|---:|---|---|---|---|
+| `steps` | `array<object>` | yes | `` | `` | Ordered list of workflow steps contained in this fragment. | `[{id:example,kind:Command,spec:{...}}]` |
+
+##### Notes
+
+- Component fragments are stored in the `workflows/components/` directory of your workspace.
+- They contain only a `steps:` list and follow a restricted schema compared to full scenarios.
+- Fragments are imported into a scenario phase using `phases[].imports`.
+- The surrounding Workspace Layout documentation explains how component fragments fit into the standard project structure.
+<!-- END GENERATED:COMPONENT_FRAGMENT_CONTRACT -->
+
 ### Variables (`workflows/vars.yaml`)
 A central YAML file for shared defaults. Values defined here are available to all workflows and components via the `{{ .vars.NAME }}` syntax.
 
@@ -60,4 +97,4 @@ This directory is managed by `deck` and should not be edited manually.
 
 - [Workflow Model](workflow-model.md)
 - [Bundle Layout](bundle-layout.md)
-- [Component Fragment Schema](schema/component-fragment.md)
+- [Component Fragment Contract](#component-fragment-contract)

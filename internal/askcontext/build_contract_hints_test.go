@@ -14,7 +14,7 @@ func TestBuildStepKindsProjectsContractHints(t *testing.T) {
 			initKubeadm = step
 		case "JoinKubeadm":
 			joinKubeadm = step
-		case "CheckCluster":
+		case "CheckKubernetesCluster":
 			clusterCheck = step
 		}
 	}

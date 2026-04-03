@@ -51,7 +51,7 @@ func readSchemaMap(path string) (map[string]any, error) {
 	return out, nil
 }
 
-func loadToolPageInputs(dir string) ([]schemadoc.PageInput, error) {
+func loadGroupPageInputs(dir string) ([]schemadoc.PageInput, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -65,6 +65,7 @@ func loadToolPageInputs(dir string) ([]schemadoc.PageInput, error) {
 		if def.Visibility != "public" {
 			continue
 		}
+		groupMeta := schemadoc.MustGroupMeta(def.Group)
 		path := filepath.Join(dir, def.SchemaFile)
 		doc, err := readSchema(path)
 		if err != nil {
@@ -78,29 +79,31 @@ func loadToolPageInputs(dir string) ([]schemadoc.PageInput, error) {
 		if err != nil {
 			return nil, err
 		}
-		page := pagesBySlug[def.DocsPage]
+		page := pagesBySlug[groupMeta.Key]
 		if page == nil {
-			title := schemadoc.DisplayFamilyTitle(def.Family, "")
 			page = &schemadoc.PageInput{
-				Family:      def.Family,
-				PageSlug:    def.DocsPage,
-				Title:       title,
-				Summary:     familyPageSummary(def, title),
-				Description: familyPageSummary(def, title),
+				Group:        groupMeta.Key,
+				PageSlug:     groupMeta.Key,
+				Title:        groupMeta.Title,
+				Summary:      groupMeta.Summary,
+				Description:  groupMeta.Summary,
+				WhenToUse:    groupMeta.WhenToUse,
+				TypicalFlows: groupMeta.TypicalFlows,
+				SeeAlso:      groupMeta.SeeAlso,
 			}
-			pagesBySlug[def.DocsPage] = page
+			pagesBySlug[groupMeta.Key] = page
 		}
 		spec, _ := doc.Properties["spec"].(map[string]any)
 		page.Variants = append(page.Variants, schemadoc.VariantInput{
 			Kind:        kind,
 			Title:       doc.Title,
 			Description: doc.Description,
-			SchemaPath:  filepath.ToSlash(filepath.Join("schemas", "tools", def.SchemaFile)),
 			Schema:      raw,
 			Meta:        schemadoc.ToolMetaForDefinition(def),
 			Required:    nestedRequired(doc.Properties, "spec"),
 			Spec:        spec,
 			Outputs:     append([]string(nil), def.Outputs...),
+			GroupOrder:  def.GroupOrder,
 			DocsOrder:   def.DocsOrder,
 		})
 	}
@@ -108,15 +111,15 @@ func loadToolPageInputs(dir string) ([]schemadoc.PageInput, error) {
 	for _, page := range pagesBySlug {
 		pages = append(pages, *page)
 	}
-	sort.Slice(pages, func(i, j int) bool { return pages[i].PageSlug < pages[j].PageSlug })
+	sort.Slice(pages, func(i, j int) bool {
+		left := schemadoc.MustGroupMeta(pages[i].Group)
+		right := schemadoc.MustGroupMeta(pages[j].Group)
+		if left.Order != right.Order {
+			return left.Order < right.Order
+		}
+		return pages[i].PageSlug < pages[j].PageSlug
+	})
 	return pages, nil
-}
-
-func familyPageSummary(def workflowexec.StepDefinition, title string) string {
-	if def.Kind == def.Family {
-		return def.Summary
-	}
-	return fmt.Sprintf("Reference for the `%s` family of typed workflow steps.", title)
 }
 
 func loadToolSchemas(dir string) ([]toolSchemaDoc, error) {

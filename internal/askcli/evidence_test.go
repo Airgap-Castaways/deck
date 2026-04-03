@@ -90,7 +90,7 @@ func TestExecuteAuthoringBlocksWhenRequiredExternalEvidenceFails(t *testing.T) {
 	client := &stubClient{responses: []string{
 		`{"version":1,"request":"create Kubernetes 1.35.1 workflow","intent":"draft","complexity":"complex","authoringProgram":{"verification":{"expectedNodeCount":1,"expectedReadyCount":1,"expectedControlPlaneReady":1}},"blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`,
 		`{"summary":"ok","blocking":[],"advisory":[],"missingContracts":[],"suggestedFixes":[],"findings":[]}`,
-		`{"summary":"generated","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-cluster","overrides":{"nodeCount":1}}]}]}}`,
+		`{"summary":"generated","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-kubernetes-cluster","overrides":{"nodeCount":1}}]}]}}`,
 	}}
 	root := t.TempDir()
 	err := Execute(context.Background(), Options{Root: root, Prompt: "Create a Kubernetes 1.35.1 workflow", Create: true, Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client)

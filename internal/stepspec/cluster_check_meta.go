@@ -3,22 +3,24 @@ package stepspec
 import "github.com/Airgap-Castaways/deck/internal/stepmeta"
 
 var _ = stepmeta.MustRegister[ClusterCheck](stepmeta.Definition{
-	Kind:        "CheckCluster",
+	Kind:        "CheckKubernetesCluster",
 	Family:      "cluster-check",
 	FamilyTitle: "ClusterCheck",
+	Group:       "kubernetes-lifecycle",
+	GroupOrder:  70,
 	DocsPage:    "cluster-check",
 	DocsOrder:   10,
 	Visibility:  "public",
 	Roles:       []string{"apply"},
 	SchemaFile:  "cluster-check.schema.json",
-	SchemaPatch: stepmeta.PatchCheckClusterToolSchema,
+	SchemaPatch: stepmeta.PatchCheckKubernetesClusterToolSchema,
 	Ask: stepmeta.AskMetadata{
 		Capabilities:  []string{"cluster-verification", "kubeadm-bootstrap"},
 		ContractHints: stepmeta.ContractHints{VerificationRelated: true, RoleSensitive: true},
 		Builders: []stepmeta.AuthoringBuilder{{
-			ID:                   "apply.check-cluster",
+			ID:                   "apply.check-kubernetes-cluster",
 			Phase:                "verify",
-			DefaultStepID:        "apply-check-cluster",
+			DefaultStepID:        "apply-check-kubernetes-cluster",
 			Summary:              "Verify cluster readiness with typed node expectations.",
 			RequiresCapabilities: []string{"cluster-verification"},
 			Bindings: []stepmeta.AuthoringBinding{
@@ -43,7 +45,7 @@ var _ = stepmeta.MustRegister[ClusterCheck](stepmeta.Definition{
 		}},
 		MatchSignals:             []string{"kubernetes", "kubeadm", "cluster", "verify", "health", "ready"},
 		KeyFields:                []string{"spec.nodes", "spec.versions", "spec.kubeSystem", "spec.reports"},
-		ValidationHints:          []stepmeta.ValidationHint{{ErrorContains: "spec.interval: does not match pattern", Fix: "Keep CheckCluster spec.interval as a literal duration such as 5s; do not replace it with a vars template."}},
+		ValidationHints:          []stepmeta.ValidationHint{{ErrorContains: "spec.interval: does not match pattern", Fix: "Keep CheckKubernetesCluster spec.interval as a literal duration such as 5s; do not replace it with a vars template."}},
 		ConstrainedLiteralFields: []stepmeta.ConstrainedLiteralField{{Path: "spec.interval", Guidance: "Keep spec.interval as a literal duration such as 5s or 30s, not a vars template."}},
 	},
 })

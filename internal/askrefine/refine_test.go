@@ -52,7 +52,7 @@ func TestCandidatesForDocumentsExcludeExtractVarForConstrainedAndNumericFields(t
 			Name: "verify",
 			Steps: []askcontract.WorkflowStep{{
 				ID:   "check",
-				Kind: "CheckCluster",
+				Kind: "CheckKubernetesCluster",
 				Spec: map[string]any{"interval": "5s", "timeout": "10m", "nodes": map[string]any{"total": 1}},
 			}},
 		}}},
@@ -104,7 +104,7 @@ func TestCandidatesForDocumentsUseRecommendationOnlyWhenNothingRepeats(t *testin
 }
 
 func TestResolveCandidateMarksUnsupportedExtractVarAsIgnorable(t *testing.T) {
-	doc := askcontract.GeneratedDocument{Path: "workflows/scenarios/apply.yaml", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1", Phases: []askcontract.WorkflowPhase{{Name: "verify", Steps: []askcontract.WorkflowStep{{ID: "check", Kind: "CheckCluster", Spec: map[string]any{"interval": "5s"}}}}}}}
+	doc := askcontract.GeneratedDocument{Path: "workflows/scenarios/apply.yaml", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1", Phases: []askcontract.WorkflowPhase{{Name: "verify", Steps: []askcontract.WorkflowStep{{ID: "check", Kind: "CheckKubernetesCluster", Spec: map[string]any{"interval": "5s"}}}}}}}
 	_, err := ResolveCandidate(doc, askcontract.RefineTransformAction{Candidate: "extract-var|workflows/scenarios/apply.yaml|phases[0].steps[0].spec.interval"})
 	var unknown UnknownCandidateError
 	if err == nil || !strings.Contains(err.Error(), "unknown refine transform candidate") || !strings.Contains(err.Error(), "workflows/scenarios/apply.yaml") {

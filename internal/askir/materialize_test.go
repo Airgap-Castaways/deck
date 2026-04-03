@@ -392,7 +392,7 @@ func TestMaterializeSkipsUnsupportedUnknownExtractVarCandidate(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 		t.Fatalf("mkdir target: %v", err)
 	}
-	content := "version: v1alpha1\nphases:\n  - name: verify\n    steps:\n      - id: apply-check-cluster\n        kind: CheckCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 1\n            ready: 1\n            controlPlaneReady: 1\n          timeout: 10m\n"
+	content := "version: v1alpha1\nphases:\n  - name: verify\n    steps:\n      - id: apply-check-kubernetes-cluster\n        kind: CheckKubernetesCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 1\n            ready: 1\n            controlPlaneReady: 1\n          timeout: 10m\n"
 	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
 		t.Fatalf("write target: %v", err)
 	}
@@ -619,11 +619,11 @@ func TestMaterializeDeleteDocument(t *testing.T) {
 }
 
 func TestMaterializeCompilesBuilderSelection(t *testing.T) {
-	files, err := Materialize(t.TempDir(), askcontract.GenerationResponse{Program: &askcontract.AuthoringProgram{Cluster: askcontract.ProgramCluster{JoinFile: "/tmp/deck/join.txt", ControlPlaneCount: 1}, Verification: askcontract.ProgramVerification{ExpectedNodeCount: 1, ExpectedReadyCount: 1, ExpectedControlPlaneReady: 1}}, Selection: &askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm", Overrides: map[string]any{}}, {ID: "apply.check-cluster", Overrides: map[string]any{}}}}}}})
+	files, err := Materialize(t.TempDir(), askcontract.GenerationResponse{Program: &askcontract.AuthoringProgram{Cluster: askcontract.ProgramCluster{JoinFile: "/tmp/deck/join.txt", ControlPlaneCount: 1}, Verification: askcontract.ProgramVerification{ExpectedNodeCount: 1, ExpectedReadyCount: 1, ExpectedControlPlaneReady: 1}}, Selection: &askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm", Overrides: map[string]any{}}, {ID: "apply.check-kubernetes-cluster", Overrides: map[string]any{}}}}}}})
 	if err != nil {
 		t.Fatalf("materialize builder selection: %v", err)
 	}
-	if len(files) != 1 || !strings.Contains(files[0].Content, "kind: InitKubeadm") || !strings.Contains(files[0].Content, "kind: CheckCluster") {
+	if len(files) != 1 || !strings.Contains(files[0].Content, "kind: InitKubeadm") || !strings.Contains(files[0].Content, "kind: CheckKubernetesCluster") {
 		t.Fatalf("expected builder selection to render typed workflow content, got %#v", files)
 	}
 }
@@ -643,7 +643,7 @@ func TestMaterializeCompilesCompleteTwoNodeOfflineBuilderSelection(t *testing.T)
 	selection := &askcontract.DraftSelection{
 		Targets: []askcontract.DraftTargetSelection{
 			{Path: "workflows/prepare.yaml", Kind: "workflow", Builders: []askcontract.DraftBuilderSelection{{ID: "prepare.download-package"}, {ID: "prepare.download-image"}}},
-			{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.install-package"}, {ID: "apply.load-image"}, {ID: "apply.init-kubeadm"}, {ID: "apply.join-kubeadm"}, {ID: "apply.check-cluster"}}},
+			{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.install-package"}, {ID: "apply.load-image"}, {ID: "apply.init-kubeadm"}, {ID: "apply.join-kubeadm"}, {ID: "apply.check-kubernetes-cluster"}}},
 		},
 		Vars: map[string]any{"role": "control-plane", "joinFile": "/tmp/deck/join.txt"},
 	}
@@ -668,7 +668,7 @@ func TestMaterializeCompilesCompleteTwoNodeOfflineBuilderSelection(t *testing.T)
 			t.Fatalf("expected %q in prepare workflow, got %q", want, byPath["workflows/prepare.yaml"])
 		}
 	}
-	for _, want := range []string{"kind: InstallPackage", "kind: LoadImage", "kind: InitKubeadm", "kind: JoinKubeadm", "kind: CheckCluster", `when: vars.role == "control-plane"`, `when: vars.role == "worker"`, "path: packages/rpm/9", "sourceDir: images/control-plane", "joinFile: /tmp/deck/join.txt", "outputJoinFile: /tmp/deck/join.txt", "total: 2", "ready: 2", "controlPlaneReady: 1"} {
+	for _, want := range []string{"kind: InstallPackage", "kind: LoadImage", "kind: InitKubeadm", "kind: JoinKubeadm", "kind: CheckKubernetesCluster", `when: vars.role == "control-plane"`, `when: vars.role == "worker"`, "path: packages/rpm/9", "sourceDir: images/control-plane", "joinFile: /tmp/deck/join.txt", "outputJoinFile: /tmp/deck/join.txt", "total: 2", "ready: 2", "controlPlaneReady: 1"} {
 		if !strings.Contains(byPath["workflows/scenarios/apply.yaml"], want) {
 			t.Fatalf("expected %q in apply workflow, got %q", want, byPath["workflows/scenarios/apply.yaml"])
 		}

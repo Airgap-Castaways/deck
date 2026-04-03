@@ -84,7 +84,7 @@ func TestRetrieveIncludesLocalFactChunks(t *testing.T) {
 
 func TestRetrieveRepoBehaviorExplainPrefersLocalFactsOverWorkspace(t *testing.T) {
 	workspace := WorkspaceSummary{Files: []WorkspaceFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps: []\n"}}}
-	result := Retrieve(askintent.RouteExplain, "Explain how InitKubeadm and CheckCluster are assembled for ask draft generation in this repo", askintent.Target{Kind: "workspace"}, workspace, askstate.Context{}, nil)
+	result := Retrieve(askintent.RouteExplain, "Explain how InitKubeadm and CheckKubernetesCluster are assembled for ask draft generation in this repo", askintent.Target{Kind: "workspace"}, workspace, askstate.Context{}, nil)
 	if len(result.Chunks) == 0 {
 		t.Fatalf("expected retrieval chunks")
 	}
@@ -215,8 +215,8 @@ func TestCompressChunkContentDoesNotTrimYAML(t *testing.T) {
 		"        kind: JoinKubeadm",
 		"  - name: verify",
 		"    steps:",
-		"      - id: check-cluster",
-		"        kind: CheckCluster",
+		"      - id: check-kubernetes-cluster",
+		"        kind: CheckKubernetesCluster",
 	}, "\n")
 	compressed := compressChunkContent("multi-node kubeadm worker join handoff", "workflows/scenarios/apply.yaml", content, 80)
 	if compressed != content {

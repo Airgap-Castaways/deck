@@ -2,7 +2,6 @@ package schemadoc
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,45 +9,91 @@ import (
 	"github.com/Airgap-Castaways/deck/schemas"
 )
 
-func TestRenderToolPageGroupsConcreteKindsByFamily(t *testing.T) {
-	page := testFamilyPageInput(t, "file")
-	rendered := string(RenderToolPage(page))
+func TestRenderGroupPageListsKindsByGroup(t *testing.T) {
+	page := testGroupPageInput(t, "filesystem-content")
+	rendered := string(RenderGroupPage(page))
 
-	if !strings.Contains(rendered, "## Supported Kinds") {
-		t.Fatalf("expected supported kinds section:\n%s", rendered)
+	if !strings.Contains(rendered, "- group: `filesystem-content`") {
+		t.Fatalf("expected group summary header:\n%s", rendered)
 	}
-	for _, kind := range []string{"DownloadFile", "WriteFile", "CopyFile", "EditFile"} {
+	for _, kind := range []string{"EnsureDirectory", "WriteFile", "CopyFile", "EditFile", "CreateSymlink"} {
 		if !strings.Contains(rendered, "`"+kind+"`") {
-			t.Fatalf("expected grouped file kind %s:\n%s", kind, rendered)
+			t.Fatalf("expected kind %s in group page:\n%s", kind, rendered)
 		}
 	}
-	if strings.Contains(rendered, "spec.action") {
-		t.Fatalf("did not expect legacy spec.action docs:\n%s", rendered)
-	}
-	if !strings.Contains(rendered, "../../../schemas/tools/file.download.schema.json") {
-		t.Fatalf("expected raw schema link for grouped variant:\n%s", rendered)
+	if strings.Contains(rendered, "family:") {
+		t.Fatalf("did not expect family label in public group page:\n%s", rendered)
 	}
 }
 
-func TestRenderToolPageConcreteKindSectionUsesNormalizedExample(t *testing.T) {
-	page := testFamilyPageInput(t, "package")
-	rendered := string(RenderToolPage(page))
+func TestRenderGroupPageIncludesTypicalFlowsAndSeeAlso(t *testing.T) {
+	page := testGroupPageInput(t, "runtime-services")
+	rendered := string(RenderGroupPage(page))
 
-	if !strings.Contains(rendered, "## `DownloadPackage`") || !strings.Contains(rendered, "## `InstallPackage`") {
-		t.Fatalf("expected concrete kind sections:\n%s", rendered)
-	}
-	if !strings.Contains(rendered, "kind: InstallPackage") {
-		t.Fatalf("expected normalized concrete kind example:\n%s", rendered)
-	}
-	if strings.Contains(rendered, "action:") {
-		t.Fatalf("did not expect legacy action selector in rendered page:\n%s", rendered)
-	}
-	if !strings.Contains(rendered, "outputs: `artifacts`") {
-		t.Fatalf("expected outputs section for DownloadPackage:\n%s", rendered)
+	for _, want := range []string{"## Typical Flows", "### Configure containerd", "[Waits and Polling](waits-polling.md)", "[Workflow Model](../workflow-model.md#workflow-schema-contract)"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("expected %q in runtime services page:\n%s", want, rendered)
+		}
 	}
 }
 
-func TestRenderWorkflowPageUsesConcreteKindExample(t *testing.T) {
+func TestRenderGroupPageUsesConcreteExamplesAndValidationRules(t *testing.T) {
+	page := testGroupPageInput(t, "artifact-staging")
+	rendered := string(RenderGroupPage(page))
+
+	if !strings.Contains(rendered, "## `DownloadPackage`") || !strings.Contains(rendered, "kind: DownloadPackage") {
+		t.Fatalf("expected concrete DownloadPackage section:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "At least one of `spec.source` or `spec.items` must be set.") {
+		t.Fatalf("expected schema-derived branch rule in artifact staging page:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "schema: `../../../schemas/tools/") {
+		t.Fatalf("did not expect raw per-kind schema path in public group page:\n%s", rendered)
+	}
+}
+
+func TestRenderGroupPageEscapesMultilineExamples(t *testing.T) {
+	page := testGroupPageInput(t, "runtime-services")
+	rendered := string(RenderGroupPage(page))
+
+	if !strings.Contains(rendered, "[Service]<br>Environment=NODE_IP={{ .vars.nodeIP }}") {
+		t.Fatalf("expected multiline example to stay inside table cell:\n%s", rendered)
+	}
+}
+
+func TestRenderGroupPagePreservesKindScopedNotes(t *testing.T) {
+	rendered := string(RenderGroupPage(testGroupPageInput(t, "kubernetes-lifecycle")))
+	loadSection := sectionForKind(rendered, "LoadImage")
+	if strings.Contains(loadSection, "spec.auth") || strings.Contains(loadSection, "outputDir") {
+		t.Fatalf("expected LoadImage notes to exclude DownloadImage-only guidance:\n%s", loadSection)
+	}
+	verifySection := sectionForKind(rendered, "CheckKubernetesCluster")
+	if !strings.Contains(verifySection, "Use this for typed bootstrap and upgrade verification") {
+		t.Fatalf("expected Kubernetes cluster check guidance:\n%s", verifySection)
+	}
+}
+
+func TestRenderTypedStepsPageListsGroups(t *testing.T) {
+	page := RenderTypedStepsPage([]PageInput{testGroupPageInput(t, "host-prep"), testGroupPageInput(t, "kubernetes-lifecycle")})
+	rendered := string(page)
+
+	for _, want := range []string{"# Typed Steps", "## [Host Prep](groups/host-prep.md)", "## [Kubernetes Lifecycle](groups/kubernetes-lifecycle.md)"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("expected %q in typed steps index:\n%s", want, rendered)
+		}
+	}
+}
+
+func TestRenderTypedStepsPageLinksCoreContracts(t *testing.T) {
+	rendered := string(RenderTypedStepsPage([]PageInput{testGroupPageInput(t, "host-prep")}))
+	for _, want := range []string{"[Workflow Model](workflow-model.md#workflow-schema-contract)", "[Workspace Layout](workspace-layout.md#component-fragment-contract)"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("expected %q in typed steps page:\n%s", want, rendered)
+		}
+	}
+}
+
+func TestRenderWorkflowSchemaPartialUsesNestedHeadings(t *testing.T) {
 	raw, err := schemas.WorkflowSchema()
 	if err != nil {
 		t.Fatalf("WorkflowSchema: %v", err)
@@ -57,101 +102,21 @@ func TestRenderWorkflowPageUsesConcreteKindExample(t *testing.T) {
 	if err := json.Unmarshal(raw, &schema); err != nil {
 		t.Fatalf("unmarshal workflow schema: %v", err)
 	}
-	rendered := string(RenderWorkflowPage("schemas/deck-workflow.schema.json", schema, WorkflowMeta()))
-
-	if !strings.Contains(rendered, "kind: WriteFile") {
-		t.Fatalf("expected concrete kind workflow example:\n%s", rendered)
-	}
-	if strings.Contains(rendered, "action: write") {
-		t.Fatalf("did not expect legacy action line in workflow example:\n%s", rendered)
-	}
-}
-
-func TestRenderToolPageEscapesMultilineTableExamples(t *testing.T) {
-	page := testFamilyPageInput(t, "systemd-unit")
-	rendered := string(RenderToolPage(page))
-
-	if !strings.Contains(rendered, "[Service]<br>Environment=NODE_IP={{ .vars.nodeIP }}") {
-		t.Fatalf("expected multiline example to stay inside table cell:\n%s", rendered)
-	}
-}
-
-func TestRenderToolPageIncludesSchemaDerivedBranchRuleSummary(t *testing.T) {
-	page := testFamilyPageInput(t, "file")
-	rendered := string(RenderToolPage(page))
-	if !strings.Contains(rendered, "At least one of `spec.source` or `spec.items` must be set.") {
-		t.Fatalf("expected schema-derived branch rule in file docs:\n%s", rendered)
-	}
-}
-
-func TestRenderToolPageAvoidsGenericPlaceholderExamplesForRestoredFamilies(t *testing.T) {
-	for _, family := range []string{"file", "wait", "package", "image"} {
-		rendered := string(RenderToolPage(testFamilyPageInput(t, family)))
-		for _, bad := range []string{"`example`", "`{...}`", "`[{...}]`"} {
-			if strings.Contains(rendered, bad) {
-				t.Fatalf("family %s still contains generic placeholder %s:\n%s", family, bad, rendered)
-			}
+	rendered := string(RenderWorkflowSchemaPartial("../../schemas/deck-workflow.schema.json", schema, WorkflowMeta()))
+	for _, want := range []string{"## Workflow Schema Contract", "### Example", "### Validation Rules", "- schema: `../../schemas/deck-workflow.schema.json`"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("expected %q in workflow schema partial:\n%s", want, rendered)
 		}
 	}
 }
 
-func TestRenderToolPageUsesKindScopedNotesForImageAndPackageFamilies(t *testing.T) {
-	imagePage := string(RenderToolPage(testFamilyPageInput(t, "image")))
-	loadSection := sectionForKind(imagePage, "LoadImage")
-	if strings.Contains(loadSection, "spec.auth") || strings.Contains(loadSection, "outputDir") {
-		t.Fatalf("expected LoadImage notes to exclude DownloadImage-only guidance:\n%s", loadSection)
-	}
-	packagePage := string(RenderToolPage(testFamilyPageInput(t, "package")))
-	installSection := sectionForKind(packagePage, "InstallPackage")
-	if strings.Contains(installSection, "outputDir") || strings.Contains(installSection, "Container-backed `DownloadPackage`") {
-		t.Fatalf("expected InstallPackage notes to exclude DownloadPackage-only guidance:\n%s", installSection)
-	}
-}
-
-func TestRenderToolPageNormalizesRepresentativeExamples(t *testing.T) {
-	for _, family := range []string{"package", "image", "file", "kernel-module"} {
-		rendered := string(RenderToolPage(testFamilyPageInput(t, family)))
-		if strings.Contains(rendered, "\t") {
-			t.Fatalf("expected rendered %s page to avoid tabs:\n%s", family, rendered)
-		}
-		if strings.Contains(rendered, "spec:\n\n") {
-			t.Fatalf("expected rendered %s page to avoid blank line after spec:\n%s", family, rendered)
-		}
-	}
-}
-
-func TestFamilyTitleFallbackUsesSpacedWords(t *testing.T) {
-	if got := familyTitleFallback("host-check"); got != "Host Check" {
-		t.Fatalf("unexpected host-check title: %q", got)
-	}
-	if got := familyTitleFallback("systemd-unit"); got != "Systemd Unit" {
-		t.Fatalf("unexpected systemd-unit title: %q", got)
+func TestGroupMetadataIsStable(t *testing.T) {
+	meta := MustGroupMeta("host-prep")
+	if meta.Title != "Host Prep" {
+		t.Fatalf("unexpected host-prep title: %q", meta.Title)
 	}
 	if got := DisplayFamilyTitle("host-check", ""); got != "Host Check" {
-		t.Fatalf("unexpected display title: %q", got)
-	}
-}
-
-func TestRenderToolPagePreservesNoteOrder(t *testing.T) {
-	rendered := string(RenderToolPage(testFamilyPageInput(t, "package")))
-	section := sectionForKind(rendered, "DownloadPackage")
-	first := "Use `DownloadPackage` and `InstallPackage` with `ConfigureRepository` and `RefreshRepository` for a complete typed package-management flow."
-	second := "Omit `outputDir` unless you need a custom package location; deck uses `packages/` by default, or `packages/deb/<release>` and `packages/rpm/<release>` when `repo.type` is set."
-	firstIdx := strings.Index(section, first)
-	secondIdx := strings.Index(section, second)
-	if firstIdx == -1 || secondIdx == -1 || firstIdx > secondIdx {
-		t.Fatalf("expected stable note ordering in package section:\n%s", section)
-	}
-}
-
-func TestWaitForCommandUsesConcreteExample(t *testing.T) {
-	rendered := string(RenderToolPage(testFamilyPageInput(t, "wait")))
-	section := sectionForKind(rendered, "WaitForCommand")
-	if !strings.Contains(section, "command: [test, -f, /etc/kubernetes/admin.conf]") {
-		t.Fatalf("expected WaitForCommand concrete example:\n%s", section)
-	}
-	if strings.Contains(section, "apiVersion: deck/v1alpha1") || strings.Contains(section, "example-waitforcommand") {
-		t.Fatalf("expected WaitForCommand to avoid generic fallback example:\n%s", section)
+		t.Fatalf("unexpected family display title fallback: %q", got)
 	}
 }
 
@@ -168,12 +133,22 @@ func sectionForKind(page string, kind string) string {
 	return rest
 }
 
-func testFamilyPageInput(t *testing.T, family string) PageInput {
+func testGroupPageInput(t *testing.T, group string) PageInput {
 	t.Helper()
+	meta := MustGroupMeta(group)
 	defs := workflowcontract.StepDefinitions()
-	page := PageInput{Family: family}
+	page := PageInput{
+		Group:        group,
+		PageSlug:     meta.Key,
+		Title:        meta.Title,
+		Summary:      meta.Summary,
+		Description:  meta.Summary,
+		WhenToUse:    meta.WhenToUse,
+		TypicalFlows: meta.TypicalFlows,
+		SeeAlso:      meta.SeeAlso,
+	}
 	for _, def := range defs {
-		if def.Family != family || def.Visibility != "public" {
+		if def.Group != group || def.Visibility != "public" {
 			continue
 		}
 		raw, err := schemas.ToolSchema(def.SchemaFile)
@@ -186,26 +161,21 @@ func testFamilyPageInput(t *testing.T, family string) PageInput {
 		}
 		properties, _ := schema["properties"].(map[string]any)
 		spec, _ := properties["spec"].(map[string]any)
-		if page.PageSlug == "" {
-			page.PageSlug = def.DocsPage
-			page.Title = DisplayFamilyTitle(def.Family, "")
-			page.Summary = "Reference for the `" + page.Title + "` family of typed workflow steps."
-		}
 		page.Variants = append(page.Variants, VariantInput{
 			Kind:        def.Kind,
 			Title:       def.FamilyTitle,
 			Description: def.Summary,
-			SchemaPath:  filepath.ToSlash(filepath.Join("schemas", "tools", def.SchemaFile)),
 			Schema:      schema,
 			Meta:        ToolMetaForDefinition(def),
 			Required:    toRequiredStrings(spec["required"]),
 			Spec:        spec,
 			Outputs:     append([]string(nil), def.Outputs...),
+			GroupOrder:  def.GroupOrder,
 			DocsOrder:   def.DocsOrder,
 		})
 	}
-	if page.PageSlug == "" {
-		t.Fatalf("missing test page for family %s", family)
+	if len(page.Variants) == 0 {
+		t.Fatalf("missing test page for group %s", group)
 	}
 	return page
 }

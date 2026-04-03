@@ -12,7 +12,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "CheckCluster"
+      "const": "CheckKubernetesCluster"
     },
     "metadata": {
       "additionalProperties": true,
@@ -305,7 +305,7 @@
     "kind",
     "spec"
   ],
-  "title": "CheckClusterStep",
+  "title": "CheckKubernetesClusterStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

@@ -10,19 +10,19 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
-func TestGeneratedToolPagesExist(t *testing.T) {
-	seenPages := map[string]bool{}
+func TestGeneratedGroupPagesExist(t *testing.T) {
+	seenGroups := map[string]bool{}
 	for _, def := range workflowcontract.StepDefinitions() {
 		if def.Visibility != "public" {
 			continue
 		}
-		if seenPages[def.DocsPage] {
+		if seenGroups[def.Group] {
 			continue
 		}
-		seenPages[def.DocsPage] = true
-		page := filepath.Join("..", "docs", "reference", "schema", "tools", def.DocsPage+".md")
+		seenGroups[def.Group] = true
+		page := filepath.Join("..", "docs", "reference", "groups", def.Group+".md")
 		if _, err := os.Stat(page); err != nil {
-			t.Fatalf("tool page missing for %s: %v", def.Kind, err)
+			t.Fatalf("group page missing for %s: %v", def.Kind, err)
 		}
 	}
 }

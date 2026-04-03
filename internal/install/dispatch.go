@@ -83,8 +83,8 @@ func executeWorkflowStep(ctx context.Context, step config.Step, rendered map[str
 		return nil, runResetKubeadm(ctx, effectiveSpec)
 	case "UpgradeKubeadm":
 		return nil, runUpgradeKubeadm(ctx, effectiveSpec)
-	case "CheckCluster":
-		return nil, runCheckCluster(ctx, effectiveSpec)
+	case "CheckKubernetesCluster":
+		return nil, runCheckKubernetesCluster(ctx, effectiveSpec)
 	case "CheckHost":
 		decoded, err := workflowexec.DecodeSpec[stepspec.CheckHost](effectiveSpec)
 		if err != nil {

@@ -198,12 +198,12 @@ func TestLookupContainerdAndClusterKinds(t *testing.T) {
 		}
 	}
 
-	cluster, ok, err := stepmeta.Lookup("CheckCluster")
+	cluster, ok, err := stepmeta.Lookup("CheckKubernetesCluster")
 	if err != nil {
-		t.Fatalf("Lookup(CheckCluster): %v", err)
+		t.Fatalf("Lookup(CheckKubernetesCluster): %v", err)
 	}
 	if !ok {
-		t.Fatal("expected CheckCluster registration")
+		t.Fatal("expected CheckKubernetesCluster registration")
 	}
 	for _, want := range []string{"spec.nodes.total", "spec.versions.server", "spec.fileAssertions[].contains", "spec.reports.nodesPath"} {
 		if !hasFieldPath(cluster.Docs.Fields, want) {
