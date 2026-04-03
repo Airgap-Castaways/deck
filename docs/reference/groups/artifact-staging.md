@@ -22,7 +22,7 @@ Use this group during prepare when apply must avoid remote downloads and consume
 ### Stage offline images
 
 - kinds: `DownloadImage`
-- note: Use Kubernetes Lifecycle during apply to load staged image archives.
+- note: Use Runtime and Services during apply to load staged image archives into the local runtime.
 
 ### Fetch bundle files
 

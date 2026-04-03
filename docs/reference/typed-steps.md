@@ -31,15 +31,15 @@ Use these pages when you are deciding which kind to author. For top-level workfl
 
 ## [Runtime and Services](groups/runtime-services.md)
 
-- **Summary**: Configure container runtimes and manage systemd units and services on the node.
-- **When to use**: Use this group when runtime settings or service state changes must take effect locally during apply.
-- **Kinds**: `WriteContainerdConfig`, `WriteContainerdRegistryHosts`, `WriteSystemdUnit`, `ManageService`
+- **Summary**: Configure container runtimes, load or verify local images, and manage systemd units and services on the node.
+- **When to use**: Use this group when runtime settings, local image availability, or service state changes must take effect locally during apply.
+- **Kinds**: `WriteContainerdConfig`, `WriteContainerdRegistryHosts`, `WriteSystemdUnit`, `ManageService`, `LoadImage`, `VerifyImage`
 
 ## [Kubernetes Lifecycle](groups/kubernetes-lifecycle.md)
 
-- **Summary**: Load images, bootstrap or join kubeadm nodes, and verify Kubernetes-specific cluster state.
-- **When to use**: Use this group for kubeadm bootstrap, join, reset, upgrade, image loading, and Kubernetes cluster verification steps.
-- **Kinds**: `LoadImage`, `VerifyImage`, `InitKubeadm`, `JoinKubeadm`, `UpgradeKubeadm`, `ResetKubeadm`, `CheckKubernetesCluster`
+- **Summary**: Bootstrap or join kubeadm nodes and verify Kubernetes-specific cluster state.
+- **When to use**: Use this group for kubeadm bootstrap, join, reset, upgrade, and Kubernetes cluster verification steps.
+- **Kinds**: `InitKubeadm`, `JoinKubeadm`, `UpgradeKubeadm`, `ResetKubeadm`, `CheckKubernetesCluster`
 
 ## [Waits and Polling](groups/waits-polling.md)
 
