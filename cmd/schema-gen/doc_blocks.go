@@ -15,20 +15,15 @@ const (
 	toolDefinitionBlockEnd      = "<!-- END GENERATED:TOOL_DEFINITION_SCHEMA -->"
 )
 
-func syncGeneratedBlock(targetPath string, begin string, end string, partialPath string) error {
+func syncGeneratedBlock(targetPath string, begin string, end string, block []byte) error {
 	//nolint:gosec // Paths come from generator-owned repo locations.
 	target, err := os.ReadFile(targetPath)
 	if err != nil {
 		return err
 	}
-	//nolint:gosec // Paths come from generator-owned repo locations.
-	partial, err := os.ReadFile(partialPath)
+	updated, err := replaceManagedBlock(string(target), begin, end, string(block))
 	if err != nil {
-		return err
-	}
-	updated, err := replaceManagedBlock(string(target), begin, end, string(partial))
-	if err != nil {
-		return fmt.Errorf("sync %s from %s: %w", targetPath, partialPath, err)
+		return fmt.Errorf("sync %s managed block: %w", targetPath, err)
 	}
 	return writeFile(targetPath, []byte(updated))
 }
