@@ -98,13 +98,10 @@ func run() error {
 }
 
 func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSchema, toolDefinitionSchema map[string]any, groupPages []schemadoc.PageInput) error {
-	if err := removeLegacyToolDocs(filepath.Join(root, "docs", "reference", "schema", "tools")); err != nil {
+	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "schema")); err != nil {
 		return err
 	}
-	if err := removeLegacySchemaDocs(filepath.Join(root, "docs", "reference", "schema")); err != nil {
-		return err
-	}
-	if err := removeLegacyGeneratedDocs(filepath.Join(root, "docs", "_generated")); err != nil {
+	if err := removeDirIfExists(filepath.Join(root, "docs", "_generated")); err != nil {
 		return err
 	}
 	if err := removeGeneratedGroupDocs(filepath.Join(root, "docs", "reference", "groups"), groupPages); err != nil {
@@ -130,26 +127,6 @@ func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSche
 	return nil
 }
 
-func removeLegacySchemaDocs(dir string) error {
-	if _, err := os.Stat(dir); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	return os.RemoveAll(dir)
-}
-
-func removeLegacyGeneratedDocs(dir string) error {
-	if _, err := os.Stat(dir); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	return os.RemoveAll(dir)
-}
-
 func removeGeneratedGroupDocs(dir string, groupPages []schemadoc.PageInput) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
@@ -173,7 +150,7 @@ func removeGeneratedGroupDocs(dir string, groupPages []schemadoc.PageInput) erro
 	return nil
 }
 
-func removeLegacyToolDocs(dir string) error {
+func removeDirIfExists(dir string) error {
 	if _, err := os.Stat(dir); err != nil {
 		if os.IsNotExist(err) {
 			return nil
