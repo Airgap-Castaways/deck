@@ -18,6 +18,51 @@ Phase imports resolve from `workflows/components/`. Write component-relative pat
 
 `workflows/components/` files are step fragments. They contain only `steps:` and may reference shared `vars.*`, but shared defaults should stay in `workflows/vars.yaml` or the importing scenario `vars:` block.
 
+<!-- BEGIN GENERATED:WORKFLOW_SCHEMA_CONTRACT -->
+## Workflow Schema Contract
+
+Top-level workflow authoring reference for deck workflows.
+
+- schema: `../../schemas/deck-workflow.schema.json`
+
+### Example
+
+```yaml
+version: v1alpha1
+steps:
+  - id: write-config
+    apiVersion: deck/v1alpha1
+    kind: WriteFile
+    spec:
+      path: /etc/example.conf
+      content: hello
+```
+
+### Fields
+
+| Key | Type | Required | Default | Enum | Description | Example |
+|---|---|---:|---|---|---|---|
+| `phases` | `array<object>` | no | `` | `` | Ordered execution phases. Each phase can contain imports, steps, or both. | `[{name:install,steps:[...]}]` |
+| `steps` | `array<object>` | no | `` | `` | Flat step list for workflows that do not need named phases. Execution normalizes these steps into an implicit `default` phase. | `[{id:configure-runtime,kind:WriteContainerdConfig,spec:{...}}]` |
+| `vars` | `object` | no | `map[]` | `` |  | `map[]` |
+| `version` | `string` | yes | `` | `v1alpha1` |  | `v1alpha1` |
+
+### Validation Rules
+
+- At least one of the top-level groups `phases` or `steps` must be present.
+- Top-level `phases` and top-level `steps` cannot both be set in the same workflow.
+
+### Notes
+
+- A workflow must define at least one of `phases` or `steps`.
+- A workflow cannot define both top-level `phases` and top-level `steps` at the same time.
+- Top-level `steps` execute as an implicit phase named `default`.
+- Imports are only supported under `phases[].imports` and resolve from `workflows/components/`.
+- When a step omits `apiVersion`, deck resolves it from the top-level workflow `version` before schema and role checks run.
+- Workflow mode is determined by command context or file location, not by an in-file `role` field.
+- Each step still validates against its own kind-specific schema after the top-level workflow schema passes.
+<!-- END GENERATED:WORKFLOW_SCHEMA_CONTRACT -->
+
 ## Variables
 
 Variables and runtime values come from distinct sources:
@@ -286,6 +331,6 @@ Validating before transport is one of the main reasons to use a workflow model i
 ## Related references
 
 - `../concepts/why-deck.md`
-- [Schema Reference](schema/README.md)
+- [Workspace Layout](workspace-layout.md#component-fragment-contract)
 - `bundle-layout.md`
 - `../../schemas/deck-workflow.schema.json`

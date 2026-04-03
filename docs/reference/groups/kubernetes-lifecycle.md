@@ -25,7 +25,7 @@ Use this group for kubeadm bootstrap, join, reset, upgrade, image loading, and K
 
 ## Shared Step Fields
 
-Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema](../schema/workflow.md).
+Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema Contract](../workflow-model.md#workflow-schema-contract).
 
 ## Supported Kinds
 
@@ -332,4 +332,4 @@ spec:
 - [Waits and Polling](waits-polling.md)
 - [Artifact Staging](artifact-staging.md)
 - [Typed Steps](../typed-steps.md)
-- [Schema Reference](../schema/README.md)
+- [Workflow Model](../workflow-model.md#workflow-schema-contract)

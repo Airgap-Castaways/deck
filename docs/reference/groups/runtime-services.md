@@ -24,7 +24,7 @@ Use this group when runtime settings or service state changes must take effect l
 
 ## Shared Step Fields
 
-Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema](../schema/workflow.md).
+Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema Contract](../workflow-model.md#workflow-schema-contract).
 
 ## Supported Kinds
 
@@ -189,4 +189,4 @@ spec:
 - [Filesystem and Content](filesystem-content.md)
 - [Host Prep](host-prep.md)
 - [Typed Steps](../typed-steps.md)
-- [Schema Reference](../schema/README.md)
+- [Workflow Model](../workflow-model.md#workflow-schema-contract)

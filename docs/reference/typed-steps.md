@@ -3,7 +3,7 @@
 
 Choose typed workflow steps by task-oriented group rather than internal implementation family.
 
-Use these pages when you are deciding which kind to author. For raw schema artifacts, see [Schema Reference](schema/README.md).
+Use these pages when you are deciding which kind to author. For top-level workflow and component document contracts, see [Workflow Model](workflow-model.md#workflow-schema-contract) and [Workspace Layout](workspace-layout.md#component-fragment-contract).
 
 ## [Host Prep](groups/host-prep.md)
 

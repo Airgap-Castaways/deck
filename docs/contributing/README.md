@@ -6,6 +6,7 @@ Guidelines and conventions for contributing to deck.
 - [Ask Authoring Pipeline](ask-authoring-pipeline.md): Current `deck ask` draft/refine architecture and source-of-truth boundaries.
 - [Ask Quality Evaluation](ask-quality-evaluation.md): Required before/after quality checks for `deck ask` pipeline changes.
 - [Comment-Driven Step Metadata](comment-driven-step-metadata.md): Source-of-truth rules for public step docs, schema annotations, and ask metadata.
+- [Tool Definition Schema](tool-definition-schema.md): Generated reference for contributor-facing `ToolDefinition` manifest fields and rules.
 - [Legacy Compatibility](legacy-compatibility.md): Compatibility shim inventory, tests, and removal gates.
 - [Release Process](release-process.md): How tagged releases publish tarballs, Linux packages, and the Homebrew tap.
 - [Versioning](versioning.md): How we handle versioning and releases.

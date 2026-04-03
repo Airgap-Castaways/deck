@@ -164,7 +164,7 @@ func ComponentFragmentMeta() PageMetadata {
 			"Component fragments are stored in the `workflows/components/` directory of your workspace.",
 			"They contain only a `steps:` list and follow a restricted schema compared to full scenarios.",
 			"Fragments are imported into a scenario phase using `phases[].imports`.",
-			"For more details on where fragments fit in the project, see the [Workspace Layout](../../workspace-layout.md).",
+			"The surrounding Workspace Layout documentation explains how component fragments fit into the standard project structure.",
 		},
 	}
 }

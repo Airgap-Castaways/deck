@@ -30,7 +30,7 @@ func TestRenderGroupPageIncludesTypicalFlowsAndSeeAlso(t *testing.T) {
 	page := testGroupPageInput(t, "runtime-services")
 	rendered := string(RenderGroupPage(page))
 
-	for _, want := range []string{"## Typical Flows", "### Configure containerd", "[Waits and Polling](waits-polling.md)", "[Schema Reference](../schema/README.md)"} {
+	for _, want := range []string{"## Typical Flows", "### Configure containerd", "[Waits and Polling](waits-polling.md)", "[Workflow Model](../workflow-model.md#workflow-schema-contract)"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("expected %q in runtime services page:\n%s", want, rendered)
 		}
@@ -84,13 +84,29 @@ func TestRenderTypedStepsPageListsGroups(t *testing.T) {
 	}
 }
 
-func TestRenderSchemaIndexPointsToTypedSteps(t *testing.T) {
-	rendered := string(RenderSchemaIndex("schemas/deck-workflow.schema.json", "schemas/deck-tooldefinition.schema.json"))
-	if !strings.Contains(rendered, "[Typed Steps](../typed-steps.md)") {
-		t.Fatalf("expected typed steps link in schema index:\n%s", rendered)
+func TestRenderTypedStepsPageLinksCoreContracts(t *testing.T) {
+	rendered := string(RenderTypedStepsPage([]PageInput{testGroupPageInput(t, "host-prep")}))
+	for _, want := range []string{"[Workflow Model](workflow-model.md#workflow-schema-contract)", "[Workspace Layout](workspace-layout.md#component-fragment-contract)"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("expected %q in typed steps page:\n%s", want, rendered)
+		}
 	}
-	if strings.Contains(rendered, "Tool Step Quick Links") {
-		t.Fatalf("did not expect legacy tool quick links:\n%s", rendered)
+}
+
+func TestRenderWorkflowSchemaPartialUsesNestedHeadings(t *testing.T) {
+	raw, err := schemas.WorkflowSchema()
+	if err != nil {
+		t.Fatalf("WorkflowSchema: %v", err)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("unmarshal workflow schema: %v", err)
+	}
+	rendered := string(RenderWorkflowSchemaPartial("../../schemas/deck-workflow.schema.json", schema, WorkflowMeta()))
+	for _, want := range []string{"## Workflow Schema Contract", "### Example", "### Validation Rules", "- schema: `../../schemas/deck-workflow.schema.json`"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("expected %q in workflow schema partial:\n%s", want, rendered)
+		}
 	}
 }
 

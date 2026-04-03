@@ -75,6 +75,7 @@ deck lint --file ./workflows/scenarios/apply.yaml
 For planning and diagnostics, also review:
 
 - [Workflow model](../reference/workflow-model.md)
-- [Schema & Tools](../reference/schema/README.md)
+- [Typed Steps](../reference/typed-steps.md)
+- [Workspace Layout](../reference/workspace-layout.md)
 - [Server audit log](../reference/server-audit-log.md)
 - [CLI Reference](../reference/cli.md)

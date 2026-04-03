@@ -101,22 +101,34 @@ func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSche
 	if err := removeLegacyToolDocs(filepath.Join(root, "docs", "reference", "schema", "tools")); err != nil {
 		return err
 	}
+	if err := removeLegacySchemaDocs(filepath.Join(root, "docs", "reference", "schema")); err != nil {
+		return err
+	}
 	if err := removeGeneratedGroupDocs(filepath.Join(root, "docs", "reference", "groups"), groupPages); err != nil {
 		return err
 	}
 	if err := writeFile(filepath.Join(root, "docs", "reference", "typed-steps.md"), schemadoc.RenderTypedStepsPage(groupPages)); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "README.md"), schemadoc.RenderSchemaIndex("schemas/deck-workflow.schema.json", "schemas/deck-tooldefinition.schema.json")); err != nil {
+	workflowPartialPath := filepath.Join(root, "docs", "_generated", "reference", "workflow-schema-contract.md")
+	if err := writeFile(workflowPartialPath, schemadoc.RenderWorkflowSchemaPartial("../../schemas/deck-workflow.schema.json", workflowSchema, schemadoc.WorkflowMeta())); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "workflow.md"), schemadoc.RenderWorkflowPage("schemas/deck-workflow.schema.json", workflowSchema, schemadoc.WorkflowMeta())); err != nil {
+	if err := syncGeneratedBlock(filepath.Join(root, "docs", "reference", "workflow-model.md"), workflowSchemaBlockBegin, workflowSchemaBlockEnd, workflowPartialPath); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "component-fragment.md"), schemadoc.RenderComponentFragmentPage("schemas/deck-component-fragment.schema.json", componentFragmentSchema, schemadoc.ComponentFragmentMeta())); err != nil {
+	componentPartialPath := filepath.Join(root, "docs", "_generated", "reference", "component-fragment-contract.md")
+	if err := writeFile(componentPartialPath, schemadoc.RenderComponentFragmentSchemaPartial("../../schemas/deck-component-fragment.schema.json", componentFragmentSchema, schemadoc.ComponentFragmentMeta())); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "tool-definition.md"), schemadoc.RenderToolDefinitionPage("schemas/deck-tooldefinition.schema.json", toolDefinitionSchema, schemadoc.ToolDefinitionMeta())); err != nil {
+	if err := syncGeneratedBlock(filepath.Join(root, "docs", "reference", "workspace-layout.md"), componentFragmentBlockBegin, componentFragmentBlockEnd, componentPartialPath); err != nil {
+		return err
+	}
+	toolDefinitionPartialPath := filepath.Join(root, "docs", "_generated", "contributing", "tool-definition-schema.md")
+	if err := writeFile(toolDefinitionPartialPath, schemadoc.RenderToolDefinitionSchemaPartial("../../schemas/deck-tooldefinition.schema.json", toolDefinitionSchema, schemadoc.ToolDefinitionMeta())); err != nil {
+		return err
+	}
+	if err := syncGeneratedBlock(filepath.Join(root, "docs", "contributing", "tool-definition-schema.md"), toolDefinitionBlockBegin, toolDefinitionBlockEnd, toolDefinitionPartialPath); err != nil {
 		return err
 	}
 	for _, page := range groupPages {
@@ -125,6 +137,16 @@ func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSche
 		}
 	}
 	return nil
+}
+
+func removeLegacySchemaDocs(dir string) error {
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return os.RemoveAll(dir)
 }
 
 func removeGeneratedGroupDocs(dir string, groupPages []schemadoc.PageInput) error {
