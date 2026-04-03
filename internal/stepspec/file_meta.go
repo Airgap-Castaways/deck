@@ -15,7 +15,11 @@ var _ = stepmeta.MustRegister[DownloadFile](stepmeta.Definition{
 	Outputs:     []string{"outputPath", "outputPaths", "artifacts"},
 	SchemaFile:  "file.download.schema.json",
 	SchemaPatch: stepmeta.PatchDownloadFileToolSchema,
-	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.source", "spec.fetch", "spec.mode"}},
+	Notes: []string{
+		"`outputPath` must stay under the prepared `files/` root.",
+		"Omit `outputPath` unless later steps need a stable custom location inside `files/`.",
+	},
+	Ask: stepmeta.AskMetadata{KeyFields: []string{"spec.source", "spec.fetch", "spec.mode"}},
 })
 
 var _ = stepmeta.MustRegister[WriteFile](stepmeta.Definition{

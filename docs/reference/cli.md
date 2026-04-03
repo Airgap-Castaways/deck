@@ -15,6 +15,8 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 ## Additional helpers
 
 - `list`: list available scenarios from the local workspace or the saved remote server
+- `cache list`: inspect cached artifact entries
+- `cache clean`: delete cached entries, optionally by age or as a dry run
 - `server remote set`: save the default remote server URL used for server-backed scenario lookup
 - `server remote show`: show the effective default remote server URL
 - `server remote unset`: clear the saved remote server URL
@@ -32,6 +34,9 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 - `ask config show`: show the effective ask config with a masked api key
 - `ask config health`: probe configured ask augmentation providers and show transport and capability status
 - `ask config unset`: clear saved ask config
+- `ask login`: start or import an OpenAI OAuth session for `ask`
+- `ask logout`: delete the saved OAuth session for a provider
+- `ask status`: inspect whether a saved OAuth session is currently available
 
 `ask` is experimental and ships as part of the standard `deck` binary.
 
@@ -79,6 +84,8 @@ These commands are additive. They do not replace the default local execution pat
 `deck server health -o json` returns the resolved server URL, `/healthz` URL, and HTTP status.
 
 `deck server up` writes structured audit records under `.deck/logs/server-audit.log`. The current audit schema is version 2 and uses top-level fields such as `component`, `event`, `method`, `path`, `status`, and `duration_ms`. Older consumers that expected `source`, `event_type`, or nested `extra` fields must be updated.
+
+Use [Server Audit Log](server-audit-log.md) for the current emitted record shape and compatibility notes.
 
 `deck bundle verify -o json` returns the verified bundle path and final status.
 
@@ -145,6 +152,47 @@ To enable completion for all future shell sessions, add the sourcing command to 
 
 - `bundle`: bundle lifecycle operations
 - `cache`: inspect or clean the artifact cache
+
+## Practical flags worth knowing
+
+### Variable overrides
+
+`prepare`, `plan`, and `apply` support repeatable `--var key=value` overrides for one invocation.
+
+Use this when you want to test a different site value without editing `workflows/vars.yaml` or the scenario file itself.
+
+```bash
+deck prepare --var registryHost=mirror.local --var kubernetesVersion=v1.30.1
+deck plan --scenario apply --var role=worker
+deck apply --scenario apply --var role=control-plane --var nodeIP=10.0.0.10
+```
+
+### `server up` operational flags
+
+`deck server up` supports a few operational modes beyond the default `--root` and `--addr` pair:
+
+- `--tls-cert` and `--tls-key`: serve HTTPS with explicit certificate files
+- `--tls-self-signed`: auto-generate a self-signed certificate for local use
+- `--daemon` / `-d`: run as a transient systemd service instead of foreground mode
+- `--unit`: choose the transient systemd unit name used by daemon mode
+- `--audit-max-size-mb` and `--audit-max-files`: control audit log rotation limits
+
+### `cache clean`
+
+Use `deck cache clean` to prune cached downloads and release archives.
+
+- `--older-than 30d`: delete entries older than the given duration
+- `--dry-run`: print what would be removed without deleting anything
+
+### `ask` OAuth session commands
+
+For OpenAI-backed `ask` usage, `deck` also supports local OAuth session management:
+
+- `deck ask login`: start browser or headless device login, or import a token explicitly
+- `deck ask status`: show whether the saved session is present and whether it has a refresh token
+- `deck ask logout`: remove the saved session for that provider
+
+These commands complement `ask config set`; they do not replace model, endpoint, or MCP configuration.
 
 ## Common examples
 
@@ -270,6 +318,7 @@ Optional transport override example:
 - `apply` runs all phases by default when phases are used; `--phase` narrows execution to one phase.
 - top-level `steps` execute as an implicit `default` phase.
 - `parallelGroup` only parallelizes consecutive steps inside one phase.
+- apply-time parallel batches also use a limited safe kind allowlist and reject same-batch path or `runtime.*` dependencies.
 - `bundle build` archives the canonical workspace bundle inputs: the root `deck` launcher, `workflows/`, `outputs/`, and `.deck/manifest.json`, and respects `.deckignore` within those paths.
 - Help text is shown on stdout only when you request it with `--help` or `help`.
 - Command and flag errors are written to stderr without automatic usage output.

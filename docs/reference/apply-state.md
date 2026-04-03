@@ -32,6 +32,14 @@ When a phase uses explicit `parallelGroup` batches:
 - `register` outputs from that batch become visible only after the full batch succeeds
 - if any step in the batch fails, the whole phase remains incomplete
 
+Authoring and validation rules still apply before the batch runs:
+
+- `parallelGroup` names must stay contiguous inside the phase
+- apply-time parallel batches only support a limited safe kind allowlist
+- same-batch steps cannot target the same literal path or consume each other's `runtime.*` outputs
+
+Use [Workflow Model](workflow-model.md#parallel-batches) for the current batching rules and constraints.
+
 ## `--fresh`
 
 Use `--fresh` to ignore saved apply state for that invocation.

@@ -216,6 +216,37 @@ Supported providers currently include:
 
 You can also override `provider`, `model`, and `endpoint` per command instead of saving them globally.
 
+## OpenAI OAuth session commands
+
+If you use the OpenAI provider, `deck` also supports a saved local OAuth session alongside static API-key configuration.
+
+Inspect whether a saved session is available:
+
+```bash
+deck ask status --provider openai
+```
+
+Start login in a browser flow:
+
+```bash
+deck ask login --provider openai
+```
+
+Headless environments can use device login or import a token directly:
+
+```bash
+deck ask login --provider openai --headless
+printf '%s' "$OPENAI_OAUTH_TOKEN" | deck ask login --provider openai --stdin-token
+```
+
+Remove the saved session:
+
+```bash
+deck ask logout --provider openai
+```
+
+OAuth session commands are provider-specific operational helpers. They do not replace `ask config set` for selecting the provider, model, endpoint, or MCP settings.
+
 ## Configure external evidence providers
 
 Inspect the effective provider setup:

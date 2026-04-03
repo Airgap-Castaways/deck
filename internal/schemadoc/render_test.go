@@ -30,7 +30,7 @@ func TestRenderGroupPageIncludesTypicalFlowsAndSeeAlso(t *testing.T) {
 	page := testGroupPageInput(t, "runtime-services")
 	rendered := string(RenderGroupPage(page))
 
-	for _, want := range []string{"## Typical Flows", "### Configure containerd", "[Waits and Polling](waits-polling.md)", "[Workflow Model](../workflow-model.md#workflow-schema-contract)"} {
+	for _, want := range []string{"## Typical Flows", "### Configure containerd", "[Waits and Polling](waits-polling.md)", "[Step Envelope Contract](../workflow-model.md#step-envelope-contract)"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("expected %q in runtime services page:\n%s", want, rendered)
 		}
