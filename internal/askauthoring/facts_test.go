@@ -49,3 +49,13 @@ func TestInferFactsDetectsRoleCountsBeforeAndAfterLabels(t *testing.T) {
 		}
 	}
 }
+
+func TestInferFactsTreatsLegacyCheckClusterPromptAsVerificationOnly(t *testing.T) {
+	facts := InferFacts("Create a single-node apply workflow that verifies the cluster with check-cluster expecting total 1 node and controlPlaneReady 1.", nil, "unspecified")
+	if !contains(facts.Capabilities, "cluster-verification") {
+		t.Fatalf("expected verification capability for legacy prompt, got %#v", facts)
+	}
+	if contains(facts.Ambiguities, "cluster-implementation") {
+		t.Fatalf("expected legacy verification-only prompt not to require cluster implementation clarification, got %#v", facts)
+	}
+}

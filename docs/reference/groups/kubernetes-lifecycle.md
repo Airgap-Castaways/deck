@@ -21,7 +21,7 @@ Use this group for kubeadm bootstrap, join, reset, upgrade, image loading, and K
 ### Join workers
 
 - kinds: `JoinKubeadm`, `CheckKubernetesCluster`
-- note: Final cluster verification usually runs only on the control-plane role.
+- note: Final cluster verification usually runs on the control-plane role after workers have joined.
 
 ## Shared Step Fields
 

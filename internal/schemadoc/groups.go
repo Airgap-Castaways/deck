@@ -73,7 +73,7 @@ var groupMetadata = map[string]GroupMetadata{
 		Summary:      "Load images, bootstrap or join kubeadm nodes, and verify Kubernetes-specific cluster state.",
 		WhenToUse:    "Use this group for kubeadm bootstrap, join, reset, upgrade, image loading, and Kubernetes cluster verification steps.",
 		Order:        60,
-		TypicalFlows: []GroupFlow{{Title: "Bootstrap a control plane", Kinds: []string{"LoadImage", "InitKubeadm", "CheckKubernetesCluster"}}, {Title: "Join workers", Kinds: []string{"JoinKubeadm", "CheckKubernetesCluster"}, Note: "Final cluster verification usually runs only on the control-plane role."}},
+		TypicalFlows: []GroupFlow{{Title: "Bootstrap a control plane", Kinds: []string{"LoadImage", "InitKubeadm", "CheckKubernetesCluster"}}, {Title: "Join workers", Kinds: []string{"JoinKubeadm", "CheckKubernetesCluster"}, Note: "Final cluster verification usually runs on the control-plane role after workers have joined."}},
 		SeeAlso:      []string{"host-prep", "package-management", "waits-polling", "artifact-staging"},
 	},
 	"waits-polling": {
