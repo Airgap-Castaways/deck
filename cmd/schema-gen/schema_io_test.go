@@ -3,14 +3,15 @@ package main
 import (
 	"testing"
 
-	"github.com/Airgap-Castaways/deck/internal/workflowexec"
+	"github.com/Airgap-Castaways/deck/internal/schemadoc"
 )
 
-func TestFamilyPageSummaryUsesNaturalTitle(t *testing.T) {
-	def := workflowexec.StepDefinition{Family: "host-check", FamilyTitle: "HostCheck", Kind: "CheckHost", Summary: "Validate host suitability checks on the current node."}
-	got := familyPageSummary(def, "Host Check")
-	want := "Reference for the `Host Check` family of typed workflow steps."
-	if got != want {
-		t.Fatalf("unexpected family summary: got %q want %q", got, want)
+func TestGroupMetadataIncludesKubernetesLifecycle(t *testing.T) {
+	meta := schemadoc.MustGroupMeta("kubernetes-lifecycle")
+	if meta.Title != "Kubernetes Lifecycle" {
+		t.Fatalf("unexpected group title: %q", meta.Title)
+	}
+	if len(meta.TypicalFlows) == 0 {
+		t.Fatal("expected typical flows for kubernetes lifecycle")
 	}
 }

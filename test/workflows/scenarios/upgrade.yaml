@@ -75,7 +75,7 @@ phases:
           enabled: true
           state: started
       - id: upgrade-report
-        kind: CheckCluster
+        kind: CheckKubernetesCluster
         spec:
           timeout: 20m
           interval: 5s

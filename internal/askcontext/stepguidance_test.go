@@ -8,7 +8,7 @@ func TestDiscoverCandidateStepsWithOptionsKeepsBootstrapKindsVisible(t *testing.
 	for _, item := range selected {
 		seen[item.Step.Kind] = true
 	}
-	for _, want := range []string{"InitKubeadm", "CheckHost", "CheckCluster"} {
+	for _, want := range []string{"InitKubeadm", "CheckHost", "CheckKubernetesCluster"} {
 		if !seen[want] {
 			t.Fatalf("expected candidate %s, got %#v", want, selected)
 		}

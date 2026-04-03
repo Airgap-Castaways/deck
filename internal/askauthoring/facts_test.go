@@ -24,8 +24,8 @@ func TestInferFactsDoesNotTreatJoinFileRefactorAsClusterAuthoring(t *testing.T) 
 	}
 }
 
-func TestInferFactsTreatsCheckClusterPromptAsVerificationOnly(t *testing.T) {
-	facts := InferFacts("Create a single-node apply workflow that verifies the cluster with CheckCluster expecting total 1 node and controlPlaneReady 1.", nil, "unspecified")
+func TestInferFactsTreatsCheckKubernetesClusterPromptAsVerificationOnly(t *testing.T) {
+	facts := InferFacts("Create a single-node apply workflow that verifies the cluster with CheckKubernetesCluster expecting total 1 node and controlPlaneReady 1.", nil, "unspecified")
 	if !contains(facts.Capabilities, "cluster-verification") {
 		t.Fatalf("expected verification capability, got %#v", facts)
 	}

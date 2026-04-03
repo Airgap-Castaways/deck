@@ -362,7 +362,7 @@ func mentionsClusterWorkflow(lower string) bool {
 		"worker",
 		"workers",
 		"checkcluster",
-		"check-cluster",
+		"check-kubernetes-cluster",
 		"check cluster",
 		"verify cluster",
 		"cluster-verification",
@@ -378,7 +378,7 @@ func mentionsClusterWorkflow(lower string) bool {
 func mentionsClusterVerification(lower string) bool {
 	return hasAny(lower,
 		"checkcluster",
-		"check-cluster",
+		"check-kubernetes-cluster",
 		"check cluster",
 		"verify cluster",
 		"cluster-verification",

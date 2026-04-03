@@ -14,7 +14,7 @@ var (
 	PatchJoinKubeadmToolSchema                  = patchJoinKubeadmToolSchema
 	PatchResetKubeadmToolSchema                 = patchResetKubeadmToolSchema
 	PatchUpgradeKubeadmToolSchema               = patchUpgradeKubeadmToolSchema
-	PatchCheckClusterToolSchema                 = patchCheckClusterToolSchema
+	PatchCheckKubernetesClusterToolSchema       = patchCheckKubernetesClusterToolSchema
 )
 
 func patchCommandToolSchema(root map[string]any) {
@@ -246,7 +246,7 @@ func patchUpgradeKubeadmToolSchema(root map[string]any) {
 	setMap(props, "spec", spec)
 }
 
-func patchCheckClusterToolSchema(root map[string]any) {
+func patchCheckKubernetesClusterToolSchema(root map[string]any) {
 	props := propertyMap(root)
 	spec := specMap(root)
 	properties := propertyMap(spec)

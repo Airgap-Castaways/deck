@@ -78,7 +78,7 @@ cd "$tmpdir"
 ### Prompt B1: supported draft generation
 
 ```bash
-/home/opencode/workspace/deck/bin/deck ask --create "Create a minimal single-node apply-only offline kubeadm workflow for Kubernetes 1.35.1 using only init-kubeadm and check-cluster builders"
+/home/opencode/workspace/deck/bin/deck ask --create "Create a minimal single-node apply-only offline kubeadm workflow for Kubernetes 1.35.1 using only init-kubeadm and check-kubernetes-cluster builders"
 ```
 
 Expected outcome:

@@ -245,25 +245,18 @@ Rules for the first version:
 
 Typed steps make the workflow easier to scan, validate, and evolve. Use `Command` only when no supported kind fits.
 
-Supported kinds:
+Public typed step reference is organized by task-oriented groups:
 
-- `CheckHost`
-- `Command`
-- `WriteContainerdConfig`, `WriteContainerdRegistryHosts`
-- `EnsureDirectory`
-- `DownloadFile`, `WriteFile`, `CopyFile`, `EditFile`, `ExtractArchive`
-- `DownloadImage`, `LoadImage`, `VerifyImage`
-- `CheckCluster`
-- `KernelModule`
-- `InitKubeadm`, `JoinKubeadm`, `ResetKubeadm`, `UpgradeKubeadm`
-- `DownloadPackage`, `InstallPackage`
-- `ConfigureRepository`, `RefreshRepository`
-- `ManageService`
-- `Swap`
-- `CreateSymlink`
-- `Sysctl`
-- `WriteSystemdUnit`
-- `WaitForCommand`, `WaitForFile`, `WaitForMissingFile`, `WaitForService`, `WaitForTCPPort`, `WaitForMissingTCPPort`
+- `Host Prep`
+- `Artifact Staging`
+- `Filesystem and Content`
+- `Package Management`
+- `Runtime and Services`
+- `Kubernetes Lifecycle`
+- `Waits and Polling`
+- `Advanced`
+
+Use [Typed Steps](typed-steps.md) for the current group pages and exact supported kind inventory.
 
 ## Prepare semantics
 

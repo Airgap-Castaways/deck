@@ -5,8 +5,8 @@ This directory contains JSON Schema files for typed workflow steps.
 
 ## Current schemas
 
-- `cluster-check.schema.json`: `CheckCluster` (`public`)
 - `host-check.schema.json`: `CheckHost` (`public`)
+- `cluster-check.schema.json`: `CheckKubernetesCluster` (`public`)
 - `command.schema.json`: `Command` (`public`)
 - `repository.configure.schema.json`: `ConfigureRepository` (`public`)
 - `file.copy.schema.json`: `CopyFile` (`public`)
@@ -43,4 +43,4 @@ This directory contains JSON Schema files for typed workflow steps.
 - `file.write.schema.json`: `WriteFile` (`public`)
 - `systemd-unit.schema.json`: `WriteSystemdUnit` (`public`)
 
-Use `../../docs/reference/schema/README.md` for the generated reference view.
+Use `../../docs/reference/typed-steps.md` for typed step reference and `../../docs/reference/schema/README.md` for core schema docs.

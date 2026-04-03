@@ -94,6 +94,20 @@ func TestToolMetadataCategoryMatchesRegistry(t *testing.T) {
 	}
 }
 
+func TestPublicStepDefinitionsMapToKnownGroups(t *testing.T) {
+	for _, def := range workflowexec.StepDefinitions() {
+		if def.Visibility != "public" {
+			continue
+		}
+		if _, ok := GroupMeta(def.Group); !ok {
+			t.Fatalf("missing group metadata for %s group %q", def.Kind, def.Group)
+		}
+		if def.GroupOrder <= 0 {
+			t.Fatalf("expected positive group order for %s", def.Kind)
+		}
+	}
+}
+
 func TestToolMetadataRemovesLegacyActionFieldDocs(t *testing.T) {
 	for _, def := range workflowexec.StepDefinitions() {
 		meta := ToolMetaForDefinition(def)

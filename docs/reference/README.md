@@ -7,8 +7,8 @@ Use this section when you need exact command syntax, workflow contracts, schema 
 - [Workspace Layout](workspace-layout.md): Workspace structure and organization.
 - [CLI Reference](cli.md): Command-line interface usage and flags.
 - [Workflow Model](workflow-model.md): Detailed explanation of the deck workflow model.
+- [Typed Steps](typed-steps.md): Task-oriented reference for choosing and authoring typed workflow steps.
 - [Apply State](apply-state.md): Phase-based apply resume and `--fresh` behavior.
-- [Package Tool Reference](schema/tools/package.md): `DownloadPackage` cache behavior, exported artifact reuse, and offline package workflow details.
-- [Schema & Tools](schema/README.md): Exhaustive reference for workflow schemas and typed tools.
+- [Schema Reference](schema/README.md): Core workflow, component, and tool-definition schema reference.
 - [Bundle Layout](bundle-layout.md): Specifications for the deck self-contained bundle format.
 - [Server Audit Log](server-audit-log.md): Documentation on the server audit log format.

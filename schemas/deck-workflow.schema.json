@@ -87,55 +87,6 @@
                       {
                         "properties": {
                           "kind": {
-                            "const": "CheckCluster"
-                          }
-                        },
-                        "required": [
-                          "kind"
-                        ]
-                      },
-                      {
-                        "anyOf": [
-                          {
-                            "not": {
-                              "required": [
-                                "apiVersion"
-                              ]
-                            }
-                          },
-                          {
-                            "properties": {
-                              "apiVersion": {
-                                "const": "deck/v1alpha1"
-                              }
-                            },
-                            "required": [
-                              "apiVersion"
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  },
-                  "then": {
-                    "properties": {
-                      "register": {
-                        "additionalProperties": false,
-                        "maxProperties": 0,
-                        "propertyNames": {
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "type": "object"
-                      }
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "allOf": [
-                      {
-                        "properties": {
-                          "kind": {
                             "const": "CheckHost"
                           }
                         },
@@ -175,6 +126,55 @@
                             "passed"
                           ]
                         },
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "CheckKubernetesCluster"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
                         "propertyNames": {
                           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                         },
@@ -1973,8 +1973,8 @@
                 },
                 "kind": {
                   "enum": [
-                    "CheckCluster",
                     "CheckHost",
+                    "CheckKubernetesCluster",
                     "Command",
                     "ConfigureRepository",
                     "CopyFile",
@@ -2074,55 +2074,6 @@
                 {
                   "properties": {
                     "kind": {
-                      "const": "CheckCluster"
-                    }
-                  },
-                  "required": [
-                    "kind"
-                  ]
-                },
-                {
-                  "anyOf": [
-                    {
-                      "not": {
-                        "required": [
-                          "apiVersion"
-                        ]
-                      }
-                    },
-                    {
-                      "properties": {
-                        "apiVersion": {
-                          "const": "deck/v1alpha1"
-                        }
-                      },
-                      "required": [
-                        "apiVersion"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "register": {
-                  "additionalProperties": false,
-                  "maxProperties": 0,
-                  "propertyNames": {
-                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                  },
-                  "type": "object"
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "allOf": [
-                {
-                  "properties": {
-                    "kind": {
                       "const": "CheckHost"
                     }
                   },
@@ -2162,6 +2113,55 @@
                       "passed"
                     ]
                   },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "CheckKubernetesCluster"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
                   "propertyNames": {
                     "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                   },
@@ -3960,8 +3960,8 @@
           },
           "kind": {
             "enum": [
-              "CheckCluster",
               "CheckHost",
+              "CheckKubernetesCluster",
               "Command",
               "ConfigureRepository",
               "CopyFile",

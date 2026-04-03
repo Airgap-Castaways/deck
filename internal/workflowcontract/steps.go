@@ -13,6 +13,8 @@ type StepDefinition struct {
 	Kind                string
 	Family              string
 	FamilyTitle         string
+	Group               string
+	GroupOrder          int
 	DocsPage            string
 	DocsOrder           int
 	SchemaFile          string
@@ -49,12 +51,14 @@ func StepDefinitionForKey(key StepTypeKey) (StepDefinition, bool) {
 	return StepDefinition{}, false
 }
 
-func stepDef(kind, family, familyTitle, docsPage string, docsOrder int, schemaFile, generator, visibility, category, summary, whenToUse string, roles, outputs []string) StepDefinition {
+func stepDef(kind, family, familyTitle, group string, groupOrder int, docsPage string, docsOrder int, schemaFile, generator, visibility, category, summary, whenToUse string, roles, outputs []string) StepDefinition {
 	def := StepDefinition{
 		APIVersion:          BuiltInStepAPIVersion,
 		Kind:                kind,
 		Family:              family,
 		FamilyTitle:         familyTitle,
+		Group:               group,
+		GroupOrder:          groupOrder,
 		DocsPage:            docsPage,
 		DocsOrder:           docsOrder,
 		SchemaFile:          schemaFile,
@@ -84,6 +88,8 @@ func stepDefFromMeta(kind string, generator string, category string) StepDefinit
 		projection.Kind,
 		projection.Family,
 		projection.FamilyTitle,
+		projection.Group,
+		projection.GroupOrder,
 		projection.DocsPage,
 		projection.DocsOrder,
 		projection.SchemaFile,

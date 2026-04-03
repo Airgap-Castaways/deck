@@ -14,12 +14,12 @@ This directory contains the raw JSON Schema files shipped with `deck`.
 1. Validate the workflow file structure.
 2. Validate each step against the schema for its `kind`.
 
-For the human-facing reference, read `../docs/reference/schema/README.md`.
+For the human-facing reference, read `../docs/reference/typed-steps.md` for typed steps and `../docs/reference/schema/README.md` for core schemas.
 
 ## Current tool schemas
 
-- `tools/cluster-check.schema.json`: `CheckCluster` (`public`)
 - `tools/host-check.schema.json`: `CheckHost` (`public`)
+- `tools/cluster-check.schema.json`: `CheckKubernetesCluster` (`public`)
 - `tools/command.schema.json`: `Command` (`public`)
 - `tools/repository.configure.schema.json`: `ConfigureRepository` (`public`)
 - `tools/file.copy.schema.json`: `CopyFile` (`public`)

@@ -64,14 +64,14 @@ func useStubUpgradeKubeadm(t *testing.T) {
 	}
 }
 
-func useStubCheckCluster(t *testing.T) {
+func useStubCheckKubernetesCluster(t *testing.T) {
 	t.Helper()
-	origCheckCluster := checkClusterExecutor
+	origCheckKubernetesCluster := checkClusterExecutor
 	t.Cleanup(func() {
-		checkClusterExecutor = origCheckCluster
+		checkClusterExecutor = origCheckKubernetesCluster
 	})
 	checkClusterExecutor = func(_ context.Context, spec stepspec.ClusterCheck) error {
-		return runCheckClusterStub(spec)
+		return runCheckKubernetesClusterStub(spec)
 	}
 }
 
@@ -1027,14 +1027,14 @@ func TestRun_CreateSymlink(t *testing.T) {
 
 func TestRun_UpgradeAndClusterChecks(t *testing.T) {
 	useStubUpgradeKubeadm(t)
-	useStubCheckCluster(t)
+	useStubCheckKubernetesCluster(t)
 
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state", "state.json")
 	reportDir := filepath.Join(dir, "reports")
 	wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "install", Steps: []config.Step{
 		{ID: "upgrade", Kind: "UpgradeKubeadm", Spec: map[string]any{"kubernetesVersion": "v1.31.0"}},
-		{ID: "check", Kind: "CheckCluster", Spec: map[string]any{"reports": map[string]any{"nodesPath": filepath.Join(reportDir, "nodes.txt")}, "versions": map[string]any{"reportPath": filepath.Join(reportDir, "version.txt")}}},
+		{ID: "check", Kind: "CheckKubernetesCluster", Spec: map[string]any{"reports": map[string]any{"nodesPath": filepath.Join(reportDir, "nodes.txt")}, "versions": map[string]any{"reportPath": filepath.Join(reportDir, "version.txt")}}},
 	}}}}
 
 	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {

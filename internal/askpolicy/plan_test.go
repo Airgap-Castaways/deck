@@ -50,7 +50,7 @@ func TestBuildScenarioRequirementsUnderstandsThreeNodeSpelling(t *testing.T) {
 }
 
 func TestBuildScenarioRequirementsCapturesSpecificTwoNodeOfflinePrompt(t *testing.T) {
-	prompt := "Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker. Generate both workflows/prepare.yaml and workflows/scenarios/apply.yaml. In prepare, stage kubeadm kubelet kubectl cri-tools containerd packages and Kubernetes control-plane images using typed steps only. In apply, use vars.role with allowed values control-plane and worker, bootstrap the control-plane with InitKubeadm writing /tmp/deck/join.txt, join the worker with JoinKubeadm using that same file, and run final CheckCluster only on the control-plane expecting total 2 nodes and controlPlaneReady 1. Do not use remote downloads during apply. Use workflows/vars.yaml if values repeat, and use workflows/components/ only if needed."
+	prompt := "Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker. Generate both workflows/prepare.yaml and workflows/scenarios/apply.yaml. In prepare, stage kubeadm kubelet kubectl cri-tools containerd packages and Kubernetes control-plane images using typed steps only. In apply, use vars.role with allowed values control-plane and worker, bootstrap the control-plane with InitKubeadm writing /tmp/deck/join.txt, join the worker with JoinKubeadm using that same file, and run final CheckKubernetesCluster only on the control-plane expecting total 2 nodes and controlPlaneReady 1. Do not use remote downloads during apply. Use workflows/vars.yaml if values repeat, and use workflows/components/ only if needed."
 	req := BuildScenarioRequirements(prompt, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
 	if req.Connectivity != "offline" || !req.NeedsPrepare || req.AcceptanceLevel != "complete" {
 		t.Fatalf("expected offline complete prepare/apply requirements, got %#v", req)
@@ -100,7 +100,7 @@ func TestBuildScenarioRequirementsSupportsExplicitPrepareOnlyRequest(t *testing.
 
 func TestBuildScenarioRequirementsIgnoresExternalEvidenceArtifactKinds(t *testing.T) {
 	retrieval := askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}", Evidence: &askretrieve.EvidenceSummary{ArtifactKinds: []string{"package"}, OfflineHints: []string{"Treat gathered installation artifacts as offline bundle inputs for prepare before apply."}}}}}
-	req := BuildScenarioRequirements("create a minimal single-node apply-only kubeadm workflow using only init-kubeadm and check-cluster builders", retrieval, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
+	req := BuildScenarioRequirements("create a minimal single-node apply-only kubeadm workflow using only init-kubeadm and check-kubernetes-cluster builders", retrieval, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
 	if req.NeedsPrepare {
 		t.Fatalf("expected external evidence artifact hints not to force prepare, got %#v", req)
 	}
@@ -275,7 +275,7 @@ func TestNormalizePlanAddsRuntimePlatformClarificationForPackageRequestWithoutDi
 }
 
 func TestNormalizePlanSkipsRuntimePlatformClarificationForMinimalApplyOnlySingleNodeBootstrap(t *testing.T) {
-	prompt := "Create a minimal single-node apply-only offline kubeadm workflow for Kubernetes 1.35.1 using only init-kubeadm and check-cluster builders"
+	prompt := "Create a minimal single-node apply-only offline kubeadm workflow for Kubernetes 1.35.1 using only init-kubeadm and check-kubernetes-cluster builders"
 	plan := NormalizePlan(askcontract.PlanResponse{
 		Request:             prompt,
 		Intent:              "draft",
@@ -466,7 +466,7 @@ func TestNormalizePlanDropsSpuriousClusterClarificationsForJoinFileRefine(t *tes
 
 func TestNormalizePlanClearsSingleNodeWorkerExecutionForVerificationOnlyDraft(t *testing.T) {
 	plan := NormalizePlan(askcontract.PlanResponse{
-		Request: "Create a single-node apply workflow that verifies the cluster with CheckCluster expecting total 1 node and controlPlaneReady 1.",
+		Request: "Create a single-node apply workflow that verifies the cluster with CheckKubernetesCluster expecting total 1 node and controlPlaneReady 1.",
 		Intent:  "draft",
 		AuthoringBrief: askcontract.AuthoringBrief{
 			Topology:             "single-node",
@@ -479,7 +479,7 @@ func TestNormalizePlanClearsSingleNodeWorkerExecutionForVerificationOnlyDraft(t 
 		EntryScenario:       "workflows/scenarios/apply.yaml",
 		TargetOutcome:       "generate files",
 		ValidationChecklist: []string{"lint"},
-	}, "Create a single-node apply workflow that verifies the cluster with CheckCluster expecting total 1 node and controlPlaneReady 1.", askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}})
+	}, "Create a single-node apply workflow that verifies the cluster with CheckKubernetesCluster expecting total 1 node and controlPlaneReady 1.", askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}})
 	if plan.ExecutionModel.RoleExecution.RoleSelector != "" || plan.ExecutionModel.RoleExecution.WorkerFlow != "" || plan.ExecutionModel.RoleExecution.PerNodeInvocation {
 		t.Fatalf("expected single-node verification plan to clear worker role execution, got %#v", plan.ExecutionModel.RoleExecution)
 	}

@@ -50,7 +50,7 @@ func TestWorkflowIntegrationBootstrap(t *testing.T) {
 		"prep-disable-swap Swap PLAN",
 		"bootstrap-reset-preflight ResetKubeadm PLAN",
 		"bootstrap-init InitKubeadm PLAN",
-		"bootstrap-report CheckCluster PLAN",
+		"bootstrap-report CheckKubernetesCluster PLAN",
 	)
 }
 
@@ -134,7 +134,7 @@ func TestWorkflowIntegrationUpgrade(t *testing.T) {
 		"bootstrap-init InitKubeadm PLAN",
 		"install-upgrade-kubelet CopyFile PLAN",
 		"upgrade-control-plane UpgradeKubeadm PLAN",
-		"upgrade-report CheckCluster PLAN",
+		"upgrade-report CheckKubernetesCluster PLAN",
 	)
 }
 

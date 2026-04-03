@@ -143,13 +143,19 @@ Typed steps make workflows easier to review, validate, and evolve. They also let
 
 Another reason for this design is to reduce user confusion. `deck` tries to give common operational work one clear typed shape instead of several overlapping ways to express the same action. The goal is not to model every edge immediately. The goal is to keep the main path simple enough that operators can usually predict which step kind to reach for and what behavior it implies.
 
-## Noun-family step taxonomy
+## Group-based step navigation
 
-The typed step model is intentionally organized around noun families rather than a large list of unrelated verbs.
+Public typed step docs are organized around task-oriented groups rather than a flat list of families.
 
-Families such as `File`, `Package`, `Image`, `Repository`, and `Wait` group concrete kinds like `DownloadFile`, `InstallPackage`, `VerifyImage`, `RefreshRepository`, and `WaitForFile`. That keeps the schema surface explicit without fragmenting the human-facing docs into dozens of unrelated pages.
+Groups such as `Artifact Staging`, `Package Management`, `Runtime and Services`, and `Kubernetes Lifecycle` help operators start from the task they are trying to perform instead of from internal schema taxonomy.
 
-When a capability fits an existing family cleanly, extending that family is usually preferred over creating a new unrelated step kind.
+Internally, `deck` still keeps a family taxonomy for registration and code generation. That split is intentional:
+
+- `kind` is the concrete workflow step identity
+- `group` is the public docs/navigation layer
+- `family` is the internal schema/codegen grouping layer
+
+When a capability fits an existing family cleanly, extending that family is still usually preferred over creating a new unrelated step kind. Public docs, however, should continue to guide operators through groups rather than exposing family structure as the primary way to discover steps.
 
 ## Command surface design
 

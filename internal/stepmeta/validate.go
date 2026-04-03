@@ -10,6 +10,9 @@ func validateEntry(entry Entry) error {
 		return nil
 	}
 	problems := make([]string, 0)
+	if strings.TrimSpace(entry.Definition.Group) == "" {
+		problems = append(problems, "missing group")
+	}
 	if strings.TrimSpace(entry.Docs.Summary) == "" {
 		problems = append(problems, formatSourceProblem(entry.Docs.Source, "missing type summary"))
 	}
