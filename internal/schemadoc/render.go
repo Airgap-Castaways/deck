@@ -71,7 +71,7 @@ func RenderGroupPage(in PageInput) []byte {
 		}
 	}
 	buf.WriteString("\n## Shared Step Fields\n\n")
-	buf.WriteString("Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema Contract](../workflow-model.md#workflow-schema-contract).\n")
+	buf.WriteString("Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `parallelGroup`, `retry`, `timeout`, `register`, and `metadata` are documented in [Step Envelope Contract](../workflow-model.md#step-envelope-contract).\n")
 	if len(in.Variants) > 1 {
 		buf.WriteString("\n## Supported Kinds\n\n")
 		for _, variant := range sortedVariants(in.Variants) {
@@ -125,7 +125,7 @@ func RenderGroupPage(in PageInput) []byte {
 		buf.WriteString("- [" + meta.Title + "](" + meta.Key + ".md)\n")
 	}
 	buf.WriteString("- [Typed Steps](../typed-steps.md)\n")
-	buf.WriteString("- [Workflow Model](../workflow-model.md#workflow-schema-contract)\n")
+	buf.WriteString("- [Step Envelope Contract](../workflow-model.md#step-envelope-contract)\n")
 	return buf.Bytes()
 }
 

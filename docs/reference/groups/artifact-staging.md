@@ -30,7 +30,7 @@ Use this group during prepare when apply must avoid remote downloads and consume
 
 ## Shared Step Fields
 
-Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema Contract](../workflow-model.md#workflow-schema-contract).
+Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `parallelGroup`, `retry`, `timeout`, `register`, and `metadata` are documented in [Step Envelope Contract](../workflow-model.md#step-envelope-contract).
 
 ## Supported Kinds
 
@@ -125,8 +125,8 @@ spec:
 
 ### Notes
 
-- `DownloadFile` writes into bundle storage through `outputPath` rather than a node path.
-- Omit `outputPath` unless later steps need a stable custom bundle location.
+- `outputPath` must stay under the prepared `files/` root.
+- Omit `outputPath` unless later steps need a stable custom location inside `files/`.
 
 ## `DownloadPackage`
 
@@ -198,6 +198,7 @@ spec:
 ### Notes
 
 - Use `DownloadPackage` and `InstallPackage` with `ConfigureRepository` and `RefreshRepository` for a complete typed package-management flow.
+- `outputDir` must stay under the prepared `packages/` root.
 - Omit `outputDir` unless you need a custom package location; deck uses `packages/` by default, or `packages/deb/<release>` and `packages/rpm/<release>` when `repo.type` is set.
 - Keeping the same package list across `download` and `install` helps maintain offline parity.
 - Use `restrictToRepos` on the `InstallPackage` step to prevent the node's default online repos from being consulted during an offline apply.
@@ -256,7 +257,8 @@ spec:
 
 ### Notes
 
-- Omit `outputDir` unless you need a dedicated image subdirectory; deck writes to `images/` by default.
+- `outputDir` must stay under the prepared `images/` root.
+- Omit `outputDir` unless you need a dedicated image subdirectory under `images/`.
 - `spec.auth` is optional and only applies to `DownloadImage`.
 
 ## Related
@@ -265,4 +267,4 @@ spec:
 - [Kubernetes Lifecycle](kubernetes-lifecycle.md)
 - [Filesystem and Content](filesystem-content.md)
 - [Typed Steps](../typed-steps.md)
-- [Workflow Model](../workflow-model.md#workflow-schema-contract)
+- [Step Envelope Contract](../workflow-model.md#step-envelope-contract)

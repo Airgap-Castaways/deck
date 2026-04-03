@@ -21,7 +21,7 @@ Start with typed groups first. Use this group only when the built-in typed steps
 
 ## Shared Step Fields
 
-Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema Contract](../workflow-model.md#workflow-schema-contract).
+Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `parallelGroup`, `retry`, `timeout`, `register`, and `metadata` are documented in [Step Envelope Contract](../workflow-model.md#step-envelope-contract).
 
 ## `Command`
 
@@ -58,4 +58,4 @@ spec:
 ## Related
 
 - [Typed Steps](../typed-steps.md)
-- [Workflow Model](../workflow-model.md#workflow-schema-contract)
+- [Step Envelope Contract](../workflow-model.md#step-envelope-contract)
