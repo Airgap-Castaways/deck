@@ -5,6 +5,7 @@ import "strings"
 type ExecutionContext struct {
 	BundleRoot string
 	StatePath  string
+	kubeadm    kubeadmExecutor
 }
 
 func (c ExecutionContext) RenderContext() map[string]any {

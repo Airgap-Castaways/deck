@@ -20,14 +20,7 @@ import (
 
 var kubeadmAdminConfPath = "/etc/kubernetes/admin.conf"
 
-var (
-	kubeadmInitExecutor    = runInitKubeadmReal
-	kubeadmJoinExecutor    = runJoinKubeadmReal
-	kubeadmResetExecutor   = runResetKubeadmReal
-	kubeadmUpgradeExecutor = runUpgradeKubeadmReal
-)
-
-func runInitKubeadm(ctx context.Context, spec map[string]any) error {
+func runInitKubeadm(ctx context.Context, spec map[string]any, executor kubeadmExecutor) error {
 	decoded, err := workflowexec.DecodeSpec[stepspec.KubeadmInit](spec)
 	if err != nil {
 		return fmt.Errorf("decode InitKubeadm spec: %w", err)
@@ -35,10 +28,10 @@ func runInitKubeadm(ctx context.Context, spec map[string]any) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
-	return kubeadmInitExecutor(ctx, decoded)
+	return withKubeadmExecutor(executor).Init(ctx, decoded)
 }
 
-func runJoinKubeadm(ctx context.Context, spec map[string]any) error {
+func runJoinKubeadm(ctx context.Context, spec map[string]any, executor kubeadmExecutor) error {
 	decoded, err := workflowexec.DecodeSpec[stepspec.KubeadmJoin](spec)
 	if err != nil {
 		return fmt.Errorf("decode JoinKubeadm spec: %w", err)
@@ -46,10 +39,10 @@ func runJoinKubeadm(ctx context.Context, spec map[string]any) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
-	return kubeadmJoinExecutor(ctx, decoded)
+	return withKubeadmExecutor(executor).Join(ctx, decoded)
 }
 
-func runUpgradeKubeadm(ctx context.Context, spec map[string]any) error {
+func runUpgradeKubeadm(ctx context.Context, spec map[string]any, executor kubeadmExecutor) error {
 	decoded, err := workflowexec.DecodeSpec[stepspec.KubeadmUpgrade](spec)
 	if err != nil {
 		return fmt.Errorf("decode UpgradeKubeadm spec: %w", err)
@@ -57,7 +50,7 @@ func runUpgradeKubeadm(ctx context.Context, spec map[string]any) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
-	return kubeadmUpgradeExecutor(ctx, decoded)
+	return withKubeadmExecutor(executor).Upgrade(ctx, decoded)
 }
 
 func runInitKubeadmReal(parent context.Context, spec stepspec.KubeadmInit) error {
@@ -293,7 +286,7 @@ func runJoinKubeadmReal(ctx context.Context, spec stepspec.KubeadmJoin) error {
 	return nil
 }
 
-func runResetKubeadm(ctx context.Context, spec map[string]any) error {
+func runResetKubeadm(ctx context.Context, spec map[string]any, executor kubeadmExecutor) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
@@ -302,7 +295,7 @@ func runResetKubeadm(ctx context.Context, spec map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("decode ResetKubeadm spec: %w", err)
 	}
-	return kubeadmResetExecutor(ctx, decoded)
+	return withKubeadmExecutor(executor).Reset(ctx, decoded)
 }
 
 func runResetKubeadmReal(ctx context.Context, decoded stepspec.KubeadmReset) error {
