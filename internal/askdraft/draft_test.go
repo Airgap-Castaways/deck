@@ -327,6 +327,48 @@ func TestCompileAddsRoleVarWhenWorkflowUsesRoleSelector(t *testing.T) {
 	}
 }
 
+func TestPromptBlockShowsSupportedPrepareFallbackBuildersWhenCapabilitiesDoNotMatch(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		AuthoringBrief: askcontract.AuthoringBrief{
+			TargetPaths:          []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml"},
+			RequiredCapabilities: []string{"kubeadm-join"},
+		},
+		Files: []askcontract.PlanFile{{Path: "workflows/prepare.yaml"}, {Path: "workflows/scenarios/apply.yaml"}},
+	}
+	text := PromptBlock(plan, plan.AuthoringBrief)
+	for _, want := range []string{"workflows/prepare.yaml", "no capability-matched draft builders", "prepare.download-package", "prepare.download-image"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected %q in prompt block, got %q", want, text)
+		}
+	}
+}
+
+func TestCompileAssignsUniqueStepIDsForRepeatedBuilders(t *testing.T) {
+	selection := askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{
+		Path: "workflows/scenarios/apply.yaml",
+		Builders: []askcontract.DraftBuilderSelection{
+			{ID: "apply.check-cluster", Overrides: map[string]any{"controlPlaneReady": 1, "nodeCount": 1, "readyCount": 1, "whenRole": "control-plane"}},
+			{ID: "apply.check-cluster", Overrides: map[string]any{"controlPlaneReady": 1, "nodeCount": 2, "readyCount": 2, "whenRole": "control-plane"}},
+		},
+	}}}
+	docs, err := CompileWithProgram(askcontract.AuthoringProgram{}, selection)
+	if err != nil {
+		t.Fatalf("compile repeated builders: %v", err)
+	}
+	if len(docs) != 1 || docs[0].Workflow == nil {
+		t.Fatalf("expected single workflow document, got %#v", docs)
+	}
+	ids := []string{}
+	for _, phase := range docs[0].Workflow.Phases {
+		for _, step := range phase.Steps {
+			ids = append(ids, step.ID)
+		}
+	}
+	if len(ids) != 2 || ids[0] == ids[1] {
+		t.Fatalf("expected unique ids for repeated builders, got %v", ids)
+	}
+}
+
 func TestCompileCreatesVarsDocumentWhenRoleGatedWorkflowHasNoVarsTarget(t *testing.T) {
 	program := askcontract.AuthoringProgram{
 		Cluster:      askcontract.ProgramCluster{JoinFile: "/tmp/deck/join.txt", RoleSelector: "role", ControlPlaneCount: 1, WorkerCount: 1},

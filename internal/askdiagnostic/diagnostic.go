@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
@@ -74,6 +75,26 @@ func FromValidationError(err error, message string, bundle askknowledge.Bundle) 
 	}
 	if strings.Contains(lower, "is not supported for role prepare") {
 		appendDiag(Diagnostic{Code: "role_support", Severity: "blocking", Message: "step kind is not supported for prepare", Expected: "prepare-supported typed step", Actual: "unsupported step kind for prepare", SourceRef: "workflow step role declarations", SuggestedFix: "Use a typed prepare step such as DownloadImage or DownloadPackage for artifact collection."})
+	}
+	if builderID, path, ok := extractUnsupportedDraftBuilder(message); ok {
+		supported := askcatalog.Current().BuilderIDsForPath(path)
+		suggestedFix := "Use only supported draft builder ids for the planned file."
+		expected := "supported draft builder ids"
+		if len(supported) > 0 {
+			expected = strings.Join(supported, ", ")
+			suggestedFix = fmt.Sprintf("Replace %s with a supported builder id for %s: %s.", builderID, path, expected)
+		}
+		appendDiag(Diagnostic{Code: "unsupported_draft_builder", Severity: "blocking", File: path, Message: fmt.Sprintf("draft builder %s is not supported for %s", builderID, path), Expected: expected, Actual: builderID, SourceRef: "askcatalog", SuggestedFix: suggestedFix})
+	}
+	if path, ok := extractMissingPlannedFile(message); ok {
+		supported := askcatalog.Current().BuilderIDsForPath(path)
+		suggestedFix := fmt.Sprintf("Ensure the draft selection generates the planned file %s.", path)
+		expected := "planned file present"
+		if len(supported) > 0 {
+			suggestedFix = fmt.Sprintf("Generate %s with supported builder ids such as %s.", path, strings.Join(supported, ", "))
+			expected = strings.Join(supported, ", ")
+		}
+		appendDiag(Diagnostic{Code: "missing_planned_file", Severity: "blocking", File: path, Message: fmt.Sprintf("planned file %s was not generated", path), Expected: expected, SourceRef: "askcatalog", SuggestedFix: suggestedFix})
 	}
 	if stepID, ok := extractDuplicateStepID(message); ok {
 		spec := workflowissues.MustSpec(workflowissues.CodeDuplicateStepID)
@@ -179,6 +200,7 @@ func FromValidationIssues(issues []validate.Issue) []Diagnostic {
 func classifyRepairOp(issue validate.Issue) string {
 	lowerCode := strings.ToLower(strings.TrimSpace(issue.Code))
 	lowerMessage := strings.ToLower(strings.TrimSpace(issue.Message))
+	lowerActual := strings.ToLower(strings.TrimSpace(issue.Actual))
 	switch {
 	case lowerCode == "missing_step_field" || strings.Contains(lowerMessage, " is required"):
 		return "fill-field"
@@ -186,6 +208,8 @@ func classifyRepairOp(issue validate.Issue) string {
 		return "remove-field"
 	case lowerCode == "duplicate_step_id":
 		return "rename-step"
+	case strings.Contains(lowerMessage, "invalid type") && strings.Contains(lowerActual, "{{ .vars."):
+		return "fix-literal"
 	case strings.Contains(lowerMessage, "must be one of") || strings.Contains(lowerMessage, "does not match pattern"):
 		return "fix-literal"
 	case strings.Contains(lowerMessage, "parse yaml"):
@@ -258,6 +282,38 @@ func extractRequiredField(message string) (string, bool) {
 	field = strings.ReplaceAll(field, ":", ".")
 	field = strings.ReplaceAll(field, " ", "")
 	return field, true
+}
+
+func extractUnsupportedDraftBuilder(message string) (string, string, bool) {
+	const prefix = "unsupported draft builder "
+	trimmed := strings.TrimSpace(message)
+	if !strings.HasPrefix(trimmed, prefix) {
+		return "", "", false
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+	parts := strings.SplitN(rest, " for ", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	builderID := strings.Trim(strings.TrimSpace(parts[0]), `"`)
+	path := strings.TrimSpace(parts[1])
+	if builderID == "" || path == "" {
+		return "", "", false
+	}
+	return builderID, path, true
+}
+
+func extractMissingPlannedFile(message string) (string, bool) {
+	const prefix = "plan contract validation failed: planned file "
+	trimmed := strings.TrimSpace(message)
+	if !strings.HasPrefix(trimmed, prefix) || !strings.HasSuffix(trimmed, " was not generated") {
+		return "", false
+	}
+	path := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(trimmed, prefix), " was not generated"))
+	if path == "" {
+		return "", false
+	}
+	return path, true
 }
 
 func findStep(bundle askknowledge.Bundle, kind string) (askknowledge.StepKnowledge, bool) {

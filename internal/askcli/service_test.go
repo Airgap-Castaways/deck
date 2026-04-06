@@ -501,19 +501,19 @@ func TestBuildPlanWithReviewFallsBackOnPlannerFailure(t *testing.T) {
 	}
 }
 
-func TestBuildPlanWithReviewStopsEarlyWhenFallbackPlanIsNotViable(t *testing.T) {
+func TestBuildPlanWithReviewBuildsViableArtifactFallbackPlan(t *testing.T) {
 	client := &stubClient{responses: []string{"not-json"}}
 	prompt := "Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker. Generate both workflows/prepare.yaml and workflows/scenarios/apply.yaml. In prepare, stage kubeadm kubelet kubectl cri-tools containerd packages and Kubernetes control-plane images using typed steps only. In apply, use vars.role with allowed values control-plane and worker, bootstrap the control-plane with InitKubeadm writing /tmp/deck/join.txt, join the worker with JoinKubeadm using that same file, and run final CheckCluster only on the control-plane expecting total 2 nodes and controlPlaneReady 1. Do not use remote downloads during apply."
 	req := askpolicy.BuildScenarioRequirements(prompt, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
-	_, _, usedFallback, err := buildPlanWithReview(context.Background(), client, askconfigSettings{provider: "openai", model: "gpt-5.4", apiKey: "test-key"}, askintent.Decision{Route: askintent.RouteDraft}, askretrieve.RetrievalResult{}, prompt, askretrieve.WorkspaceSummary{}, req, newAskLogger(io.Discard, "trace"))
-	if err == nil {
-		t.Fatalf("expected invalid artifact fallback plan to stop early")
+	plan, _, usedFallback, err := buildPlanWithReview(context.Background(), client, askconfigSettings{provider: "openai", model: "gpt-5.4", apiKey: "test-key"}, askintent.Decision{Route: askintent.RouteDraft}, askretrieve.RetrievalResult{}, prompt, askretrieve.WorkspaceSummary{}, req, newAskLogger(io.Discard, "trace"))
+	if err != nil {
+		t.Fatalf("expected viable artifact fallback plan, got %v", err)
 	}
-	if usedFallback {
-		t.Fatalf("expected invalid fallback plan to return an error, not succeed")
+	if !usedFallback {
+		t.Fatalf("expected fallback path")
 	}
-	if !strings.Contains(err.Error(), "fallback plan is not viable") || !strings.Contains(err.Error(), "artifacts.packages") {
-		t.Fatalf("expected early artifact viability error, got %v", err)
+	if len(plan.AuthoringProgram.Artifacts.Packages) == 0 || len(plan.AuthoringProgram.Artifacts.Images) == 0 {
+		t.Fatalf("expected artifact fallback plan to seed package/image staging, got %#v", plan.AuthoringProgram.Artifacts)
 	}
 	if client.calls != 1 {
 		t.Fatalf("expected planner failure to stop before critic/generation, got %d calls", client.calls)
@@ -1799,6 +1799,18 @@ func TestValidateGenerationBlocksFilesOutsideClarifiedPlanTargets(t *testing.T) 
 	}
 	if !containsTrimmed(critic.CoverageGaps, "workflows/components/unplanned.yaml") {
 		t.Fatalf("expected coverage gap for unplanned file, got %#v", critic)
+	}
+}
+
+func TestValidateGenerationAllowsPreserveOnlyRefineNoop(t *testing.T) {
+	gen := askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/worker-join.yaml", Action: "preserve"}}}
+	plan := askcontract.PlanResponse{Intent: "refine", Files: []askcontract.PlanFile{{Path: "workflows/scenarios/worker-join.yaml", Action: "update"}}, AuthoringBrief: askcontract.AuthoringBrief{TargetPaths: []string{"workflows/scenarios/worker-join.yaml"}}}
+	summary, critic, err := validateGeneration(context.Background(), t.TempDir(), gen, nil, askintent.Decision{Route: askintent.RouteRefine}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{})
+	if err != nil {
+		t.Fatalf("expected preserve-only refine noop to validate, got %v", err)
+	}
+	if summary == "" || len(critic.Blocking) != 0 {
+		t.Fatalf("expected noop validation success, got summary=%q critic=%#v", summary, critic)
 	}
 }
 

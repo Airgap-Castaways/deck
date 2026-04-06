@@ -44,20 +44,19 @@ func runInteractiveClarifications(stdin io.Reader, stdout io.Writer, plan askcon
 		if len(items) == 0 {
 			return current, false, nil
 		}
-		for _, item := range items {
-			answer, aborted, err := promptClarification(reader, stdout, item)
-			if err != nil {
-				return current, false, err
-			}
-			if aborted {
-				return current, true, nil
-			}
-			updated, err := applyPlanAnswers(current, []string{item.ID + "=" + answer})
-			if err != nil {
-				return current, false, err
-			}
-			current = updated
+		item := items[0]
+		answer, aborted, err := promptClarification(reader, stdout, item)
+		if err != nil {
+			return current, false, err
 		}
+		if aborted {
+			return current, true, nil
+		}
+		updated, err := applyPlanAnswers(current, []string{item.ID + "=" + answer})
+		if err != nil {
+			return current, false, err
+		}
+		current = updated
 	}
 }
 

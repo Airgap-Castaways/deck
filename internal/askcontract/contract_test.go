@@ -262,6 +262,17 @@ func TestParseGenerationNormalizesExtractVarVarsPathAliasIntoVarName(t *testing.
 	}
 }
 
+func TestParseGenerationAcceptsStringPhaseImports(t *testing.T) {
+	resp, err := ParseGeneration(`{"summary":"ok","review":[],"documents":[{"path":"workflows/scenarios/apply.yaml","workflow":{"version":"v1alpha1","phases":[{"name":"bootstrap","imports":["k8s/prereq.yaml",{"path":"worker-join.yaml"}]}]}}]}`)
+	if err != nil {
+		t.Fatalf("parse generation: %v", err)
+	}
+	imports := resp.Documents[0].Workflow.Phases[0].Imports
+	if len(imports) != 2 || imports[0].Path != "k8s/prereq.yaml" || imports[1].Path != "worker-join.yaml" {
+		t.Fatalf("expected string imports to normalize, got %#v", imports)
+	}
+}
+
 func TestAuthoringProgramValueComputesRoleWhenExpressions(t *testing.T) {
 	program := AuthoringProgram{Cluster: ProgramCluster{RoleSelector: "role", ControlPlaneCount: 1, WorkerCount: 1}, Verification: ProgramVerification{FinalVerificationRole: "control-plane", ExpectedNodeCount: 2, ExpectedReadyCount: 2, ExpectedControlPlaneReady: 1}}
 	value, ok := program.Value("cluster.roleWhen.worker")

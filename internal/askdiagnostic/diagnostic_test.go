@@ -67,6 +67,16 @@ func TestFromValidationErrorPrefersStructuredIssues(t *testing.T) {
 	}
 }
 
+func TestFromValidationErrorSuggestsSupportedDraftBuilders(t *testing.T) {
+	diags := FromValidationError(nil, `unsupported draft builder "prepare.check-host" for workflows/prepare.yaml`, askknowledge.Current())
+	joined := JSON(diags)
+	for _, want := range []string{"unsupported_draft_builder", "prepare.download-package", "prepare.download-image", "workflows/prepare.yaml"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected %q in diagnostics, got %s", want, joined)
+		}
+	}
+}
+
 func validationErrorWithIssues() error {
 	return &validate.ValidationError{Message: "workflows/prepare.yaml: E_SCHEMA_INVALID: step prepare-stage-packages (DownloadPackage): spec.backend: image is required", Issues: []validate.Issue{{Code: "missing_step_field", Severity: "blocking", File: "workflows/prepare.yaml", Path: "spec.backend.image", StepID: "prepare-stage-packages", StepKind: "DownloadPackage", Message: "DownloadPackage requires spec.backend.image", SourceRef: "package.download.schema.json"}}}
 }
