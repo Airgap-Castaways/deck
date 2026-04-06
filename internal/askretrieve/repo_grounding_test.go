@@ -4,15 +4,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	_ "github.com/Airgap-Castaways/deck/internal/stepspec"
 )
 
 func TestBuildStepspecSummaryUsesCanonicalCatalogFacts(t *testing.T) {
-	summary := buildStepspecSummary(t.TempDir(), strings.ToLower("Explain HelperKind InlineKind apply.init-kubeadm apply.check-cluster"))
+	builderID, kind := currentGroundingClusterCheckFact()
+	summary := buildStepspecSummary(t.TempDir(), strings.ToLower("Explain HelperKind InlineKind apply.init-kubeadm "+builderID))
 	for _, want := range []string{
 		"- observed typed step kinds:",
 		"- observed ask builders:",
-		"- step fact: CheckCluster builders=apply.check-cluster",
+		"- step fact: " + kind + " builders=" + builderID,
 		"- step fact: InitKubeadm builders=apply.init-kubeadm",
 	} {
 		if !strings.Contains(summary, want) {
@@ -22,6 +24,20 @@ func TestBuildStepspecSummaryUsesCanonicalCatalogFacts(t *testing.T) {
 	if strings.Contains(summary, "candidate step kind") {
 		t.Fatalf("expected fact-only wording, got %q", summary)
 	}
+}
+
+func currentGroundingClusterCheckFact() (string, string) {
+	for _, step := range askcatalog.Current().StepKinds() {
+		if !strings.Contains(step.Kind, "Check") || !strings.Contains(step.Kind, "Cluster") {
+			continue
+		}
+		for _, builder := range step.Builders {
+			if strings.Contains(builder.ID, "check") && strings.Contains(builder.ID, "cluster") {
+				return builder.ID, step.Kind
+			}
+		}
+	}
+	return "apply.check-kubernetes-cluster", "CheckKubernetesCluster"
 }
 
 func TestBuildStepmetaSummaryUsesCanonicalBuilderAndValidationCounts(t *testing.T) {

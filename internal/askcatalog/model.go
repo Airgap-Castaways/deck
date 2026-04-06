@@ -162,8 +162,12 @@ func (c Catalog) StepKinds() []Step {
 }
 
 func (c Catalog) LookupStep(kind string) (Step, bool) {
-	step, ok := c.Steps[kind]
-	return step, ok
+	for _, candidate := range stepAliasCandidates(kind) {
+		if step, ok := c.Steps[candidate]; ok {
+			return step, true
+		}
+	}
+	return Step{}, false
 }
 
 func (c Catalog) LookupField(kind string, path string) (Field, bool) {
@@ -178,8 +182,10 @@ func (c Catalog) LookupField(kind string, path string) (Field, bool) {
 func (c Catalog) LookupBuilder(id string) (Builder, bool) {
 	for _, step := range c.StepKinds() {
 		for _, builder := range step.Builders {
-			if builder.ID == id {
-				return builder, true
+			for _, candidate := range builderAliasCandidates(id) {
+				if builder.ID == candidate {
+					return builder, true
+				}
 			}
 		}
 	}
@@ -293,4 +299,34 @@ func containsRole(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func stepAliasCandidates(kind string) []string {
+	kind = strings.TrimSpace(kind)
+	if kind == "" {
+		return nil
+	}
+	switch kind {
+	case "CheckCluster":
+		return []string{"CheckCluster", "CheckKubernetesCluster"}
+	case "CheckKubernetesCluster":
+		return []string{"CheckKubernetesCluster", "CheckCluster"}
+	default:
+		return []string{kind}
+	}
+}
+
+func builderAliasCandidates(id string) []string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil
+	}
+	switch id {
+	case "apply.check-cluster":
+		return []string{"apply.check-cluster", "apply.check-kubernetes-cluster"}
+	case "apply.check-kubernetes-cluster":
+		return []string{"apply.check-kubernetes-cluster", "apply.check-cluster"}
+	default:
+		return []string{id}
+	}
 }

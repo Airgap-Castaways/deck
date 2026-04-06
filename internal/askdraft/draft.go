@@ -589,13 +589,14 @@ func deprecatedOverrideAllowed(builderID string, key string) bool {
 		}
 	}
 	allowed := map[string][]string{
-		"prepare.download-package": {"backendImage", "backendRuntime", "distroFamily", "distroRelease", "outputDir", "packages", "repoType"},
-		"prepare.download-image":   {"backendEngine", "images", "outputDir"},
-		"apply.install-package":    {"packages", "sourcePath"},
-		"apply.load-image":         {"images", "runtime", "sourceDir"},
-		"apply.init-kubeadm":       {"criSocket", "imageRepository", "joinFile", "kubernetesVersion", "podCIDR", "whenRole"},
-		"apply.join-kubeadm":       {"joinFile", "whenRole"},
-		"apply.check-cluster":      {"controlPlaneReady", "interval", "nodeCount", "readyCount", "timeout", "whenRole"},
+		"prepare.download-package":       {"backendImage", "backendRuntime", "distroFamily", "distroRelease", "outputDir", "packages", "repoType"},
+		"prepare.download-image":         {"backendEngine", "images", "outputDir"},
+		"apply.install-package":          {"packages", "sourcePath"},
+		"apply.load-image":               {"images", "runtime", "sourceDir"},
+		"apply.init-kubeadm":             {"criSocket", "imageRepository", "joinFile", "kubernetesVersion", "podCIDR", "whenRole"},
+		"apply.join-kubeadm":             {"joinFile", "whenRole"},
+		"apply.check-cluster":            {"controlPlaneReady", "interval", "nodeCount", "readyCount", "timeout", "whenRole"},
+		"apply.check-kubernetes-cluster": {"controlPlaneReady", "interval", "nodeCount", "readyCount", "timeout", "whenRole"},
 	}
 	for _, item := range allowed[strings.TrimSpace(builderID)] {
 		if strings.TrimSpace(item) == strings.TrimSpace(key) {

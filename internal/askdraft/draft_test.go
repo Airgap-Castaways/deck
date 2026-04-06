@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	_ "github.com/Airgap-Castaways/deck/internal/stepspec"
 )
@@ -26,7 +27,7 @@ func TestCompileBuildsWorkflowDocumentsFromBuilderSelections(t *testing.T) {
 			},
 			{
 				Path:     "workflows/scenarios/apply.yaml",
-				Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm", Overrides: map[string]any{}}, {ID: "apply.check-cluster", Overrides: map[string]any{}}},
+				Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm", Overrides: map[string]any{}}, {ID: currentClusterCheckBuilderID(), Overrides: map[string]any{}}},
 			},
 		},
 		Vars: map[string]any{"role": "control-plane"},
@@ -56,7 +57,7 @@ func TestCompileBuildsWorkflowDocumentsFromBuilderSelections(t *testing.T) {
 			joinedKinds = append(joinedKinds, step.Kind)
 		}
 	}
-	if !strings.Contains(strings.Join(joinedKinds, ","), "InitKubeadm") || !strings.Contains(strings.Join(joinedKinds, ","), "CheckCluster") {
+	if !strings.Contains(strings.Join(joinedKinds, ","), "InitKubeadm") || !strings.Contains(strings.Join(joinedKinds, ","), currentClusterCheckKind()) {
 		t.Fatalf("expected kubeadm builder steps, got %#v", apply)
 	}
 }
@@ -119,7 +120,7 @@ func TestCompileUsesKubeadmOverrideAliasesAndDropsStructuralNoise(t *testing.T) 
 		Path: "workflows/scenarios/apply.yaml",
 		Builders: []askcontract.DraftBuilderSelection{
 			{ID: "apply.init-kubeadm", Overrides: map[string]any{"outputJoinFile": "/custom/join.txt", "kubernetesVersion": "v1.35.1", "criSocket": "unix:///run/containerd/containerd.sock", "phase": "ignored"}},
-			{ID: "apply.check-cluster", Overrides: map[string]any{"nodeCount": 1, "readyCount": 1, "controlPlaneReady": 1, "phase": "ignored"}},
+			{ID: currentClusterCheckBuilderID(), Overrides: map[string]any{"nodeCount": 1, "readyCount": 1, "controlPlaneReady": 1, "phase": "ignored"}},
 		},
 	}}}
 	docs, err := CompileWithProgram(askcontract.AuthoringProgram{}, selection)
@@ -140,7 +141,7 @@ func TestCompileUsesKubeadmOverrideAliasesAndDropsStructuralNoise(t *testing.T) 
 	if init.Spec["outputJoinFile"] != "/custom/join.txt" || init.Spec["kubernetesVersion"] != "v1.35.1" || init.Spec["criSocket"] != "unix:///run/containerd/containerd.sock" {
 		t.Fatalf("expected init-kubeadm overrides to materialize, got %#v", init.Spec)
 	}
-	check := joined["CheckCluster"]
+	check := joined[currentClusterCheckKind()]
 	nodes, _ := check.Spec["nodes"].(map[string]any)
 	if nodes["total"] != 1 || nodes["ready"] != 1 || nodes["controlPlaneReady"] != 1 {
 		t.Fatalf("expected check-cluster overrides to materialize, got %#v", check.Spec)
@@ -190,7 +191,7 @@ func TestCompileBuildsCompleteTwoNodeOfflineDraft(t *testing.T) {
 					{ID: "apply.load-image"},
 					{ID: "apply.init-kubeadm"},
 					{ID: "apply.join-kubeadm"},
-					{ID: "apply.check-cluster"},
+					{ID: currentClusterCheckBuilderID()},
 				},
 			},
 		},
@@ -278,7 +279,7 @@ func TestCompileBuildsCompleteTwoNodeOfflineDraft(t *testing.T) {
 	if join.When != `vars.role == "worker"` || join.Spec["joinFile"] != "/tmp/deck/join.txt" {
 		t.Fatalf("expected worker join gate and join file, got %#v", join)
 	}
-	check := applySteps["CheckCluster"]
+	check := applySteps[currentClusterCheckKind()]
 	if check.When != `vars.role == "control-plane"` {
 		t.Fatalf("expected control-plane verification gate, got %#v", check)
 	}
@@ -300,7 +301,7 @@ func TestCompileAddsRoleVarWhenWorkflowUsesRoleSelector(t *testing.T) {
 	selection := askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{
 		{
 			Path:     "workflows/scenarios/apply.yaml",
-			Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm"}, {ID: "apply.join-kubeadm"}, {ID: "apply.check-cluster"}},
+			Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm"}, {ID: "apply.join-kubeadm"}, {ID: currentClusterCheckBuilderID()}},
 		},
 		{
 			Path: "workflows/vars.yaml",
@@ -348,8 +349,8 @@ func TestCompileAssignsUniqueStepIDsForRepeatedBuilders(t *testing.T) {
 	selection := askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{
 		Path: "workflows/scenarios/apply.yaml",
 		Builders: []askcontract.DraftBuilderSelection{
-			{ID: "apply.check-cluster", Overrides: map[string]any{"controlPlaneReady": 1, "nodeCount": 1, "readyCount": 1, "whenRole": "control-plane"}},
-			{ID: "apply.check-cluster", Overrides: map[string]any{"controlPlaneReady": 1, "nodeCount": 2, "readyCount": 2, "whenRole": "control-plane"}},
+			{ID: currentClusterCheckBuilderID(), Overrides: map[string]any{"controlPlaneReady": 1, "nodeCount": 1, "readyCount": 1, "whenRole": "control-plane"}},
+			{ID: currentClusterCheckBuilderID(), Overrides: map[string]any{"controlPlaneReady": 1, "nodeCount": 2, "readyCount": 2, "whenRole": "control-plane"}},
 		},
 	}}}
 	docs, err := CompileWithProgram(askcontract.AuthoringProgram{}, selection)
@@ -375,7 +376,7 @@ func TestCompileCreatesVarsDocumentWhenRoleGatedWorkflowHasNoVarsTarget(t *testi
 		Cluster:      askcontract.ProgramCluster{JoinFile: "/tmp/deck/join.txt", RoleSelector: "role", ControlPlaneCount: 1, WorkerCount: 1},
 		Verification: askcontract.ProgramVerification{ExpectedNodeCount: 2, ExpectedReadyCount: 2, ExpectedControlPlaneReady: 1},
 	}
-	selection := askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{Path: "workflows/scenarios/apply.yaml", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm"}, {ID: "apply.join-kubeadm"}, {ID: "apply.check-cluster"}}}}}
+	selection := askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{Path: "workflows/scenarios/apply.yaml", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm"}, {ID: "apply.join-kubeadm"}, {ID: currentClusterCheckBuilderID()}}}}}
 	docs, err := CompileWithProgram(program, selection)
 	if err != nil {
 		t.Fatalf("compile role-gated workflow without vars target: %v", err)
@@ -388,6 +389,29 @@ func TestCompileCreatesVarsDocumentWhenRoleGatedWorkflowHasNoVarsTarget(t *testi
 	if vars == nil || vars["role"] != "control-plane" {
 		t.Fatalf("expected automatic vars companion for role-gated workflow, got %#v", docs)
 	}
+}
+
+func currentClusterCheckBuilderID() string {
+	for _, step := range askcatalog.Current().StepKinds() {
+		if !strings.Contains(step.Kind, "Check") || !strings.Contains(step.Kind, "Cluster") {
+			continue
+		}
+		for _, builder := range step.Builders {
+			if strings.Contains(builder.ID, "check") && strings.Contains(builder.ID, "cluster") {
+				return builder.ID
+			}
+		}
+	}
+	return "apply.check-kubernetes-cluster"
+}
+
+func currentClusterCheckKind() string {
+	for _, step := range askcatalog.Current().StepKinds() {
+		if strings.Contains(step.Kind, "Check") && strings.Contains(step.Kind, "Cluster") {
+			return step.Kind
+		}
+	}
+	return "CheckKubernetesCluster"
 }
 
 func TestDocumentKindPrefersCanonicalVarsAndComponentPaths(t *testing.T) {
