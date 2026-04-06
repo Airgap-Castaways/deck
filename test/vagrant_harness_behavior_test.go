@@ -51,9 +51,9 @@ func TestVagrantHarnessBehaviorFresh(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, artDir, "checkpoints"), 0o755); err != nil {
 		t.Fatalf("mkdir art dir: %v", err)
 	}
-	bundleCacheDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "k8s-worker-join")
-	stagingCacheDir := filepath.Join(root, "test", "artifacts", "cache", "staging", "k8s-worker-join")
-	vagrantCacheDir := filepath.Join(root, "test", "artifacts", "cache", "vagrant", "k8s-worker-join")
+	bundleCacheDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "shared", "compat")
+	stagingCacheDir := filepath.Join(root, "test", "artifacts", "cache", "staging", "shared", "compat")
+	vagrantCacheDir := filepath.Join(root, "test", "artifacts", "cache", "vagrant", "shared", "compat")
 	for _, dir := range []string{bundleCacheDir, stagingCacheDir, vagrantCacheDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatalf("mkdir cache dir %s: %v", dir, err)
@@ -78,9 +78,9 @@ func TestVagrantHarnessBehaviorFreshCache(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, artDir), 0o755); err != nil {
 		t.Fatalf("mkdir art dir: %v", err)
 	}
-	bundleDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "k8s-worker-join")
-	stagingDir := filepath.Join(root, "test", "artifacts", "cache", "staging", "k8s-worker-join")
-	vagrantDir := filepath.Join(root, "test", "artifacts", "cache", "vagrant", "k8s-worker-join")
+	bundleDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "shared", "compat")
+	stagingDir := filepath.Join(root, "test", "artifacts", "cache", "staging", "shared", "compat")
+	vagrantDir := filepath.Join(root, "test", "artifacts", "cache", "vagrant", "shared", "compat")
 	for _, dir := range []string{bundleDir, stagingDir, vagrantDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatalf("mkdir cache dir %s: %v", dir, err)
@@ -102,7 +102,7 @@ func TestVagrantHarnessBehaviorCacheReuse(t *testing.T) {
 	root := testProjectRoot(t)
 	artDir := filepath.Join("test", "tmp", "cache-reuse-behavior")
 	checkpointDir := filepath.Join(root, artDir, "checkpoints")
-	bundleDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "k8s-worker-join")
+	bundleDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "shared", "compat")
 	if err := os.MkdirAll(checkpointDir, 0o755); err != nil {
 		t.Fatalf("mkdir checkpoints: %v", err)
 	}

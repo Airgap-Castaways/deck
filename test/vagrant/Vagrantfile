@@ -61,23 +61,6 @@ Vagrant.configure("2") do |config|
     config.vm.synced_folder ".", "/vagrant", disabled: true
   end
 
-  case sync_type
-  when "9p"
-    config.vm.synced_folder sync_source, "/workspace", type: "9p", accessmode: "mapped"
-  when "rsync"
-    config.vm.synced_folder sync_source, "/workspace", type: "rsync",
-      rsync__exclude: [
-        ".git/",
-        ".vagrant/",
-        "test/vagrant/.vagrant/",
-        "test/artifacts/runs/*/",
-        "test/artifacts/cache/vagrant/*/rsync-root/",
-        "test/artifacts/cache/vagrant/*/rsync-root.stage/"
-      ]
-  else
-    config.vm.synced_folder sync_source, "/workspace", type: "nfs", nfs_version: 4, nfs_udp: false
-  end
-
   nodes = [
     { name: "control-plane", ip: "192.168.57.10", memory: 3072, cpus: default_cpus, box: control_plane_box },
     { name: "worker", ip: "192.168.57.11", memory: 3072, cpus: default_cpus, box: worker_box },
@@ -86,8 +69,19 @@ Vagrant.configure("2") do |config|
 
   nodes.each do |node|
     config.vm.define node[:name] do |m|
+      node_sync_key = node[:name].tr("-", "_").upcase
+      node_sync_source = ENV.fetch("DECK_VAGRANT_SYNC_SOURCE_#{node_sync_key}", sync_source).strip
+      node_sync_source = sync_source if node_sync_source.empty?
       m.vm.box = node[:box]
       m.vm.hostname = node[:name]
+      case sync_type
+      when "9p"
+        m.vm.synced_folder node_sync_source, "/workspace", type: "9p", accessmode: "mapped"
+      when "rsync"
+        m.vm.synced_folder node_sync_source, "/workspace", type: "rsync"
+      else
+        m.vm.synced_folder node_sync_source, "/workspace", type: "nfs", nfs_version: 4, nfs_udp: false
+      end
       if enable_private_network
         m.ssh.host = node[:ip]
         m.ssh.port = 22

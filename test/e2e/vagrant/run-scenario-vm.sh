@@ -50,6 +50,7 @@ OFFLINE_RELEASE_WORKER_2="${DECK_OFFLINE_RELEASE_WORKER_2:-rocky9}"
 KUBERNETES_VERSION="${DECK_KUBERNETES_VERSION:-v1.30.1}"
 KUBERNETES_UPGRADE_VERSION="${DECK_KUBERNETES_UPGRADE_VERSION:-}"
 PREPARED_BUNDLE_REL="${DECK_PREPARED_BUNDLE_REL:-}"
+PREPARED_BUNDLE_TAR_REL="${DECK_PREPARED_BUNDLE_TAR_REL:-}"
 E2E_SCENARIO="${DECK_E2E_SCENARIO:-k8s-worker-join}"
 E2E_RUN_ID="${DECK_E2E_RUN_ID:-local}"
 E2E_PROVIDER="${DECK_E2E_PROVIDER:-libvirt}"
@@ -57,6 +58,7 @@ E2E_CACHE_KEY="${DECK_E2E_CACHE_KEY:-compat}"
 E2E_STARTED_AT="${DECK_E2E_STARTED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 SERVER_ROOT="/tmp/deck/server-root"
 DECK_BIN="/tmp/deck/deck"
+DECK_BIN_STAMP_FILE="/tmp/deck/deck.cache-key"
 SERVER_PID=""
 REPO_TYPE="apt-flat"
 OFFLINE_GUARD_ACTIVE=0
@@ -92,16 +94,6 @@ case "${ARCH_RAW}" in
     exit 1
     ;;
 esac
-
-if [[ ! -f "/workspace/${PREPARED_BUNDLE_REL}/outputs/bin/linux/${ARCH}/deck" ]]; then
-  echo "[deck] missing prepared bundle runtime binary: /workspace/${PREPARED_BUNDLE_REL}/outputs/bin/linux/${ARCH}/deck"
-  exit 1
-fi
-
-if [[ ! -x "${DECK_BIN}" ]]; then
-  cp "/workspace/${PREPARED_BUNDLE_REL}/outputs/bin/linux/${ARCH}/deck" "${DECK_BIN}"
-  chmod +x "${DECK_BIN}"
-fi
 
 cd /workspace
 
@@ -177,25 +169,66 @@ ensure_advertise_address() {
   fi
 }
 
+control_plane_bundle_deck_path() {
+  printf '%s\n' "${SERVER_ROOT}/outputs/bin/linux/${ARCH}/deck"
+}
+
+download_worker_deck_binary() {
+  local deck_url="${SERVER_URL}/bin/linux/${ARCH}/deck"
+  local i
+  for ((i=1; i<=180; i++)); do
+    if curl -fsS --max-time 10 "${deck_url}" -o "${DECK_BIN}.tmp"; then
+      chmod +x "${DECK_BIN}.tmp"
+      mv "${DECK_BIN}.tmp" "${DECK_BIN}"
+      return 0
+    fi
+    sleep 2
+  done
+  rm -f "${DECK_BIN}.tmp"
+  echo "[deck] failed to download deck runtime binary from ${deck_url}"
+  exit 1
+}
+
+ensure_deck_runtime_binary() {
+  if [[ -x "${DECK_BIN}" ]] && [[ -f "${DECK_BIN_STAMP_FILE}" ]] && [[ "$(cat "${DECK_BIN_STAMP_FILE}" 2>/dev/null || true)" == "${E2E_CACHE_KEY}" ]]; then
+    return 0
+  fi
+  if [[ "${ROLE}" == "control-plane" ]]; then
+    local source_path
+    source_path="$(control_plane_bundle_deck_path)"
+    if [[ ! -f "${source_path}" ]]; then
+      echo "[deck] missing control-plane runtime binary: ${source_path}"
+      exit 1
+    fi
+    cp "${source_path}" "${DECK_BIN}"
+    chmod +x "${DECK_BIN}"
+    printf '%s\n' "${E2E_CACHE_KEY}" > "${DECK_BIN_STAMP_FILE}"
+    return 0
+  fi
+  download_worker_deck_binary
+  printf '%s\n' "${E2E_CACHE_KEY}" > "${DECK_BIN_STAMP_FILE}"
+}
+
 prepare_server_bundle() {
-  if [[ -n "${PREPARED_BUNDLE_REL}" ]] && [[ -f "/workspace/${PREPARED_BUNDLE_REL}/.deck/manifest.json" ]]; then
+  if [[ -n "${PREPARED_BUNDLE_TAR_REL}" ]] && [[ -f "/workspace/${PREPARED_BUNDLE_TAR_REL}" ]]; then
     sudo -n rm -rf "${SERVER_ROOT}"
     mkdir -p "${SERVER_ROOT}"
-    cp -a "/workspace/${PREPARED_BUNDLE_REL}/." "${SERVER_ROOT}/"
-    printf 'prepared-bundle=%s\n' "${PREPARED_BUNDLE_REL}" > "${CASE_DIR}/01-prepare.log"
+    tar -xf "/workspace/${PREPARED_BUNDLE_TAR_REL}" -C "${SERVER_ROOT}" --strip-components=1
+    printf 'prepared-bundle-tar=%s\n' "${PREPARED_BUNDLE_TAR_REL}" > "${CASE_DIR}/01-prepare.log"
     return 0
   fi
 
-  echo "[deck] prepared bundle missing; host step prepare-host must publish DECK_PREPARED_BUNDLE_REL" | tee -a "${CASE_DIR}/01-prepare.log"
+  echo "[deck] prepared bundle tar missing; host step prepare-host must publish DECK_PREPARED_BUNDLE_TAR_REL" | tee -a "${CASE_DIR}/01-prepare.log"
   exit 1
 }
 
 write_runtime_workflows() {
   local workflow_dir="${SERVER_ROOT}/workflows"
-  rm -rf "${workflow_dir}"
-  mkdir -p "${workflow_dir}"
   ensure_advertise_address
-  cp -a "/workspace/test/workflows/." "${workflow_dir}/"
+  if [[ ! -d "${workflow_dir}" ]]; then
+    echo "[deck] missing rendered workflows in extracted bundle: ${workflow_dir}"
+    exit 1
+  fi
   CONTROL_PLANE_WORKFLOW_URL="${SERVER_URL}/workflows/scenarios/control-plane-bootstrap.yaml"
   rm -rf "${RENDERED_WORKFLOWS_DIR}"
   mkdir -p "${RENDERED_WORKFLOWS_DIR}"
@@ -235,6 +268,7 @@ require_control_plane() {
 action_prepare_bundle() {
   require_control_plane
   prepare_server_bundle
+  ensure_deck_runtime_binary
   write_runtime_workflows
   start_server_background
   if ! wait_server_health; then
@@ -245,11 +279,13 @@ action_prepare_bundle() {
 }
 
 action_apply_scenario() {
+  ensure_deck_runtime_binary
   scenario_action_apply
 }
 
 action_verify_scenario() {
   require_control_plane
+  ensure_deck_runtime_binary
   scenario_action_verify "${SCENARIO_STAGE:-}"
 }
 

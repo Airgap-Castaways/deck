@@ -28,7 +28,8 @@ bash test/e2e/vagrant/run-scenario.sh --scenario k8s-node-reset
 
 - shared folder 기본값: `rsync`
 - 필요하면 `DECK_VAGRANT_SYNC_TYPE=9p` 또는 `DECK_VAGRANT_SYNC_TYPE=nfs`로 override할 수 있다.
-- rsync 경로는 repo 전체가 아니라 `test/artifacts/cache/vagrant/<scenario>/rsync-root/`에 준비된 최소 실행 트리만 sync한다.
+- rsync 경로는 repo 전체가 아니라 shared bundle/cache에서 만든 role별 최소 실행 트리만 sync한다.
+- control-plane은 prepared bundle tarball과 guest helper를 받고, worker들은 guest helper만 받는다.
 - NFS 경로는 `nfs_version: 4`, `nfs_udp: false`로 고정한다.
 - 기본 artifact 경로: `test/artifacts/runs/<scenario>/<run-id>/`
 - 기본 VM prefix: `deck-<scenario>-local`
@@ -49,9 +50,9 @@ bash test/e2e/vagrant/run-scenario.sh --scenario k8s-node-reset
 ## 아티팩트 경로
 
 - `test/artifacts/runs/<scenario>/<run-id>/`
-- `test/artifacts/cache/bundles/<scenario>/...`
-- `test/artifacts/cache/staging/<scenario>/...`
-- `test/artifacts/cache/vagrant/<scenario>/...`
+- `test/artifacts/cache/bundles/shared/<cache-key>/...`
+- `test/artifacts/cache/staging/shared/<cache-key>/...`
+- `test/artifacts/cache/vagrant/shared/<cache-key>/...`
 - `test/vagrant/.vagrant/`
 
 주요 출력:
@@ -61,9 +62,9 @@ bash test/e2e/vagrant/run-scenario.sh --scenario k8s-node-reset
 - `reports/cluster-nodes.txt`
 - `result.json`
 - `pass.txt`
-- 공유 prepared bundle cache는 run별 artifact 디렉터리가 아니라 `test/artifacts/cache/bundles/<scenario>/...`에 유지된다.
-- host-side bundle 작업 경로는 `test/artifacts/cache/staging/<scenario>/...`를 사용한다.
-- rsync 모드에서는 guest가 실제로 읽는 파일만 `test/artifacts/cache/vagrant/<scenario>/...`에 staging 한 뒤 `/workspace`로 sync한다.
+- 공유 prepared bundle cache는 run별 artifact 디렉터리가 아니라 `test/artifacts/cache/bundles/shared/<cache-key>/...`에 유지된다.
+- host-side bundle 작업 경로는 `test/artifacts/cache/staging/shared/<cache-key>/...`를 사용한다.
+- rsync 모드에서는 control-plane용 tarball payload와 worker용 helper-only payload를 `test/artifacts/cache/vagrant/shared/<cache-key>/...` 아래에 별도로 staging 한 뒤 `/workspace`로 sync한다.
 - Vagrant machine state는 기본 `.vagrant` 경로인 `test/vagrant/.vagrant/`에 유지된다.
 - `nfs`/`9p` shared folder에서 결과 파일이 호스트에 바로 보이면 collect는 fetch 대신 검증만 수행한다.
 
@@ -78,7 +79,7 @@ bash test/e2e/vagrant/run-scenario.sh --scenario k8s-node-reset
 - 반복 로컬 실행은 기본적으로 같은 artifact 경로와 같은 VM prefix를 재사용한다.
 - 재실행이 필요하면 `--from-step`, `--to-step`, `--resume`, `--art-dir`로 범위를 좁힌다.
 - `--art-dir`를 바꿔도 prepared bundle은 공유 cache 경로를 재사용한다.
-- 상태를 완전히 초기화하려면 `rm -rf test/vagrant/.vagrant test/artifacts/runs/k8s-worker-join/local test/artifacts/cache/bundles/k8s-worker-join test/artifacts/cache/staging/k8s-worker-join test/artifacts/cache/vagrant/k8s-worker-join` 후 다시 실행한다.
+- 상태를 완전히 초기화하려면 `rm -rf test/vagrant/.vagrant test/artifacts/runs/k8s-worker-join/local test/artifacts/cache/bundles/shared test/artifacts/cache/staging/shared test/artifacts/cache/vagrant/shared` 후 다시 실행한다.
 
 ## 유지보수 메모
 
