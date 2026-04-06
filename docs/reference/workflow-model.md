@@ -141,22 +141,31 @@ When a prepare download step does not set an explicit output location, deck uses
 - `DownloadImage`: `images/`
 - `DownloadPackage`: `packages/`, or `packages/deb/<release>` and `packages/rpm/<release>` when `repo.type` is set
 
-## Step shape
+## Step Envelope Contract
 
-Every step is centered on:
+Every workflow step uses the same outer envelope before kind-specific `spec` validation runs.
 
-- `id`
-- `apiVersion`
-- `kind`
-- `spec`
+Required fields:
 
-Optional execution controls:
+- `id`: stable step identifier; must match the workflow step id pattern
+- `kind`: typed step name such as `WriteFile` or `CheckKubernetesCluster`
+- `spec`: kind-specific payload validated against that step's schema
 
+Optional shared fields:
+
+- `apiVersion`: step api version; when omitted, deck resolves it from the top-level workflow `version`
 - `when`: CEL expression; the step is skipped when it evaluates to false
-- `parallelGroup`: consecutive steps with the same group can run as one parallel batch inside a phase
+- `parallelGroup`: consecutive steps with the same value can run in one batch inside a phase
 - `retry`: retry count on failure
 - `timeout`: duration string such as `30s` or `5m`
-- `register`: export step outputs into later runtime values
+- `register`: export declared step outputs into later runtime values
+- `metadata`: free-form annotation map for tooling or audit-oriented context
+
+Shared envelope rules:
+
+- `register` keys become available as `runtime.<name>` in CEL and `.runtime.<name>` in templates
+- if a step runs inside a parallel batch, its `register` outputs become visible only after the full batch succeeds
+- `spec` is always validated again against the selected step kind after the shared envelope passes
 
 ### `when` — conditional execution
 
@@ -208,6 +217,8 @@ steps:
       joinFile: "{{ .runtime.joinFile }}"
       extraArgs: ["--cri-socket", "unix:///run/containerd/containerd.sock", "--ignore-preflight-errors=Swap,FileExisting-crictl,FileExisting-conntrack,FileExisting-socat"]
 ```
+
+`register` can only export output names that the selected step kind explicitly declares. For example, `InitKubeadm` can export `joinFile`, while steps with no declared outputs reject non-empty `register` mappings during validation.
 
 ## Phases
 
@@ -282,9 +293,15 @@ phases:
 Rules for the first version:
 
 - only consecutive steps with the same `parallelGroup` value are in the same batch
+- once a batch closes, the same `parallelGroup` value cannot reappear later in the phase
 - phases still execute in order
+- apply-time parallel batches are intentionally restricted to a small allowlist: `Command`, `CopyFile`, `EnsureDirectory`, `ExtractArchive`, `WaitForCommand`, `WaitForFile`, `WaitForMissingFile`, `WaitForService`, `WaitForTCPPort`, `WaitForMissingTCPPort`, and `WriteFile`
+- same-batch apply steps cannot target the same literal output path or node path
+- same-batch prepare steps cannot write to the same literal prepared root path such as the same `files/...`, `images/...`, or `packages/...` destination
 - same-batch steps cannot consume each other's `register` outputs through `runtime.*`
 - `register` outputs from a parallel batch become visible only to later batches or later phases
+
+If a workflow needs one step to consume another step's runtime output, put those steps in separate batches or separate phases.
 
 ## Step kinds
 
@@ -307,9 +324,9 @@ Use [Typed Steps](typed-steps.md) for the current group pages and exact supporte
 
 `prepare` uses the same step grammar as `apply`, but command context determines which kinds are valid.
 
-- `DownloadFile` is prepare-only and writes bundle-relative outputs under the canonical `files/` root
-- `DownloadImage` is prepare-only and writes prepared image archives under `images/` or an `images/...` subdirectory
-- `DownloadPackage` is prepare-only and writes prepared package content under `packages/` or a `packages/...` subdirectory
+- `DownloadFile` is prepare-only and `outputPath` must stay under the canonical `files/` root
+- `DownloadImage` is prepare-only and `outputDir` must stay under `images/` or an `images/...` subdirectory
+- `DownloadPackage` is prepare-only and `outputDir` must stay under `packages/` or a `packages/...` subdirectory
 - omit `outputPath` or `outputDir` unless you need a stable custom location for later apply steps
 - container-backed `DownloadPackage` reuses a host-owned exported artifact cache after successful exports instead of bind-mounting apt/dnf package-manager cache directories
 - `workflows/prepare.yaml` is the fixed entrypoint for prepare workflows
