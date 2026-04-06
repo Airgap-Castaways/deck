@@ -17,13 +17,21 @@ LDFLAGS ?= -X $(BUILDINFO_PKG).Version=$(VERSION) -X $(BUILDINFO_PKG).Commit=$(C
 
 .PHONY: build test lint vuln generate verify-generated print-build-meta release-check release-snapshot
 
+GENERATED_GROUP_DOCS := $(sort $(wildcard docs/reference/groups/*.md))
+GENERATED_SCHEMA_FILES := \
+	schemas/deck-workflow.schema.json \
+	schemas/deck-component-fragment.schema.json \
+	schemas/deck-tooldefinition.schema.json \
+	schemas/README.md \
+	schemas/tools/README.md \
+	$(sort $(wildcard schemas/tools/*.schema.json))
 GENERATED_PATHS := \
 	docs/contributing/tool-definition-schema.md \
-	docs/reference/groups \
 	docs/reference/typed-steps.md \
 	docs/reference/workflow-model.md \
 	docs/reference/workspace-layout.md \
-	schemas
+	$(GENERATED_GROUP_DOCS) \
+	$(GENERATED_SCHEMA_FILES)
 
 build:
 	@mkdir -p $(BIN_DIR)
