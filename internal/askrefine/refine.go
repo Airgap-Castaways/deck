@@ -78,6 +78,9 @@ func ResolveCandidate(doc askcontract.GeneratedDocument, transform askcontract.R
 		}
 		return transform, UnknownCandidateError{Path: strings.TrimSpace(doc.Path), Type: "extract-var", RawPath: strings.TrimSpace(transform.RawPath), Ignorable: true}
 	}
+	if resolved, ok := resolveStepScopedCandidate(doc, transform); ok {
+		transform = resolved
+	}
 	for _, candidate := range candidatesForDocument(doc, ctx) {
 		if candidate.ID != strings.TrimSpace(transform.Candidate) {
 			continue
@@ -122,6 +125,53 @@ func ResolveCandidate(doc askcontract.GeneratedDocument, transform askcontract.R
 		return transform, UnknownCandidateError{Candidate: transform.Candidate, Path: strings.TrimSpace(doc.Path), Type: parsedType, RawPath: parsedRawPath, Ignorable: parsedType == "extract-var"}
 	}
 	return transform, UnknownCandidateError{Candidate: transform.Candidate, Path: strings.TrimSpace(doc.Path)}
+}
+
+func resolveStepScopedCandidate(doc askcontract.GeneratedDocument, transform askcontract.RefineTransformAction) (askcontract.RefineTransformAction, bool) {
+	stepID := strings.TrimSpace(transform.Candidate)
+	if stepID == "" || strings.Contains(stepID, "|") {
+		return transform, false
+	}
+	relativePath := strings.TrimSpace(transform.Path)
+	if relativePath == "" || strings.HasPrefix(relativePath, "workflows/") {
+		return transform, false
+	}
+	if strings.TrimSpace(transform.Type) == "extract-component" {
+		return transform, false
+	}
+	base := stepRawPathByID(doc, stepID)
+	if base == "" {
+		return transform, false
+	}
+	if strings.TrimSpace(transform.Type) == "set-field" || strings.TrimSpace(transform.Type) == "delete-field" || strings.TrimSpace(transform.Type) == "" {
+		rawPath := base + "." + strings.TrimPrefix(strings.TrimSpace(relativePath), ".")
+		transform.Candidate = candidateID(firstNonEmpty(strings.TrimSpace(transform.Type), "set-field"), doc.Path, rawPath)
+		if strings.TrimSpace(transform.RawPath) == "" {
+			transform.RawPath = rawPath
+		}
+		return transform, true
+	}
+	return transform, false
+}
+
+func stepRawPathByID(doc askcontract.GeneratedDocument, stepID string) string {
+	stepID = strings.TrimSpace(stepID)
+	if stepID == "" || doc.Workflow == nil {
+		return ""
+	}
+	for i, step := range doc.Workflow.Steps {
+		if strings.TrimSpace(step.ID) == stepID {
+			return fmt.Sprintf("steps[%d]", i)
+		}
+	}
+	for i, phase := range doc.Workflow.Phases {
+		for j, step := range phase.Steps {
+			if strings.TrimSpace(step.ID) == stepID {
+				return fmt.Sprintf("phases[%d].steps[%d]", i, j)
+			}
+		}
+	}
+	return ""
 }
 
 func PromptBlock(plan askcontract.PlanResponse, docs []askcontract.GeneratedDocument) string {

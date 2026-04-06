@@ -42,8 +42,26 @@ func applyPlanAnswers(plan askcontract.PlanResponse, answers []string) (askcontr
 		}
 		plan.Clarifications[idx].Answer = value
 	}
-	decision := askintent.Decision{Route: askintent.ParseRoute(plan.Intent), Target: planTarget(plan, askintent.Target{Kind: plan.AuthoringBrief.TargetScope})}
+	decision := askintent.Decision{Route: planRoute(plan), Target: planTarget(plan, askintent.Target{Kind: plan.AuthoringBrief.TargetScope})}
 	return askpolicy.NormalizePlan(plan, plan.Request, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, decision), nil
+}
+
+func planRoute(plan askcontract.PlanResponse) askintent.Route {
+	route := askintent.ParseRoute(plan.Intent)
+	if route == askintent.RouteDraft || route == askintent.RouteRefine {
+		return route
+	}
+	if strings.EqualFold(strings.TrimSpace(plan.AuthoringBrief.CompletenessTarget), "refine") {
+		return askintent.RouteRefine
+	}
+	for _, file := range plan.Files {
+		action := strings.ToLower(strings.TrimSpace(file.Action))
+		switch action {
+		case "update", "edit", "delete", "preserve":
+			return askintent.RouteRefine
+		}
+	}
+	return askintent.RouteDraft
 }
 
 func containsAnswerOption(options []string, value string) bool {

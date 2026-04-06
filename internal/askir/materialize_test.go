@@ -282,6 +282,34 @@ func TestMaterializeRefineCandidateExtractVarTransform(t *testing.T) {
 	}
 }
 
+func TestMaterializeRefineStepIDShorthandSetFieldTransform(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "control-plane-bootstrap.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nphases:\n  - name: verify\n    steps:\n      - id: bootstrap-report\n        kind: CheckCluster\n        spec:\n          timeout: 5m\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/scenarios/control-plane-bootstrap.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:      "set-field",
+			Candidate: "bootstrap-report",
+			Path:      "spec.timeout",
+			Value:     "10m",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize step shorthand set-field transform: %v", err)
+	}
+	if len(files) != 1 || !strings.Contains(files[0].Content, "timeout: 10m") || strings.Contains(files[0].Content, "\nspec:\n  timeout: 10m\nphases:") {
+		t.Fatalf("expected shorthand set-field to update nested step field, got %#v", files)
+	}
+}
+
 func TestMaterializeRemovesEmptyWorkflowVarsBlockAfterDelete(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")

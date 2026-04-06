@@ -6,8 +6,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
-	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
+	"github.com/Airgap-Castaways/deck/internal/stepmeta"
 )
 
 type Bundle struct {
@@ -99,54 +100,49 @@ func Current() Bundle {
 }
 
 func buildBundle() Bundle {
-	manifest := askcontext.Current()
+	catalog := askcatalog.Current()
 	bundle := Bundle{
 		Workflow: WorkflowKnowledge{
-			SupportedRoles:   append([]string(nil), manifest.Workflow.SupportedModes...),
-			SupportedVersion: manifest.Workflow.SupportedVersion,
-			TopLevelModes:    append([]string(nil), manifest.Workflow.TopLevelModes...),
-			RequiredFields:   append([]string(nil), manifest.Workflow.RequiredFields...),
-			Notes:            append([]string(nil), manifest.Workflow.Notes...),
-			PhaseExample:     strings.TrimSpace(manifest.Workflow.PhaseExample),
-			StepsExample:     strings.TrimSpace(manifest.Workflow.StepsExample),
+			SupportedRoles:   append([]string(nil), catalog.Workflow.SupportedModes...),
+			SupportedVersion: catalog.Workflow.SupportedVersion,
+			TopLevelModes:    append([]string(nil), catalog.Workflow.TopLevelModes...),
+			RequiredFields:   append([]string(nil), catalog.Workflow.RequiredFields...),
+			Notes:            append([]string(nil), catalog.Workflow.InvariantNotes...),
+			PhaseExample:     strings.TrimSpace(catalog.Workflow.PhaseExample),
+			StepsExample:     strings.TrimSpace(catalog.Workflow.StepsExample),
 		},
 		Topology: TopologyKnowledge{
-			WorkflowRoot:     manifest.Topology.WorkflowRoot,
-			ScenarioDir:      manifest.Topology.ScenarioDir,
-			ComponentDir:     manifest.Topology.ComponentDir,
-			VarsPath:         manifest.Topology.VarsPath,
-			CanonicalPrepare: manifest.Topology.CanonicalPrepare,
-			CanonicalApply:   manifest.Topology.CanonicalApply,
-			AllowedPaths:     append([]string(nil), manifest.Topology.AllowedPaths...),
+			WorkflowRoot:     catalog.Workspace.WorkflowRoot,
+			ScenarioDir:      catalog.Workspace.ScenarioDir,
+			ComponentDir:     catalog.Workspace.ComponentDir,
+			VarsPath:         catalog.Workspace.VarsPath,
+			CanonicalPrepare: catalog.Workspace.CanonicalPrepare,
+			CanonicalApply:   catalog.Workspace.CanonicalApply,
+			AllowedPaths:     append([]string(nil), catalog.Workspace.AllowedPaths...),
 		},
 		Components: ComponentKnowledge{
-			ImportRule:      manifest.Components.ImportRule,
-			FragmentRule:    manifest.Components.FragmentRule,
-			ImportExample:   strings.TrimSpace(manifest.Components.ImportExample),
-			FragmentExample: strings.TrimSpace(manifest.Components.FragmentExample),
-			AllowedRootKeys: []string{"steps"},
+			ImportRule:      catalog.Components.ImportRule,
+			FragmentRule:    catalog.Components.FragmentRule,
+			ImportExample:   strings.TrimSpace(catalog.Components.ImportExample),
+			FragmentExample: strings.TrimSpace(catalog.Components.FragmentExample),
+			AllowedRootKeys: append([]string(nil), catalog.Components.AllowedRootKeys...),
 		},
 		Vars: VarsKnowledge{
-			Path:        manifest.Vars.Path,
-			Summary:     manifest.Vars.Summary,
-			PreferFor:   append([]string(nil), manifest.Vars.PreferFor...),
-			AvoidFor:    append([]string(nil), manifest.Vars.AvoidFor...),
-			ExampleKeys: append([]string(nil), manifest.Vars.ExampleKeys...),
+			Path:        catalog.Vars.Path,
+			Summary:     catalog.Vars.Summary,
+			PreferFor:   append([]string(nil), catalog.Vars.PreferFor...),
+			AvoidFor:    append([]string(nil), catalog.Vars.AvoidFor...),
+			ExampleKeys: append([]string(nil), catalog.Vars.ExampleKeys...),
 		},
 		Policy: PolicyKnowledge{
-			AssumeOfflineByDefault: manifest.Policy.AssumeOfflineByDefault,
-			PrepareArtifactKinds:   append([]string(nil), manifest.Policy.PrepareArtifactKinds...),
-			ForbiddenApplyActions:  append([]string(nil), manifest.Policy.ForbiddenApplyActions...),
-			VarsAdvisory:           append([]string(nil), manifest.Policy.VarsAdvisory...),
-			ComponentAdvisory:      append([]string(nil), manifest.Policy.ComponentAdvisory...),
+			AssumeOfflineByDefault: catalog.Policy.AssumeOfflineByDefault,
+			PrepareArtifactKinds:   append([]string(nil), catalog.Policy.PrepareArtifactKinds...),
+			ForbiddenApplyActions:  append([]string(nil), catalog.Policy.ForbiddenApplyActions...),
+			VarsAdvisory:           append([]string(nil), catalog.Policy.VarsAdvisory...),
+			ComponentAdvisory:      append([]string(nil), catalog.Policy.ComponentAdvisory...),
 		},
 	}
-	defs := workflowcontract.StepDefinitions()
-	index := make(map[string]workflowcontract.StepDefinition, len(defs))
-	for _, def := range defs {
-		index[def.Kind] = def
-	}
-	for _, step := range manifest.StepKinds {
+	for _, step := range catalog.StepKinds() {
 		bundle.Steps = append(bundle.Steps, StepKnowledge{
 			Kind:                     step.Kind,
 			Category:                 step.Category,
@@ -155,22 +151,17 @@ func buildBundle() Bundle {
 			SchemaFile:               step.SchemaFile,
 			AllowedRoles:             append([]string(nil), step.AllowedRoles...),
 			Outputs:                  append([]string(nil), step.Outputs...),
-			Example:                  strings.TrimSpace(step.MinimalShape),
-			KeyFields:                append([]askcontext.StepFieldContext(nil), step.KeyFields...),
-			SchemaRuleSummaries:      append([]string(nil), step.SchemaRuleSummaries...),
-			ConstrainedLiteralFields: append([]askcontext.ConstrainedFieldHint(nil), step.ConstrainedLiteralFields...),
+			KeyFields:                stepFieldContexts(step),
+			SchemaRuleSummaries:      append([]string(nil), step.RuleSummaries...),
+			ConstrainedLiteralFields: constrainedFieldHints(step.ConstrainedLiteralFields),
 		})
 		for _, field := range step.ConstrainedLiteralFields {
-			sourceRef := step.SchemaFile
-			if def, ok := index[step.Kind]; ok && strings.TrimSpace(def.SchemaFile) != "" {
-				sourceRef = def.SchemaFile
-			}
 			bundle.Constraints = append(bundle.Constraints, ConstraintKnowledge{
 				StepKind:      step.Kind,
 				Path:          field.Path,
 				AllowedValues: append([]string(nil), field.AllowedValues...),
 				Guidance:      field.Guidance,
-				SourceRef:     sourceRef,
+				SourceRef:     step.SchemaFile,
 			})
 		}
 	}
@@ -182,6 +173,38 @@ func buildBundle() Bundle {
 		return bundle.Constraints[i].StepKind < bundle.Constraints[j].StepKind
 	})
 	return bundle
+}
+
+func stepFieldContexts(step askcatalog.Step) []askcontext.StepFieldContext {
+	keys := append([]string(nil), step.KeyFields...)
+	if len(keys) == 0 {
+		for path, field := range step.Fields {
+			if field.Requirement == "required" {
+				keys = append(keys, path)
+			}
+		}
+		sort.Strings(keys)
+		if len(keys) > 5 {
+			keys = keys[:5]
+		}
+	}
+	out := make([]askcontext.StepFieldContext, 0, len(keys))
+	for _, key := range keys {
+		field, ok := step.Fields[key]
+		if !ok {
+			continue
+		}
+		out = append(out, askcontext.StepFieldContext{Path: key, Description: field.Description, Example: field.Example, Requirement: string(field.Requirement)})
+	}
+	return out
+}
+
+func constrainedFieldHints(items []stepmeta.ConstrainedLiteralField) []askcontext.ConstrainedFieldHint {
+	out := make([]askcontext.ConstrainedFieldHint, 0, len(items))
+	for _, item := range items {
+		out = append(out, askcontext.ConstrainedFieldHint{Path: item.Path, AllowedValues: append([]string(nil), item.AllowedValues...), Guidance: item.Guidance})
+	}
+	return out
 }
 
 func (b Bundle) WorkflowPromptBlock() string {

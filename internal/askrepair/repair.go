@@ -64,12 +64,22 @@ func TryAutoRepairWithProgram(root string, files []askcontract.GeneratedFile, di
 			notes = append(notes, fmt.Sprintf("filled %s in %s", rawPath, path))
 		case "fix-literal":
 			rawPath := repairRawPath(diag)
-			if rawPath == "" || len(diag.Allowed) == 0 {
+			if rawPath == "" {
 				continue
 			}
-			value := strings.TrimSpace(diag.Allowed[0])
-			if preferred, ok := defaultLiteralValue(diag, files, program); ok {
+			value := ""
+			if len(diag.Allowed) > 0 {
+				value = strings.TrimSpace(diag.Allowed[0])
+			}
+			if preferred, ok := defaultLiteralValue(diag, files, program); ok && strings.TrimSpace(preferred) != "" {
 				value = preferred
+			}
+			if value == "" {
+				if preferred, ok := defaultFillValue(diag, files, program); ok {
+					editDocs[path] = append(editDocs[path], askcontract.StructuredEditAction{Op: "set", RawPath: rawPath, Value: preferred})
+					notes = append(notes, fmt.Sprintf("restored schema-valid literal %s in %s", rawPath, path))
+				}
+				continue
 			}
 			editDocs[path] = append(editDocs[path], askcontract.StructuredEditAction{Op: "set", RawPath: rawPath, Value: value})
 			notes = append(notes, fmt.Sprintf("set constrained literal %s in %s", rawPath, path))

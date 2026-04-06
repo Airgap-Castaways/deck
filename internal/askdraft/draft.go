@@ -22,33 +22,10 @@ type Candidate struct {
 }
 
 func Candidates(plan askcontract.PlanResponse, brief askcontract.AuthoringBrief) []Candidate {
-	catalog := askcatalog.Current()
 	paths := candidateTargetPaths(plan)
 	items := []Candidate{}
 	for _, path := range paths {
-		role := targetRole(path)
-		if role == "" {
-			continue
-		}
-		for _, step := range catalog.StepKinds() {
-			if !containsString(step.AllowedRoles, role) {
-				continue
-			}
-			for _, builder := range step.Builders {
-				if !builderAllowed(builder, brief.RequiredCapabilities) {
-					continue
-				}
-				items = append(items, Candidate{
-					ID:                builder.ID,
-					Path:              path,
-					Phase:             builder.Phase,
-					StepKind:          builder.StepKind,
-					Summary:           firstNonEmpty(builder.Summary, step.Summary),
-					RequiredOverrides: builder.RequiredOverrideKeys(),
-					OptionalOverrides: builder.OptionalOverrideKeys(),
-				})
-			}
-		}
+		items = append(items, matchedCandidatesForPath(path, brief.RequiredCapabilities)...)
 	}
 	return dedupeCandidates(items)
 }
@@ -62,27 +39,51 @@ func PromptBlock(plan askcontract.PlanResponse, brief askcontract.AuthoringBrief
 	b.WriteString("Draft builder candidates:\n")
 	b.WriteString("- Select builder ids under selection.targets[].builders and set only documented override keys; do not author raw step.spec payloads.\n")
 	b.WriteString("- Code assembles the workflow documents from these candidates, fills defaults from the authoring program and source-of-truth metadata, and rejects unsupported override keys.\n")
-	for _, candidate := range candidates {
-		b.WriteString("- id: ")
-		b.WriteString(candidate.ID)
-		b.WriteString(" path=")
-		b.WriteString(candidate.Path)
-		b.WriteString(" phase=")
-		b.WriteString(candidate.Phase)
-		b.WriteString(" step=")
-		b.WriteString(candidate.StepKind)
-		b.WriteString(" summary=")
-		b.WriteString(candidate.Summary)
-		b.WriteString("\n")
-		if len(candidate.RequiredOverrides) > 0 {
-			b.WriteString("  - required overrides: ")
-			b.WriteString(strings.Join(candidate.RequiredOverrides, ", "))
+	paths := candidateTargetPaths(plan)
+	for _, path := range paths {
+		matched := matchedCandidatesForPath(path, brief.RequiredCapabilities)
+		if len(matched) == 0 {
+			supportedIDs := askcatalog.Current().BuilderIDsForPath(path)
+			if len(supportedIDs) == 0 {
+				b.WriteString("- path: ")
+				b.WriteString(path)
+				b.WriteString(" has no registered draft builders.\n")
+				continue
+			}
+			b.WriteString("- path: ")
+			b.WriteString(path)
+			b.WriteString(" has no capability-matched draft builders under the current plan. If you must generate this path, stay inside these supported builder ids: ")
+			b.WriteString(strings.Join(supportedIDs, ", "))
 			b.WriteString("\n")
+			continue
 		}
-		if len(candidate.OptionalOverrides) > 0 {
-			b.WriteString("  - optional overrides: ")
-			b.WriteString(strings.Join(candidate.OptionalOverrides, ", "))
+		b.WriteString("- path: ")
+		b.WriteString(path)
+		b.WriteString(" supported builder ids: ")
+		b.WriteString(strings.Join(candidateIDs(matched), ", "))
+		b.WriteString("\n")
+		for _, candidate := range matched {
+			b.WriteString("- id: ")
+			b.WriteString(candidate.ID)
+			b.WriteString(" path=")
+			b.WriteString(candidate.Path)
+			b.WriteString(" phase=")
+			b.WriteString(candidate.Phase)
+			b.WriteString(" step=")
+			b.WriteString(candidate.StepKind)
+			b.WriteString(" summary=")
+			b.WriteString(candidate.Summary)
 			b.WriteString("\n")
+			if len(candidate.RequiredOverrides) > 0 {
+				b.WriteString("  - required overrides: ")
+				b.WriteString(strings.Join(candidate.RequiredOverrides, ", "))
+				b.WriteString("\n")
+			}
+			if len(candidate.OptionalOverrides) > 0 {
+				b.WriteString("  - optional overrides: ")
+				b.WriteString(strings.Join(candidate.OptionalOverrides, ", "))
+				b.WriteString("\n")
+			}
 		}
 	}
 	return strings.TrimSpace(b.String())
@@ -187,6 +188,7 @@ func workflowReferencesRoleVar(workflow askcontract.WorkflowDocument) bool {
 func buildWorkflowTarget(catalog askcatalog.Catalog, path string, target askcontract.DraftTargetSelection, program askcontract.AuthoringProgram, variables map[string]any) (*askcontract.WorkflowDocument, error) {
 	workflow := &askcontract.WorkflowDocument{Version: "v1alpha1", Vars: cloneMap(target.Vars)}
 	phaseIndex := map[string]int{}
+	usedStepIDs := map[string]int{}
 	for _, selected := range target.Builders {
 		builder, ok := catalog.LookupBuilder(strings.TrimSpace(selected.ID))
 		if !ok {
@@ -200,6 +202,7 @@ func buildWorkflowTarget(catalog askcatalog.Catalog, path string, target askcont
 		if err != nil {
 			return nil, err
 		}
+		step.ID = nextDraftStepID(step.ID, phase, step.When, usedStepIDs)
 		idx, ok := phaseIndex[phase]
 		if !ok {
 			phaseIndex[phase] = len(workflow.Phases)
@@ -209,6 +212,56 @@ func buildWorkflowTarget(catalog askcatalog.Catalog, path string, target askcont
 		workflow.Phases[idx].Steps = append(workflow.Phases[idx].Steps, step)
 	}
 	return workflow, nil
+}
+
+func nextDraftStepID(base string, phase string, when string, used map[string]int) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = "step"
+	}
+	if used == nil {
+		return base
+	}
+	if used[base] == 0 {
+		used[base] = 1
+		return base
+	}
+	suffixes := []string{}
+	if role := roleSuffixFromWhen(when); role != "" {
+		suffixes = append(suffixes, role)
+	}
+	if cleanPhase := sanitizeStepID(phase); cleanPhase != "" && cleanPhase != "main" {
+		suffixes = append(suffixes, cleanPhase)
+	}
+	for _, suffix := range suffixes {
+		candidate := base + "-" + suffix
+		if used[candidate] == 0 {
+			used[candidate] = 1
+			used[base]++
+			return candidate
+		}
+	}
+	count := used[base] + 1
+	used[base] = count
+	for {
+		candidate := fmt.Sprintf("%s-%d", base, count)
+		if used[candidate] == 0 {
+			used[candidate] = 1
+			return candidate
+		}
+		count++
+		used[base] = count
+	}
+}
+
+func roleSuffixFromWhen(when string) string {
+	when = strings.TrimSpace(strings.ToLower(when))
+	for _, token := range []string{"control-plane", "worker", "prepare", "apply"} {
+		if strings.Contains(when, token) {
+			return sanitizeStepID(token)
+		}
+	}
+	return ""
 }
 
 func buildStep(builder askcatalog.Builder, overrides map[string]any, program askcontract.AuthoringProgram, variables map[string]any) (string, askcontract.WorkflowStep, error) {
@@ -542,6 +595,7 @@ func deprecatedOverrideAllowed(builderID string, key string) bool {
 		"apply.load-image":               {"images", "runtime", "sourceDir"},
 		"apply.init-kubeadm":             {"criSocket", "imageRepository", "joinFile", "kubernetesVersion", "podCIDR", "whenRole"},
 		"apply.join-kubeadm":             {"joinFile", "whenRole"},
+		"apply.check-cluster":            {"controlPlaneReady", "interval", "nodeCount", "readyCount", "timeout", "whenRole"},
 		"apply.check-kubernetes-cluster": {"controlPlaneReady", "interval", "nodeCount", "readyCount", "timeout", "whenRole"},
 	}
 	for _, item := range allowed[strings.TrimSpace(builderID)] {
@@ -575,15 +629,15 @@ func candidateTargetPaths(plan askcontract.PlanResponse) []string {
 }
 
 func targetRole(path string) string {
-	path = filepath.ToSlash(strings.TrimSpace(path))
-	switch {
-	case path == "workflows/prepare.yaml":
-		return "prepare"
-	case strings.HasPrefix(path, "workflows/scenarios/"):
-		return "apply"
-	default:
+	builders := askcatalog.Current().BuildersForPath(path)
+	if len(builders) == 0 {
 		return ""
 	}
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	if path == "workflows/prepare.yaml" {
+		return "prepare"
+	}
+	return "apply"
 }
 
 func builderAllowed(builder askcatalog.Builder, capabilities []string) bool {
@@ -596,6 +650,53 @@ func builderAllowed(builder askcatalog.Builder, capabilities []string) bool {
 		}
 	}
 	return false
+}
+
+func matchedCandidatesForPath(path string, capabilities []string) []Candidate {
+	catalog := askcatalog.Current()
+	role := targetRole(path)
+	if role == "" {
+		return nil
+	}
+	items := []Candidate{}
+	for _, step := range catalog.StepKinds() {
+		if !containsString(step.AllowedRoles, role) {
+			continue
+		}
+		for _, builder := range step.Builders {
+			if !builderAllowed(builder, capabilities) {
+				continue
+			}
+			items = append(items, Candidate{
+				ID:                builder.ID,
+				Path:              path,
+				Phase:             builder.Phase,
+				StepKind:          builder.StepKind,
+				Summary:           firstNonEmpty(builder.Summary, step.Summary),
+				RequiredOverrides: builder.RequiredOverrideKeys(),
+				OptionalOverrides: builder.OptionalOverrideKeys(),
+			})
+		}
+	}
+	return dedupeCandidates(items)
+}
+
+func candidateIDs(candidates []Candidate) []string {
+	if len(candidates) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		id := strings.TrimSpace(candidate.ID)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func normalizeOverrideValue(value any, variables map[string]any) any {

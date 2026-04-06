@@ -124,6 +124,28 @@ type PhaseImport struct {
 	When string `json:"when,omitempty"`
 }
 
+func (p *PhaseImport) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		*p = PhaseImport{}
+		return nil
+	}
+	var single string
+	if err := json.Unmarshal(data, &single); err == nil {
+		*p = PhaseImport{Path: strings.TrimSpace(single)}
+		return nil
+	}
+	type alias PhaseImport
+	var value alias
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*p = PhaseImport(value)
+	p.Path = strings.TrimSpace(p.Path)
+	p.When = strings.TrimSpace(p.When)
+	return nil
+}
+
 type WorkflowStep struct {
 	ID            string            `json:"id"`
 	APIVersion    string            `json:"apiVersion,omitempty"`

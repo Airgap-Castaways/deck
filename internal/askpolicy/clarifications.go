@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askauthoring"
+	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
@@ -122,7 +123,7 @@ func coverageBoundaryBlockers(prompt string, req ScenarioRequirements, decision 
 
 func unsupportedCapabilities(req ScenarioRequirements) ([]string, []string) {
 	capabilityKinds := map[string][]string{}
-	for _, step := range askcontext.Current().StepKinds {
+	for _, step := range askcatalog.Current().StepKinds() {
 		for _, capability := range step.Capabilities {
 			capability = strings.TrimSpace(capability)
 			if capability == "" {

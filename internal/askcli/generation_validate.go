@@ -16,6 +16,9 @@ import (
 
 func validateGeneration(ctx context.Context, root string, gen askcontract.GenerationResponse, files []askcontract.GeneratedFile, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult) (string, askcontract.CriticResponse, error) {
 	if len(files) == 0 {
+		if decision.Route == askintent.RouteRefine && preserveOnlyDocuments(gen.Documents) {
+			return "lint ok (0 yaml files, 0 scenario entrypoints)", askcontract.CriticResponse{}, nil
+		}
 		critic := askcontract.CriticResponse{Blocking: []string{"response did not include any files"}, MissingFiles: filePathsFromPlan(plan), RequiredFixes: []string{"Return the planned workflow files"}}
 		return "", critic, fmt.Errorf("response did not include any files")
 	}
@@ -55,6 +58,18 @@ func validateGeneration(ctx context.Context, root string, gen askcontract.Genera
 		return "", critic, fmt.Errorf("semantic validation failed: %s", strings.Join(critic.Blocking, "; "))
 	}
 	return fmt.Sprintf("lint ok (%d yaml files, %d scenario entrypoints)", directValidated, len(validated)), critic, nil
+}
+
+func preserveOnlyDocuments(documents []askcontract.GeneratedDocument) bool {
+	if len(documents) == 0 {
+		return false
+	}
+	for _, doc := range documents {
+		if strings.ToLower(strings.TrimSpace(doc.Action)) != "preserve" {
+			return false
+		}
+	}
+	return true
 }
 
 func validatePlanContract(files []askcontract.GeneratedFile, plan askcontract.PlanResponse, decision askintent.Decision) askcontract.CriticResponse {

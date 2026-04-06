@@ -58,13 +58,31 @@ func InvariantPromptBlock() PromptBlock {
 }
 
 func PolicyPromptBlock() PromptBlock {
+	manifest := Current()
 	b := &strings.Builder{}
 	b.WriteString("Workflow authoring policy:\n")
+	if manifest.Policy.AssumeOfflineByDefault {
+		b.WriteString("- Assume offline unless the request explicitly says online.\n")
+	}
 	b.WriteString("- Prefer typed steps over Command whenever a typed step expresses the change clearly.\n")
-	b.WriteString("- Prefer workflows/vars.yaml for repeated configurable values instead of scattering literals across steps.\n")
-	b.WriteString("- Do not replace schema-typed arrays or objects with string templates. Keep arrays as YAML arrays and objects as YAML objects so schema validation still passes.\n")
-	b.WriteString("- Split repeated logic into reusable components and import them under phases[].imports.\n")
-	b.WriteString("- Use the `prepare` command for online collection or offline bundle preparation and `apply` for local node changes.\n")
+	if len(manifest.Policy.PrepareArtifactKinds) > 0 {
+		b.WriteString("- Use `prepare` when packages, images, binaries, archives, bundles, or repository mirrors must be staged before apply.\n")
+	}
+	for _, rule := range manifest.Policy.VarsAdvisory {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(rule))
+		b.WriteString("\n")
+	}
+	for _, rule := range manifest.Policy.ComponentAdvisory {
+		b.WriteString("- ")
+		b.WriteString(strings.TrimSpace(rule))
+		b.WriteString("\n")
+	}
+	for _, rule := range manifest.Policy.ForbiddenApplyActions {
+		b.WriteString("- Apply should avoid: ")
+		b.WriteString(strings.TrimSpace(rule))
+		b.WriteString("\n")
+	}
 	return PromptBlock{Topic: TopicPolicy, Title: "Workflow authoring policy", Content: strings.TrimSpace(b.String())}
 }
 

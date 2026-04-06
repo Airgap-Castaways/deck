@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
+	_ "github.com/Airgap-Castaways/deck/internal/stepspec"
 )
 
 func TestTryAutoRepairFillsMissingInitJoinFile(t *testing.T) {
@@ -91,4 +93,38 @@ func TestTryAutoRepairRespectsRepairPaths(t *testing.T) {
 	if strings.Contains(byPath["workflows/prepare.yaml"], "backend:") {
 		t.Fatalf("expected out-of-scope repair to be skipped, got %q", byPath["workflows/prepare.yaml"])
 	}
+}
+
+func TestTryAutoRepairRestoresTypedLiteralsFromProgramDefaults(t *testing.T) {
+	kind := currentRepairClusterCheckKind()
+	files := []askcontract.GeneratedFile{{Path: "workflows/scenarios/control-plane-bootstrap.yaml", Content: "version: v1alpha1\nphases:\n  - name: verify\n    steps:\n      - id: bootstrap-report\n        kind: " + kind + "\n        spec:\n          timeout: \"{{ .vars.bootstrap.verifyTimeout }}\"\n          nodes:\n            total: \"{{ .vars.bootstrap.verifyTotalNodes }}\"\n            ready: \"{{ .vars.bootstrap.verifyReadyNodes }}\"\n            controlPlaneReady: \"{{ .vars.bootstrap.verifyControlPlaneReadyNodes }}\"\n"}}
+	diags := []askdiagnostic.Diagnostic{
+		{RepairOp: "fix-literal", File: "workflows/scenarios/control-plane-bootstrap.yaml", StepID: "bootstrap-report", StepKind: kind, Path: "spec.timeout", Actual: "{{ .vars.bootstrap.verifyTimeout }}", Message: "Invalid type. Expected: string duration, given: string template"},
+		{RepairOp: "fix-literal", File: "workflows/scenarios/control-plane-bootstrap.yaml", StepID: "bootstrap-report", StepKind: kind, Path: "spec.nodes.total", Actual: "{{ .vars.bootstrap.verifyTotalNodes }}", Message: "Invalid type. Expected: integer, given: string"},
+		{RepairOp: "fix-literal", File: "workflows/scenarios/control-plane-bootstrap.yaml", StepID: "bootstrap-report", StepKind: kind, Path: "spec.nodes.ready", Actual: "{{ .vars.bootstrap.verifyReadyNodes }}", Message: "Invalid type. Expected: integer, given: string"},
+		{RepairOp: "fix-literal", File: "workflows/scenarios/control-plane-bootstrap.yaml", StepID: "bootstrap-report", StepKind: kind, Path: "spec.nodes.controlPlaneReady", Actual: "{{ .vars.bootstrap.verifyControlPlaneReadyNodes }}", Message: "Invalid type. Expected: integer, given: string"},
+	}
+	program := askcontract.AuthoringProgram{Verification: askcontract.ProgramVerification{ExpectedNodeCount: 1, ExpectedReadyCount: 1, ExpectedControlPlaneReady: 1, Timeout: "10m"}}
+	repaired, _, applied, err := TryAutoRepairWithProgram(t.TempDir(), files, diags, []string{"workflows/scenarios/control-plane-bootstrap.yaml"}, program)
+	if err != nil {
+		t.Fatalf("try auto repair typed literals: %v", err)
+	}
+	if !applied || len(repaired) != 1 {
+		t.Fatalf("expected typed literal repair to apply, got %#v", repaired)
+	}
+	content := repaired[0].Content
+	for _, want := range []string{"timeout: 10m", "total: 1", "ready: 1", "controlPlaneReady: 1"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("expected %q in repaired content, got %q", want, content)
+		}
+	}
+}
+
+func currentRepairClusterCheckKind() string {
+	for _, step := range askcatalog.Current().StepKinds() {
+		if strings.Contains(step.Kind, "Check") && strings.Contains(step.Kind, "Cluster") {
+			return step.Kind
+		}
+	}
+	return "CheckKubernetesCluster"
 }

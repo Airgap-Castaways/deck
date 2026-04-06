@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askauthoring"
+	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
@@ -64,7 +65,47 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 		plan.Files = filtered
 		plan.ComponentRecommendation = nil
 	}
+	plan = pruneUnsatisfiableDraftComponentPlan(plan, decision)
 	return plan
+}
+
+func pruneUnsatisfiableDraftComponentPlan(plan askcontract.PlanResponse, decision askintent.Decision) askcontract.PlanResponse {
+	if decision.Route != askintent.RouteDraft {
+		return plan
+	}
+	filteredFiles := make([]askcontract.PlanFile, 0, len(plan.Files))
+	blockedComponents := map[string]bool{}
+	for _, file := range plan.Files {
+		path := filepath.ToSlash(strings.TrimSpace(file.Path))
+		if strings.HasPrefix(path, "workflows/components/") && len(askcatalog.Current().BuildersForPath(path)) == 0 {
+			blockedComponents[path] = true
+			continue
+		}
+		filteredFiles = append(filteredFiles, file)
+	}
+	if len(blockedComponents) == 0 {
+		return plan
+	}
+	plan.Files = filteredFiles
+	plan.AuthoringBrief.TargetPaths = filterBlockedPaths(plan.AuthoringBrief.TargetPaths, blockedComponents)
+	plan.AuthoringBrief.AllowedCompanionPaths = filterBlockedPaths(plan.AuthoringBrief.AllowedCompanionPaths, blockedComponents)
+	plan.ComponentRecommendation = filterBlockedPaths(plan.ComponentRecommendation, blockedComponents)
+	return plan
+}
+
+func filterBlockedPaths(values []string, blocked map[string]bool) []string {
+	if len(blocked) == 0 {
+		return values
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		clean := filepath.ToSlash(strings.TrimSpace(value))
+		if blocked[clean] {
+			continue
+		}
+		out = append(out, value)
+	}
+	return dedupeStrings(out)
 }
 
 func ensureRoleVarsPlanned(plan askcontract.PlanResponse, decision askintent.Decision) askcontract.PlanResponse {
@@ -635,8 +676,14 @@ func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askco
 			program.Platform.Family = family
 		}
 	}
+	if strings.EqualFold(strings.TrimSpace(program.Platform.Family), "custom") && brief.ModeIntent == "prepare+apply" && (hasBriefCapability(brief, "package-staging") || hasBriefCapability(brief, "image-staging") || hasBriefCapability(brief, "prepare-artifacts")) {
+		program.Platform.Family = defaultPlatformFamilyForPrepare(prompt)
+	}
 	if strings.TrimSpace(program.Platform.Release) == "" {
 		program.Platform.Release = release
+	}
+	if strings.TrimSpace(program.Platform.Release) == "" && brief.ModeIntent == "prepare+apply" && hasBriefCapability(brief, "package-staging") {
+		program.Platform.Release = defaultPlatformRelease(program.Platform.Family)
 	}
 	if strings.TrimSpace(program.Platform.RepoType) == "" && !minimalSingleNodeBootstrap {
 		program.Platform.RepoType = defaultRepoType(program.Platform.Family)
@@ -649,6 +696,12 @@ func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askco
 	}
 	if strings.TrimSpace(program.Artifacts.ImageOutputDir) == "" && !minimalSingleNodeBootstrap {
 		program.Artifacts.ImageOutputDir = "images/control-plane"
+	}
+	if len(program.Artifacts.Packages) == 0 && (hasBriefCapability(brief, "package-staging") || hasBriefCapability(brief, "prepare-artifacts")) {
+		program.Artifacts.Packages = defaultKubeadmPackages(prompt, brief)
+	}
+	if len(program.Artifacts.Images) == 0 && (hasBriefCapability(brief, "image-staging") || hasBriefCapability(brief, "prepare-artifacts")) {
+		program.Artifacts.Images = defaultKubeadmImages(program.Cluster.KubernetesVersion, brief)
 	}
 	if strings.TrimSpace(program.Cluster.JoinFile) == "" {
 		program.Cluster.JoinFile = "/tmp/deck/join.txt"
@@ -715,6 +768,45 @@ func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askco
 		}
 	}
 	return program
+}
+
+func defaultPlatformFamilyForPrepare(prompt string) string {
+	family, _ := inferPlatformFromPrompt(prompt)
+	if strings.TrimSpace(family) != "" {
+		return family
+	}
+	return "rhel"
+}
+
+func defaultPlatformRelease(family string) string {
+	if strings.EqualFold(strings.TrimSpace(family), "debian") {
+		return "12"
+	}
+	return "9"
+}
+
+func defaultKubeadmPackages(prompt string, brief askcontract.AuthoringBrief) []string {
+	if !hasBriefCapability(brief, "kubeadm-bootstrap") && !hasBriefCapability(brief, "kubeadm-join") && !strings.Contains(strings.ToLower(strings.TrimSpace(prompt)), "kubeadm") {
+		return nil
+	}
+	return []string{"kubeadm", "kubelet", "kubectl", "cri-tools", "containerd"}
+}
+
+func defaultKubeadmImages(version string, brief askcontract.AuthoringBrief) []string {
+	if !hasBriefCapability(brief, "kubeadm-bootstrap") && !hasBriefCapability(brief, "kubeadm-join") {
+		return nil
+	}
+	version = strings.TrimSpace(strings.TrimPrefix(version, "v"))
+	if version == "" || strings.EqualFold(version, "stable") {
+		version = "1.30.0"
+	}
+	return []string{
+		"registry.k8s.io/kube-apiserver:v" + version,
+		"registry.k8s.io/kube-controller-manager:v" + version,
+		"registry.k8s.io/kube-scheduler:v" + version,
+		"registry.k8s.io/kube-proxy:v" + version,
+		"registry.k8s.io/pause:3.9",
+	}
 }
 
 func isMinimalSingleNodeBootstrapPrompt(prompt string, brief askcontract.AuthoringBrief) bool {
