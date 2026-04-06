@@ -9,7 +9,7 @@ import (
 
 func stepEnvelopeSchema(kind, title, description, visibility string) map[string]any {
 	apiVersion := workflowcontract.BuiltInStepAPIVersion
-	if def, ok := workflowexec.BuiltInTypeDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind}); ok && def.Step.APIVersion != "" {
+	if def, ok, err := workflowexec.BuiltInTypeDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind}); err == nil && ok && def.Step.APIVersion != "" {
 		apiVersion = def.Step.APIVersion
 	}
 	return map[string]any{
@@ -44,7 +44,7 @@ func durationStringSchema() map[string]any {
 }
 
 func schemaFileName(kind string) string {
-	if def, ok := workflowexec.BuiltInTypeDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind}); ok {
+	if def, ok, err := workflowexec.BuiltInTypeDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind}); err == nil && ok {
 		return def.Step.SchemaFile
 	}
 	return strings.ToLower(kind) + ".schema.json"

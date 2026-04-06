@@ -38,13 +38,21 @@ func generateWorkflowSchema() (map[string]any, error) {
 	props := propertyMap(root)
 	setMap(props, "version", supportedWorkflowVersionSchema())
 	mergeMap(props, "vars", map[string]any{"type": "object", "additionalProperties": true, "default": map[string]any{}})
-	setMap(props, "steps", map[string]any{"type": "array", "minItems": 1, "items": stepBaseSchema()})
+	stepSchema, err := stepBaseSchema()
+	if err != nil {
+		return nil, err
+	}
+	setMap(props, "steps", map[string]any{"type": "array", "minItems": 1, "items": stepSchema})
 	setMap(props, "phases", map[string]any{"type": "array", "minItems": 1, "items": phases})
 
 	return root, nil
 }
 
-func generateComponentFragmentSchema() map[string]any {
+func generateComponentFragmentSchema() (map[string]any, error) {
+	stepSchema, err := stepBaseSchema()
+	if err != nil {
+		return nil, err
+	}
 	root := map[string]any{
 		"$schema":              "https://json-schema.org/draft/2020-12/schema",
 		"$id":                  "https://deck.local/schemas/deck-component-fragment.schema.json",
@@ -54,10 +62,10 @@ func generateComponentFragmentSchema() map[string]any {
 		"additionalProperties": false,
 		"required":             []any{"steps"},
 		"properties": map[string]any{
-			"steps": map[string]any{"type": "array", "minItems": 1, "items": stepBaseSchema()},
+			"steps": map[string]any{"type": "array", "minItems": 1, "items": stepSchema},
 		},
 	}
-	return root
+	return root, nil
 }
 
 func generateToolDefinitionSchema() (map[string]any, error) {
@@ -100,7 +108,11 @@ func phaseSchema() (map[string]any, error) {
 	setMap(props, "name", map[string]any{"type": "string", "minLength": 1})
 	setMap(props, "maxParallelism", map[string]any{"type": "integer", "minimum": 1})
 	setMap(props, "imports", map[string]any{"type": "array", "minItems": 1, "items": workflowImportSchema()})
-	setMap(props, "steps", map[string]any{"type": "array", "items": stepBaseSchema()})
+	stepSchema, err := stepBaseSchema()
+	if err != nil {
+		return nil, err
+	}
+	setMap(props, "steps", map[string]any{"type": "array", "items": stepSchema})
 	return phase, nil
 }
 
@@ -116,7 +128,11 @@ func workflowImportSchema() map[string]any {
 	}
 }
 
-func stepBaseSchema() map[string]any {
+func stepBaseSchema() (map[string]any, error) {
+	kinds, err := workflowexec.StepKinds()
+	if err != nil {
+		return nil, err
+	}
 	root := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
@@ -124,7 +140,7 @@ func stepBaseSchema() map[string]any {
 		"properties": map[string]any{
 			"id":            map[string]any{"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,127}$"},
 			"apiVersion":    supportedStepAPIVersionSchema(),
-			"kind":          map[string]any{"type": "string", "enum": toAnySlice(workflowexec.StepKinds())},
+			"kind":          map[string]any{"type": "string", "enum": toAnySlice(kinds)},
 			"metadata":      map[string]any{"type": "object", "additionalProperties": true},
 			"when":          map[string]any{"type": "string", "minLength": 1},
 			"parallelGroup": map[string]any{"type": "string", "minLength": 1},
@@ -138,12 +154,19 @@ func stepBaseSchema() map[string]any {
 			"spec":    map[string]any{"type": "object"},
 		},
 	}
-	root["allOf"] = registerContractClauses()
-	return root
+	clauses, err := registerContractClauses()
+	if err != nil {
+		return nil, err
+	}
+	root["allOf"] = clauses
+	return root, nil
 }
 
-func registerContractClauses() []any {
-	defs := workflowexec.StepDefinitions()
+func registerContractClauses() ([]any, error) {
+	defs, err := workflowexec.StepDefinitions()
+	if err != nil {
+		return nil, err
+	}
 	clauses := make([]any, 0, len(defs))
 	for _, def := range defs {
 		clauses = append(clauses, map[string]any{
@@ -153,7 +176,7 @@ func registerContractClauses() []any {
 			},
 		})
 	}
-	return clauses
+	return clauses, nil
 }
 
 func registerValueSchema(outputs []string) map[string]any {

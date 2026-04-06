@@ -13,7 +13,11 @@ import (
 
 func runPrepareRenderedStepWithKey(ctx context.Context, runner CommandRunner, bundleRoot string, step config.Step, rendered map[string]any, key workflowexec.StepTypeKey, inputVars map[string]string, opts RunOptions) ([]string, map[string]any, error) {
 	kind := step.Kind
-	if !workflowexec.StepAllowedForRoleForKey("prepare", key) {
+	allowed, err := workflowexec.StepAllowedForRoleForKey("prepare", key)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !allowed {
 		return nil, nil, errcode.Newf(errCodePrepareKindUnsupported, "unsupported step kind %s", kind)
 	}
 

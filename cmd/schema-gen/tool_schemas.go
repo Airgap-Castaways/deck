@@ -5,7 +5,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workflowschema"
 )
 
-func schemaMetadataForDefinition(def workflowexec.StepDefinition) workflowexec.SchemaMetadata {
+func schemaMetadataForDefinition(def workflowexec.StepDefinition) (workflowexec.SchemaMetadata, error) {
 	return workflowschema.SchemaMetadataForDefinition(def)
 }
 

@@ -83,14 +83,17 @@ func normalizedGeneratedExample(example string) string {
 	return trimmed + "\n"
 }
 
-func ToolKinds() []string {
-	defs := workflowcontract.StepDefinitions()
+func ToolKinds() ([]string, error) {
+	defs, err := workflowcontract.StepDefinitions()
+	if err != nil {
+		return nil, err
+	}
 	kinds := make([]string, 0, len(defs))
 	for _, def := range defs {
 		kinds = append(kinds, def.Kind)
 	}
 	sort.Strings(kinds)
-	return kinds
+	return kinds, nil
 }
 
 // WorkflowMeta intentionally stays centralized because it documents the top-level

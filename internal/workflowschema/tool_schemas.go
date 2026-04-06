@@ -8,13 +8,13 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
-func SchemaMetadataForDefinition(def workflowexec.StepDefinition) workflowexec.SchemaMetadata {
+func SchemaMetadataForDefinition(def workflowexec.StepDefinition) (workflowexec.SchemaMetadata, error) {
 	entry, ok, err := stepmeta.LookupCatalogEntry(def.Kind)
 	if err != nil {
-		panic(err)
+		return workflowexec.SchemaMetadata{}, fmt.Errorf("lookup step metadata for %s: %w", def.Kind, err)
 	}
 	if !ok {
-		panic(fmt.Sprintf("missing stepmeta entry for %s", def.Kind))
+		return workflowexec.SchemaMetadata{}, fmt.Errorf("missing stepmeta entry for %s", def.Kind)
 	}
 	projection := stepmeta.ProjectSchema(entry)
 	meta := workflowexec.SchemaMetadata{
@@ -29,13 +29,16 @@ func SchemaMetadataForDefinition(def workflowexec.StepDefinition) workflowexec.S
 		meta.GeneratorName = def.Kind
 	}
 	if meta.Patch == nil || meta.SpecType == nil {
-		panic(fmt.Sprintf("missing stepmeta schema metadata for %s", def.Kind))
+		return workflowexec.SchemaMetadata{}, fmt.Errorf("missing stepmeta schema metadata for %s", def.Kind)
 	}
-	return meta
+	return meta, nil
 }
 
 func ToolSchemaDefinitions() (map[string]map[string]any, error) {
-	defs := workflowexec.BuiltInTypeDefinitionsWith(nil, SchemaMetadataForDefinition)
+	defs, err := workflowexec.BuiltInTypeDefinitionsWith(nil, SchemaMetadataForDefinition)
+	if err != nil {
+		return nil, err
+	}
 	generated := make(map[string]map[string]any, len(defs))
 	for _, def := range defs {
 		if def.Schema.SpecType == nil || def.Schema.Patch == nil {

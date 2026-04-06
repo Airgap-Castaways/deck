@@ -136,7 +136,10 @@ func sectionForKind(page string, kind string) string {
 func testGroupPageInput(t *testing.T, group string) PageInput {
 	t.Helper()
 	meta := MustGroupMeta(group)
-	defs := workflowcontract.StepDefinitions()
+	defs, err := workflowcontract.StepDefinitions()
+	if err != nil {
+		t.Fatalf("StepDefinitions: %v", err)
+	}
 	page := PageInput{
 		Group:        group,
 		PageSlug:     meta.Key,

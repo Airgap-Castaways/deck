@@ -435,7 +435,10 @@ func validateToolSchemas(wf *config.Workflow) error {
 		if err != nil {
 			return err
 		}
-		schemaFile, ok := workflowexec.StepSchemaFileForKey(key)
+		schemaFile, ok, err := workflowexec.StepSchemaFileForKey(key)
+		if err != nil {
+			return err
+		}
 		if !ok {
 			continue
 		}
