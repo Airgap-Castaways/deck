@@ -38,7 +38,10 @@ func AllowedGeneratedPathPatterns() []string {
 }
 
 func build() Catalog {
-	defs := workflowexec.BuiltInTypeDefinitions()
+	defs, err := workflowexec.BuiltInTypeDefinitions()
+	if err != nil {
+		return Catalog{}
+	}
 	steps := map[string]Step{}
 	ordered := make([]string, 0, len(defs))
 	for _, def := range defs {

@@ -84,7 +84,10 @@ func normalizedGeneratedExample(example string) string {
 }
 
 func ToolKinds() []string {
-	defs := workflowcontract.StepDefinitions()
+	defs, err := workflowcontract.StepDefinitions()
+	if err != nil {
+		return nil
+	}
 	kinds := make([]string, 0, len(defs))
 	for _, def := range defs {
 		kinds = append(kinds, def.Kind)

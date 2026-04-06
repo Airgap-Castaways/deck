@@ -48,7 +48,11 @@ func run() error {
 		return err
 	}
 	componentFragmentSchemaPath := filepath.Join(root, "schemas", "deck-component-fragment.schema.json")
-	if err := writeJSONFile(componentFragmentSchemaPath, generateComponentFragmentSchema()); err != nil {
+	componentFragmentSchema, err := generateComponentFragmentSchema()
+	if err != nil {
+		return err
+	}
+	if err := writeJSONFile(componentFragmentSchemaPath, componentFragmentSchema); err != nil {
 		return err
 	}
 	if err := writeToolSchemas(root); err != nil {

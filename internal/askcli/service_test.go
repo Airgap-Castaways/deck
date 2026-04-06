@@ -1429,7 +1429,10 @@ func TestPromptAndDocsShareSchemaRuleSummaryForDownloadFile(t *testing.T) {
 func testSchemaDocGroupPageInput(t *testing.T, group string) schemadoc.PageInput {
 	t.Helper()
 	meta := schemadoc.MustGroupMeta(group)
-	defs := workflowcontract.StepDefinitions()
+	defs, err := workflowcontract.StepDefinitions()
+	if err != nil {
+		t.Fatalf("StepDefinitions: %v", err)
+	}
 	page := schemadoc.PageInput{Group: group, PageSlug: meta.Key, Title: meta.Title, Summary: meta.Summary, Description: meta.Summary, WhenToUse: meta.WhenToUse, TypicalFlows: meta.TypicalFlows, SeeAlso: meta.SeeAlso}
 	for _, def := range defs {
 		if def.Group != group || def.Visibility != "public" {

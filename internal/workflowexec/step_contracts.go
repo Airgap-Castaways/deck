@@ -15,7 +15,10 @@ func StepSchemaFileForKey(key StepTypeKey) (string, bool) {
 }
 
 func StepKinds() []string {
-	defs := StepDefinitions()
+	defs, err := StepDefinitions()
+	if err != nil {
+		return nil
+	}
 	kinds := make([]string, 0, len(defs))
 	for _, def := range defs {
 		kinds = append(kinds, def.Kind)

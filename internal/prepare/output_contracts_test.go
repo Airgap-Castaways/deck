@@ -92,7 +92,11 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 		})
 	}
 
-	for _, def := range workflowexec.StepDefinitions() {
+	defs, err := workflowexec.StepDefinitions()
+	if err != nil {
+		t.Fatalf("StepDefinitions: %v", err)
+	}
+	for _, def := range defs {
 		if !contains(def.Roles, "prepare") {
 			continue
 		}

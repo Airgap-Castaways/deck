@@ -60,7 +60,11 @@ func loadGroupPageInputs(dir string) ([]schemadoc.PageInput, error) {
 		return nil, err
 	}
 	pagesBySlug := map[string]*schemadoc.PageInput{}
-	for _, typedDef := range workflowexec.BuiltInTypeDefinitions() {
+	typedDefs, err := workflowexec.BuiltInTypeDefinitions()
+	if err != nil {
+		return nil, err
+	}
+	for _, typedDef := range typedDefs {
 		def := typedDef.Step
 		if def.Visibility != "public" {
 			continue
@@ -130,7 +134,10 @@ func loadToolSchemas(dir string) ([]toolSchemaDoc, error) {
 	if err := ensureRegistrySchemaFiles(dir, entries); err != nil {
 		return nil, err
 	}
-	defs := workflowexec.StepDefinitions()
+	defs, err := workflowexec.StepDefinitions()
+	if err != nil {
+		return nil, err
+	}
 	tools := make([]toolSchemaDoc, 0, len(defs))
 	for _, def := range defs {
 		raw, err := fsutil.ReadFile(filepath.Join(dir, def.SchemaFile))
@@ -161,7 +168,11 @@ func loadToolSchemas(dir string) ([]toolSchemaDoc, error) {
 
 func ensureRegistrySchemaFiles(dir string, entries []os.DirEntry) error {
 	known := map[string]bool{}
-	for _, def := range workflowexec.StepDefinitions() {
+	defs, err := workflowexec.StepDefinitions()
+	if err != nil {
+		return err
+	}
+	for _, def := range defs {
 		known[def.SchemaFile] = true
 	}
 	for _, entry := range entries {

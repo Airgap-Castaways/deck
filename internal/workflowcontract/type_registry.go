@@ -32,8 +32,8 @@ func defaultToolMetadata(def StepDefinition) ToolMetadata {
 	}
 }
 
-func defaultSchemaMetadata(def StepDefinition) SchemaMetadata {
-	return SchemaMetadata{GeneratorName: def.ToolSchemaGenerator}
+func defaultSchemaMetadata(def StepDefinition) (SchemaMetadata, error) {
+	return SchemaMetadata{GeneratorName: def.ToolSchemaGenerator}, nil
 }
 
 type BuiltInTypeDefinition struct {
@@ -43,12 +43,15 @@ type BuiltInTypeDefinition struct {
 	Schema SchemaMetadata
 }
 
-func BuiltInTypeDefinitions() []BuiltInTypeDefinition {
+func BuiltInTypeDefinitions() ([]BuiltInTypeDefinition, error) {
 	return BuiltInTypeDefinitionsWith(defaultToolMetadata, defaultSchemaMetadata)
 }
 
-func BuiltInTypeDefinitionsWith(toolBuilder func(StepDefinition) ToolMetadata, schemaBuilder func(StepDefinition) SchemaMetadata) []BuiltInTypeDefinition {
-	defs := StepDefinitions()
+func BuiltInTypeDefinitionsWith(toolBuilder func(StepDefinition) ToolMetadata, schemaBuilder func(StepDefinition) (SchemaMetadata, error)) ([]BuiltInTypeDefinition, error) {
+	defs, err := StepDefinitions()
+	if err != nil {
+		return nil, err
+	}
 	out := make([]BuiltInTypeDefinition, 0, len(defs))
 	if toolBuilder == nil {
 		toolBuilder = defaultToolMetadata
@@ -58,24 +61,31 @@ func BuiltInTypeDefinitionsWith(toolBuilder func(StepDefinition) ToolMetadata, s
 	}
 	for _, def := range defs {
 		key := StepTypeKey{APIVersion: def.APIVersion, Kind: def.Kind}
+		schema, err := schemaBuilder(def)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, BuiltInTypeDefinition{
 			Key:    key,
 			Step:   def,
 			Docs:   cloneToolMetadata(toolBuilder(def)),
-			Schema: schemaBuilder(def),
+			Schema: schema,
 		})
 	}
-	return out
+	return out, nil
 }
 
-func BuiltInTypeDefinitionForKey(key StepTypeKey) (BuiltInTypeDefinition, bool) {
+func BuiltInTypeDefinitionForKey(key StepTypeKey) (BuiltInTypeDefinition, bool, error) {
 	return BuiltInTypeDefinitionForKeyWith(key, defaultToolMetadata, defaultSchemaMetadata)
 }
 
-func BuiltInTypeDefinitionForKeyWith(key StepTypeKey, toolBuilder func(StepDefinition) ToolMetadata, schemaBuilder func(StepDefinition) SchemaMetadata) (BuiltInTypeDefinition, bool) {
-	def, ok := StepDefinitionForKey(key)
+func BuiltInTypeDefinitionForKeyWith(key StepTypeKey, toolBuilder func(StepDefinition) ToolMetadata, schemaBuilder func(StepDefinition) (SchemaMetadata, error)) (BuiltInTypeDefinition, bool, error) {
+	def, ok, err := StepDefinitionForKey(key)
+	if err != nil {
+		return BuiltInTypeDefinition{}, false, err
+	}
 	if !ok {
-		return BuiltInTypeDefinition{}, false
+		return BuiltInTypeDefinition{}, false, nil
 	}
 	if toolBuilder == nil {
 		toolBuilder = defaultToolMetadata
@@ -83,7 +93,11 @@ func BuiltInTypeDefinitionForKeyWith(key StepTypeKey, toolBuilder func(StepDefin
 	if schemaBuilder == nil {
 		schemaBuilder = defaultSchemaMetadata
 	}
-	return BuiltInTypeDefinition{Key: key, Step: def, Docs: cloneToolMetadata(toolBuilder(def)), Schema: schemaBuilder(def)}, true
+	schema, err := schemaBuilder(def)
+	if err != nil {
+		return BuiltInTypeDefinition{}, false, err
+	}
+	return BuiltInTypeDefinition{Key: key, Step: def, Docs: cloneToolMetadata(toolBuilder(def)), Schema: schema}, true, nil
 }
 
 func cloneToolMetadata(meta ToolMetadata) ToolMetadata {

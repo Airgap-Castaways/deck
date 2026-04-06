@@ -11,11 +11,11 @@ type (
 	StepTypeKey    = workflowcontract.StepTypeKey
 )
 
-func StepDefinitions() []StepDefinition {
+func StepDefinitions() ([]StepDefinition, error) {
 	return workflowcontract.StepDefinitions()
 }
 
-func StepDefinitionForKey(key StepTypeKey) (StepDefinition, bool) {
+func StepDefinitionForKey(key StepTypeKey) (StepDefinition, bool, error) {
 	return workflowcontract.StepDefinitionForKey(key)
 }
 

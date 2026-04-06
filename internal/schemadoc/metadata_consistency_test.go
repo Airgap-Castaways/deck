@@ -10,7 +10,10 @@ import (
 
 func TestToolMetadataCoversStepKinds(t *testing.T) {
 	for _, kind := range workflowexec.StepKinds() {
-		def, ok := workflowcontract.StepDefinitionForKey(workflowcontract.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind})
+		def, ok, err := workflowcontract.StepDefinitionForKey(workflowcontract.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind})
+		if err != nil {
+			t.Fatalf("StepDefinitionForKey(%s): %v", kind, err)
+		}
 		if !ok {
 			t.Fatalf("missing step definition for %s", kind)
 		}
@@ -68,7 +71,10 @@ func TestRemovedFieldsStayOutOfPublicMetadata(t *testing.T) {
 		{kind: "WaitForService", field: "spec.state"},
 	}
 	for _, tc := range checks {
-		def, ok := workflowcontract.StepDefinitionForKey(workflowcontract.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: tc.kind})
+		def, ok, err := workflowcontract.StepDefinitionForKey(workflowcontract.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: tc.kind})
+		if err != nil {
+			t.Fatalf("StepDefinitionForKey(%s): %v", tc.kind, err)
+		}
 		if !ok {
 			t.Fatalf("missing step definition for %s", tc.kind)
 		}
@@ -80,7 +86,11 @@ func TestRemovedFieldsStayOutOfPublicMetadata(t *testing.T) {
 }
 
 func TestToolMetadataCategoryMatchesRegistry(t *testing.T) {
-	for _, def := range workflowexec.StepDefinitions() {
+	defs, err := workflowexec.StepDefinitions()
+	if err != nil {
+		t.Fatalf("StepDefinitions: %v", err)
+	}
+	for _, def := range defs {
 		meta := ToolMetaForDefinition(def)
 		if meta.Category != def.Category {
 			t.Fatalf("category mismatch for %s: metadata=%q registry=%q", def.Kind, meta.Category, def.Category)
@@ -95,7 +105,11 @@ func TestToolMetadataCategoryMatchesRegistry(t *testing.T) {
 }
 
 func TestPublicStepDefinitionsMapToKnownGroups(t *testing.T) {
-	for _, def := range workflowexec.StepDefinitions() {
+	defs, err := workflowexec.StepDefinitions()
+	if err != nil {
+		t.Fatalf("StepDefinitions: %v", err)
+	}
+	for _, def := range defs {
 		if def.Visibility != "public" {
 			continue
 		}
@@ -109,7 +123,11 @@ func TestPublicStepDefinitionsMapToKnownGroups(t *testing.T) {
 }
 
 func TestToolMetadataRemovesLegacyActionFieldDocs(t *testing.T) {
-	for _, def := range workflowexec.StepDefinitions() {
+	defs, err := workflowexec.StepDefinitions()
+	if err != nil {
+		t.Fatalf("StepDefinitions: %v", err)
+	}
+	for _, def := range defs {
 		meta := ToolMetaForDefinition(def)
 		if _, ok := meta.FieldDocs["spec.action"]; ok {
 			t.Fatalf("legacy spec.action field doc should not be exposed for %s", def.Kind)
@@ -130,7 +148,10 @@ func TestRepresentativeToolMetadataStaysDetailed(t *testing.T) {
 		{kind: "JoinKubeadm", fieldPaths: []string{"spec.joinFile", "spec.configFile"}},
 	}
 	for _, tc := range tests {
-		def, ok := workflowcontract.StepDefinitionForKey(workflowcontract.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: tc.kind})
+		def, ok, err := workflowcontract.StepDefinitionForKey(workflowcontract.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: tc.kind})
+		if err != nil {
+			t.Fatalf("StepDefinitionForKey(%s): %v", tc.kind, err)
+		}
 		if !ok {
 			t.Fatalf("missing step definition for %s", tc.kind)
 		}

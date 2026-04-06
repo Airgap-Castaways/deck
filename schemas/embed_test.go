@@ -12,7 +12,11 @@ import (
 
 func TestGeneratedGroupPagesExist(t *testing.T) {
 	seenGroups := map[string]bool{}
-	for _, def := range workflowcontract.StepDefinitions() {
+	defs, err := workflowcontract.StepDefinitions()
+	if err != nil {
+		t.Fatalf("StepDefinitions: %v", err)
+	}
+	for _, def := range defs {
 		if def.Visibility != "public" {
 			continue
 		}
@@ -29,7 +33,10 @@ func TestGeneratedGroupPagesExist(t *testing.T) {
 
 func TestToolSchemasCoverStepContracts(t *testing.T) {
 	for _, kind := range workflowexec.StepKinds() {
-		def, ok := workflowexec.StepDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind})
+		def, ok, err := workflowexec.StepDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind})
+		if err != nil {
+			t.Fatalf("StepDefinitionForKey(%s): %v", kind, err)
+		}
 		if !ok {
 			t.Fatalf("missing definition for %s", kind)
 		}
