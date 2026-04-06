@@ -56,16 +56,11 @@ func Execute[T any](ctx context.Context, batch workflowexec.StepBatch, run func(
 	if len(batch.Steps) == 0 {
 		return results, nil
 	}
-	if !batch.Parallel() {
-		result, err := run(ctx, batch.Steps[0])
-		if err != nil {
-			return results, err
-		}
-		results[0] = result
-		return results, nil
-	}
 	group, groupCtx := errgroup.WithContext(ctx)
 	limit := batch.MaxParallelism
+	if !batch.Parallel() {
+		limit = 1
+	}
 	if limit <= 0 || limit > len(batch.Steps) {
 		limit = len(batch.Steps)
 	}
