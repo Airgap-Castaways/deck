@@ -25,8 +25,6 @@ import (
 var (
 	runtimeVarNamePattern      = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	singleBraceTemplatePattern = regexp.MustCompile(`(^|[^\{])(\{\s*\.(vars|runtime)\.[^{}]+\})([^\}]|$)`)
-	runtimeWhenRefPattern      = regexp.MustCompile(`\bruntime\.([A-Za-z_][A-Za-z0-9_]*)`)
-	runtimeTemplateRefPattern  = regexp.MustCompile(`\.runtime\.([A-Za-z_][A-Za-z0-9_]*)`)
 )
 
 type documentKind string

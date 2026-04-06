@@ -3,17 +3,12 @@ package askir
 import (
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askdraft"
+	"github.com/Airgap-Castaways/deck/internal/workflowrefs"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
-)
-
-var (
-	varsTemplateRefRE   = regexp.MustCompile(`\$?\{\{\s*\.?vars\.([a-zA-Z0-9_.\[\]-]+)\s*\}\}`)
-	varsExpressionRefRE = regexp.MustCompile(`(?:^|[^A-Za-z0-9_])\.?vars\.([a-zA-Z0-9_-]+(?:\[[^\]]+\]|\.[a-zA-Z0-9_-]+)*)`)
 )
 
 func Materialize(root string, gen askcontract.GenerationResponse) ([]askcontract.GeneratedFile, error) {
@@ -64,7 +59,10 @@ func MaterializeWithBase(root string, base []askcontract.GeneratedFile, gen askc
 func pruneUnusedVarsDocumentTransforms(root string, documents []askcontract.GeneratedDocument, base []askcontract.GeneratedFile) []askcontract.GeneratedDocument {
 	used, previewOK := referencedVarNamesAfterMaterialization(root, documents, base)
 	if !previewOK {
-		used = referencedVarNames(documents, base)
+		used, previewOK = referencedVarNames(documents, base)
+	}
+	if !previewOK {
+		return documents
 	}
 	if len(used) == 0 && !documentsContainNonVarsEdits(documents) {
 		return documents
@@ -142,21 +140,21 @@ func referencedVarNamesAfterMaterialization(root string, documents []askcontract
 	}
 	used := map[string]bool{}
 	for _, file := range finalFiles {
-		for _, match := range varTemplateMatches(file.Content) {
-			used[match] = true
+		if !collectReferencedVarsFromGeneratedFile(used, file) {
+			return nil, false
 		}
 	}
 	return used, true
 }
 
-func referencedVarNames(documents []askcontract.GeneratedDocument, base []askcontract.GeneratedFile) map[string]bool {
+func referencedVarNames(documents []askcontract.GeneratedDocument, base []askcontract.GeneratedFile) (map[string]bool, bool) {
 	used := map[string]bool{}
 	for _, file := range base {
 		if file.Delete {
 			continue
 		}
-		for _, match := range varTemplateMatches(file.Content) {
-			used[match] = true
+		if !collectReferencedVarsFromGeneratedFile(used, file) {
+			return nil, false
 		}
 	}
 	for _, doc := range documents {
@@ -165,35 +163,75 @@ func referencedVarNames(documents []askcontract.GeneratedDocument, base []askcon
 				used[strings.TrimSpace(transform.VarName)] = true
 			}
 		}
-		collectReferencedVarsFromDocument(used, doc)
+		if !collectReferencedVarsFromDocument(used, doc) {
+			return nil, false
+		}
 	}
-	return used
+	return used, true
 }
 
-func collectReferencedVarsFromDocument(used map[string]bool, doc askcontract.GeneratedDocument) {
+func collectReferencedVarsFromGeneratedFile(used map[string]bool, file askcontract.GeneratedFile) bool {
+	parsed, err := ParseDocument(file.Path, []byte(file.Content))
+	if err != nil {
+		return false
+	}
+	return collectReferencedVarsFromDocument(used, parsed)
+}
+
+func collectReferencedVarsFromDocument(used map[string]bool, doc askcontract.GeneratedDocument) bool {
 	if doc.Workflow != nil {
 		collectReferencedVarsFromMap(used, doc.Workflow.Vars)
+		for _, phase := range doc.Workflow.Phases {
+			for _, item := range phase.Imports {
+				if !collectReferencedVarsFromWhen(used, item.When) {
+					return false
+				}
+			}
+		}
 		for _, step := range doc.Workflow.Steps {
-			collectReferencedVarsFromStep(used, step)
+			if !collectReferencedVarsFromStep(used, step) {
+				return false
+			}
 		}
 		for _, phase := range doc.Workflow.Phases {
 			for _, step := range phase.Steps {
-				collectReferencedVarsFromStep(used, step)
+				if !collectReferencedVarsFromStep(used, step) {
+					return false
+				}
 			}
 		}
 	}
 	if doc.Component != nil {
 		for _, step := range doc.Component.Steps {
-			collectReferencedVarsFromStep(used, step)
+			if !collectReferencedVarsFromStep(used, step) {
+				return false
+			}
 		}
 	}
+	return true
 }
 
-func collectReferencedVarsFromStep(used map[string]bool, step askcontract.WorkflowStep) {
-	collectReferencedVarsFromString(used, step.When)
+func collectReferencedVarsFromWhen(used map[string]bool, expr string) bool {
+	refs, err := workflowrefs.WhenReferences(expr)
+	if err != nil {
+		return false
+	}
+	for _, ref := range refs {
+		if ref.Namespace == workflowrefs.NamespaceVars {
+			used[ref.Path] = true
+		}
+	}
+	return true
+}
+
+func collectReferencedVarsFromStep(used map[string]bool, step askcontract.WorkflowStep) bool {
+	if !collectReferencedVarsFromWhen(used, step.When) {
+		return false
+	}
 	collectReferencedVarsFromString(used, step.Timeout)
 	collectReferencedVarsFromMap(used, step.Metadata)
 	collectReferencedVarsFromMap(used, step.Spec)
+	return true
 }
 
 func collectReferencedVarsFromMap(used map[string]bool, values map[string]any) {
@@ -216,51 +254,11 @@ func collectReferencedVarsFromMap(used map[string]bool, values map[string]any) {
 }
 
 func collectReferencedVarsFromString(used map[string]bool, text string) {
-	for _, match := range varTemplateMatches(text) {
-		used[match] = true
-	}
-}
-
-func varTemplateMatches(text string) []string {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return nil
-	}
-	seen := map[string]bool{}
-	out := []string{}
-	for _, match := range varsTemplateRefRE.FindAllStringSubmatch(text, -1) {
-		if len(match) == 2 {
-			out = appendVarTemplateMatch(out, seen, match[1])
+	for _, ref := range workflowrefs.TemplateReferences(text) {
+		if ref.Namespace == workflowrefs.NamespaceVars {
+			used[ref.Path] = true
 		}
 	}
-	for _, match := range varsExpressionRefRE.FindAllStringSubmatch(text, -1) {
-		if len(match) == 2 {
-			out = appendVarTemplateMatch(out, seen, match[1])
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func appendVarTemplateMatch(out []string, seen map[string]bool, name string) []string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return out
-	}
-	if !seen[name] {
-		seen[name] = true
-		out = append(out, name)
-	}
-	if idx := strings.IndexAny(name, ".["); idx > 0 {
-		root := strings.TrimSpace(name[:idx])
-		if root != "" && !seen[root] {
-			seen[root] = true
-			out = append(out, root)
-		}
-	}
-	return out
 }
 
 func varsRootKey(transform askcontract.RefineTransformAction) string {

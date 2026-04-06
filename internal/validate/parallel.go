@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/config"
+	"github.com/Airgap-Castaways/deck/internal/workflowrefs"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
@@ -20,37 +21,25 @@ func parallelApplyKindAllowed(kind string) bool {
 
 func referencedRuntimeVars(step config.Step) []string {
 	seen := map[string]bool{}
-	for _, match := range runtimeWhenRefPattern.FindAllStringSubmatch(strings.TrimSpace(step.When), -1) {
-		if len(match) == 2 {
-			seen[match[1]] = true
+	refs, err := workflowrefs.WhenReferences(step.When)
+	if err == nil {
+		for _, ref := range refs {
+			if ref.Namespace == workflowrefs.NamespaceRuntime {
+				seen[ref.Root] = true
+			}
 		}
 	}
-	collectRuntimeTemplateRefs(step.Spec, seen)
+	for _, ref := range workflowrefs.ValueTemplateReferences(step.Spec) {
+		if ref.Namespace == workflowrefs.NamespaceRuntime {
+			seen[ref.Root] = true
+		}
+	}
 	vars := make([]string, 0, len(seen))
 	for key := range seen {
 		vars = append(vars, key)
 	}
 	sort.Strings(vars)
 	return vars
-}
-
-func collectRuntimeTemplateRefs(value any, seen map[string]bool) {
-	switch typed := value.(type) {
-	case string:
-		for _, match := range runtimeTemplateRefPattern.FindAllStringSubmatch(typed, -1) {
-			if len(match) == 2 {
-				seen[match[1]] = true
-			}
-		}
-	case map[string]any:
-		for _, item := range typed {
-			collectRuntimeTemplateRefs(item, seen)
-		}
-	case []any:
-		for _, item := range typed {
-			collectRuntimeTemplateRefs(item, seen)
-		}
-	}
 }
 
 func literalApplyTargetPath(step config.Step) string {

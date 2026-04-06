@@ -147,3 +147,21 @@ func TestPackCachePlanFallsBackToFetchWhenExportedCacheMissing(t *testing.T) {
 		t.Fatalf("expected REUSE when exported cache exists, got %s", got)
 	}
 }
+
+func TestCollectStepInputVarNamesUsesStructuralTemplateParsing(t *testing.T) {
+	spec := map[string]any{
+		"downloads": "{{ index .vars.downloads 0 \"outputPath\" }}",
+		"path":      "files/{{ vars.kubernetesVersion }}.bin",
+		"runtime":   "{{ .runtime.downloaded }}",
+	}
+	got := collectStepInputVarNames(spec)
+	want := []string{"downloads", "kubernetesVersion"}
+	if len(got) != len(want) {
+		t.Fatalf("collectStepInputVarNames length = %d, want %d (%#v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("collectStepInputVarNames = %#v, want %#v", got, want)
+		}
+	}
+}

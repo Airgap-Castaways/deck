@@ -798,35 +798,34 @@ func TestMaterializeWithBaseKeepsVarsUsedByUntouchedBaseExpressions(t *testing.T
 	}
 }
 
-func TestVarTemplateMatchesAcceptAliasForms(t *testing.T) {
-	text := "{{ vars.kubernetesVersion }} ${{ vars.joinFile }} {{ .vars.criSocket }}"
-	matches := varTemplateMatches(text)
-	joined := strings.Join(matches, ",")
+func TestCollectReferencedVarsFromStringAcceptAliasForms(t *testing.T) {
+	used := map[string]bool{}
+	collectReferencedVarsFromString(used, "{{ vars.kubernetesVersion }} ${{ vars.joinFile }} {{ .vars.criSocket }}")
 	for _, want := range []string{"kubernetesVersion", "joinFile", "criSocket"} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("expected %q in alias matches, got %q", want, joined)
+		if !used[want] {
+			t.Fatalf("expected %q in alias matches, got %#v", want, used)
 		}
 	}
 }
 
-func TestVarTemplateMatchesIncludeBracketPathsAndRootKeys(t *testing.T) {
-	text := "{{ .vars.nodes[0].ip }}"
-	matches := varTemplateMatches(text)
-	joined := strings.Join(matches, ",")
+func TestCollectReferencedVarsFromStringIncludeBracketPathsAndRootKeys(t *testing.T) {
+	used := map[string]bool{}
+	collectReferencedVarsFromString(used, "{{ .vars.nodes[0].ip }}")
 	for _, want := range []string{"nodes[0].ip", "nodes"} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("expected %q in bracket matches, got %q", want, joined)
+		if !used[want] {
+			t.Fatalf("expected %q in bracket matches, got %#v", want, used)
 		}
 	}
 }
 
-func TestVarTemplateMatchesIncludeRawExpressions(t *testing.T) {
-	text := `.vars.role == "control-plane" && vars.upgradeKubernetesVersion != "" && {{ eq .vars.joinFile "" }}`
-	matches := varTemplateMatches(text)
-	joined := strings.Join(matches, ",")
-	for _, want := range []string{"role", "upgradeKubernetesVersion", "joinFile"} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("expected %q in raw expression matches, got %q", want, joined)
+func TestCollectReferencedVarsFromWhenIncludesRawExpressions(t *testing.T) {
+	used := map[string]bool{}
+	if !collectReferencedVarsFromWhen(used, `vars.role == "control-plane" && vars.upgradeKubernetesVersion != ""`) {
+		t.Fatalf("expected when reference collection to succeed")
+	}
+	for _, want := range []string{"role", "upgradeKubernetesVersion"} {
+		if !used[want] {
+			t.Fatalf("expected %q in raw expression matches, got %#v", want, used)
 		}
 	}
 }
