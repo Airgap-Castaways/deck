@@ -25,7 +25,7 @@
 | Change area | RunCommands |
 |---|---|
 | Any Go change | `make test && make lint` |
-| Schema gen (`cmd/schema-gen/`, `internal/schemadoc/`) | `make generate && git diff --exit-code` |
+| Schema gen (`cmd/schema-gen/`, `internal/schemadoc/`) | `make verify-generated` |
 | Step kind logic or workflow YAML | `make build` then `deck lint` against files in `test/workflows/scenarios/` and `docs/guides/examples/` |
 | CLI surface (`cmd/deck/`) | `make build && ./bin/deck --help && ./bin/deck version` |
 | Full CI parity (Linux, Vagrant required) | `make build lint test` then Vagrant E2E under `test/e2e/vagrant/` |

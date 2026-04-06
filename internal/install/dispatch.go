@@ -76,13 +76,13 @@ func executeWorkflowStep(ctx context.Context, step config.Step, rendered map[str
 	case "VerifyImage":
 		return nil, runVerifyImages(ctx, effectiveSpec)
 	case "InitKubeadm":
-		return nil, runInitKubeadm(ctx, effectiveSpec)
+		return nil, runInitKubeadm(ctx, effectiveSpec, execCtx.kubeadm)
 	case "JoinKubeadm":
-		return nil, runJoinKubeadm(ctx, effectiveSpec)
+		return nil, runJoinKubeadm(ctx, effectiveSpec, execCtx.kubeadm)
 	case "ResetKubeadm":
-		return nil, runResetKubeadm(ctx, effectiveSpec)
+		return nil, runResetKubeadm(ctx, effectiveSpec, execCtx.kubeadm)
 	case "UpgradeKubeadm":
-		return nil, runUpgradeKubeadm(ctx, effectiveSpec)
+		return nil, runUpgradeKubeadm(ctx, effectiveSpec, execCtx.kubeadm)
 	case "CheckKubernetesCluster":
 		return nil, runCheckKubernetesCluster(ctx, effectiveSpec)
 	case "CheckHost":
