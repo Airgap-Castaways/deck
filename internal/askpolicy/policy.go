@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askauthoring"
+	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
@@ -800,7 +801,17 @@ func inferNodeCount(req ScenarioRequirements) int {
 
 func inferRequiredCapabilities(req ScenarioRequirements) []string {
 	facts := askauthoring.InferFacts(strings.Join(req.ScenarioIntent, " "), req.ArtifactKinds, req.Connectivity)
-	return dedupeStrings(facts.Capabilities)
+	capabilities := append([]string(nil), facts.Capabilities...)
+	if req.NeedsPrepare && strings.EqualFold(strings.TrimSpace(req.Connectivity), "offline") {
+		capabilities = append(capabilities, "prepare-artifacts")
+		if containsString(req.ArtifactKinds, "package") || containsString(req.ScenarioIntent, "kubeadm") {
+			capabilities = append(capabilities, "package-staging")
+		}
+		if containsString(req.ArtifactKinds, "image") || containsString(req.ScenarioIntent, "kubeadm") {
+			capabilities = append(capabilities, "image-staging")
+		}
+	}
+	return dedupeStrings(capabilities)
 }
 
 func typedPreferenceRequested(prompt string) bool {
@@ -936,7 +947,7 @@ func prepareAppearsArtifactOriented(content string, artifactKinds []string) bool
 
 func constrainedLiteralViolations(content string) []string {
 	violations := []string{}
-	for _, step := range askcontext.Current().StepKinds {
+	for _, step := range askcatalog.Current().StepKinds() {
 		for _, field := range step.ConstrainedLiteralFields {
 			if fieldUsesVarsTemplate(content, field.Path) {
 				violations = append(violations, field.Path)

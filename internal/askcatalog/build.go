@@ -3,6 +3,7 @@ package askcatalog
 import (
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
 	"github.com/Airgap-Castaways/deck/internal/validate"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
+	"github.com/Airgap-Castaways/deck/internal/workflowissues"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 	deckschemas "github.com/Airgap-Castaways/deck/schemas"
 )
@@ -46,8 +48,14 @@ func build() Catalog {
 		}
 		workflowMeta := stepmeta.ProjectWorkflow(entry, def.Step.Category, def.Step.ToolSchemaGenerator)
 		toolMeta := schemadoc.ToolMetaForDefinition(def.Step)
+		schemaMeta := stepmeta.ProjectSchema(entry)
 		askMeta := stepmeta.ProjectAsk(entry)
 		facts := schemaFactsForSchemaFile(workflowMeta.SchemaFile)
+		stepSourceRefs := uniqueSourceRefs(
+			sourceRefString(entry.Docs.Source),
+			sourceRefString(schemaMeta.Source),
+			"internal/stepmeta/registry.go",
+		)
 		steps[workflowMeta.Kind] = Step{
 			Kind:                     workflowMeta.Kind,
 			Category:                 workflowMeta.Category,
@@ -64,30 +72,123 @@ func build() Catalog {
 			ConstrainedLiteralFields: append([]stepmeta.ConstrainedLiteralField(nil), askMeta.ConstrainedLiteralFields...),
 			QualityRules:             append([]stepmeta.QualityRule(nil), askMeta.QualityRules...),
 			KeyFields:                append([]string(nil), askMeta.KeyFields...),
-			Fields:                   projectFields(facts, toolMeta, askMeta),
+			Fields:                   projectFields(facts, toolMeta, askMeta, workflowMeta.SchemaFile),
 			RuleSummaries:            append([]string(nil), facts.RuleSummaries...),
-			Builders:                 projectBuilders(workflowMeta.Kind, askMeta.Builders),
+			Builders:                 projectBuilders(workflowMeta.Kind, askMeta.Builders, stepSourceRefs),
+			SourceRefs:               stepSourceRefs,
 		}
 		ordered = append(ordered, workflowMeta.Kind)
 	}
 	sort.Strings(ordered)
 	return Catalog{
 		Workflow: WorkflowRules{
+			Summary:          schemadoc.WorkflowMeta().Summary,
 			SupportedVersion: validate.SupportedWorkflowVersion(),
 			TopLevelModes:    validate.WorkflowTopLevelModes(),
 			SupportedModes:   validate.SupportedWorkflowRoles(),
 			RequiredFields:   workflowRequiredFields(),
 			ImportRule:       validate.WorkflowImportRule(),
-			InvariantNotes:   append([]string(nil), validate.WorkflowInvariantNotes()...),
+			PhaseRules: []string{
+				"Each phase needs a non-empty name.",
+				"Each phase must define steps or imports.",
+				"Phase objects do not support an id field.",
+			},
+			StepRules: []string{
+				"Each step needs id, kind, and spec.",
+				"Step ids belong on steps, not phases.",
+				workflowissues.MustSpec(workflowissues.CodeDuplicateStepID).Details,
+			},
+			PhaseExample: strings.TrimSpace(`version: v1alpha1
+phases:
+  - name: bootstrap
+    steps:
+      - id: check-host
+        kind: CheckHost
+        spec:
+          checks: [os, arch, swap]
+          failFast: true`),
+			StepsExample: strings.TrimSpace(`version: v1alpha1
+steps:
+  - id: run-command
+    kind: Command
+    spec:
+      command: [echo, hello]`),
+			InvariantNotes: append([]string(nil), validate.WorkflowInvariantNotes()...),
+			SourceRefs:     []string{"schemas/workflow.schema.json", "internal/validate", "internal/workflowissues"},
 		},
 		Workspace: WorkspaceRules{
-			WorkflowRoot:     workspacepaths.WorkflowRootDir,
-			ScenarioDir:      workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowScenariosDir,
-			ComponentDir:     workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowComponentsDir,
-			VarsPath:         workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowVarsRel,
-			AllowedPaths:     AllowedGeneratedPathPatterns(),
-			CanonicalPrepare: workspacepaths.WorkflowRootDir + "/" + workspacepaths.CanonicalPrepareWorkflowRel,
-			CanonicalApply:   workspacepaths.WorkflowRootDir + "/" + workspacepaths.CanonicalApplyWorkflowRel,
+			WorkflowRoot:      workspacepaths.WorkflowRootDir,
+			ScenarioDir:       workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowScenariosDir,
+			ComponentDir:      workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowComponentsDir,
+			VarsPath:          workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowVarsRel,
+			AllowedPaths:      AllowedGeneratedPathPatterns(),
+			CanonicalPrepare:  workspacepaths.WorkflowRootDir + "/" + workspacepaths.CanonicalPrepareWorkflowRel,
+			CanonicalApply:    workspacepaths.WorkflowRootDir + "/" + workspacepaths.CanonicalApplyWorkflowRel,
+			GeneratedPathNote: "New ask-generated files must stay under workflows/prepare.yaml, workflows/scenarios/, workflows/components/, or workflows/vars.yaml.",
+			SourceRefs:        []string{"internal/workspacepaths"},
+		},
+		Policy: PolicyRules{
+			AssumeOfflineByDefault: true,
+			PreferTypedSteps:       true,
+			PrepareArtifactKinds:   []string{"package", "image", "binary", "archive", "bundle", "repository-mirror"},
+			ForbiddenApplyActions: []string{
+				"remote package download",
+				"remote image pull",
+				"remote binary download",
+				"remote archive fetch",
+				"online repository sync",
+			},
+			VarsAdvisory: []string{
+				"Repeated package lists, image lists, paths, versions, or environment-specific values should move to workflows/vars.yaml.",
+				"Missing vars should not block generation on its own.",
+				"Detected local host facts belong under runtime.host in when expressions, not in workflows/vars.yaml.",
+				"workflows/vars.yaml must remain plain YAML data. Do not place template expressions in vars values, keys, or unquoted scalar positions.",
+				"Do not replace schema-typed arrays or objects with string templates. Keep arrays as YAML arrays and objects as YAML objects so schema validation still passes.",
+			},
+			ComponentAdvisory: []string{
+				"Reusable repeated logic across phases or scenarios should usually move into workflows/components/.",
+				"Missing components should not block generation on its own.",
+			},
+			SourceRefs: []string{"internal/askpolicy", "internal/validate"},
+		},
+		Modes: []ModeRules{
+			{
+				Mode:        "prepare",
+				Summary:     "Prepare collects online inputs and produces offline-ready artifacts.",
+				WhenToUse:   "Use prepare when the request needs downloads, mirrored images, package caches, or bundle content created before apply.",
+				Prefer:      []string{"download-oriented File, Image, and Package steps", "variables shared by later apply steps", "named phases when collection has multiple stages"},
+				Avoid:       []string{"live node reconfiguration that belongs in apply", "service management on the target node"},
+				OutputFiles: []string{workspacepaths.CanonicalPrepareWorkflowRel, workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowVarsRel},
+				SourceRefs:  []string{"internal/askpolicy", "internal/workspacepaths"},
+			},
+			{
+				Mode:        "apply",
+				Summary:     "Apply changes the local node using prepared inputs and typed host actions.",
+				WhenToUse:   "Use apply for package installation, file writes, service changes, runtime config, host convergence steps, and host suitability validation.",
+				Prefer:      []string{"typed steps such as File, ConfigureRepository, RefreshRepository, ManageService, WriteContainerdConfig, Package, and CheckHost", "runtime.host.* for detected local host branching", "named phases for multi-step installs", "components for reusable imported logic"},
+				Avoid:       []string{"online collection logic that should happen during prepare", "large repeated literals that belong in vars.yaml"},
+				OutputFiles: []string{workspacepaths.WorkflowRootDir + "/" + workspacepaths.CanonicalApplyWorkflowRel, workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowVarsRel},
+				SourceRefs:  []string{"internal/askpolicy", "internal/workspacepaths"},
+			},
+		},
+		Components: ComponentRules{
+			Summary:         "Reusable workflow fragments belong in workflows/components/ and are imported into scenario phases.",
+			ImportRule:      "Imports are only valid under phases[].imports and resolve from workflows/components/ using component-relative paths.",
+			ReuseRule:       "Split repeated or reusable logic into components instead of duplicating steps across scenarios.",
+			LocationRule:    "Scenario entrypoints live under workflows/scenarios/ while imported fragments live under workflows/components/.",
+			FragmentRule:    "Component files are fragment documents, not full workflow documents. They should usually contain a top-level `steps:` mapping only and must not add workflow-level fields like version or phases.",
+			ImportExample:   strings.TrimSpace("phases:\n  - name: preflight\n    imports:\n      - path: check-host.yaml"),
+			FragmentExample: strings.TrimSpace("steps:\n  - id: check-host\n    kind: CheckHost\n    spec:\n      checks: [os, arch, swap]\n      failFast: true"),
+			AllowedRootKeys: []string{"steps"},
+			SourceRefs:      []string{"internal/workspacepaths", "internal/validate"},
+		},
+		Vars: VarsRules{
+			Path:        workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowVarsRel,
+			Summary:     "Prefer workflows/vars.yaml for configurable values that would otherwise be repeated inline across steps or files.",
+			PreferFor:   []string{"package lists", "repository URLs", "service names", "paths and ports that may vary by environment"},
+			AvoidFor:    []string{"runtime-only outputs registered from previous steps", "detected local host facts such as osFamily or arch that already exist under runtime.host", "tiny one-off literals with no reuse value", "typed step fields whose schema expects a native YAML array or object but the template engine would turn into a string", "typed enum fields or constrained scalar fields that must stay literal to satisfy schema validation"},
+			ExampleKeys: []string{"dockerRepoURL", "dockerPackages", "containerRuntimeConfigPath"},
+			SourceRefs:  []string{"internal/askpolicy", "internal/workspacepaths"},
 		},
 		Steps:   steps,
 		ordered: ordered,
@@ -105,7 +206,7 @@ func projectContract(hints stepmeta.ContractHints) ContractBindings {
 	}
 }
 
-func projectFields(facts schemafacts.DocumentFacts, toolMeta schemadoc.ToolMetadata, ask stepmeta.AskMetadata) map[string]Field {
+func projectFields(facts schemafacts.DocumentFacts, toolMeta schemadoc.ToolMetadata, ask stepmeta.AskMetadata, schemaFile string) map[string]Field {
 	constrained := map[string]stepmeta.ConstrainedLiteralField{}
 	for _, field := range ask.ConstrainedLiteralFields {
 		constrained[strings.TrimSpace(field.Path)] = field
@@ -124,6 +225,7 @@ func projectFields(facts schemafacts.DocumentFacts, toolMeta schemadoc.ToolMetad
 			Enum:        append([]string(nil), fact.Enum...),
 			Description: strings.TrimSpace(fact.Description),
 			Example:     strings.TrimSpace(fact.Example),
+			SourceRef:   strings.TrimSpace(schemaFile),
 		}
 		if doc, ok := toolMeta.FieldDocs[field.Path]; ok {
 			if field.Description == "" {
@@ -145,7 +247,7 @@ func projectFields(facts schemafacts.DocumentFacts, toolMeta schemadoc.ToolMetad
 	return out
 }
 
-func projectBuilders(kind string, builders []stepmeta.AuthoringBuilder) []Builder {
+func projectBuilders(kind string, builders []stepmeta.AuthoringBuilder, sourceRefs []string) []Builder {
 	out := make([]Builder, 0, len(builders))
 	for _, builder := range builders {
 		projected := Builder{
@@ -156,12 +258,38 @@ func projectBuilders(kind string, builders []stepmeta.AuthoringBuilder) []Builde
 			Summary:              strings.TrimSpace(builder.Summary),
 			RequiresCapabilities: append([]string(nil), builder.RequiresCapabilities...),
 			Bindings:             make([]Binding, 0, len(builder.Bindings)),
+			SourceRefs:           append([]string(nil), sourceRefs...),
 		}
 		for _, binding := range builder.Bindings {
 			projected.Bindings = append(projected.Bindings, Binding{Path: strings.TrimSpace(binding.Path), From: strings.TrimSpace(binding.From), Semantic: strings.TrimSpace(binding.Semantic), Required: binding.Required})
 		}
 		out = append(out, projected)
 	}
+	return out
+}
+
+func sourceRefString(ref stepmeta.SourceRef) string {
+	if strings.TrimSpace(ref.File) == "" {
+		return ""
+	}
+	if ref.Line > 0 {
+		return strings.TrimSpace(ref.File) + ":" + strings.TrimSpace(strconv.Itoa(ref.Line))
+	}
+	return strings.TrimSpace(ref.File)
+}
+
+func uniqueSourceRefs(values ...string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	sort.Strings(out)
 	return out
 }
 
