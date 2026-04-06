@@ -6,6 +6,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
+	_ "github.com/Airgap-Castaways/deck/internal/stepspec"
 )
 
 func TestTryAutoRepairFillsMissingInitJoinFile(t *testing.T) {

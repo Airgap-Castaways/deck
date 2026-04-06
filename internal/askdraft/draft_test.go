@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	_ "github.com/Airgap-Castaways/deck/internal/stepspec"
 )
 
 func TestCompileBuildsWorkflowDocumentsFromBuilderSelections(t *testing.T) {

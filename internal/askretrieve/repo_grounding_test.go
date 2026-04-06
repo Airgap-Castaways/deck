@@ -3,6 +3,8 @@ package askretrieve
 import (
 	"strings"
 	"testing"
+
+	_ "github.com/Airgap-Castaways/deck/internal/stepspec"
 )
 
 func TestBuildStepspecSummaryUsesCanonicalCatalogFacts(t *testing.T) {
