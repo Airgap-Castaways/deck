@@ -22,7 +22,11 @@ func (installLookPathRunner) LookPath(file string) (string, error) {
 func executeWorkflowStep(ctx context.Context, step config.Step, rendered map[string]any, key workflowexec.StepTypeKey, execCtx ExecutionContext) (map[string]any, error) {
 	kind := step.Kind
 	effectiveSpec := specWithStepTimeout(rendered, step.Timeout)
-	if !workflowexec.StepAllowedForRoleForKey("apply", key) {
+	allowed, err := workflowexec.StepAllowedForRoleForKey("apply", key)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
 		return nil, errcode.Newf(errCodeInstallKindUnsupported, "unsupported step kind %s", kind)
 	}
 

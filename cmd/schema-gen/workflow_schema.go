@@ -129,6 +129,10 @@ func workflowImportSchema() map[string]any {
 }
 
 func stepBaseSchema() (map[string]any, error) {
+	kinds, err := workflowexec.StepKinds()
+	if err != nil {
+		return nil, err
+	}
 	root := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
@@ -136,7 +140,7 @@ func stepBaseSchema() (map[string]any, error) {
 		"properties": map[string]any{
 			"id":            map[string]any{"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,127}$"},
 			"apiVersion":    supportedStepAPIVersionSchema(),
-			"kind":          map[string]any{"type": "string", "enum": toAnySlice(workflowexec.StepKinds())},
+			"kind":          map[string]any{"type": "string", "enum": toAnySlice(kinds)},
 			"metadata":      map[string]any{"type": "object", "additionalProperties": true},
 			"when":          map[string]any{"type": "string", "minLength": 1},
 			"parallelGroup": map[string]any{"type": "string", "minLength": 1},

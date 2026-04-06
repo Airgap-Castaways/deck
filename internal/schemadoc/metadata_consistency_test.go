@@ -9,7 +9,11 @@ import (
 )
 
 func TestToolMetadataCoversStepKinds(t *testing.T) {
-	for _, kind := range workflowexec.StepKinds() {
+	kinds, err := workflowexec.StepKinds()
+	if err != nil {
+		t.Fatalf("StepKinds: %v", err)
+	}
+	for _, kind := range kinds {
 		def, ok, err := workflowcontract.StepDefinitionForKey(workflowcontract.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind})
 		if err != nil {
 			t.Fatalf("StepDefinitionForKey(%s): %v", kind, err)

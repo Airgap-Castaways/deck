@@ -32,7 +32,11 @@ func TestGeneratedGroupPagesExist(t *testing.T) {
 }
 
 func TestToolSchemasCoverStepContracts(t *testing.T) {
-	for _, kind := range workflowexec.StepKinds() {
+	kinds, err := workflowexec.StepKinds()
+	if err != nil {
+		t.Fatalf("StepKinds: %v", err)
+	}
+	for _, kind := range kinds {
 		def, ok, err := workflowexec.StepDefinitionForKey(workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: kind})
 		if err != nil {
 			t.Fatalf("StepDefinitionForKey(%s): %v", kind, err)
@@ -40,7 +44,10 @@ func TestToolSchemasCoverStepContracts(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing definition for %s", kind)
 		}
-		file, ok := workflowexec.StepSchemaFileForKey(workflowexec.StepTypeKey{APIVersion: def.APIVersion, Kind: def.Kind})
+		file, ok, err := workflowexec.StepSchemaFileForKey(workflowexec.StepTypeKey{APIVersion: def.APIVersion, Kind: def.Kind})
+		if err != nil {
+			t.Fatalf("StepSchemaFileForKey(%s): %v", kind, err)
+		}
 		if !ok {
 			t.Fatalf("missing schema file for kind %s", kind)
 		}
@@ -74,7 +81,11 @@ func TestWorkflowSchemaCoversStepKinds(t *testing.T) {
 		value, _ := rawValue.(string)
 		seen[value] = true
 	}
-	for _, kind := range workflowexec.StepKinds() {
+	kinds, err := workflowexec.StepKinds()
+	if err != nil {
+		t.Fatalf("StepKinds: %v", err)
+	}
+	for _, kind := range kinds {
 		if !seen[kind] {
 			t.Fatalf("workflow schema kind enum missing %s", kind)
 		}

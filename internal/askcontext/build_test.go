@@ -18,7 +18,11 @@ func TestManifestIncludesAllStepKinds(t *testing.T) {
 	for _, step := range manifest.StepKinds {
 		seen[step.Kind] = true
 	}
-	for _, kind := range workflowexec.StepKinds() {
+	kinds, err := workflowexec.StepKinds()
+	if err != nil {
+		t.Fatalf("StepKinds: %v", err)
+	}
+	for _, kind := range kinds {
 		if !seen[kind] {
 			t.Fatalf("missing step kind in manifest: %s", kind)
 		}

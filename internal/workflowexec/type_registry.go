@@ -27,12 +27,8 @@ func BuiltInTypeDefinitionsWith(toolBuilder func(StepDefinition) ToolMetadata, s
 	return workflowcontract.BuiltInTypeDefinitionsWith(tb, sb)
 }
 
-func BuiltInTypeDefinitionForKey(key StepTypeKey) (BuiltInTypeDefinition, bool) {
-	def, ok, err := workflowcontract.BuiltInTypeDefinitionForKey(workflowcontract.StepTypeKey(key))
-	if err != nil {
-		return BuiltInTypeDefinition{}, false
-	}
-	return def, ok
+func BuiltInTypeDefinitionForKey(key StepTypeKey) (BuiltInTypeDefinition, bool, error) {
+	return workflowcontract.BuiltInTypeDefinitionForKey(workflowcontract.StepTypeKey(key))
 }
 
 func BuiltInTypeDefinitionForKeyWith(key StepTypeKey, toolBuilder func(StepDefinition) ToolMetadata, schemaBuilder func(StepDefinition) (SchemaMetadata, error)) (BuiltInTypeDefinition, bool, error) {

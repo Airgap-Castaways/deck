@@ -28,7 +28,11 @@ func validateRoleKinds(name string, wf *config.Workflow) error {
 		if err != nil {
 			return err
 		}
-		if workflowexec.StepAllowedForRoleForKey(role, key) {
+		allowed, err := workflowexec.StepAllowedForRoleForKey(role, key)
+		if err != nil {
+			return err
+		}
+		if allowed {
 			continue
 		}
 		return fmt.Errorf("E_KIND_ROLE_MISMATCH: step %s (%s) is not supported for role %s", step.ID, step.Kind, role)
@@ -51,10 +55,12 @@ func inferWorkflowMode(name string, wf *config.Workflow) string {
 		if err != nil {
 			continue
 		}
-		if workflowexec.StepAllowedForRoleForKey("prepare", key) {
+		prepareAllowed, err := workflowexec.StepAllowedForRoleForKey("prepare", key)
+		if err == nil && prepareAllowed {
 			seenPrepare = true
 		}
-		if workflowexec.StepAllowedForRoleForKey("apply", key) {
+		applyAllowed, err := workflowexec.StepAllowedForRoleForKey("apply", key)
+		if err == nil && applyAllowed {
 			seenApply = true
 		}
 	}
@@ -77,7 +83,8 @@ func isValidOutputKey(workflowVersion string, step config.Step, outputKey string
 	if err != nil {
 		return false
 	}
-	return workflowexec.StepHasOutputForKey(key, outputKey)
+	ok, err := workflowexec.StepHasOutputForKey(key, outputKey)
+	return err == nil && ok
 }
 
 func effectiveStepTypeKey(workflowVersion string, step config.Step) (workflowexec.StepTypeKey, error) {

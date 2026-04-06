@@ -39,10 +39,16 @@ func TestStepRegistryDelegatesToWorkflowContract(t *testing.T) {
 		if got.Category != want.Category {
 			t.Fatalf("category mismatch for %s: got %q want %q", want.Kind, got.Category, want.Category)
 		}
-		if file, ok := StepSchemaFileForKey(StepTypeKey{APIVersion: want.APIVersion, Kind: want.Kind}); !ok || file != want.SchemaFile {
+		if file, ok, err := StepSchemaFileForKey(StepTypeKey{APIVersion: want.APIVersion, Kind: want.Kind}); err != nil || !ok || file != want.SchemaFile {
+			if err != nil {
+				t.Fatalf("StepSchemaFileForKey(%s): %v", want.Kind, err)
+			}
 			t.Fatalf("StepSchemaFileForKey mismatch for %s: got %q ok=%t want %q", want.Kind, file, ok, want.SchemaFile)
 		}
-		builtIn, ok := BuiltInTypeDefinitionForKey(StepTypeKey{APIVersion: want.APIVersion, Kind: want.Kind})
+		builtIn, ok, err := BuiltInTypeDefinitionForKey(StepTypeKey{APIVersion: want.APIVersion, Kind: want.Kind})
+		if err != nil {
+			t.Fatalf("BuiltInTypeDefinitionForKey(%s): %v", want.Kind, err)
+		}
 		if !ok {
 			t.Fatalf("missing built-in type definition for %s", want.Kind)
 		}
@@ -67,7 +73,10 @@ func TestRegisterableOutputsCoveredByContracts(t *testing.T) {
 		t.Fatalf("StepDefinitions: %v", err)
 	}
 	for _, def := range defs {
-		builtIn, ok := BuiltInTypeDefinitionForKey(StepTypeKey{APIVersion: def.APIVersion, Kind: def.Kind})
+		builtIn, ok, err := BuiltInTypeDefinitionForKey(StepTypeKey{APIVersion: def.APIVersion, Kind: def.Kind})
+		if err != nil {
+			t.Fatalf("BuiltInTypeDefinitionForKey(%s): %v", def.Kind, err)
+		}
 		if !ok {
 			t.Fatalf("missing built-in type definition for %s", def.Kind)
 		}

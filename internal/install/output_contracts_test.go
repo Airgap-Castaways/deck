@@ -61,7 +61,11 @@ func TestStepOutputsCoverApplyContracts(t *testing.T) {
 				if _, ok := outputs[outputKey]; !ok {
 					t.Fatalf("expected runtime output %q for %s", outputKey, tc.kind)
 				}
-				if !workflowexec.StepHasOutputForKey(stepKey, outputKey) {
+				hasOutput, err := workflowexec.StepHasOutputForKey(stepKey, outputKey)
+				if err != nil {
+					t.Fatalf("StepHasOutputForKey(%s,%s): %v", tc.kind, outputKey, err)
+				}
+				if !hasOutput {
 					t.Fatalf("contract missing output %q for %s", outputKey, tc.kind)
 				}
 			}

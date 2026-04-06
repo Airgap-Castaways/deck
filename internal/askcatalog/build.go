@@ -2,6 +2,7 @@ package askcatalog
 
 import (
 	"encoding/json"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,14 +19,21 @@ import (
 )
 
 var (
-	once sync.Once
-	data Catalog
+	once     sync.Once
+	logOnce  sync.Once
+	data     Catalog
+	errBuild error
 )
 
 func Current() Catalog {
 	once.Do(func() {
-		data = build()
+		data, errBuild = build()
 	})
+	if errBuild != nil {
+		logOnce.Do(func() {
+			log.Printf("askcatalog: build failed: %v", errBuild)
+		})
+	}
 	return data
 }
 
@@ -37,10 +45,10 @@ func AllowedGeneratedPathPatterns() []string {
 	return workspacepaths.AllowedAuthoringPathPatterns()
 }
 
-func build() Catalog {
+func build() (Catalog, error) {
 	defs, err := workflowexec.BuiltInTypeDefinitions()
 	if err != nil {
-		return Catalog{}
+		return Catalog{}, err
 	}
 	steps := map[string]Step{}
 	ordered := make([]string, 0, len(defs))
@@ -195,7 +203,7 @@ steps:
 		},
 		Steps:   steps,
 		ordered: ordered,
-	}
+	}, nil
 }
 
 func projectContract(hints stepmeta.ContractHints) ContractBindings {

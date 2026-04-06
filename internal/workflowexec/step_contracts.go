@@ -6,40 +6,49 @@ func normalizeStepKey(key StepTypeKey) StepTypeKey {
 	return StepTypeKey{APIVersion: strings.TrimSpace(key.APIVersion), Kind: strings.TrimSpace(key.Kind)}
 }
 
-func StepSchemaFileForKey(key StepTypeKey) (string, bool) {
-	def, ok := BuiltInTypeDefinitionForKey(normalizeStepKey(key))
-	if !ok || def.Step.SchemaFile == "" {
-		return "", false
+func StepSchemaFileForKey(key StepTypeKey) (string, bool, error) {
+	def, ok, err := BuiltInTypeDefinitionForKey(normalizeStepKey(key))
+	if err != nil {
+		return "", false, err
 	}
-	return def.Step.SchemaFile, true
+	if !ok || def.Step.SchemaFile == "" {
+		return "", false, nil
+	}
+	return def.Step.SchemaFile, true, nil
 }
 
-func StepKinds() []string {
+func StepKinds() ([]string, error) {
 	defs, err := StepDefinitions()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	kinds := make([]string, 0, len(defs))
 	for _, def := range defs {
 		kinds = append(kinds, def.Kind)
 	}
-	return kinds
+	return kinds, nil
 }
 
-func StepAllowedForRoleForKey(role string, key StepTypeKey) bool {
-	def, ok := BuiltInTypeDefinitionForKey(normalizeStepKey(key))
-	if !ok {
-		return false
+func StepAllowedForRoleForKey(role string, key StepTypeKey) (bool, error) {
+	def, ok, err := BuiltInTypeDefinitionForKey(normalizeStepKey(key))
+	if err != nil {
+		return false, err
 	}
-	return containsString(def.Step.Roles, role)
+	if !ok {
+		return false, nil
+	}
+	return containsString(def.Step.Roles, role), nil
 }
 
-func StepHasOutputForKey(key StepTypeKey, output string) bool {
-	def, ok := BuiltInTypeDefinitionForKey(normalizeStepKey(key))
-	if !ok {
-		return false
+func StepHasOutputForKey(key StepTypeKey, output string) (bool, error) {
+	def, ok, err := BuiltInTypeDefinitionForKey(normalizeStepKey(key))
+	if err != nil {
+		return false, err
 	}
-	return containsString(def.Step.Outputs, output)
+	if !ok {
+		return false, nil
+	}
+	return containsString(def.Step.Outputs, output), nil
 }
 
 func containsString(values []string, want string) bool {
