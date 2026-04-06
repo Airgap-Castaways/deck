@@ -23,7 +23,9 @@ GENERATED_PATHS := \
 	docs/reference/typed-steps.md \
 	docs/reference/workflow-model.md \
 	docs/reference/workspace-layout.md \
-	schemas
+	schemas \
+	':(exclude)schemas/embed.go' \
+	':(exclude)schemas/embed_test.go'
 
 build:
 	@mkdir -p $(BIN_DIR)
