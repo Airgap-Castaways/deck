@@ -800,7 +800,9 @@ func TestMaterializeWithBaseKeepsVarsUsedByUntouchedBaseExpressions(t *testing.T
 
 func TestCollectReferencedVarsFromStringAcceptAliasForms(t *testing.T) {
 	used := map[string]bool{}
-	collectReferencedVarsFromString(used, "{{ vars.kubernetesVersion }} ${{ vars.joinFile }} {{ .vars.criSocket }}")
+	if !collectReferencedVarsFromString(used, "{{ vars.kubernetesVersion }} ${{ vars.joinFile }} {{ .vars.criSocket }}") {
+		t.Fatalf("expected template reference collection to succeed")
+	}
 	for _, want := range []string{"kubernetesVersion", "joinFile", "criSocket"} {
 		if !used[want] {
 			t.Fatalf("expected %q in alias matches, got %#v", want, used)
@@ -810,7 +812,9 @@ func TestCollectReferencedVarsFromStringAcceptAliasForms(t *testing.T) {
 
 func TestCollectReferencedVarsFromStringIncludeBracketPathsAndRootKeys(t *testing.T) {
 	used := map[string]bool{}
-	collectReferencedVarsFromString(used, "{{ .vars.nodes[0].ip }}")
+	if !collectReferencedVarsFromString(used, "{{ .vars.nodes[0].ip }}") {
+		t.Fatalf("expected template reference collection to succeed")
+	}
 	for _, want := range []string{"nodes[0].ip", "nodes"} {
 		if !used[want] {
 			t.Fatalf("expected %q in bracket matches, got %#v", want, used)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"text/template"
 	"text/template/parse"
 
@@ -22,24 +23,33 @@ type Reference struct {
 	Root      string
 }
 
-func TemplateReferences(input string) []Reference {
+var (
+	whenEnvOnce sync.Once
+	whenEnvInst *cel.Env
+	errWhenEnv  error
+)
+
+func TemplateReferences(input string) ([]Reference, error) {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
-		return nil
+		return nil, nil
 	}
 	refs := newReferenceSet()
 	collectDirectTemplateActionRefs(trimmed, refs)
 	tmpl, err := template.New("refs").Parse(normalizeTemplateAliasesForParse(trimmed))
-	if err == nil {
-		collectTemplateNodeRefs(tmpl.Root, refs)
+	if err != nil {
+		return nil, fmt.Errorf("parse template references: %w", err)
 	}
-	return refs.sorted()
+	collectTemplateNodeRefs(tmpl.Root, refs)
+	return refs.sorted(), nil
 }
 
-func ValueTemplateReferences(value any) []Reference {
+func ValueTemplateReferences(value any) ([]Reference, error) {
 	refs := newReferenceSet()
-	collectValueTemplateRefs(value, refs)
-	return refs.sorted()
+	if err := collectValueTemplateRefs(value, refs); err != nil {
+		return nil, err
+	}
+	return refs.sorted(), nil
 }
 
 func WhenReferences(expr string) ([]Reference, error) {
@@ -47,10 +57,7 @@ func WhenReferences(expr string) ([]Reference, error) {
 	if trimmed == "" {
 		return nil, nil
 	}
-	env, err := cel.NewEnv(
-		cel.Variable(NamespaceVars, cel.MapType(cel.StringType, cel.DynType)),
-		cel.Variable(NamespaceRuntime, cel.MapType(cel.StringType, cel.DynType)),
-	)
+	env, err := whenEnv()
 	if err != nil {
 		return nil, fmt.Errorf("create CEL env: %w", err)
 	}
@@ -65,6 +72,16 @@ func WhenReferences(expr string) ([]Reference, error) {
 	refs := newReferenceSet()
 	collectCELRefs(parsed.GetExpr(), refs)
 	return refs.sorted(), nil
+}
+
+func whenEnv() (*cel.Env, error) {
+	whenEnvOnce.Do(func() {
+		whenEnvInst, errWhenEnv = cel.NewEnv(
+			cel.Variable(NamespaceVars, cel.MapType(cel.StringType, cel.DynType)),
+			cel.Variable(NamespaceRuntime, cel.MapType(cel.StringType, cel.DynType)),
+		)
+	})
+	return whenEnvInst, errWhenEnv
 }
 
 type referenceSet struct {
@@ -114,21 +131,30 @@ func (s *referenceSet) sorted() []Reference {
 	return out
 }
 
-func collectValueTemplateRefs(value any, refs *referenceSet) {
+func collectValueTemplateRefs(value any, refs *referenceSet) error {
 	switch typed := value.(type) {
 	case string:
-		for _, ref := range TemplateReferences(typed) {
+		found, err := TemplateReferences(typed)
+		if err != nil {
+			return err
+		}
+		for _, ref := range found {
 			refs.add(ref.Namespace, ref.Path)
 		}
 	case map[string]any:
 		for _, item := range typed {
-			collectValueTemplateRefs(item, refs)
+			if err := collectValueTemplateRefs(item, refs); err != nil {
+				return err
+			}
 		}
 	case []any:
 		for _, item := range typed {
-			collectValueTemplateRefs(item, refs)
+			if err := collectValueTemplateRefs(item, refs); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 func collectTemplateNodeRefs(node parse.Node, refs *referenceSet) {
@@ -271,7 +297,7 @@ func normalizeTemplateAliasesForParse(input string) string {
 		out.WriteString(input[i:prefixEnd])
 		body := input[start+2 : end]
 		out.WriteString("{{")
-		out.WriteString(normalizeTemplateActionBody(body))
+		out.WriteString(rewriteTemplateActionBody(body))
 		out.WriteString("}}")
 		i = end + 2
 	}
@@ -284,12 +310,92 @@ func collectDirectTemplateActionRefs(input string, refs *referenceSet) {
 		if !ok {
 			return
 		}
-		body := input[start+2 : end]
-		if namespace, path, ok := namespacePath(body); ok {
-			refs.add(namespace, path)
-		}
+		collectTemplateActionBodyRefs(input[start+2:end], refs)
 		i = end + 2
 	}
+}
+
+func collectTemplateActionBodyRefs(body string, refs *referenceSet) {
+	forEachTemplateActionReference(body, func(_ int, _ int, namespace, path string, _ bool) {
+		refs.add(namespace, path)
+	})
+}
+
+func rewriteTemplateActionBody(body string) string {
+	var out strings.Builder
+	last := 0
+	forEachTemplateActionReference(body, func(start, end int, namespace, path string, hasDot bool) {
+		out.WriteString(body[last:start])
+		rewritten := normalizedTemplateReference(namespace, path, hasDot)
+		if rewritten == "" {
+			if !hasDot {
+				out.WriteByte('.')
+			}
+			out.WriteString(body[start:end])
+		} else {
+			out.WriteString(rewritten)
+		}
+		last = end
+	})
+	if last == 0 {
+		return body
+	}
+	out.WriteString(body[last:])
+	return out.String()
+}
+
+func normalizedTemplateReference(namespace, path string, hasDot bool) string {
+	if strings.Contains(path, "[") {
+		selectors, ok := referencePathSelectors(path)
+		if !ok {
+			return ""
+		}
+		parts := make([]string, 0, len(selectors)+2)
+		parts = append(parts, "index", "."+namespace)
+		parts = append(parts, selectors...)
+		return strings.Join(parts, " ")
+	}
+	if hasDot {
+		return "." + namespace + "." + path
+	}
+	return "." + namespace + "." + path
+}
+
+func forEachTemplateActionReference(body string, visit func(start, end int, namespace, path string, hasDot bool)) {
+	for i := 0; i < len(body); {
+		if quote, end, ok := quotedTemplateString(body, i); ok {
+			i = end
+			_ = quote
+			continue
+		}
+		namespace, path, end, hasDot, ok := templateActionReferenceAt(body, i)
+		if !ok {
+			i++
+			continue
+		}
+		visit(i, end, namespace, path, hasDot)
+		i = end
+	}
+}
+
+func quotedTemplateString(body string, start int) (byte, int, bool) {
+	if start >= len(body) {
+		return 0, 0, false
+	}
+	quote := body[start]
+	if quote != '\'' && quote != '"' && quote != '`' {
+		return 0, 0, false
+	}
+	for i := start + 1; i < len(body); i++ {
+		if quote != '`' && body[i] == '\\' {
+			i++
+			continue
+		}
+		if body[i] == quote {
+			return quote, i + 1, true
+		}
+	}
+	return quote, len(body), true
 }
 
 func nextTemplateAction(input string, offset int) (int, int, bool) {
@@ -312,68 +418,144 @@ func nextTemplateAction(input string, offset int) (int, int, bool) {
 	return 0, 0, false
 }
 
-func normalizeTemplateActionBody(body string) string {
-	trimmed := strings.TrimSpace(body)
-	namespace, path, ok := namespacePath(trimmed)
-	if !ok {
-		return body
+func templateActionReferenceAt(body string, start int) (string, string, int, bool, bool) {
+	if start > 0 && !isTemplateReferenceBoundary(body[start-1]) {
+		return "", "", 0, false, false
 	}
-	return " ." + namespace + "." + path + " "
-}
-
-func namespacePath(input string) (string, string, bool) {
-	trimmed := strings.TrimSpace(input)
-	trimmed = strings.TrimPrefix(trimmed, ".")
-	for _, namespace := range []string{NamespaceVars, NamespaceRuntime} {
-		prefix := namespace + "."
-		if !strings.HasPrefix(trimmed, prefix) {
-			continue
-		}
-		path := strings.TrimPrefix(trimmed, prefix)
-		if validReferencePath(path) {
-			return namespace, path, true
+	hasDot := false
+	pos := start
+	if body[pos] == '.' {
+		hasDot = true
+		pos++
+		if start > 0 && !isTemplateReferenceBoundary(body[start-1]) {
+			return "", "", 0, false, false
 		}
 	}
-	return "", "", false
+	namespace := ""
+	switch {
+	case strings.HasPrefix(body[pos:], NamespaceVars+"."):
+		namespace = NamespaceVars
+	case strings.HasPrefix(body[pos:], NamespaceRuntime+"."):
+		namespace = NamespaceRuntime
+	default:
+		return "", "", 0, false, false
+	}
+	pos += len(namespace) + 1
+	pathLen := referencePathLen(body[pos:])
+	if pathLen == 0 {
+		return "", "", 0, false, false
+	}
+	return namespace, body[pos : pos+pathLen], pos + pathLen, hasDot, true
 }
 
-func validReferencePath(path string) bool {
+func isTemplateReferenceBoundary(ch byte) bool {
+	return !isReferenceIdentPart(ch) && ch != '.' && ch != ']'
+}
+
+func referencePathLen(path string) int {
 	if path == "" {
-		return false
+		return 0
 	}
-	for i := 0; i < len(path); {
-		if !isReferenceIdentStart(path[i]) {
-			return false
+	i := 0
+	for {
+		segmentLen := referenceSegmentLen(path[i:])
+		if segmentLen == 0 {
+			return 0
 		}
-		i++
-		for i < len(path) && isReferenceIdentPart(path[i]) {
-			i++
-		}
+		i += segmentLen
 		for i < len(path) && path[i] == '[' {
 			end := strings.IndexByte(path[i+1:], ']')
 			if end < 0 {
-				return false
+				return 0
 			}
 			i += end + 2
 		}
-		if i == len(path) {
-			return true
-		}
-		if path[i] != '.' {
-			return false
+		if i >= len(path) || path[i] != '.' {
+			break
 		}
 		i++
-		if i == len(path) {
+		if i >= len(path) {
+			return 0
+		}
+	}
+	return i
+}
+
+func referencePathSelectors(path string) ([]string, bool) {
+	if path == "" {
+		return nil, false
+	}
+	selectors := []string{}
+	i := 0
+	for {
+		segmentLen := referenceSegmentLen(path[i:])
+		if segmentLen == 0 {
+			return nil, false
+		}
+		selectors = append(selectors, fmt.Sprintf("%q", path[i:i+segmentLen]))
+		i += segmentLen
+		for i < len(path) && path[i] == '[' {
+			end := strings.IndexByte(path[i+1:], ']')
+			if end < 0 {
+				return nil, false
+			}
+			selector := strings.TrimSpace(path[i+1 : i+1+end])
+			if selector == "" {
+				return nil, false
+			}
+			if isQuotedTemplateSelector(selector) || isDecimalSelector(selector) {
+				selectors = append(selectors, selector)
+			} else {
+				selectors = append(selectors, fmt.Sprintf("%q", selector))
+			}
+			i += end + 2
+		}
+		if i >= len(path) {
+			break
+		}
+		if path[i] != '.' {
+			return nil, false
+		}
+		i++
+		if i >= len(path) {
+			return nil, false
+		}
+	}
+	return selectors, true
+}
+
+func isQuotedTemplateSelector(selector string) bool {
+	if len(selector) < 2 {
+		return false
+	}
+	quote := selector[0]
+	return (quote == '\'' || quote == '"' || quote == '`') && selector[len(selector)-1] == quote
+}
+
+func isDecimalSelector(selector string) bool {
+	for i := 0; i < len(selector); i++ {
+		if selector[i] < '0' || selector[i] > '9' {
 			return false
 		}
 	}
-	return true
+	return selector != ""
+}
+
+func referenceSegmentLen(segment string) int {
+	if segment == "" || !isReferenceIdentStart(segment[0]) {
+		return 0
+	}
+	i := 1
+	for i < len(segment) && isReferenceIdentPart(segment[i]) {
+		i++
+	}
+	return i
 }
 
 func isReferenceIdentStart(ch byte) bool {
-	return ch == '_' || ch == '-' || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
+	return ch == '_' || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
 }
 
 func isReferenceIdentPart(ch byte) bool {
-	return isReferenceIdentStart(ch) || (ch >= '0' && ch <= '9')
+	return isReferenceIdentStart(ch) || ch == '-' || (ch >= '0' && ch <= '9')
 }

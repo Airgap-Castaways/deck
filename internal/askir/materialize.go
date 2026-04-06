@@ -180,7 +180,9 @@ func collectReferencedVarsFromGeneratedFile(used map[string]bool, file askcontra
 
 func collectReferencedVarsFromDocument(used map[string]bool, doc askcontract.GeneratedDocument) bool {
 	if doc.Workflow != nil {
-		collectReferencedVarsFromMap(used, doc.Workflow.Vars)
+		if !collectReferencedVarsFromMap(used, doc.Workflow.Vars) {
+			return false
+		}
 		for _, phase := range doc.Workflow.Phases {
 			for _, item := range phase.Imports {
 				if !collectReferencedVarsFromWhen(used, item.When) {
@@ -228,37 +230,57 @@ func collectReferencedVarsFromStep(used map[string]bool, step askcontract.Workfl
 	if !collectReferencedVarsFromWhen(used, step.When) {
 		return false
 	}
-	collectReferencedVarsFromString(used, step.Timeout)
-	collectReferencedVarsFromMap(used, step.Metadata)
-	collectReferencedVarsFromMap(used, step.Spec)
+	if !collectReferencedVarsFromString(used, step.Timeout) {
+		return false
+	}
+	if !collectReferencedVarsFromMap(used, step.Metadata) {
+		return false
+	}
+	if !collectReferencedVarsFromMap(used, step.Spec) {
+		return false
+	}
 	return true
 }
 
-func collectReferencedVarsFromMap(used map[string]bool, values map[string]any) {
+func collectReferencedVarsFromMap(used map[string]bool, values map[string]any) bool {
 	for _, value := range values {
 		switch typed := value.(type) {
 		case string:
-			collectReferencedVarsFromString(used, typed)
+			if !collectReferencedVarsFromString(used, typed) {
+				return false
+			}
 		case map[string]any:
-			collectReferencedVarsFromMap(used, typed)
+			if !collectReferencedVarsFromMap(used, typed) {
+				return false
+			}
 		case []any:
 			for _, item := range typed {
 				if nested, ok := item.(map[string]any); ok {
-					collectReferencedVarsFromMap(used, nested)
+					if !collectReferencedVarsFromMap(used, nested) {
+						return false
+					}
 				} else if text, ok := item.(string); ok {
-					collectReferencedVarsFromString(used, text)
+					if !collectReferencedVarsFromString(used, text) {
+						return false
+					}
 				}
 			}
 		}
 	}
+	return true
 }
 
-func collectReferencedVarsFromString(used map[string]bool, text string) {
-	for _, ref := range workflowrefs.TemplateReferences(text) {
+func collectReferencedVarsFromString(used map[string]bool, text string) bool {
+	refs, err := workflowrefs.TemplateReferences(text)
+	if err != nil {
+		return false
+	}
+	for _, ref := range refs {
 		if ref.Namespace == workflowrefs.NamespaceVars {
 			used[ref.Path] = true
 		}
 	}
+	return true
 }
 
 func varsRootKey(transform askcontract.RefineTransformAction) string {

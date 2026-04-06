@@ -19,17 +19,22 @@ func parallelApplyKindAllowed(kind string) bool {
 	}
 }
 
-func referencedRuntimeVars(step config.Step) []string {
+func referencedRuntimeVars(step config.Step) ([]string, error) {
 	seen := map[string]bool{}
 	refs, err := workflowrefs.WhenReferences(step.When)
-	if err == nil {
-		for _, ref := range refs {
-			if ref.Namespace == workflowrefs.NamespaceRuntime {
-				seen[ref.Root] = true
-			}
+	if err != nil {
+		return nil, err
+	}
+	for _, ref := range refs {
+		if ref.Namespace == workflowrefs.NamespaceRuntime {
+			seen[ref.Root] = true
 		}
 	}
-	for _, ref := range workflowrefs.ValueTemplateReferences(step.Spec) {
+	templateRefs, err := workflowrefs.ValueTemplateReferences(step.Spec)
+	if err != nil {
+		return nil, err
+	}
+	for _, ref := range templateRefs {
 		if ref.Namespace == workflowrefs.NamespaceRuntime {
 			seen[ref.Root] = true
 		}
@@ -39,7 +44,7 @@ func referencedRuntimeVars(step config.Step) []string {
 		vars = append(vars, key)
 	}
 	sort.Strings(vars)
-	return vars
+	return vars, nil
 }
 
 func literalApplyTargetPath(step config.Step) string {

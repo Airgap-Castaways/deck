@@ -698,7 +698,11 @@ func validateParallelBatch(batch workflowexec.StepBatch, role string) error {
 		}
 	}
 	for _, step := range batch.Steps {
-		for _, runtimeVar := range referencedRuntimeVars(step) {
+		runtimeVars, err := referencedRuntimeVars(step)
+		if err != nil {
+			return fmt.Errorf("analyze runtime references for step %s: %w", step.ID, err)
+		}
+		for _, runtimeVar := range runtimeVars {
 			if producer, exists := registered[runtimeVar]; exists {
 				return fmt.Errorf("E_PARALLEL_RUNTIME_DEPENDENCY: phase %s step %s references runtime.%s from same parallelGroup producer %s", batch.PhaseName, step.ID, runtimeVar, producer)
 			}

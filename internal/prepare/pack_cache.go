@@ -212,7 +212,11 @@ func stepArtifactType(kind string) (string, bool) {
 
 func collectStepInputVarNames(spec map[string]any) []string {
 	seen := map[string]bool{}
-	for _, ref := range workflowrefs.ValueTemplateReferences(spec) {
+	refs, err := workflowrefs.ValueTemplateReferences(spec)
+	if err != nil {
+		return nil
+	}
+	for _, ref := range refs {
 		if ref.Namespace == workflowrefs.NamespaceVars {
 			seen[ref.Root] = true
 		}
