@@ -29,6 +29,7 @@ bash test/e2e/vagrant/run-scenario.sh --scenario k8s-node-reset
 - shared folder 기본값: `rsync`
 - 필요하면 `DECK_VAGRANT_SYNC_TYPE=9p` 또는 `DECK_VAGRANT_SYNC_TYPE=nfs`로 override할 수 있다.
 - `vagrant up ...`를 직접 실행해도 기본 rsync 동작은 role별 최소 실행 트리를 자동 준비해서 사용한다.
+- 직접 실행 전에 현재 VM prefix와 맞지 않는 `.vagrant` libvirt machine metadata는 자동으로 정리한다.
 - rsync 경로는 repo 전체가 아니라 shared bundle/cache에서 만든 role별 최소 실행 트리만 sync한다.
 - control-plane은 prepared bundle tarball과 guest helper를 받고, worker들은 guest helper만 받는다.
 - NFS 경로는 `nfs_version: 4`, `nfs_udp: false`로 고정한다.
