@@ -25,8 +25,6 @@ import (
 var (
 	runtimeVarNamePattern      = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	singleBraceTemplatePattern = regexp.MustCompile(`(^|[^\{])(\{\s*\.(vars|runtime)\.[^{}]+\})([^\}]|$)`)
-	runtimeWhenRefPattern      = regexp.MustCompile(`\bruntime\.([A-Za-z_][A-Za-z0-9_]*)`)
-	runtimeTemplateRefPattern  = regexp.MustCompile(`\.runtime\.([A-Za-z_][A-Za-z0-9_]*)`)
 )
 
 type documentKind string
@@ -703,7 +701,11 @@ func validateParallelBatch(batch workflowexec.StepBatch, role string) error {
 		}
 	}
 	for _, step := range batch.Steps {
-		for _, runtimeVar := range referencedRuntimeVars(step) {
+		runtimeVars, err := referencedRuntimeVars(step)
+		if err != nil {
+			return fmt.Errorf("analyze runtime references for step %s: %w", step.ID, err)
+		}
+		for _, runtimeVar := range runtimeVars {
 			if producer, exists := registered[runtimeVar]; exists {
 				return fmt.Errorf("E_PARALLEL_RUNTIME_DEPENDENCY: phase %s step %s references runtime.%s from same parallelGroup producer %s", batch.PhaseName, step.ID, runtimeVar, producer)
 			}

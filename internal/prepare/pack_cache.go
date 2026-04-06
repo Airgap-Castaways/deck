@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -15,16 +14,12 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/filemode"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
 	"github.com/Airgap-Castaways/deck/internal/userdirs"
+	"github.com/Airgap-Castaways/deck/internal/workflowrefs"
 )
 
 const (
 	packCacheActionFetch = "FETCH"
 	packCacheActionReuse = "REUSE"
-)
-
-var (
-	packCacheTemplateExprPattern = regexp.MustCompile(`\{\{[^}]*\}\}`)
-	packCacheVarRefPattern       = regexp.MustCompile(`\.vars\.([A-Za-z_][A-Za-z0-9_]*)`)
 )
 
 type packCacheState struct {
@@ -217,35 +212,21 @@ func stepArtifactType(kind string) (string, bool) {
 
 func collectStepInputVarNames(spec map[string]any) []string {
 	seen := map[string]bool{}
-	collectInputVarNamesFromAny(spec, seen)
+	refs, err := workflowrefs.ValueTemplateReferences(spec)
+	if err != nil {
+		return nil
+	}
+	for _, ref := range refs {
+		if ref.Namespace == workflowrefs.NamespaceVars {
+			seen[ref.Root] = true
+		}
+	}
 	keys := make([]string, 0, len(seen))
 	for key := range seen {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-func collectInputVarNamesFromAny(v any, seen map[string]bool) {
-	switch tv := v.(type) {
-	case string:
-		for _, expr := range packCacheTemplateExprPattern.FindAllString(tv, -1) {
-			matches := packCacheVarRefPattern.FindAllStringSubmatch(expr, -1)
-			for _, match := range matches {
-				if len(match) == 2 {
-					seen[match[1]] = true
-				}
-			}
-		}
-	case map[string]any:
-		for _, item := range tv {
-			collectInputVarNamesFromAny(item, seen)
-		}
-	case []any:
-		for _, item := range tv {
-			collectInputVarNamesFromAny(item, seen)
-		}
-	}
 }
 
 func computeStepCacheKey(step config.Step) string {
