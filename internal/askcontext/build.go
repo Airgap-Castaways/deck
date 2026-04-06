@@ -1,6 +1,7 @@
 package askcontext
 
 import (
+	"sort"
 	"strings"
 	"sync"
 
@@ -202,11 +203,7 @@ func sortStrings(values []string) {
 	if len(values) < 2 {
 		return
 	}
-	for i := 0; i < len(values)-1; i++ {
-		for j := i + 1; j < len(values); j++ {
-			if strings.TrimSpace(values[j]) < strings.TrimSpace(values[i]) {
-				values[i], values[j] = values[j], values[i]
-			}
-		}
-	}
+	sort.Slice(values, func(i, j int) bool {
+		return strings.TrimSpace(values[i]) < strings.TrimSpace(values[j])
+	})
 }
