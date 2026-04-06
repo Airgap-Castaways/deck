@@ -32,6 +32,28 @@ Vagrant.configure("2") do |config|
   sync_type = "rsync" if sync_type.empty?
   sync_source = ENV.fetch("DECK_VAGRANT_SYNC_SOURCE", "../..").strip
   sync_source = "../.." if sync_source.empty?
+  prepare_minimal_rsync_script = File.expand_path("prepare-minimal-rsync.sh", __dir__)
+  minimal_rsync_env_path = File.expand_path("../artifacts/cache/vagrant/manual/rsync-sources.env", __dir__)
+  sync_role_overrides = {}
+  explicit_role_sync_override = ["DECK_VAGRANT_SYNC_SOURCE_CONTROL_PLANE", "DECK_VAGRANT_SYNC_SOURCE_WORKER", "DECK_VAGRANT_SYNC_SOURCE_WORKER_2"].any? do |key|
+    !ENV.fetch(key, "").strip.empty?
+  end
+  auto_prepare_minimal_rsync = sync_type == "rsync" && !explicit_role_sync_override && ARGV.any? { |arg| ["up", "reload"].include?(arg) }
+  if auto_prepare_minimal_rsync
+    unless File.exist?(prepare_minimal_rsync_script)
+      raise "missing minimal rsync helper: #{prepare_minimal_rsync_script}"
+    end
+    unless system({ "ROOT_DIR" => File.expand_path("../..", __dir__) }, "bash", prepare_minimal_rsync_script)
+      raise "failed to prepare minimal rsync sources"
+    end
+  end
+  if File.exist?(minimal_rsync_env_path)
+    File.readlines(minimal_rsync_env_path, chomp: true).each do |line|
+      next if line.empty? || line.start_with?("#") || !line.include?("=")
+      key, value = line.split("=", 2)
+      sync_role_overrides[key] = value
+    end
+  end
   disable_default_sync = ENV.fetch("DECK_VAGRANT_DISABLE_DEFAULT_SYNC", "1") == "1"
   libvirt_pool_name = ENV.fetch("DECK_LIBVIRT_POOL_NAME", ENV.fetch("LIBVIRT_DEFAULT_STORAGE_POOL", "default"))
   libvirt_use_session = ENV.fetch("DECK_LIBVIRT_USE_SESSION", "0") == "1"
@@ -70,7 +92,7 @@ Vagrant.configure("2") do |config|
   nodes.each do |node|
     config.vm.define node[:name] do |m|
       node_sync_key = node[:name].tr("-", "_").upcase
-      node_sync_source = ENV.fetch("DECK_VAGRANT_SYNC_SOURCE_#{node_sync_key}", sync_source).strip
+      node_sync_source = ENV.fetch("DECK_VAGRANT_SYNC_SOURCE_#{node_sync_key}", sync_role_overrides.fetch("DECK_VAGRANT_SYNC_SOURCE_#{node_sync_key}", sync_source)).strip
       node_sync_source = sync_source if node_sync_source.empty?
       m.vm.box = node[:box]
       m.vm.hostname = node[:name]

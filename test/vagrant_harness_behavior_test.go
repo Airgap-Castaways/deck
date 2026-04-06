@@ -32,6 +32,7 @@ func TestVagrantHarnessBehaviorCanonicalScripts(t *testing.T) {
 	runnerPath := filepath.Join(root, "test", "e2e", "vagrant", "run-scenario.sh")
 	vmdPath := filepath.Join(root, "test", "e2e", "vagrant", "run-scenario-vm.sh")
 	renderPath := filepath.Join(root, "test", "e2e", "vagrant", "render-workflows.sh")
+	manualRsyncPath := filepath.Join(root, "test", "vagrant", "prepare-minimal-rsync.sh")
 	if _, err := os.Stat(runnerPath); err != nil {
 		t.Fatalf("stat canonical runner: %v", err)
 	}
@@ -40,6 +41,9 @@ func TestVagrantHarnessBehaviorCanonicalScripts(t *testing.T) {
 	}
 	if _, err := os.Stat(renderPath); err != nil {
 		t.Fatalf("stat workflow renderer: %v", err)
+	}
+	if _, err := os.Stat(manualRsyncPath); err != nil {
+		t.Fatalf("stat manual rsync helper: %v", err)
 	}
 	requireScriptHelpContainsAll(t, runnerPath, "--scenario", "--fresh-cache", "--art-dir")
 	requireScriptHelpContainsAll(t, vmdPath, "prepare-bundle", "apply-scenario", "verify-scenario", "bootstrap|cluster|all")

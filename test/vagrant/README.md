@@ -28,6 +28,7 @@ bash test/e2e/vagrant/run-scenario.sh --scenario k8s-node-reset
 
 - shared folder 기본값: `rsync`
 - 필요하면 `DECK_VAGRANT_SYNC_TYPE=9p` 또는 `DECK_VAGRANT_SYNC_TYPE=nfs`로 override할 수 있다.
+- `vagrant up ...`를 직접 실행해도 기본 rsync 동작은 role별 최소 실행 트리를 자동 준비해서 사용한다.
 - rsync 경로는 repo 전체가 아니라 shared bundle/cache에서 만든 role별 최소 실행 트리만 sync한다.
 - control-plane은 prepared bundle tarball과 guest helper를 받고, worker들은 guest helper만 받는다.
 - NFS 경로는 `nfs_version: 4`, `nfs_udp: false`로 고정한다.
@@ -80,6 +81,7 @@ bash test/e2e/vagrant/run-scenario.sh --scenario k8s-node-reset
 - 재실행이 필요하면 `--from-step`, `--to-step`, `--resume`, `--art-dir`로 범위를 좁힌다.
 - `--art-dir`를 바꿔도 prepared bundle은 공유 cache 경로를 재사용한다.
 - 상태를 완전히 초기화하려면 `rm -rf test/vagrant/.vagrant test/artifacts/runs/k8s-worker-join/local test/artifacts/cache/bundles/shared test/artifacts/cache/staging/shared test/artifacts/cache/vagrant/shared` 후 다시 실행한다.
+- 직접 `vagrant up control-plane worker worker-2 --provider libvirt`를 쓰면 `test/vagrant/prepare-minimal-rsync.sh`가 자동으로 shared cache와 role별 rsync source를 준비한다.
 
 ## 유지보수 메모
 
