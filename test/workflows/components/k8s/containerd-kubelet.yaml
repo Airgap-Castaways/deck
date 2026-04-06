@@ -21,14 +21,13 @@ steps:
           capabilities: [pull, resolve]
           skipVerify: true
   - id: update-containerd-pause-image
-    kind: EditFile
+    kind: EditTOML
     spec:
       path: /etc/containerd/config.toml
-      backup: false
       edits:
-        - op: replace
-          match: registry.k8s.io/pause:3.8
-          replaceWith: registry.k8s.io/pause:3.9
+        - op: set
+          rawPath: plugins."io.containerd.grpc.v1.cri".sandbox_image
+          value: registry.k8s.io/pause:3.9
   - id: restart-containerd
     kind: ManageService
     spec:
