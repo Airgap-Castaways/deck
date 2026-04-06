@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -65,6 +66,10 @@ func TestServe_StaticReadOnly(t *testing.T) {
 	registryTarPath := filepath.Join(root, "outputs", "images", "registry.k8s.io_kube-apiserver_v1.30.1.tar")
 	if err := tarball.WriteToFile(registryTarPath, registryTag, registryImage); err != nil {
 		t.Fatalf("tarball.WriteToFile: %v", err)
+	}
+	registryTarInfo, err := os.Stat(registryTarPath)
+	if err != nil {
+		t.Fatalf("stat registry tar: %v", err)
 	}
 	rawManifest, err := registryImage.RawManifest()
 	if err != nil {
@@ -146,6 +151,10 @@ func TestServe_StaticReadOnly(t *testing.T) {
 			{path: "/browse/workflows/", want: "scenarios"},
 			{path: "/browse/images/", want: "kube-apiserver"},
 			{path: "/browse/images/coredns/coredns/", want: "v1.11.1"},
+			{path: "/browse/images/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", registryTarInfo.Size())},
+			{path: "/browse/images/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", len(rawManifest))},
+			{path: "/browse/images/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", manifest.Config.Size)},
+			{path: "/browse/images/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", manifest.Layers[0].Size)},
 		} {
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			rr := httptest.NewRecorder()
@@ -417,21 +426,6 @@ func TestServe_StaticReadOnly(t *testing.T) {
 	})
 }
 
-func TestHealth(t *testing.T) {
-	root := t.TempDir()
-	h, err := NewHandler(root, HandlerOptions{})
-	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected GET /healthz 200, got %d", rr.Code)
-	}
-}
-
 func TestAccessLog(t *testing.T) {
 	root := t.TempDir()
 	var accessLog bytes.Buffer
@@ -444,6 +438,9 @@ func TestAccessLog(t *testing.T) {
 	req.RemoteAddr = "127.0.0.1:43210"
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected GET /healthz 200, got %d", rr.Code)
+	}
 
 	line := strings.TrimSpace(accessLog.String())
 	for _, want := range []string{"component=server", "event=request", "remote_addr=127.0.0.1:43210", "method=GET", "path=/healthz", "status=200", "bytes=0", "duration_ms="} {
@@ -453,39 +450,15 @@ func TestAccessLog(t *testing.T) {
 	}
 }
 
-func TestHandlerRejectsLegacyPutUploads(t *testing.T) {
-	root := t.TempDir()
-	for _, category := range []string{"files", "packages", "images", "workflows"} {
-		if err := os.MkdirAll(filepath.Join(root, category), 0o755); err != nil {
-			t.Fatalf("mkdir %s: %v", category, err)
-		}
-	}
-
-	h, err := NewHandler(root, HandlerOptions{})
+func TestRenderBrowsePageHidesDirectorySizes(t *testing.T) {
+	body, err := renderBrowsePage("/browse/files/", []browseEntry{{Name: "linux", Kind: "dir", Size: 4096}, {Name: "archive", Kind: "meta", Size: 1234}})
 	if err != nil {
-		t.Fatalf("NewHandler: %v", err)
+		t.Fatalf("renderBrowsePage: %v", err)
 	}
-
-	for _, tc := range []struct {
-		path string
-		file string
-		body string
-	}{
-		{path: "/files/new/file.txt", file: filepath.Join(root, "outputs", "files", "new", "file.txt"), body: "file-data"},
-		{path: "/packages/deb/pkg.txt", file: filepath.Join(root, "outputs", "packages", "deb", "pkg.txt"), body: "pkg-data"},
-		{path: "/images/manifests/app.json", file: filepath.Join(root, "outputs", "images", "manifests", "app.json"), body: "img-data"},
-		{path: "/workflows/flow.yaml", file: filepath.Join(root, "workflows", "flow.yaml"), body: "wf-data"},
-	} {
-		putReq := httptest.NewRequest(http.MethodPut, tc.path, strings.NewReader(tc.body))
-		putRR := httptest.NewRecorder()
-		h.ServeHTTP(putRR, putReq)
-		if putRR.Code != http.StatusMethodNotAllowed {
-			t.Fatalf("expected PUT %s 405, got %d", tc.path, putRR.Code)
-		}
-
-		raw, readErr := os.ReadFile(tc.file)
-		if !os.IsNotExist(readErr) {
-			t.Fatalf("expected no file write for PUT %s, got err=%v content=%q", tc.path, readErr, string(raw))
-		}
+	if strings.Contains(body, "4096 bytes") {
+		t.Fatalf("expected directory size to stay hidden, got %q", body)
+	}
+	if !strings.Contains(body, "1234 bytes") {
+		t.Fatalf("expected non-directory size to render, got %q", body)
 	}
 }

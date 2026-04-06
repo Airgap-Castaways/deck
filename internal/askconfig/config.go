@@ -3,6 +3,7 @@ package askconfig
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -264,18 +265,37 @@ func applyStoredSession(effective *EffectiveSettings) {
 }
 
 func ResolveRuntimeSession(provider string) (askauth.Session, string, string, error) {
+	return ResolveRuntimeSessionWithContext(context.Background(), provider)
+}
+
+func ResolveRuntimeSessionWithContext(ctx context.Context, provider string) (askauth.Session, string, string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return askauth.Session{}, "", "", err
+	}
 	session, ok, err := askauth.Load(provider)
 	if err != nil || !ok {
 		return askauth.Session{}, "", "", err
 	}
-	return resolveRuntimeSession(session)
+	return resolveRuntimeSessionWithContext(ctx, session)
 }
 
-func resolveRuntimeSession(session askauth.Session) (askauth.Session, string, string, error) {
+func resolveRuntimeSessionWithContext(ctx context.Context, session askauth.Session) (askauth.Session, string, string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return askauth.Session{}, "", "", err
+	}
 	now := nowUTC()
 	if !session.ExpiresAt.IsZero() && session.ExpiresAt.Before(now) {
 		if session.Provider == "openai" && strings.TrimSpace(session.RefreshToken) != "" {
-			refreshed, err := askauth.RefreshOpenAICodex(context.Background(), askauth.OpenAICodexOptions{}, session.RefreshToken)
+			refreshed, err := askauth.RefreshOpenAICodex(ctx, askauth.OpenAICodexOptions{}, session.RefreshToken)
+			if err != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+				return askauth.Session{}, "", "", err
+			}
 			if err == nil {
 				if refreshed.AccountEmail == "" {
 					refreshed.AccountEmail = session.AccountEmail

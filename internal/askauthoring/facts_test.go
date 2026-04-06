@@ -24,8 +24,8 @@ func TestInferFactsDoesNotTreatJoinFileRefactorAsClusterAuthoring(t *testing.T) 
 	}
 }
 
-func TestInferFactsTreatsCheckClusterPromptAsVerificationOnly(t *testing.T) {
-	facts := InferFacts("Create a single-node apply workflow that verifies the cluster with CheckCluster expecting total 1 node and controlPlaneReady 1.", nil, "unspecified")
+func TestInferFactsTreatsCheckKubernetesClusterPromptAsVerificationOnly(t *testing.T) {
+	facts := InferFacts("Create a single-node apply workflow that verifies the cluster with CheckKubernetesCluster expecting total 1 node and controlPlaneReady 1.", nil, "unspecified")
 	if !contains(facts.Capabilities, "cluster-verification") {
 		t.Fatalf("expected verification capability, got %#v", facts)
 	}
@@ -47,5 +47,15 @@ func TestInferFactsDetectsRoleCountsBeforeAndAfterLabels(t *testing.T) {
 		if facts.ControlPlaneCount != tc.wantCP || facts.WorkerCount != tc.wantWork {
 			t.Fatalf("prompt %q expected cp=%d workers=%d, got %#v", tc.prompt, tc.wantCP, tc.wantWork, facts)
 		}
+	}
+}
+
+func TestInferFactsTreatsLegacyCheckClusterPromptAsVerificationOnly(t *testing.T) {
+	facts := InferFacts("Create a single-node apply workflow that verifies the cluster with check-cluster expecting total 1 node and controlPlaneReady 1.", nil, "unspecified")
+	if !contains(facts.Capabilities, "cluster-verification") {
+		t.Fatalf("expected verification capability for legacy prompt, got %#v", facts)
+	}
+	if contains(facts.Ambiguities, "cluster-implementation") {
+		t.Fatalf("expected legacy verification-only prompt not to require cluster implementation clarification, got %#v", facts)
 	}
 }

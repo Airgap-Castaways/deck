@@ -1530,16 +1530,16 @@ phases:
 		}
 	})
 
-	t.Run("tool schema valid CheckCluster", func(t *testing.T) {
+	t.Run("tool schema valid CheckKubernetesCluster", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
 		content := []byte(`version: v1alpha1
 phases:
   - name: verify
     steps:
-      - id: check-cluster
+      - id: check-kubernetes-cluster
         apiVersion: deck/v1alpha1
-        kind: CheckCluster
+        kind: CheckKubernetesCluster
         spec:
           nodes:
             total: 1

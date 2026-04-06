@@ -33,14 +33,13 @@ phases:
           path: /usr/bin/kubectl
           mode: "0755"
       - id: update-upgrade-pause-image
-        kind: EditFile
+        kind: EditTOML
         spec:
           path: /etc/containerd/config.toml
-          backup: false
           edits:
-            - op: replace
-              match: registry.k8s.io/pause:3.9
-              replaceWith: "{{ .vars.upgradePauseImage }}"
+            - op: set
+              rawPath: plugins."io.containerd.grpc.v1.cri".sandbox_image
+              value: "{{ .vars.upgradePauseImage }}"
       - id: restart-containerd-for-upgrade
         kind: ManageService
         spec:
@@ -75,7 +74,7 @@ phases:
           enabled: true
           state: started
       - id: upgrade-report
-        kind: CheckCluster
+        kind: CheckKubernetesCluster
         spec:
           timeout: 20m
           interval: 5s

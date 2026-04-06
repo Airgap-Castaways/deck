@@ -1,3 +1,36 @@
+begin
+  require "vagrant-libvirt/driver"
+rescue LoadError
+end
+
+if defined?(VagrantPlugins::ProviderLibvirt::Driver) && !defined?(DeckLibvirtConnectionOverride)
+  module DeckLibvirtConnectionOverride
+    def connection
+      return @connection if @connection
+
+      config = @machine.provider_config
+      conn_attr = {
+        provider: "libvirt",
+        libvirt_uri: config.uri,
+      }
+      conn_attr[:libvirt_username] = config.username if config.username
+      conn_attr[:libvirt_password] = config.password if config.password
+
+      @logger.info("Connecting to Libvirt (#{config.uri}) ...")
+      begin
+        @connection = Fog::Compute.new(conn_attr)
+      rescue Fog::Errors::Error => e
+        raise VagrantPlugins::ProviderLibvirt::Errors::FogLibvirtConnectionError,
+              error_message: e.message
+      end
+
+      @connection
+    end
+  end
+
+  VagrantPlugins::ProviderLibvirt::Driver.prepend(DeckLibvirtConnectionOverride)
+end
+
 Vagrant.configure("2") do |config|
   require "rbconfig"
   host_cpu = RbConfig::CONFIG["host_cpu"].to_s
@@ -32,6 +65,46 @@ Vagrant.configure("2") do |config|
   sync_type = "rsync" if sync_type.empty?
   sync_source = ENV.fetch("DECK_VAGRANT_SYNC_SOURCE", "../..").strip
   sync_source = "../.." if sync_source.empty?
+  sanitize_vagrant_state_script = File.expand_path("sanitize-vagrant-state.sh", __dir__)
+  prepare_minimal_rsync_script = File.expand_path("prepare-minimal-rsync.sh", __dir__)
+  minimal_rsync_env_path = File.expand_path("../artifacts/cache/vagrant/manual/rsync-sources.env", __dir__)
+  sync_role_overrides = {}
+  run_helper_script = lambda do |script_path, env_overrides, missing_message, failure_message|
+    raise missing_message unless File.exist?(script_path)
+    raise failure_message unless system(env_overrides, "bash", script_path)
+  end
+  load_env_file = lambda do |env_path, target|
+    return unless File.exist?(env_path)
+
+    File.readlines(env_path, chomp: true).each do |line|
+      next if line.empty? || line.start_with?("#") || !line.include?("=")
+
+      key, value = line.split("=", 2)
+      target[key] = value
+    end
+  end
+  explicit_role_sync_override = ["DECK_VAGRANT_SYNC_SOURCE_CONTROL_PLANE", "DECK_VAGRANT_SYNC_SOURCE_WORKER", "DECK_VAGRANT_SYNC_SOURCE_WORKER_2"].any? do |key|
+    !ENV.fetch(key, "").strip.empty?
+  end
+  auto_sanitize_vagrant_state = ARGV.any? { |arg| ["up", "reload", "status"].include?(arg) }
+  if auto_sanitize_vagrant_state && File.exist?(sanitize_vagrant_state_script)
+    run_helper_script.call(
+      sanitize_vagrant_state_script,
+      { "DECK_VAGRANT_VM_PREFIX" => vm_name_prefix, "DECK_LIBVIRT_URI" => ENV.fetch("DECK_LIBVIRT_URI", "qemu:///system") },
+      "missing Vagrant state sanitizer: #{sanitize_vagrant_state_script}",
+      "failed to sanitize Vagrant state"
+    )
+  end
+  auto_prepare_minimal_rsync = sync_type == "rsync" && !explicit_role_sync_override && ARGV.any? { |arg| ["up", "reload"].include?(arg) }
+  if auto_prepare_minimal_rsync
+    run_helper_script.call(
+      prepare_minimal_rsync_script,
+      { "ROOT_DIR" => File.expand_path("../..", __dir__) },
+      "missing minimal rsync helper: #{prepare_minimal_rsync_script}",
+      "failed to prepare minimal rsync sources"
+    )
+  end
+  load_env_file.call(minimal_rsync_env_path, sync_role_overrides)
   disable_default_sync = ENV.fetch("DECK_VAGRANT_DISABLE_DEFAULT_SYNC", "1") == "1"
   libvirt_pool_name = ENV.fetch("DECK_LIBVIRT_POOL_NAME", ENV.fetch("LIBVIRT_DEFAULT_STORAGE_POOL", "default"))
   libvirt_use_session = ENV.fetch("DECK_LIBVIRT_USE_SESSION", "0") == "1"
@@ -40,42 +113,24 @@ Vagrant.configure("2") do |config|
   libvirt_default_uri = ENV.fetch("LIBVIRT_DEFAULT_URI", "").strip
   private_network_name = ENV.fetch("DECK_VAGRANT_PRIVATE_NETWORK_NAME", "deck-vagrant")
   enable_private_network = ENV.fetch("DECK_VAGRANT_ENABLE_PRIVATE_NETWORK", "0") == "1"
-  management_network_name = ENV.fetch("DECK_VAGRANT_MANAGEMENT_NETWORK_NAME", "default")
-  management_network_address = ENV.fetch("DECK_VAGRANT_MANAGEMENT_NETWORK_ADDRESS", "192.168.122.0/24")
+  management_network_name = ENV.fetch("DECK_VAGRANT_MANAGEMENT_NETWORK_NAME", private_network_name)
+  management_network_address = ENV.fetch("DECK_VAGRANT_MANAGEMENT_NETWORK_ADDRESS", "192.168.57.0/24")
   ip_timeout = ENV.fetch("DECK_VAGRANT_IP_ADDRESS_TIMEOUT", "300").to_i
-  libvirt_ip_command = ENV.fetch("DECK_VAGRANT_LIBVIRT_IP_COMMAND", "").strip
   mgmt_attach = ENV.fetch("DECK_VAGRANT_MGMT_ATTACH", "1") == "1"
   machine_type = ENV.fetch("DECK_VAGRANT_MACHINE_TYPE", "")
   libvirt_driver = ENV.fetch("DECK_VAGRANT_LIBVIRT_DRIVER", "")
   qemu_use_agent = ENV.fetch("DECK_VAGRANT_QEMU_USE_AGENT", "0") == "1"
-  cpu_mode = ENV.fetch("DECK_VAGRANT_CPU_MODE", "host-model")
+  cpu_mode = ENV.fetch("DECK_VAGRANT_CPU_MODE", "").strip
   cpu_model = ENV.fetch("DECK_VAGRANT_CPU_MODEL", "").strip
   if host_arm64
     machine_type = "virt" if machine_type.empty?
-    if cpu_mode == "host-model" || cpu_mode == "host-passthrough"
+    if cpu_mode.empty? || cpu_mode == "host-model" || cpu_mode == "host-passthrough"
       cpu_mode = "custom"
     end
     cpu_model = "cortex-a57" if cpu_mode == "custom" && cpu_model.empty?
   end
   if disable_default_sync
     config.vm.synced_folder ".", "/vagrant", disabled: true
-  end
-
-  case sync_type
-  when "9p"
-    config.vm.synced_folder sync_source, "/workspace", type: "9p", accessmode: "mapped"
-  when "rsync"
-    config.vm.synced_folder sync_source, "/workspace", type: "rsync",
-      rsync__exclude: [
-        ".git/",
-        ".vagrant/",
-        "test/vagrant/.vagrant/",
-        "test/artifacts/runs/*/",
-        "test/artifacts/cache/vagrant/*/rsync-root/",
-        "test/artifacts/cache/vagrant/*/rsync-root.stage/"
-      ]
-  else
-    config.vm.synced_folder sync_source, "/workspace", type: "nfs", nfs_version: 4, nfs_udp: false
   end
 
   nodes = [
@@ -86,8 +141,19 @@ Vagrant.configure("2") do |config|
 
   nodes.each do |node|
     config.vm.define node[:name] do |m|
+      node_sync_key = node[:name].tr("-", "_").upcase
+      node_sync_source = ENV.fetch("DECK_VAGRANT_SYNC_SOURCE_#{node_sync_key}", sync_role_overrides.fetch("DECK_VAGRANT_SYNC_SOURCE_#{node_sync_key}", sync_source)).strip
+      node_sync_source = sync_source if node_sync_source.empty?
       m.vm.box = node[:box]
       m.vm.hostname = node[:name]
+      case sync_type
+      when "9p"
+        m.vm.synced_folder node_sync_source, "/workspace", type: "9p", accessmode: "mapped"
+      when "rsync"
+        m.vm.synced_folder node_sync_source, "/workspace", type: "rsync"
+      else
+        m.vm.synced_folder node_sync_source, "/workspace", type: "nfs", nfs_version: 4, nfs_udp: false
+      end
       if enable_private_network
         m.ssh.host = node[:ip]
         m.ssh.port = 22
@@ -108,8 +174,8 @@ Vagrant.configure("2") do |config|
           lv.system_uri = libvirt_default_uri
         end
         lv.qemu_use_agent = qemu_use_agent
-        lv.cpu_mode = cpu_mode
-        if cpu_mode == "custom" && !cpu_model.empty?
+        lv.cpu_mode = cpu_mode unless cpu_mode.empty?
+        if !cpu_model.empty?
           lv.cpu_model = cpu_model
         end
         lv.mgmt_attach = mgmt_attach
@@ -120,9 +186,6 @@ Vagrant.configure("2") do |config|
         end
         lv.wait_for_ip = true if lv.respond_to?(:wait_for_ip=)
         lv.ip_address_timeout = ip_timeout if lv.respond_to?(:ip_address_timeout=)
-        if !libvirt_ip_command.empty? && lv.respond_to?(:ip_command=)
-          lv.ip_command = libvirt_ip_command
-        end
         if uefi_loader
           lv.loader = uefi_loader
           lv.nvram = uefi_nvram if uefi_nvram

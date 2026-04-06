@@ -3,7 +3,7 @@ package stepspec
 // Poll and verify Kubernetes cluster health on the local node.
 // @deck.when Use this for typed bootstrap and upgrade verification instead of ad-hoc kubectl shell loops.
 // @deck.example
-// kind: CheckCluster
+// kind: CheckKubernetesCluster
 // spec:
 //
 //	interval: 5s

@@ -15,7 +15,15 @@ DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 DIRTY ?= $(shell if [ -n "$$(git status --short 2>/dev/null)" ]; then printf true; else printf false; fi)
 LDFLAGS ?= -X $(BUILDINFO_PKG).Version=$(VERSION) -X $(BUILDINFO_PKG).Commit=$(COMMIT) -X $(BUILDINFO_PKG).Date=$(DATE) -X $(BUILDINFO_PKG).Dirty=$(DIRTY)
 
-.PHONY: build test lint vuln generate print-build-meta release-check release-snapshot
+.PHONY: build test lint vuln generate verify-generated print-build-meta release-check release-snapshot
+
+GENERATED_PATHS := \
+	docs/contributing/tool-definition-schema.md \
+	docs/reference/groups \
+	docs/reference/typed-steps.md \
+	docs/reference/workflow-model.md \
+	docs/reference/workspace-layout.md \
+	schemas
 
 build:
 	@mkdir -p $(BIN_DIR)
@@ -26,6 +34,9 @@ test:
 
 generate:
 	$(GO) run ./cmd/schema-gen
+
+verify-generated: generate
+	git diff --exit-code -- $(GENERATED_PATHS)
 
 lint:
 	@if [ ! -x "$(GOLANGCI_LINT)" ]; then \

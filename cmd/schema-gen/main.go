@@ -80,12 +80,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	toolPages, err := loadToolPageInputs(filepath.Join(root, "schemas", "tools"))
+	groupPages, err := loadGroupPageInputs(filepath.Join(root, "schemas", "tools"))
 	if err != nil {
 		return err
 	}
 
-	if err := writeGeneratedSchemaDocs(root, workflowSchemaMap, componentFragmentSchemaMap, toolDefinitionSchemaMap, toolPages); err != nil {
+	if err := writeGeneratedSchemaDocs(root, workflowSchemaMap, componentFragmentSchemaMap, toolDefinitionSchemaMap, groupPages); err != nil {
 		return err
 	}
 	if err := writeFile(filepath.Join(root, "schemas", "README.md"), renderSchemasReadme(tools)); err != nil {
@@ -97,40 +97,46 @@ func run() error {
 	return nil
 }
 
-func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSchema, toolDefinitionSchema map[string]any, toolPages []schemadoc.PageInput) error {
-	if err := removeGeneratedToolDocs(filepath.Join(root, "docs", "reference", "schema", "tools"), toolPages); err != nil {
+func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSchema, toolDefinitionSchema map[string]any, groupPages []schemadoc.PageInput) error {
+	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "schema")); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "README.md"), schemadoc.RenderSchemaIndex("schemas/deck-workflow.schema.json", "schemas/deck-tooldefinition.schema.json", toolPages)); err != nil {
+	if err := removeDirIfExists(filepath.Join(root, "docs", "_generated")); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "workflow.md"), schemadoc.RenderWorkflowPage("schemas/deck-workflow.schema.json", workflowSchema, schemadoc.WorkflowMeta())); err != nil {
+	if err := removeGeneratedGroupDocs(filepath.Join(root, "docs", "reference", "groups"), groupPages); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "component-fragment.md"), schemadoc.RenderComponentFragmentPage("schemas/deck-component-fragment.schema.json", componentFragmentSchema, schemadoc.ComponentFragmentMeta())); err != nil {
+	if err := writeFile(filepath.Join(root, "docs", "reference", "typed-steps.md"), schemadoc.RenderTypedStepsPage(groupPages)); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "tool-definition.md"), schemadoc.RenderToolDefinitionPage("schemas/deck-tooldefinition.schema.json", toolDefinitionSchema, schemadoc.ToolDefinitionMeta())); err != nil {
+	if err := syncGeneratedBlock(filepath.Join(root, "docs", "reference", "workflow-model.md"), workflowSchemaBlockBegin, workflowSchemaBlockEnd, schemadoc.RenderWorkflowSchemaPartial("../../schemas/deck-workflow.schema.json", workflowSchema, schemadoc.WorkflowMeta())); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "tools", "README.md"), schemadoc.RenderToolsIndex(toolPages)); err != nil {
+	if err := syncGeneratedBlock(filepath.Join(root, "docs", "reference", "workspace-layout.md"), componentFragmentBlockBegin, componentFragmentBlockEnd, schemadoc.RenderComponentFragmentSchemaPartial("../../schemas/deck-component-fragment.schema.json", componentFragmentSchema, schemadoc.ComponentFragmentMeta())); err != nil {
 		return err
 	}
-	for _, page := range toolPages {
-		if err := writeFile(filepath.Join(root, "docs", "reference", "schema", "tools", page.PageSlug+".md"), schemadoc.RenderToolPage(page)); err != nil {
+	if err := syncGeneratedBlock(filepath.Join(root, "docs", "contributing", "tool-definition-schema.md"), toolDefinitionBlockBegin, toolDefinitionBlockEnd, schemadoc.RenderToolDefinitionSchemaPartial("../../schemas/deck-tooldefinition.schema.json", toolDefinitionSchema, schemadoc.ToolDefinitionMeta())); err != nil {
+		return err
+	}
+	for _, page := range groupPages {
+		if err := writeFile(filepath.Join(root, "docs", "reference", "groups", page.PageSlug+".md"), schemadoc.RenderGroupPage(page)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func removeGeneratedToolDocs(dir string, toolPages []schemadoc.PageInput) error {
+func removeGeneratedGroupDocs(dir string, groupPages []schemadoc.PageInput) error {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return err
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
-	keep := map[string]bool{"README.md": true}
-	for _, page := range toolPages {
+	keep := map[string]bool{}
+	for _, page := range groupPages {
 		keep[page.PageSlug+".md"] = true
 	}
 	for _, entry := range entries {
@@ -142,6 +148,16 @@ func removeGeneratedToolDocs(dir string, toolPages []schemadoc.PageInput) error 
 		}
 	}
 	return nil
+}
+
+func removeDirIfExists(dir string) error {
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return os.RemoveAll(dir)
 }
 
 func writeToolSchemas(root string) error {

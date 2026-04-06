@@ -472,16 +472,6 @@ func TestRunLegacyTopLevelCommandsAreRemoved(t *testing.T) {
 	}
 }
 
-func TestLegacyManageServiceSurfaceRemoved(t *testing.T) {
-	err := run([]string{"ManageService"})
-	if err == nil {
-		t.Fatalf("expected unknown command error")
-	}
-	if !strings.Contains(err.Error(), `unknown command "ManageService" for "deck"`) {
-		t.Fatalf("unexpected error: %q", err.Error())
-	}
-}
-
 func TestServerRemoteUsage(t *testing.T) {
 	out, err := runWithCapturedStdout([]string{"server", "remote"})
 	if err != nil {

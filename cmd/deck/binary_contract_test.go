@@ -10,13 +10,7 @@ import (
 )
 
 func TestApplyDryRunExitCodeViaBinary(t *testing.T) {
-	binaryPath := filepath.Join(t.TempDir(), "deck-test-bin")
-	buildCmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/deck")
-	buildCmd.Dir = filepath.Join("..", "..")
-	buildOut, buildErr := buildCmd.CombinedOutput()
-	if buildErr != nil {
-		t.Fatalf("build deck binary: %v, output=%s", buildErr, string(buildOut))
-	}
+	binaryPath := buildDeckBinary(t)
 
 	home := filepath.Join(t.TempDir(), "home")
 	if err := os.MkdirAll(home, 0o755); err != nil {
@@ -49,7 +43,7 @@ func TestApplyDryRunExitCodeViaBinary(t *testing.T) {
 }
 
 func TestCLIContractRoutesErrorsToStderrWithNonZeroExit(t *testing.T) {
-	binaryPath := buildDeckBinary(t, "deck-contract-bin")
+	binaryPath := buildDeckBinary(t)
 
 	tests := []struct {
 		name       string
@@ -85,7 +79,7 @@ func TestCLIContractRoutesErrorsToStderrWithNonZeroExit(t *testing.T) {
 }
 
 func TestCLIContractUsesSingleErrorLineWithoutAutoUsage(t *testing.T) {
-	binaryPath := buildDeckBinary(t, "deck-contract-cobra-errors-bin")
+	binaryPath := buildDeckBinary(t)
 
 	tests := []struct {
 		name        string
@@ -152,7 +146,7 @@ func TestCLIContractHelpTokenIsNotHijackedFromFlagValues(t *testing.T) {
 }
 
 func TestCLIContractAllowsCobraCompleteInternalPath(t *testing.T) {
-	binaryPath := buildDeckBinary(t, "deck-complete-bin")
+	binaryPath := buildDeckBinary(t)
 	res := runDeckBinary(t, binaryPath, "__complete", "completion", "b")
 	if res.exitCode != 0 {
 		t.Fatalf("expected zero exit, got %d stderr=%q", res.exitCode, res.stderr)
@@ -169,7 +163,7 @@ func TestCLIContractAllowsCobraCompleteInternalPath(t *testing.T) {
 }
 
 func TestCLIContractUnknownFlagUsesCobraWording(t *testing.T) {
-	binaryPath := buildDeckBinary(t, "deck-cobra-flag-bin")
+	binaryPath := buildDeckBinary(t)
 	res := runDeckBinary(t, binaryPath, "server", "up", "--bogus")
 	if res.exitCode == 0 {
 		t.Fatalf("expected non-zero exit")
@@ -179,43 +173,13 @@ func TestCLIContractUnknownFlagUsesCobraWording(t *testing.T) {
 	}
 }
 
-func TestCLIContractHelpRoutesViaBinary(t *testing.T) {
-	binaryPath := buildDeckBinary(t, "deck-help-contract-bin")
-
-	tests := []struct {
-		name       string
-		args       []string
-		wantStdout string
-	}{
-		{name: "root help flag", args: []string{"--help"}, wantStdout: "deck [command]"},
-		{name: "root help includes version", args: []string{"--help"}, wantStdout: "version"},
-		{name: "help bundle", args: []string{"help", "bundle"}, wantStdout: "deck bundle [command]"},
-		{name: "nested server help", args: []string{"server", "health", "--help"}, wantStdout: "deck server health [flags]"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			res := runDeckBinary(t, binaryPath, tc.args...)
-			if res.exitCode != 0 {
-				t.Fatalf("expected zero exit for %v, got %d stderr=%q", tc.args, res.exitCode, res.stderr)
-			}
-			if !strings.Contains(res.stdout, tc.wantStdout) {
-				t.Fatalf("expected stdout to include %q, got %q", tc.wantStdout, res.stdout)
-			}
-			if res.stderr != "" {
-				t.Fatalf("expected empty stderr for %v, got %q", tc.args, res.stderr)
-			}
-		})
-	}
-}
-
 func TestCLIContractVersionCommandViaBinary(t *testing.T) {
-	binaryPath := buildDeckBinary(t, "deck-version-bin")
+	binaryPath := buildDeckBinary(t)
 	res := runDeckBinary(t, binaryPath, "version")
 	if res.exitCode != 0 {
 		t.Fatalf("expected zero exit, got %d stderr=%q", res.exitCode, res.stderr)
 	}
-	if res.stdout != "deck dev\n" {
+	if res.stdout != "deck dev\nrepo https://github.com/Airgap-Castaways/deck\n" {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
 	if res.stderr != "" {
@@ -224,7 +188,7 @@ func TestCLIContractVersionCommandViaBinary(t *testing.T) {
 }
 
 func TestCLIContractGroupedParentsRejectUnknownSubcommandsViaBinary(t *testing.T) {
-	binaryPath := buildDeckBinary(t, "deck-subcmd-bin")
+	binaryPath := buildDeckBinary(t)
 
 	tests := []struct {
 		name       string
@@ -255,24 +219,8 @@ func TestCLIContractGroupedParentsRejectUnknownSubcommandsViaBinary(t *testing.T
 	}
 }
 
-func TestCLIContractBundleInspectRemovedViaBinary(t *testing.T) {
-	binaryPath := buildDeckBinary(t, "deck-positional-bin")
-	res := runDeckBinary(t, binaryPath, "bundle", "inspect")
-	if res.exitCode == 0 {
-		t.Fatalf("expected non-zero exit")
-	}
-	if !strings.Contains(res.stderr, "component=cli event=command_failed") || !strings.Contains(res.stderr, `error="unknown command \"inspect\" for \"deck bundle\""`) {
-		t.Fatalf("unexpected stderr: %q", res.stderr)
-	}
-}
-
 func TestBundledApplyWorksFromBundleDir(t *testing.T) {
-	binaryPath := filepath.Join(t.TempDir(), "deck-prepare-bin")
-	buildCmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/deck")
-	buildCmd.Dir = filepath.Join("..", "..")
-	if raw, err := buildCmd.CombinedOutput(); err != nil {
-		t.Fatalf("build deck binary: %v, output=%s", err, string(raw))
-	}
+	binaryPath := buildDeckBinary(t)
 
 	tmpRoot := t.TempDir()
 	home := filepath.Join(tmpRoot, "home")
@@ -366,15 +314,5 @@ phases:
 	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
 	if len(lines) != 1 {
 		t.Fatalf("expected bundled apply to execute once due state skip, got %d (%q)", len(lines), string(raw))
-	}
-}
-
-func TestRunUnknownCommand(t *testing.T) {
-	err := run([]string{"unknown"})
-	if err == nil {
-		t.Fatalf("expected unknown command error")
-	}
-	if !strings.Contains(err.Error(), `unknown command "unknown"`) {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }

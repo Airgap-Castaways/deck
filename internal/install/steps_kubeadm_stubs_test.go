@@ -67,7 +67,7 @@ func runUpgradeKubeadmStub(spec stepspec.KubeadmUpgrade) error {
 	return nil
 }
 
-func runCheckClusterStub(spec stepspec.ClusterCheck) error {
+func runCheckKubernetesClusterStub(spec stepspec.ClusterCheck) error {
 	if strings.TrimSpace(spec.Reports.NodesPath) != "" {
 		if err := os.MkdirAll(filepath.Dir(spec.Reports.NodesPath), 0o755); err != nil {
 			return err

@@ -35,12 +35,12 @@ type clusterCheckResult struct {
 	PodsJSON       string
 }
 
-var checkClusterExecutor = runCheckClusterReal
+var checkClusterExecutor = runCheckKubernetesClusterReal
 
-func runCheckCluster(ctx context.Context, spec map[string]any) error {
+func runCheckKubernetesCluster(ctx context.Context, spec map[string]any) error {
 	decoded, err := workflowexec.DecodeSpec[stepspec.ClusterCheck](spec)
 	if err != nil {
-		return fmt.Errorf("decode CheckCluster spec: %w", err)
+		return fmt.Errorf("decode CheckKubernetesCluster spec: %w", err)
 	}
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
@@ -48,7 +48,7 @@ func runCheckCluster(ctx context.Context, spec map[string]any) error {
 	return checkClusterExecutor(ctx, decoded)
 }
 
-func runCheckClusterReal(parent context.Context, spec stepspec.ClusterCheck) error {
+func runCheckKubernetesClusterReal(parent context.Context, spec stepspec.ClusterCheck) error {
 	timeout := parseStepTimeout(spec.Timeout, 10*time.Minute)
 	interval := parseStepTimeout(spec.Interval, 5*time.Second)
 	initialDelay := time.Duration(0)

@@ -6,8 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
+	"github.com/Airgap-Castaways/deck/internal/batchrun"
 	"github.com/Airgap-Castaways/deck/internal/bundle"
 	"github.com/Airgap-Castaways/deck/internal/config"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
@@ -18,6 +17,7 @@ type RunOptions struct {
 	StatePath  string
 	EventSink  StepEventSink
 	Fresh      bool
+	kubeadm    kubeadmExecutor
 }
 
 const (
@@ -134,7 +134,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 		runtimeVars[k] = v
 	}
 	runtimeVars["host"] = detectHostFacts()
-	execCtx := ExecutionContext{BundleRoot: bundleRoot, StatePath: statePath}
+	execCtx := ExecutionContext{BundleRoot: bundleRoot, StatePath: statePath, kubeadm: withKubeadmExecutor(opts.kubeadm)}
 	ctxData := execCtx.RenderContext()
 	for _, phase := range phases {
 		st.Phase = phase.Name
@@ -181,53 +181,21 @@ type installBatchResult struct {
 	skipped  bool
 }
 
-type batchEventContext struct {
-	batchID        string
-	parallelGroup  string
-	parallel       bool
-	batchSize      int
-	maxParallelism int
-	startedAt      string
-}
+type batchEventContext = batchrun.EventContext
 
 func executeInstallBatch(ctx context.Context, wf *config.Workflow, runtimeVars map[string]any, ctxData map[string]any, execCtx ExecutionContext, batch workflowexec.StepBatch, sink StepEventSink) error {
 	if len(batch.Steps) == 0 {
 		return nil
 	}
-	snapshot := cloneRuntimeVars(runtimeVars)
-	results := make([]installBatchResult, len(batch.Steps))
-	batchCtx := newBatchEventContext(batch)
+	snapshot := batchrun.CloneRuntimeVars(runtimeVars)
+	batchCtx := batchrun.NewEventContext(batch)
 	emitBatchEvent(sink, batchCtx, batch.PhaseName, "started", "")
-	if !batch.Parallel() {
-		result, err := executeInstallStep(ctx, wf, snapshot, ctxData, execCtx, batch.PhaseName, batchCtx, batch.Steps[0], sink)
-		if err != nil {
-			emitBatchEvent(sink, batchCtx, batch.PhaseName, "failed", batch.Steps[0].ID)
-			return err
-		}
-		results[0] = result
-	} else {
-		group, groupCtx := errgroup.WithContext(ctx)
-		limit := batch.MaxParallelism
-		if limit <= 0 || limit > len(batch.Steps) {
-			limit = len(batch.Steps)
-		}
-		group.SetLimit(limit)
-		for i, step := range batch.Steps {
-			i := i
-			step := step
-			group.Go(func() error {
-				result, err := executeInstallStep(groupCtx, wf, snapshot, ctxData, execCtx, batch.PhaseName, batchCtx, step, sink)
-				if err != nil {
-					return err
-				}
-				results[i] = result
-				return nil
-			})
-		}
-		if err := group.Wait(); err != nil {
-			emitBatchEvent(sink, batchCtx, batch.PhaseName, "failed", failedInstallBatchStep(batch, results))
-			return err
-		}
+	results, err := batchrun.Execute(ctx, batch, func(stepCtx context.Context, step config.Step) (installBatchResult, error) {
+		return executeInstallStep(stepCtx, wf, snapshot, ctxData, execCtx, batch.PhaseName, batchCtx, step, sink)
+	})
+	if err != nil {
+		emitBatchEvent(sink, batchCtx, batch.PhaseName, "failed", failedInstallBatchStep(batch, results))
+		return err
 	}
 	for i, step := range batch.Steps {
 		if results[i].skipped {
@@ -292,25 +260,12 @@ func executeInstallStep(ctx context.Context, wf *config.Workflow, runtimeSnapsho
 	return installBatchResult{}, fmt.Errorf("step %s (%s): %w", step.ID, step.Kind, execErr)
 }
 
-func newBatchEventContext(batch workflowexec.StepBatch) batchEventContext {
-	startedAt := time.Now().UTC().Format(time.RFC3339Nano)
-	limit := batch.MaxParallelism
-	if limit <= 0 || limit > len(batch.Steps) {
-		limit = len(batch.Steps)
-	}
-	batchID := strings.TrimSpace(batch.PhaseName)
-	if group := strings.TrimSpace(batch.ParallelGroup); group != "" {
-		batchID = batchID + ":" + group
-	}
-	return batchEventContext{batchID: batchID, parallelGroup: strings.TrimSpace(batch.ParallelGroup), parallel: batch.Parallel(), batchSize: len(batch.Steps), maxParallelism: limit, startedAt: startedAt}
-}
-
 func withBatchContext(ctx batchEventContext, event StepEvent) StepEvent {
-	event.BatchID = ctx.batchID
-	event.ParallelGroup = ctx.parallelGroup
-	event.Parallel = ctx.parallel
-	event.BatchSize = ctx.batchSize
-	event.MaxParallelism = ctx.maxParallelism
+	event.BatchID = ctx.BatchID
+	event.ParallelGroup = ctx.ParallelGroup
+	event.Parallel = ctx.Parallel
+	event.BatchSize = ctx.BatchSize
+	event.MaxParallelism = ctx.MaxParallelism
 	return event
 }
 
@@ -318,7 +273,7 @@ func emitBatchEvent(sink StepEventSink, ctx batchEventContext, phaseName string,
 	if sink == nil {
 		return
 	}
-	event := withBatchContext(ctx, StepEvent{Event: "batch_" + strings.TrimSpace(status), Phase: phaseName, Status: status, StartedAt: ctx.startedAt, FailedStep: strings.TrimSpace(failedStep)})
+	event := withBatchContext(ctx, StepEvent{Event: "batch_" + strings.TrimSpace(status), Phase: phaseName, Status: status, StartedAt: ctx.StartedAt, FailedStep: strings.TrimSpace(failedStep)})
 	if status != "started" {
 		event.EndedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
@@ -332,17 +287,6 @@ func failedInstallBatchStep(batch workflowexec.StepBatch, results []installBatch
 		}
 	}
 	return ""
-}
-
-func cloneRuntimeVars(input map[string]any) map[string]any {
-	if input == nil {
-		return map[string]any{}
-	}
-	out := make(map[string]any, len(input))
-	for key, value := range input {
-		out[key] = value
-	}
-	return out
 }
 
 func renderSpec(spec map[string]any, wf *config.Workflow, runtimeVars map[string]any) (map[string]any, error) {

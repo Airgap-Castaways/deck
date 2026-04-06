@@ -144,7 +144,7 @@ func TestCompileUsesKubeadmOverrideAliasesAndDropsStructuralNoise(t *testing.T) 
 	check := joined[currentClusterCheckKind()]
 	nodes, _ := check.Spec["nodes"].(map[string]any)
 	if nodes["total"] != 1 || nodes["ready"] != 1 || nodes["controlPlaneReady"] != 1 {
-		t.Fatalf("expected check-cluster overrides to materialize, got %#v", check.Spec)
+		t.Fatalf("expected check-kubernetes-cluster overrides to materialize, got %#v", check.Spec)
 	}
 }
 
@@ -285,7 +285,7 @@ func TestCompileBuildsCompleteTwoNodeOfflineDraft(t *testing.T) {
 	}
 	nodes, _ := check.Spec["nodes"].(map[string]any)
 	if check.Spec["interval"] != "5s" || check.Spec["timeout"] != "10m" || nodes["total"] != 2 || nodes["ready"] != 2 || nodes["controlPlaneReady"] != 1 {
-		t.Fatalf("expected check-cluster verification payload, got %#v", check.Spec)
+		t.Fatalf("expected check-kubernetes-cluster verification payload, got %#v", check.Spec)
 	}
 	vars := byPath["workflows/vars.yaml"].Vars
 	if vars == nil || vars["role"] != "control-plane" || vars["joinFile"] != "/tmp/deck/join.txt" {

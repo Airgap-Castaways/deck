@@ -345,14 +345,14 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_role_selector_missing", Message: fmt.Sprintf("execution model expects role-aware per-node invocation via %s but generated workflows do not appear to branch on it", executionModel.RoleExecution.RoleSelector), Fix: "Add role-aware conditions or separate role-specific phases that use the execution model role selector", Path: "workflows/scenarios/apply.yaml"})
 		}
 		if generationViolatesFinalVerificationRole(gen.Files, executionModel.Verification.FinalVerificationRole) {
-			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_final_verify_role_mismatch", Message: fmt.Sprintf("final cluster verification does not appear to run on the expected %s role", executionModel.Verification.FinalVerificationRole), Fix: "Move final CheckCluster verification to the role required by the execution model or make the role gate explicit", Path: "workflows/scenarios/apply.yaml"})
+			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_final_verify_role_mismatch", Message: fmt.Sprintf("final cluster verification does not appear to run on the expected %s role", executionModel.Verification.FinalVerificationRole), Fix: "Move final CheckKubernetesCluster verification to the role required by the execution model or make the role gate explicit", Path: "workflows/scenarios/apply.yaml"})
 		}
 	}
 	if generationViolatesVerificationExpectations(gen.Files, executionModel.Verification) {
-		findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_verification_mismatch", Message: fmt.Sprintf("generated CheckCluster expectations do not match the execution model verification contract (expected nodes=%d controlPlaneReady=%d)", executionModel.Verification.ExpectedNodeCount, executionModel.Verification.ExpectedControlPlaneReady), Fix: "Align final CheckCluster node expectations with the execution model topology contract", Path: "workflows/scenarios/apply.yaml"})
+		findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_verification_mismatch", Message: fmt.Sprintf("generated CheckKubernetesCluster expectations do not match the execution model verification contract (expected nodes=%d controlPlaneReady=%d)", executionModel.Verification.ExpectedNodeCount, executionModel.Verification.ExpectedControlPlaneReady), Fix: "Align final CheckKubernetesCluster node expectations with the execution model topology contract", Path: "workflows/scenarios/apply.yaml"})
 	}
-	if hasCapability(brief.RequiredCapabilities, "cluster-verification") && !hasKind(generatedWorkflowSteps(gen.Files), "CheckCluster") {
-		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_cluster_verification", Message: "request requires cluster verification but generated workflow does not include a CheckCluster step", Fix: "Use the typed CheckCluster step when the plan requires cluster verification", Path: "workflows/scenarios/apply.yaml"})
+	if hasCapability(brief.RequiredCapabilities, "cluster-verification") && !hasKind(generatedWorkflowSteps(gen.Files), "CheckKubernetesCluster") {
+		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_cluster_verification", Message: "request requires cluster verification but generated workflow does not include a CheckKubernetesCluster step", Fix: "Use the typed CheckKubernetesCluster step when the plan requires cluster verification", Path: "workflows/scenarios/apply.yaml"})
 	}
 	if req.TypedPreference && countCommands(gen.Files) > 0 {
 		alternatives := askcontext.StrongTypedAlternativesWithOptions(plan.Request, askcontext.StepGuidanceOptions{ModeIntent: plan.AuthoringBrief.ModeIntent, Topology: plan.AuthoringBrief.Topology, RequiredCapabilities: plan.AuthoringBrief.RequiredCapabilities})
@@ -523,7 +523,7 @@ func generationViolatesFinalVerificationRole(files []askcontract.GeneratedFile, 
 		return false
 	}
 	for _, step := range generatedWorkflowSteps(files) {
-		if !strings.EqualFold(step.Kind, "CheckCluster") {
+		if !strings.EqualFold(step.Kind, "CheckKubernetesCluster") {
 			continue
 		}
 		if strings.Contains(strings.ToLower(strings.TrimSpace(step.When)), strings.ToLower(role)) {
@@ -538,7 +538,7 @@ func generationViolatesVerificationExpectations(files []askcontract.GeneratedFil
 		return false
 	}
 	for _, step := range generatedWorkflowSteps(files) {
-		if !strings.EqualFold(step.Kind, "CheckCluster") {
+		if !strings.EqualFold(step.Kind, "CheckKubernetesCluster") {
 			continue
 		}
 		total, totalOK := intSpec(step.Spec, "nodes", "total")
@@ -1101,7 +1101,7 @@ func scenarioAppearsIncomplete(req ScenarioRequirements, files []askcontract.Gen
 	}
 	steps := generatedWorkflowSteps(files)
 	hasInit := hasKind(steps, "InitKubeadm") || hasKind(steps, "UpgradeKubeadm")
-	hasCheck := hasKind(steps, "CheckCluster")
+	hasCheck := hasKind(steps, "CheckKubernetesCluster")
 	for _, intent := range req.ScenarioIntent {
 		if intent == "kubeadm" {
 			if !hasInit {

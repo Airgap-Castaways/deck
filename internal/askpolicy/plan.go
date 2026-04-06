@@ -817,7 +817,7 @@ func isMinimalSingleNodeBootstrapPrompt(prompt string, brief askcontract.Authori
 	if strings.Contains(lower, "prepare") || strings.Contains(lower, "join") || strings.Contains(lower, "worker") {
 		return false
 	}
-	if !strings.Contains(lower, "init-kubeadm") || !strings.Contains(lower, "check-cluster") {
+	if !strings.Contains(lower, "init-kubeadm") || !strings.Contains(lower, "check-kubernetes-cluster") {
 		return false
 	}
 	if strings.Contains(lower, "ready=1") || strings.Contains(lower, "ready 1") || strings.Contains(lower, "cni") {
@@ -1163,7 +1163,7 @@ func normalizeCapabilities(values []string, fallback []string) []string {
 		value = strings.ToLower(strings.TrimSpace(value))
 		value = strings.ReplaceAll(value, "_", "-")
 		value = strings.ReplaceAll(value, " ", "-")
-		if value == "check-cluster" {
+		if value == "check-kubernetes-cluster" {
 			value = "cluster-verification"
 		}
 		if value == "" || strings.ContainsAny(value, ":/()") || !allowed[value] {

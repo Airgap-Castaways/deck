@@ -24,6 +24,8 @@ RUN_BUNDLE_SOURCE_FILE=""
 CACHE_BUNDLES_ROOT_REL=""
 PREPARED_BUNDLE_REL=""
 PREPARED_BUNDLE_ABS=""
+PREPARED_BUNDLE_TAR_REL=""
+PREPARED_BUNDLE_TAR_ABS=""
 PREPARED_BUNDLE_STAMP=""
 PREPARED_BUNDLE_WORK_REL=""
 PREPARED_BUNDLE_WORK_ABS=""
@@ -32,10 +34,14 @@ PREPARED_BUNDLE_WORKFLOW_DIR=""
 PREPARED_BUNDLE_FRAGMENT_DIR=""
 PREPARED_BUNDLE_TAR=""
 PREPARED_BUNDLE_STAGE_ABS=""
-RSYNC_STAGE_REL=""
-RSYNC_STAGE_ABS=""
-RSYNC_STAGE_STAGE_ABS=""
-RSYNC_STAGE_STAMP=""
+CONTROL_PLANE_RSYNC_STAGE_REL=""
+CONTROL_PLANE_RSYNC_STAGE_ABS=""
+CONTROL_PLANE_RSYNC_STAGE_STAGE_ABS=""
+CONTROL_PLANE_RSYNC_STAGE_STAMP=""
+WORKER_RSYNC_STAGE_REL=""
+WORKER_RSYNC_STAGE_ABS=""
+WORKER_RSYNC_STAGE_STAGE_ABS=""
+WORKER_RSYNC_STAGE_STAMP=""
 
 DECK_VAGRANT_PROVIDER="libvirt"
 DECK_VAGRANT_SYNC_TYPE="${DECK_VAGRANT_SYNC_TYPE:-rsync}"
@@ -75,6 +81,8 @@ SCENARIO_METADATA_NODES=""
 SCENARIO_METADATA_USES_WORKERS=""
 SCENARIO_METADATA_KUBERNETES_VERSION=""
 SCENARIO_METADATA_UPGRADE_KUBERNETES_VERSION=""
+BUNDLE_KUBERNETES_VERSION=""
+BUNDLE_UPGRADE_KUBERNETES_VERSION=""
 
 scenario_basename() {
   local scenario_id="${1:-}"
@@ -152,6 +160,60 @@ scenario_upgrade_kubernetes_version() {
   printf '%s\n' "${SCENARIO_METADATA_UPGRADE_KUBERNETES_VERSION:-}"
 }
 
+resolve_shared_bundle_versions() {
+  local metadata_root="${ROOT_DIR}/test/e2e/scenario-meta"
+  local default_kubernetes_version="v1.30.1"
+  local versions=""
+  local upgrade_versions=""
+
+  if [[ ! -d "${metadata_root}" ]]; then
+    BUNDLE_KUBERNETES_VERSION="${default_kubernetes_version}"
+    BUNDLE_UPGRADE_KUBERNETES_VERSION=""
+    return 0
+  fi
+
+  local resolved
+  resolved="$(python3 - <<'PY' "${metadata_root}" "${default_kubernetes_version}"
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+default = sys.argv[2]
+base_versions = set()
+upgrade_versions = set()
+
+for path in sorted(root.glob('*.env')):
+    values = {}
+    for raw in path.read_text(encoding='utf-8').splitlines():
+        line = raw.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        values[key] = value
+    base_versions.add(values.get('KUBERNETES_VERSION', default) or default)
+    upgrade = values.get('UPGRADE_KUBERNETES_VERSION', '')
+    if upgrade:
+        upgrade_versions.add(upgrade)
+
+if len(base_versions) != 1:
+    raise SystemExit('multiple base Kubernetes versions for shared bundle: ' + ', '.join(sorted(base_versions)))
+if len(upgrade_versions) > 1:
+    raise SystemExit('multiple upgrade Kubernetes versions for shared bundle: ' + ', '.join(sorted(upgrade_versions)))
+
+print(next(iter(base_versions)))
+print(next(iter(upgrade_versions)) if upgrade_versions else '')
+PY
+)" || {
+    echo "[deck] failed to resolve shared bundle versions"
+    exit 1
+  }
+
+  BUNDLE_KUBERNETES_VERSION="$(printf '%s\n' "${resolved}" | sed -n '1p')"
+  BUNDLE_UPGRADE_KUBERNETES_VERSION="$(printf '%s\n' "${resolved}" | sed -n '2p')"
+}
+
 active_nodes() {
   scenario_nodes
 }
@@ -196,21 +258,27 @@ refresh_layout_contracts() {
   RUN_ID_SANITIZED="${RUN_ID//\//-}"
   ART_DIR_REL="${DECK_VAGRANT_ART_DIR:-test/artifacts/runs/${SCENARIO_ID}/${RUN_ID}}"
   ART_DIR_ABS="${ROOT_DIR}/${ART_DIR_REL}"
-  CACHE_BUNDLES_ROOT_REL="test/artifacts/cache/bundles/${SCENARIO_ID}/${CACHE_KEY}"
-  PREPARED_BUNDLE_REL="${CACHE_BUNDLES_ROOT_REL}"
+  CACHE_BUNDLES_ROOT_REL="test/artifacts/cache/bundles/shared/${CACHE_KEY}"
+  PREPARED_BUNDLE_REL="${CACHE_BUNDLES_ROOT_REL}/bundle"
   PREPARED_BUNDLE_ABS="${ROOT_DIR}/${PREPARED_BUNDLE_REL}"
+  PREPARED_BUNDLE_TAR_REL="${CACHE_BUNDLES_ROOT_REL}/prepared-bundle.tar"
+  PREPARED_BUNDLE_TAR_ABS="${ROOT_DIR}/${PREPARED_BUNDLE_TAR_REL}"
   PREPARED_BUNDLE_STAMP="${PREPARED_BUNDLE_ABS}/.deck-cache-key"
-  PREPARED_BUNDLE_WORK_REL="test/artifacts/cache/staging/${SCENARIO_ID}/${CACHE_KEY}"
+  PREPARED_BUNDLE_WORK_REL="test/artifacts/cache/staging/shared/${CACHE_KEY}"
   PREPARED_BUNDLE_WORK_ABS="${ROOT_DIR}/${PREPARED_BUNDLE_WORK_REL}"
   PREPARED_BUNDLE_PACK_ROOT="${PREPARED_BUNDLE_WORK_ABS}/host-pack"
   PREPARED_BUNDLE_WORKFLOW_DIR="${PREPARED_BUNDLE_PACK_ROOT}/workflows"
   PREPARED_BUNDLE_FRAGMENT_DIR="${PREPARED_BUNDLE_WORKFLOW_DIR}/scenarios"
   PREPARED_BUNDLE_TAR="${PREPARED_BUNDLE_WORK_ABS}/prepared-bundle.tar"
   PREPARED_BUNDLE_STAGE_ABS="${PREPARED_BUNDLE_WORK_ABS}/prepared-bundle.stage"
-  RSYNC_STAGE_REL="test/artifacts/cache/vagrant/${SCENARIO_ID}/rsync-root"
-  RSYNC_STAGE_ABS="${ROOT_DIR}/${RSYNC_STAGE_REL}"
-  RSYNC_STAGE_STAGE_ABS="${ROOT_DIR}/test/artifacts/cache/vagrant/${SCENARIO_ID}/rsync-root.stage"
-  RSYNC_STAGE_STAMP="${RSYNC_STAGE_ABS}/.deck-rsync-key"
+  CONTROL_PLANE_RSYNC_STAGE_REL="test/artifacts/cache/vagrant/shared/${CACHE_KEY}/control-plane-rsync-root"
+  CONTROL_PLANE_RSYNC_STAGE_ABS="${ROOT_DIR}/${CONTROL_PLANE_RSYNC_STAGE_REL}"
+  CONTROL_PLANE_RSYNC_STAGE_STAGE_ABS="${ROOT_DIR}/test/artifacts/cache/vagrant/shared/${CACHE_KEY}/control-plane-rsync-root.stage"
+  CONTROL_PLANE_RSYNC_STAGE_STAMP="${CONTROL_PLANE_RSYNC_STAGE_ABS}/.deck-rsync-key"
+  WORKER_RSYNC_STAGE_REL="test/artifacts/cache/vagrant/shared/${CACHE_KEY}/worker-rsync-root"
+  WORKER_RSYNC_STAGE_ABS="${ROOT_DIR}/${WORKER_RSYNC_STAGE_REL}"
+  WORKER_RSYNC_STAGE_STAGE_ABS="${ROOT_DIR}/test/artifacts/cache/vagrant/shared/${CACHE_KEY}/worker-rsync-root.stage"
+  WORKER_RSYNC_STAGE_STAMP="${WORKER_RSYNC_STAGE_ABS}/.deck-rsync-key"
   if [[ "${DECK_VAGRANT_VM_PREFIX_FROM_ENV}" != "1" ]]; then
     DECK_VAGRANT_VM_PREFIX="deck-${SCENARIO_ID_SANITIZED}-${RUN_ID_SANITIZED}"
   fi
@@ -324,9 +392,9 @@ prepare_local_run_state() {
     SERVER_IP=""
     SERVER_URL=""
     if [[ ${FRESH_CACHE} -eq 1 ]]; then
-      rm -rf "${ROOT_DIR}/test/artifacts/cache/bundles/${SCENARIO_ID}"
-      rm -rf "${ROOT_DIR}/test/artifacts/cache/staging/${SCENARIO_ID}"
-      rm -rf "${ROOT_DIR}/test/artifacts/cache/vagrant/${SCENARIO_ID}"
+      rm -rf "${CACHE_BUNDLES_ROOT_REL:+${ROOT_DIR}/${CACHE_BUNDLES_ROOT_REL}}"
+      rm -rf "${PREPARED_BUNDLE_WORK_ABS}"
+      rm -rf "$(dirname "${CONTROL_PLANE_RSYNC_STAGE_ABS}")"
     fi
     return 0
   fi
@@ -402,8 +470,9 @@ compute_prepared_bundle_cache_key() {
   local vm_dispatcher_script="${8:-}"
   local kubernetes_version
   local upgrade_kubernetes_version
-  kubernetes_version="$(scenario_kubernetes_version || printf '%s' 'v1.30.1')"
-  upgrade_kubernetes_version="$(scenario_upgrade_kubernetes_version || true)"
+  resolve_shared_bundle_versions
+  kubernetes_version="${BUNDLE_KUBERNETES_VERSION}"
+  upgrade_kubernetes_version="${BUNDLE_UPGRADE_KUBERNETES_VERSION}"
   python3 - <<'PY' "${ROOT_DIR}" "${host_bin}" "${workflow_root}" "${helper_root}" "${backend_runtime}" "${arch}" "${include_legacy_workflows}" "${vm_scenario_script}" "${vm_dispatcher_script}" "${kubernetes_version}" "${upgrade_kubernetes_version}"
 import hashlib
 from pathlib import Path
@@ -472,15 +541,16 @@ prepare_shared_bundle_cache() {
   local upgrade_kubernetes_version=""
   local -a prepare_args=()
 
-  kubernetes_version="$(scenario_kubernetes_version || printf '%s' 'v1.30.1')"
-  upgrade_kubernetes_version="$(scenario_upgrade_kubernetes_version || true)"
+  resolve_shared_bundle_versions
+  kubernetes_version="${BUNDLE_KUBERNETES_VERSION}"
+  upgrade_kubernetes_version="${BUNDLE_UPGRADE_KUBERNETES_VERSION}"
 
   cache_key="$(compute_prepared_bundle_cache_key "${host_bin}" "${workflow_root_abs}" "${helper_root_abs}" "${backend_runtime}" "${arch}" "0" "${DECK_VAGRANT_VM_SCENARIO_SCRIPT:-}" "${DECK_VAGRANT_VM_DISPATCHER_SCRIPT:-}")"
   CACHE_KEY="${cache_key}"
   refresh_layout_contracts
-  if [[ -f "${PREPARED_BUNDLE_STAMP}" ]] && [[ -f "${PREPARED_BUNDLE_ABS}/.deck/manifest.json" ]] && [[ "$(cat "${PREPARED_BUNDLE_STAMP}" 2>/dev/null || true)" == "${cache_key}" ]]; then
+  if [[ -f "${PREPARED_BUNDLE_STAMP}" ]] && [[ -f "${PREPARED_BUNDLE_ABS}/.deck/manifest.json" ]] && [[ -f "${PREPARED_BUNDLE_TAR_ABS}" ]] && [[ "$(cat "${PREPARED_BUNDLE_STAMP}" 2>/dev/null || true)" == "${cache_key}" ]]; then
     echo "[deck] reusing shared prepared bundle cache"
-    printf '%s\n' "cache-hit:${PREPARED_BUNDLE_REL}" > "${RUN_BUNDLE_SOURCE_FILE}"
+    printf '%s\n' "cache-hit:${PREPARED_BUNDLE_TAR_REL}" > "${RUN_BUNDLE_SOURCE_FILE}"
     return 0
   fi
 
@@ -506,22 +576,27 @@ prepare_shared_bundle_cache() {
   tar -xf "${PREPARED_BUNDLE_TAR}" -C "${PREPARED_BUNDLE_STAGE_ABS}" --strip-components=1
   printf '%s\n' "${cache_key}" > "${PREPARED_BUNDLE_STAGE_ABS}/.deck-cache-key"
 
-  rm -rf "${PREPARED_BUNDLE_ABS}"
+  rm -rf "${CACHE_BUNDLES_ROOT_REL:+${ROOT_DIR}/${CACHE_BUNDLES_ROOT_REL}}"
   mkdir -p "$(dirname "${PREPARED_BUNDLE_ABS}")"
+  cp "${PREPARED_BUNDLE_TAR}" "${PREPARED_BUNDLE_TAR_ABS}"
   mv "${PREPARED_BUNDLE_STAGE_ABS}" "${PREPARED_BUNDLE_ABS}"
-  printf '%s\n' "cache-rebuild:${PREPARED_BUNDLE_REL}" > "${RUN_BUNDLE_SOURCE_FILE}"
+  printf '%s\n' "cache-rebuild:${PREPARED_BUNDLE_TAR_REL}" > "${RUN_BUNDLE_SOURCE_FILE}"
 }
 
-prepare_rsync_stage_root() {
+prepare_rsync_stage_root_for_role() {
+  local role="$1"
+  local stage_abs="$2"
+  local stage_stage_abs="$3"
+  local stage_stamp="$4"
+  local include_bundle_tar="$5"
   local vm_stage_path="${DECK_VAGRANT_VM_STAGED_PATH:-test/e2e/vagrant/run-scenario-vm.sh}"
   local dispatcher_source="${ROOT_DIR}/test/e2e/vagrant/run-scenario-vm.sh"
   local dispatcher_stage_path="${DECK_VAGRANT_VM_DISPATCHER_STAGED_PATH:-test/e2e/vagrant/run-scenario-vm.sh}"
   local dispatcher_scenario_helper_source="${ROOT_DIR}/test/e2e/vagrant/run-scenario-vm-scenario.sh"
   local dispatcher_scenario_helper_stage_path="test/e2e/vagrant/run-scenario-vm-scenario.sh"
-  local include_legacy_workflows="0"
   local rsync_key=""
 
-  rsync_key="$(python3 - <<'PY' "${ROOT_DIR}" "${DECK_VAGRANT_VM_SCENARIO_SCRIPT}" "${dispatcher_source}" "${dispatcher_scenario_helper_source}" "${PREPARED_BUNDLE_ABS}"
+  rsync_key="$(python3 - <<'PY' "${ROOT_DIR}" "${DECK_VAGRANT_VM_SCENARIO_SCRIPT}" "${dispatcher_source}" "${dispatcher_scenario_helper_source}" "${PREPARED_BUNDLE_STAMP}" "${include_bundle_tar}"
 import hashlib
 from pathlib import Path
 import sys
@@ -530,64 +605,65 @@ root = Path(sys.argv[1])
 scenario_script = Path(sys.argv[2])
 dispatcher_script = Path(sys.argv[3]) if sys.argv[3] else None
 dispatcher_scenario_helper = Path(sys.argv[4]) if sys.argv[4] else None
-prepared_bundle = Path(sys.argv[5])
+bundle_stamp = Path(sys.argv[5])
+include_bundle_tar = sys.argv[6] == '1'
 
 paths = [scenario_script]
 if dispatcher_script:
     paths.append(dispatcher_script)
 if dispatcher_scenario_helper and dispatcher_scenario_helper.is_file():
     paths.append(dispatcher_scenario_helper)
-for base in (root / "test/workflows", root / "test/e2e/scenario-meta", root / "test/e2e/scenario-hooks"):
+for base in (root / 'test/e2e/scenario-meta', root / 'test/e2e/scenario-hooks'):
     if base.exists():
-        paths.extend(sorted(p for p in base.rglob("*") if p.is_file()))
-
-bundle_stamp = prepared_bundle / ".deck-cache-key"
-if bundle_stamp.is_file():
+        paths.extend(sorted(p for p in base.rglob('*') if p.is_file()))
+if include_bundle_tar and bundle_stamp.is_file():
     paths.append(bundle_stamp)
 
 digest = hashlib.sha256()
+digest.update(f'includeBundleTar={int(include_bundle_tar)}\n'.encode())
 for path in paths:
     digest.update(path.relative_to(root).as_posix().encode())
-    digest.update(b"\0")
+    digest.update(b'\0')
     digest.update(path.read_bytes())
-    digest.update(b"\0")
+    digest.update(b'\0')
 print(digest.hexdigest())
 PY
 )"
 
-  if [[ -f "${RSYNC_STAGE_STAMP}" ]] && [[ "$(cat "${RSYNC_STAGE_STAMP}" 2>/dev/null || true)" == "${rsync_key}" ]]; then
-    echo "[deck] reusing rsync stage cache"
+  if [[ -f "${stage_stamp}" ]] && [[ "$(cat "${stage_stamp}" 2>/dev/null || true)" == "${rsync_key}" ]]; then
+    echo "[deck] reusing ${role} rsync stage cache"
     return 0
   fi
 
-  rm -rf "${RSYNC_STAGE_STAGE_ABS}" "${RSYNC_STAGE_ABS}"
-  mkdir -p "${RSYNC_STAGE_STAGE_ABS}/$(dirname "${vm_stage_path}")"
-  cp "${DECK_VAGRANT_VM_SCENARIO_SCRIPT}" "${RSYNC_STAGE_STAGE_ABS}/${vm_stage_path}"
+  rm -rf "${stage_stage_abs}" "${stage_abs}"
+  mkdir -p "${stage_stage_abs}/$(dirname "${vm_stage_path}")"
+  cp "${DECK_VAGRANT_VM_SCENARIO_SCRIPT}" "${stage_stage_abs}/${vm_stage_path}"
   if [[ -n "${dispatcher_source}" ]] && [[ -n "${dispatcher_stage_path}" ]]; then
-    mkdir -p "${RSYNC_STAGE_STAGE_ABS}/$(dirname "${dispatcher_stage_path}")"
-    cp "${dispatcher_source}" "${RSYNC_STAGE_STAGE_ABS}/${dispatcher_stage_path}"
-    if ! cmp -s "${dispatcher_source}" "${RSYNC_STAGE_STAGE_ABS}/${dispatcher_stage_path}"; then
-      echo "[deck] staged dispatcher mismatch: ${dispatcher_source} != ${RSYNC_STAGE_STAGE_ABS}/${dispatcher_stage_path}"
+    mkdir -p "${stage_stage_abs}/$(dirname "${dispatcher_stage_path}")"
+    cp "${dispatcher_source}" "${stage_stage_abs}/${dispatcher_stage_path}"
+    if ! cmp -s "${dispatcher_source}" "${stage_stage_abs}/${dispatcher_stage_path}"; then
+      echo "[deck] staged dispatcher mismatch: ${dispatcher_source} != ${stage_stage_abs}/${dispatcher_stage_path}"
       exit 1
     fi
   fi
   if [[ -f "${dispatcher_scenario_helper_source}" ]]; then
-    mkdir -p "${RSYNC_STAGE_STAGE_ABS}/$(dirname "${dispatcher_scenario_helper_stage_path}")"
-    cp "${dispatcher_scenario_helper_source}" "${RSYNC_STAGE_STAGE_ABS}/${dispatcher_scenario_helper_stage_path}"
+    mkdir -p "${stage_stage_abs}/$(dirname "${dispatcher_scenario_helper_stage_path}")"
+    cp "${dispatcher_scenario_helper_source}" "${stage_stage_abs}/${dispatcher_scenario_helper_stage_path}"
   fi
-  if [[ "${include_legacy_workflows}" == "1" ]]; then
-    cp -a "${ROOT_DIR}/test/vagrant/workflows" "${RSYNC_STAGE_STAGE_ABS}/test/vagrant/"
+  mkdir -p "${stage_stage_abs}/test/e2e"
+  cp -a "${ROOT_DIR}/test/e2e/scenario-meta" "${stage_stage_abs}/test/e2e/"
+  cp -a "${ROOT_DIR}/test/e2e/scenario-hooks" "${stage_stage_abs}/test/e2e/"
+  if [[ "${include_bundle_tar}" == "1" ]]; then
+    mkdir -p "${stage_stage_abs}/$(dirname "${PREPARED_BUNDLE_TAR_REL}")"
+    cp "${PREPARED_BUNDLE_TAR_ABS}" "${stage_stage_abs}/${PREPARED_BUNDLE_TAR_REL}"
   fi
-  cp -a "${ROOT_DIR}/test/workflows" "${RSYNC_STAGE_STAGE_ABS}/test/"
-  mkdir -p "${RSYNC_STAGE_STAGE_ABS}/test/e2e"
-  cp -a "${ROOT_DIR}/test/e2e/scenario-meta" "${RSYNC_STAGE_STAGE_ABS}/test/e2e/"
-  cp -a "${ROOT_DIR}/test/e2e/scenario-hooks" "${RSYNC_STAGE_STAGE_ABS}/test/e2e/"
-  if [[ -d "${PREPARED_BUNDLE_ABS}" ]]; then
-    mkdir -p "${RSYNC_STAGE_STAGE_ABS}/${PREPARED_BUNDLE_REL}"
-    cp -a "${PREPARED_BUNDLE_ABS}/." "${RSYNC_STAGE_STAGE_ABS}/${PREPARED_BUNDLE_REL}"
-  fi
-  printf '%s\n' "${rsync_key}" > "${RSYNC_STAGE_STAGE_ABS}/.deck-rsync-key"
-  mv "${RSYNC_STAGE_STAGE_ABS}" "${RSYNC_STAGE_ABS}"
+  printf '%s\n' "${rsync_key}" > "${stage_stage_abs}/.deck-rsync-key"
+  mv "${stage_stage_abs}" "${stage_abs}"
+}
+
+prepare_rsync_stage_roots() {
+  prepare_rsync_stage_root_for_role "control-plane" "${CONTROL_PLANE_RSYNC_STAGE_ABS}" "${CONTROL_PLANE_RSYNC_STAGE_STAGE_ABS}" "${CONTROL_PLANE_RSYNC_STAGE_STAMP}" "1"
+  prepare_rsync_stage_root_for_role "worker" "${WORKER_RSYNC_STAGE_ABS}" "${WORKER_RSYNC_STAGE_STAGE_ABS}" "${WORKER_RSYNC_STAGE_STAMP}" "0"
 }
 
 ensure_rsync_sync_source() {
@@ -596,7 +672,7 @@ ensure_rsync_sync_source() {
     "${BUILD_BINARIES_HELPER}" "${ROOT_DIR}"
   fi
   prepare_shared_bundle_cache "${HOST_BIN}" "${HOST_BACKEND_RUNTIME}" "${HOST_ARCH}"
-  prepare_rsync_stage_root
+  prepare_rsync_stage_roots
 }
 
 fetch_vm_artifacts() {
@@ -703,6 +779,7 @@ DECK_VAGRANT_VM_PREFIX=${DECK_VAGRANT_VM_PREFIX}
 SERVER_IP=${SERVER_IP:-}
 SERVER_URL=${SERVER_URL:-}
 PREPARED_BUNDLE_REL=${PREPARED_BUNDLE_REL:-}
+PREPARED_BUNDLE_TAR_REL=${PREPARED_BUNDLE_TAR_REL:-}
 SCENARIO_ID=${SCENARIO_ID:-k8s-worker-join}
 RUN_ID=${RUN_ID:-local}
 CACHE_KEY=${CACHE_KEY:-compat}
@@ -758,7 +835,7 @@ step_prepare_host() {
   "${BUILD_BINARIES_HELPER}" "${ROOT_DIR}"
   resolve_host_build_context
   prepare_shared_bundle_cache "${HOST_BIN}" "${HOST_BACKEND_RUNTIME}" "${HOST_ARCH}"
-  prepare_rsync_stage_root
+  prepare_rsync_stage_roots
   load_state_env
   save_state_env
 }
@@ -766,13 +843,16 @@ step_prepare_host() {
 step_up_vms() {
   local up_rc=0
   local sync_source_env="${DECK_VAGRANT_SYNC_SOURCE:-${ROOT_DIR}}"
+  local control_plane_sync_source_env="${DECK_VAGRANT_SYNC_SOURCE_CONTROL_PLANE:-${sync_source_env}}"
+  local worker_sync_source_env="${DECK_VAGRANT_SYNC_SOURCE_WORKER:-${sync_source_env}}"
   local -a nodes=()
   local node=""
   mapfile -t nodes < <(active_nodes)
   ensure_libvirt_environment
   if [[ "${DECK_VAGRANT_SYNC_TYPE}" == "rsync" ]]; then
     ensure_rsync_sync_source
-    sync_source_env="${RSYNC_STAGE_ABS}"
+    control_plane_sync_source_env="${CONTROL_PLANE_RSYNC_STAGE_ABS}"
+    worker_sync_source_env="${WORKER_RSYNC_STAGE_ABS}"
   fi
   pushd "${VAGRANT_DIR}" >/dev/null
   IN_VAGRANT_DIR=1
@@ -783,7 +863,7 @@ step_up_vms() {
     done
   fi
   set +e
-  DECK_VAGRANT_BOX="${DECK_VAGRANT_BOX}" DECK_VAGRANT_PROVIDER="${DECK_VAGRANT_PROVIDER}" DECK_VAGRANT_VM_PREFIX="${DECK_VAGRANT_VM_PREFIX}" DECK_VAGRANT_SYNC_TYPE="${DECK_VAGRANT_SYNC_TYPE}" DECK_VAGRANT_SYNC_SOURCE="${sync_source_env}" vagrant up "${nodes[@]}" --provider "${DECK_VAGRANT_PROVIDER}"
+  DECK_VAGRANT_BOX="${DECK_VAGRANT_BOX}" DECK_VAGRANT_PROVIDER="${DECK_VAGRANT_PROVIDER}" DECK_VAGRANT_VM_PREFIX="${DECK_VAGRANT_VM_PREFIX}" DECK_VAGRANT_SYNC_TYPE="${DECK_VAGRANT_SYNC_TYPE}" DECK_VAGRANT_SYNC_SOURCE="${sync_source_env}" DECK_VAGRANT_SYNC_SOURCE_CONTROL_PLANE="${control_plane_sync_source_env}" DECK_VAGRANT_SYNC_SOURCE_WORKER="${worker_sync_source_env}" DECK_VAGRANT_SYNC_SOURCE_WORKER_2="${worker_sync_source_env}" vagrant up "${nodes[@]}" --provider "${DECK_VAGRANT_PROVIDER}"
   up_rc=$?
   set -e
   if [[ ${up_rc} -ne 0 && "${DECK_VAGRANT_SYNC_TYPE}" == "9p" ]]; then
@@ -795,7 +875,7 @@ step_up_vms() {
     for node in "${nodes[@]}"; do
       delete_stale_volume "${node}"
     done
-    DECK_VAGRANT_BOX="${DECK_VAGRANT_BOX}" DECK_VAGRANT_PROVIDER="${DECK_VAGRANT_PROVIDER}" DECK_VAGRANT_VM_PREFIX="${DECK_VAGRANT_VM_PREFIX}" DECK_VAGRANT_SYNC_TYPE="${DECK_VAGRANT_SYNC_TYPE}" DECK_VAGRANT_SYNC_SOURCE="${RSYNC_STAGE_ABS}" vagrant up "${nodes[@]}" --provider "${DECK_VAGRANT_PROVIDER}"
+    DECK_VAGRANT_BOX="${DECK_VAGRANT_BOX}" DECK_VAGRANT_PROVIDER="${DECK_VAGRANT_PROVIDER}" DECK_VAGRANT_VM_PREFIX="${DECK_VAGRANT_VM_PREFIX}" DECK_VAGRANT_SYNC_TYPE="${DECK_VAGRANT_SYNC_TYPE}" DECK_VAGRANT_SYNC_SOURCE="${sync_source_env}" DECK_VAGRANT_SYNC_SOURCE_CONTROL_PLANE="${CONTROL_PLANE_RSYNC_STAGE_ABS}" DECK_VAGRANT_SYNC_SOURCE_WORKER="${WORKER_RSYNC_STAGE_ABS}" DECK_VAGRANT_SYNC_SOURCE_WORKER_2="${WORKER_RSYNC_STAGE_ABS}" vagrant up "${nodes[@]}" --provider "${DECK_VAGRANT_PROVIDER}"
   elif [[ ${up_rc} -ne 0 ]]; then
     exit ${up_rc}
   fi
@@ -904,11 +984,11 @@ deck_vagrant_main() {
   trap cleanup EXIT INT TERM
 
   export VAGRANT_DEFAULT_PROVIDER="libvirt"
-  export DECK_VAGRANT_MANAGEMENT_NETWORK_NAME="${DECK_VAGRANT_MANAGEMENT_NETWORK_NAME:-default}"
-  export DECK_VAGRANT_MANAGEMENT_NETWORK_ADDRESS="${DECK_VAGRANT_MANAGEMENT_NETWORK_ADDRESS:-192.168.122.0/24}"
+  export DECK_VAGRANT_MANAGEMENT_NETWORK_NAME="${DECK_VAGRANT_MANAGEMENT_NETWORK_NAME:-deck-vagrant}"
+  export DECK_VAGRANT_MANAGEMENT_NETWORK_ADDRESS="${DECK_VAGRANT_MANAGEMENT_NETWORK_ADDRESS:-192.168.57.0/24}"
   export DECK_VAGRANT_IP_ADDRESS_TIMEOUT="${DECK_VAGRANT_IP_ADDRESS_TIMEOUT:-300}"
-  export DECK_VAGRANT_LIBVIRT_IP_COMMAND="${DECK_VAGRANT_LIBVIRT_IP_COMMAND:-}"
   export DECK_VAGRANT_QEMU_USE_AGENT="${DECK_VAGRANT_QEMU_USE_AGENT:-0}"
+  export DECK_VAGRANT_ENABLE_PRIVATE_NETWORK="${DECK_VAGRANT_ENABLE_PRIVATE_NETWORK:-0}"
   export DECK_VAGRANT_MGMT_ATTACH="${DECK_VAGRANT_MGMT_ATTACH:-1}"
   export DECK_VAGRANT_SYNC_TYPE
   export DECK_VAGRANT_BOX_CONTROL_PLANE

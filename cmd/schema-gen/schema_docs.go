@@ -18,7 +18,7 @@ func renderSchemasReadme(tools []toolSchemaDoc) []byte {
 	buf.WriteString("## Validation model\n\n")
 	buf.WriteString("1. Validate the workflow file structure.\n")
 	buf.WriteString("2. Validate each step against the schema for its `kind`.\n\n")
-	buf.WriteString("For the human-facing reference, read `../docs/reference/schema/README.md`.\n\n")
+	buf.WriteString("For the human-facing reference, read `../docs/reference/typed-steps.md`, `../docs/reference/workflow-model.md`, and `../docs/reference/workspace-layout.md`. Contributor-facing tool-definition details live in `../docs/contributing/tool-definition-schema.md`.\n\n")
 	buf.WriteString("## Current tool schemas\n\n")
 	for _, tool := range tools {
 		buf.WriteString("- `tools/" + tool.File + "`: `" + tool.Kind + "` (`" + tool.Visibility + "`)\n")
@@ -35,7 +35,7 @@ func renderToolSchemasReadme(tools []toolSchemaDoc) []byte {
 	for _, tool := range tools {
 		buf.WriteString("- `" + tool.File + "`: `" + tool.Kind + "` (`" + tool.Visibility + "`)\n")
 	}
-	buf.WriteString("\nUse `../../docs/reference/schema/README.md` for the generated reference view.\n")
+	buf.WriteString("\nUse `../../docs/reference/typed-steps.md` for typed step reference, `../../docs/reference/workflow-model.md` and `../../docs/reference/workspace-layout.md` for workflow/component contracts, and `../../docs/contributing/tool-definition-schema.md` for tool-definition details.\n")
 	return buf.Bytes()
 }
 

@@ -14,6 +14,8 @@ type WorkflowProjection struct {
 	Kind        string
 	Family      string
 	FamilyTitle string
+	Group       string
+	GroupOrder  int
 	DocsPage    string
 	DocsOrder   int
 	SchemaFile  string
@@ -51,6 +53,8 @@ func ProjectWorkflow(entry Entry, category, generator string) WorkflowProjection
 		Kind:        entry.Definition.Kind,
 		Family:      entry.Definition.Family,
 		FamilyTitle: entry.Definition.FamilyTitle,
+		Group:       entry.Definition.Group,
+		GroupOrder:  entry.Definition.GroupOrder,
 		DocsPage:    entry.Definition.DocsPage,
 		DocsOrder:   entry.Definition.DocsOrder,
 		SchemaFile:  entry.Definition.SchemaFile,

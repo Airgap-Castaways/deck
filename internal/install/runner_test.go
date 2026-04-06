@@ -26,52 +26,64 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
-func useStubInitJoinKubeadm(t *testing.T) {
-	t.Helper()
-	origInit := kubeadmInitExecutor
-	origJoin := kubeadmJoinExecutor
-	t.Cleanup(func() {
-		kubeadmInitExecutor = origInit
-		kubeadmJoinExecutor = origJoin
-	})
-	kubeadmInitExecutor = func(_ context.Context, spec stepspec.KubeadmInit) error {
-		return runInitKubeadmStub(spec)
+type stubKubeadmExecutor struct {
+	initFn    func(stepspec.KubeadmInit) error
+	joinFn    func(stepspec.KubeadmJoin) error
+	resetFn   func(stepspec.KubeadmReset) error
+	upgradeFn func(stepspec.KubeadmUpgrade) error
+}
+
+func (s stubKubeadmExecutor) Init(_ context.Context, spec stepspec.KubeadmInit) error {
+	if s.initFn == nil {
+		return fmt.Errorf("unexpected kubeadm init: %+v", spec)
 	}
-	kubeadmJoinExecutor = func(_ context.Context, spec stepspec.KubeadmJoin) error {
-		return runJoinKubeadmStub(spec)
+	return s.initFn(spec)
+}
+
+func (s stubKubeadmExecutor) Join(_ context.Context, spec stepspec.KubeadmJoin) error {
+	if s.joinFn == nil {
+		return fmt.Errorf("unexpected kubeadm join: %+v", spec)
+	}
+	return s.joinFn(spec)
+}
+
+func (s stubKubeadmExecutor) Reset(_ context.Context, spec stepspec.KubeadmReset) error {
+	if s.resetFn == nil {
+		return fmt.Errorf("unexpected kubeadm reset: %+v", spec)
+	}
+	return s.resetFn(spec)
+}
+
+func (s stubKubeadmExecutor) Upgrade(_ context.Context, spec stepspec.KubeadmUpgrade) error {
+	if s.upgradeFn == nil {
+		return fmt.Errorf("unexpected kubeadm upgrade: %+v", spec)
+	}
+	return s.upgradeFn(spec)
+}
+
+func useStubInitJoinKubeadm() kubeadmExecutor {
+	return stubKubeadmExecutor{
+		initFn: runInitKubeadmStub,
+		joinFn: runJoinKubeadmStub,
 	}
 }
 
-func useStubResetKubeadm(t *testing.T) {
-	t.Helper()
-	origReset := kubeadmResetExecutor
-	t.Cleanup(func() {
-		kubeadmResetExecutor = origReset
-	})
-	kubeadmResetExecutor = func(_ context.Context, spec stepspec.KubeadmReset) error {
-		return runResetKubeadmStub(spec)
-	}
+func useStubResetKubeadm() kubeadmExecutor {
+	return stubKubeadmExecutor{resetFn: runResetKubeadmStub}
 }
 
-func useStubUpgradeKubeadm(t *testing.T) {
-	t.Helper()
-	origUpgrade := kubeadmUpgradeExecutor
-	t.Cleanup(func() {
-		kubeadmUpgradeExecutor = origUpgrade
-	})
-	kubeadmUpgradeExecutor = func(_ context.Context, spec stepspec.KubeadmUpgrade) error {
-		return runUpgradeKubeadmStub(spec)
-	}
+func useStubUpgradeKubeadm() kubeadmExecutor {
+	return stubKubeadmExecutor{upgradeFn: runUpgradeKubeadmStub}
 }
 
-func useStubCheckCluster(t *testing.T) {
+func useStubCheckKubernetesCluster(t *testing.T) {
 	t.Helper()
-	origCheckCluster := checkClusterExecutor
+	origCheckKubernetesCluster := checkClusterExecutor
 	t.Cleanup(func() {
-		checkClusterExecutor = origCheckCluster
+		checkClusterExecutor = origCheckKubernetesCluster
 	})
 	checkClusterExecutor = func(_ context.Context, spec stepspec.ClusterCheck) error {
-		return runCheckClusterStub(spec)
+		return runCheckKubernetesClusterStub(spec)
 	}
 }
 
@@ -110,7 +122,7 @@ func TestRun_InstallTools(t *testing.T) {
 	}
 	originalPath := os.Getenv("PATH")
 	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, originalPath))
-	useStubInitJoinKubeadm(t)
+	kubeadm := useStubInitJoinKubeadm()
 
 	wf := &config.Workflow{
 		Version: "v1",
@@ -130,7 +142,7 @@ func TestRun_InstallTools(t *testing.T) {
 		}},
 	}
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath, kubeadm: kubeadm}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -1026,18 +1038,18 @@ func TestRun_CreateSymlink(t *testing.T) {
 }
 
 func TestRun_UpgradeAndClusterChecks(t *testing.T) {
-	useStubUpgradeKubeadm(t)
-	useStubCheckCluster(t)
+	kubeadm := useStubUpgradeKubeadm()
+	useStubCheckKubernetesCluster(t)
 
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state", "state.json")
 	reportDir := filepath.Join(dir, "reports")
 	wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "install", Steps: []config.Step{
 		{ID: "upgrade", Kind: "UpgradeKubeadm", Spec: map[string]any{"kubernetesVersion": "v1.31.0"}},
-		{ID: "check", Kind: "CheckCluster", Spec: map[string]any{"reports": map[string]any{"nodesPath": filepath.Join(reportDir, "nodes.txt")}, "versions": map[string]any{"reportPath": filepath.Join(reportDir, "version.txt")}}},
+		{ID: "check", Kind: "CheckKubernetesCluster", Spec: map[string]any{"reports": map[string]any{"nodesPath": filepath.Join(reportDir, "nodes.txt")}, "versions": map[string]any{"reportPath": filepath.Join(reportDir, "version.txt")}}},
 	}}}}
 
-	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath, kubeadm: kubeadm}); err != nil {
 		t.Fatalf("expected typed kubeadm upgrade and cluster check success, got %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(reportDir, "nodes.txt")); err != nil {
@@ -1249,7 +1261,7 @@ func TestRun_KubeadmRealMode(t *testing.T) {
 		t.Fatalf("mkdir bin: %v", err)
 	}
 	fakeKubeadmPath := filepath.Join(binDir, "kubeadm")
-	fakeScript := "#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"${1:-}\" == \"init\" ]]; then\n  exit 0\nfi\nif [[ \"${1:-}\" == \"token\" && \"${2:-}\" == \"create\" ]]; then\n  echo \"kubeadm join 10.1.0.10:6443 --token fake.token --discovery-token-ca-cert-hash sha256:fake\"\n  exit 0\nfi\nif [[ \"${1:-}\" == \"join\" ]]; then\n  exit 0\nfi\necho \"unsupported kubeadm invocation\" >&2\nexit 1\n"
+	fakeScript := "#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"${1:-}\" == \"init\" ]]; then\n  exit 0\nfi\nif [[ \"${1:-}\" == \"token\" && \"${2:-}\" == \"create\" ]]; then\n  echo \"W0000 warning: no default routes found\"\n  echo \"kubeadm join 10.1.0.10:6443 --token fake.token --discovery-token-ca-cert-hash sha256:fake\"\n  exit 0\nfi\nif [[ \"${1:-}\" == \"join\" ]]; then\n  exit 0\nfi\necho \"unsupported kubeadm invocation\" >&2\nexit 1\n"
 	if err := os.WriteFile(fakeKubeadmPath, []byte(fakeScript), 0o755); err != nil {
 		t.Fatalf("write fake kubeadm: %v", err)
 	}
@@ -1277,8 +1289,134 @@ func TestRun_KubeadmRealMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read join file: %v", err)
 	}
-	if !strings.Contains(string(joinRaw), "kubeadm join") {
-		t.Fatalf("expected real join command in join file, got %q", string(joinRaw))
+	if got := string(joinRaw); got != "kubeadm join 10.1.0.10:6443 --token fake.token --discovery-token-ca-cert-hash sha256:fake\n" {
+		t.Fatalf("expected sanitized join file, got %q", got)
+	}
+}
+
+func TestRun_KubeadmRealModeAcceptsJoinFileWithWarnings(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	fakeKubeadmPath := filepath.Join(binDir, "kubeadm")
+	fakeScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" > \"" + filepath.Join(dir, "join-args.log") + "\"\nif [[ \"${1:-}\" == \"join\" ]]; then\n  exit 0\nfi\necho \"unsupported kubeadm invocation\" >&2\nexit 1\n"
+	if err := os.WriteFile(fakeKubeadmPath, []byte(fakeScript), 0o755); err != nil {
+		t.Fatalf("write fake kubeadm: %v", err)
+	}
+
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, originalPath))
+
+	joinPath := filepath.Join(dir, "join.txt")
+	joinLog := filepath.Join(dir, "join-args.log")
+	joinRaw := "W0000 warning: no default routes found\nkubeadm join 10.1.0.10:6443 --token fake.token --discovery-token-ca-cert-hash sha256:fake\n"
+	if err := os.WriteFile(joinPath, []byte(joinRaw), 0o644); err != nil {
+		t.Fatalf("write join file: %v", err)
+	}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "kubeadm-join",
+				Kind: "JoinKubeadm",
+				Spec: map[string]any{"joinFile": joinPath},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+		t.Fatalf("real kubeadm join run failed: %v", err)
+	}
+
+	argsRaw, err := os.ReadFile(joinLog)
+	if err != nil {
+		t.Fatalf("read join args log: %v", err)
+	}
+	if got := strings.TrimSpace(string(argsRaw)); got != "join 10.1.0.10:6443 --token fake.token --discovery-token-ca-cert-hash sha256:fake" {
+		t.Fatalf("unexpected kubeadm join args: %q", got)
+	}
+}
+
+func TestRun_KubeadmRealModeAcceptsWrappedJoinFileWithWarnings(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	fakeKubeadmPath := filepath.Join(binDir, "kubeadm")
+	fakeScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" > \"" + filepath.Join(dir, "join-args.log") + "\"\nif [[ \"${1:-}\" == \"join\" ]]; then\n  exit 0\nfi\necho \"unsupported kubeadm invocation\" >&2\nexit 1\n"
+	if err := os.WriteFile(fakeKubeadmPath, []byte(fakeScript), 0o755); err != nil {
+		t.Fatalf("write fake kubeadm: %v", err)
+	}
+
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, originalPath))
+
+	joinPath := filepath.Join(dir, "join.txt")
+	joinLog := filepath.Join(dir, "join-args.log")
+	joinRaw := "W0000 warning: no default routes found\nkubeadm join 10.1.0.10:6443 \\\n  --token fake.token \\\n  --discovery-token-ca-cert-hash sha256:fake\n"
+	if err := os.WriteFile(joinPath, []byte(joinRaw), 0o644); err != nil {
+		t.Fatalf("write join file: %v", err)
+	}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "kubeadm-join",
+				Kind: "JoinKubeadm",
+				Spec: map[string]any{"joinFile": joinPath},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+		t.Fatalf("wrapped kubeadm join run failed: %v", err)
+	}
+
+	argsRaw, err := os.ReadFile(joinLog)
+	if err != nil {
+		t.Fatalf("read join args log: %v", err)
+	}
+	if got := strings.TrimSpace(string(argsRaw)); got != "join 10.1.0.10:6443 --token fake.token --discovery-token-ca-cert-hash sha256:fake" {
+		t.Fatalf("unexpected kubeadm join args: %q", got)
 	}
 }
 
@@ -1849,9 +1987,9 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 			},
 		}},
 	}
-	useStubInitJoinKubeadm(t)
+	kubeadm := useStubInitJoinKubeadm()
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath, kubeadm: kubeadm}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -4430,9 +4568,9 @@ func TestRun_Kubeadm(t *testing.T) {
 				}},
 			}},
 		}
-		useStubResetKubeadm(t)
+		kubeadm := useStubResetKubeadm()
 
-		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath, kubeadm: kubeadm}); err != nil {
 			t.Fatalf("expected stub reset success, got %v", err)
 		}
 

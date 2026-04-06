@@ -154,7 +154,7 @@ When reviewing Go code in `deck`, check the following first:
 - Are trust-boundary operations kept in the right helper layer?
 - Does concurrency have a clear lifecycle and shutdown path?
 - Are new globals or `init()` usage really necessary?
-- If a public step changed, does it still satisfy the comment-driven metadata contract and pass `make generate && git diff --exit-code`?
+- If a public step changed, does it still satisfy the comment-driven metadata contract and pass `make verify-generated`?
 
 ## Updating this guide
 

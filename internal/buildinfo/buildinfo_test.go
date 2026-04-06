@@ -7,13 +7,16 @@ func TestCurrentUsesFallbacksAndParsesDirty(t *testing.T) {
 	originalCommit := Commit
 	originalDate := Date
 	originalDirty := Dirty
+	originalRepository := Repository
 	t.Cleanup(func() {
 		Version = originalVersion
 		Commit = originalCommit
 		Date = originalDate
 		Dirty = originalDirty
+		Repository = originalRepository
 	})
 
+	Repository = " https://github.com/Airgap-Castaways/deck "
 	Version = ""
 	Commit = ""
 	Date = ""
@@ -34,6 +37,9 @@ func TestCurrentUsesFallbacksAndParsesDirty(t *testing.T) {
 	}
 	if !info.Dirty {
 		t.Fatalf("expected dirty build info")
+	}
+	if info.Repository != "https://github.com/Airgap-Castaways/deck" {
+		t.Fatalf("unexpected repository: %q", info.Repository)
 	}
 	if Summary() != "deck dev" {
 		t.Fatalf("unexpected summary: %q", Summary())

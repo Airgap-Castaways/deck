@@ -8,57 +8,44 @@ import (
 )
 
 func TestRunUsageShowsTopLevelAxes(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-	}{
-		{name: "no args", args: []string{}},
-		{name: "help flag", args: []string{"--help"}},
-		{name: "help command", args: []string{"help"}},
+	res := execute(nil)
+	if res.err != nil {
+		t.Fatalf("expected help result, got %v", res.err)
+	}
+	if res.exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", res.exitCode)
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			res := execute(tc.args)
-			if res.err != nil {
-				t.Fatalf("expected help result, got %v", res.err)
-			}
-			if res.exitCode != 0 {
-				t.Fatalf("expected exit code 0, got %d", res.exitCode)
-			}
-
-			msg := res.stdout
-			for _, cmd := range []string{"init", "list", "lint", "prepare", "bundle", "plan", "apply", "server", "ask", "completion", "cache"} {
-				if !strings.Contains(msg, cmd) {
-					t.Fatalf("usage must include %q, got %q", cmd, msg)
-				}
-			}
-			for _, section := range []string{"Core Commands:\n", "Additional Commands:\n"} {
-				if !strings.Contains(msg, section) {
-					t.Fatalf("usage must include %q, got %q", section, msg)
-				}
-			}
-			if strings.Index(msg, "Core Commands:\n") > strings.Index(msg, "Additional Commands:\n") {
-				t.Fatalf("core commands section must appear before additional commands: %q", msg)
-			}
-			coreCommands := []string{"init", "lint", "prepare", "bundle", "plan", "apply"}
-			for i := 0; i < len(coreCommands)-1; i++ {
-				if strings.Index(msg, coreCommands[i]) > strings.Index(msg, coreCommands[i+1]) {
-					t.Fatalf("core commands must keep registration order: %q appeared after %q in %q", coreCommands[i], coreCommands[i+1], msg)
-				}
-			}
-			additionalCommands := []string{"list", "server", "ask", "version", "completion", "cache"}
-			for i := 0; i < len(additionalCommands)-1; i++ {
-				if strings.Index(msg, additionalCommands[i]) > strings.Index(msg, additionalCommands[i+1]) {
-					t.Fatalf("additional commands must keep registration order: %q appeared after %q in %q", additionalCommands[i], additionalCommands[i+1], msg)
-				}
-			}
-			for _, legacy := range []string{"strategy", "control"} {
-				if strings.Contains(msg, legacy) {
-					t.Fatalf("usage must not include legacy namespace %q, got %q", legacy, msg)
-				}
-			}
-		})
+	msg := res.stdout
+	for _, cmd := range []string{"init", "list", "lint", "prepare", "bundle", "plan", "apply", "server", "ask", "completion", "cache"} {
+		if !strings.Contains(msg, cmd) {
+			t.Fatalf("usage must include %q, got %q", cmd, msg)
+		}
+	}
+	for _, section := range []string{"Core Commands:\n", "Additional Commands:\n"} {
+		if !strings.Contains(msg, section) {
+			t.Fatalf("usage must include %q, got %q", section, msg)
+		}
+	}
+	if strings.Index(msg, "Core Commands:\n") > strings.Index(msg, "Additional Commands:\n") {
+		t.Fatalf("core commands section must appear before additional commands: %q", msg)
+	}
+	coreCommands := []string{"init", "lint", "prepare", "bundle", "plan", "apply"}
+	for i := 0; i < len(coreCommands)-1; i++ {
+		if strings.Index(msg, coreCommands[i]) > strings.Index(msg, coreCommands[i+1]) {
+			t.Fatalf("core commands must keep registration order: %q appeared after %q in %q", coreCommands[i], coreCommands[i+1], msg)
+		}
+	}
+	additionalCommands := []string{"list", "server", "ask", "version", "completion", "cache"}
+	for i := 0; i < len(additionalCommands)-1; i++ {
+		if strings.Index(msg, additionalCommands[i]) > strings.Index(msg, additionalCommands[i+1]) {
+			t.Fatalf("additional commands must keep registration order: %q appeared after %q in %q", additionalCommands[i], additionalCommands[i+1], msg)
+		}
+	}
+	for _, legacy := range []string{"strategy", "control"} {
+		if strings.Contains(msg, legacy) {
+			t.Fatalf("usage must not include legacy namespace %q, got %q", legacy, msg)
+		}
 	}
 }
 

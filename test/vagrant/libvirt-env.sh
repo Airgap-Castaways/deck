@@ -162,9 +162,12 @@ EOF
     cat >"${deck_net_xml}" <<EOF
 <network>
   <name>deck-vagrant</name>
-  <forward mode='nat'/>
   <bridge name='virbr57' stp='on' delay='0'/>
-  <ip address='192.168.57.1' netmask='255.255.255.0'/>
+  <ip address='192.168.57.1' netmask='255.255.255.0'>
+    <dhcp>
+      <range start='192.168.57.2' end='192.168.57.254'/>
+    </dhcp>
+  </ip>
 </network>
 EOF
     redefine_deck_network=0
@@ -172,11 +175,12 @@ EOF
       redefine_deck_network=1
     else
       deck_xml_current="$("${virsh_cmd[@]}" net-dumpxml deck-vagrant 2>/dev/null || true)"
-      case "${deck_xml_current}" in
-        *"<dhcp>"*)
-          redefine_deck_network=1
-          ;;
-      esac
+      if [[ "${deck_xml_current}" == *"<forward "* ]] || [[ "${deck_xml_current}" != *"<dhcp>"* ]]; then
+        redefine_deck_network=1
+      fi
+      if [[ "${deck_xml_current}" != *"<bridge name='virbr57'"* ]] || [[ "${deck_xml_current}" != *"<ip address='192.168.57.1' netmask='255.255.255.0'>"* ]]; then
+        redefine_deck_network=1
+      fi
     fi
 
     if [[ ${redefine_deck_network} -eq 1 ]]; then

@@ -32,6 +32,8 @@ func TestVagrantHarnessBehaviorCanonicalScripts(t *testing.T) {
 	runnerPath := filepath.Join(root, "test", "e2e", "vagrant", "run-scenario.sh")
 	vmdPath := filepath.Join(root, "test", "e2e", "vagrant", "run-scenario-vm.sh")
 	renderPath := filepath.Join(root, "test", "e2e", "vagrant", "render-workflows.sh")
+	manualRsyncPath := filepath.Join(root, "test", "vagrant", "prepare-minimal-rsync.sh")
+	sanitizeStatePath := filepath.Join(root, "test", "vagrant", "sanitize-vagrant-state.sh")
 	if _, err := os.Stat(runnerPath); err != nil {
 		t.Fatalf("stat canonical runner: %v", err)
 	}
@@ -40,6 +42,12 @@ func TestVagrantHarnessBehaviorCanonicalScripts(t *testing.T) {
 	}
 	if _, err := os.Stat(renderPath); err != nil {
 		t.Fatalf("stat workflow renderer: %v", err)
+	}
+	if _, err := os.Stat(manualRsyncPath); err != nil {
+		t.Fatalf("stat manual rsync helper: %v", err)
+	}
+	if _, err := os.Stat(sanitizeStatePath); err != nil {
+		t.Fatalf("stat sanitize state helper: %v", err)
 	}
 	requireScriptHelpContainsAll(t, runnerPath, "--scenario", "--fresh-cache", "--art-dir")
 	requireScriptHelpContainsAll(t, vmdPath, "prepare-bundle", "apply-scenario", "verify-scenario", "bootstrap|cluster|all")
@@ -51,9 +59,9 @@ func TestVagrantHarnessBehaviorFresh(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, artDir, "checkpoints"), 0o755); err != nil {
 		t.Fatalf("mkdir art dir: %v", err)
 	}
-	bundleCacheDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "k8s-worker-join")
-	stagingCacheDir := filepath.Join(root, "test", "artifacts", "cache", "staging", "k8s-worker-join")
-	vagrantCacheDir := filepath.Join(root, "test", "artifacts", "cache", "vagrant", "k8s-worker-join")
+	bundleCacheDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "shared", "compat")
+	stagingCacheDir := filepath.Join(root, "test", "artifacts", "cache", "staging", "shared", "compat")
+	vagrantCacheDir := filepath.Join(root, "test", "artifacts", "cache", "vagrant", "shared", "compat")
 	for _, dir := range []string{bundleCacheDir, stagingCacheDir, vagrantCacheDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatalf("mkdir cache dir %s: %v", dir, err)
@@ -78,9 +86,9 @@ func TestVagrantHarnessBehaviorFreshCache(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, artDir), 0o755); err != nil {
 		t.Fatalf("mkdir art dir: %v", err)
 	}
-	bundleDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "k8s-worker-join")
-	stagingDir := filepath.Join(root, "test", "artifacts", "cache", "staging", "k8s-worker-join")
-	vagrantDir := filepath.Join(root, "test", "artifacts", "cache", "vagrant", "k8s-worker-join")
+	bundleDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "shared", "compat")
+	stagingDir := filepath.Join(root, "test", "artifacts", "cache", "staging", "shared", "compat")
+	vagrantDir := filepath.Join(root, "test", "artifacts", "cache", "vagrant", "shared", "compat")
 	for _, dir := range []string{bundleDir, stagingDir, vagrantDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatalf("mkdir cache dir %s: %v", dir, err)
@@ -102,7 +110,7 @@ func TestVagrantHarnessBehaviorCacheReuse(t *testing.T) {
 	root := testProjectRoot(t)
 	artDir := filepath.Join("test", "tmp", "cache-reuse-behavior")
 	checkpointDir := filepath.Join(root, artDir, "checkpoints")
-	bundleDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "k8s-worker-join")
+	bundleDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "shared", "compat")
 	if err := os.MkdirAll(checkpointDir, 0o755); err != nil {
 		t.Fatalf("mkdir checkpoints: %v", err)
 	}

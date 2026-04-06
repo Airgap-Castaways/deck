@@ -2,6 +2,8 @@
 
 `deck` still carries a small set of compatibility fallbacks for pre-XDG paths and older on-disk state formats. Keep these shims narrow, tested, and easy to delete.
 
+This document describes the few pre-`v1.0.0` compatibility exceptions that are still worth keeping; it does not change the broader policy that `v0.x.y` releases may still make breaking changes while the project converges on a simpler canonical model.
+
 ## Compatibility Matrix
 
 | Area | Current path | Legacy fallback | Code | Removal gate |

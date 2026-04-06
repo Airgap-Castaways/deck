@@ -193,7 +193,7 @@ func TestRelevantStepKindsMatchesKubeadmAirGapRequest(t *testing.T) {
 	for _, step := range relevant {
 		joined = append(joined, step.Kind)
 	}
-	for _, want := range []string{"CheckHost", "LoadImage", "CheckCluster"} {
+	for _, want := range []string{"CheckHost", "LoadImage", "CheckKubernetesCluster"} {
 		if want == "LoadImage" {
 			if !containsString(joined, "LoadImage") && !containsString(joined, "DownloadImage") {
 				t.Fatalf("expected at least one image-staging step in relevant steps, got %v", joined)
@@ -215,8 +215,8 @@ func TestRelevantStepKindsWithOptionsPrefersJoinForMultiNodeCapability(t *testin
 	if !containsString(joined, "JoinKubeadm") {
 		t.Fatalf("expected JoinKubeadm in relevant steps, got %v", joined)
 	}
-	if !containsString(joined, "CheckCluster") {
-		t.Fatalf("expected CheckCluster in relevant steps, got %v", joined)
+	if !containsString(joined, "CheckKubernetesCluster") {
+		t.Fatalf("expected CheckKubernetesCluster in relevant steps, got %v", joined)
 	}
 }
 

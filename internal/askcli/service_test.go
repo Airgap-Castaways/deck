@@ -183,7 +183,7 @@ func TestNormalizePlanCriticDowngradesRecoverableIssues(t *testing.T) {
 	critic := normalizePlanCritic(plan, askcontract.PlanCriticResponse{
 		Blocking: []string{
 			"artifact consumers should bind to explicit artifact contracts",
-			"running CheckCluster in both control-plane and worker flows is not realistic",
+			"running CheckKubernetesCluster in both control-plane and worker flows is not realistic",
 		},
 		MissingContracts: []string{"join-file publication contract"},
 	})
@@ -191,7 +191,7 @@ func TestNormalizePlanCriticDowngradesRecoverableIssues(t *testing.T) {
 		t.Fatalf("expected recoverable issues to downgrade, got %#v", critic)
 	}
 	joined := strings.Join(critic.Advisory, "\n")
-	for _, want := range []string{"CheckCluster"} {
+	for _, want := range []string{"CheckKubernetesCluster"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("expected %q in advisory, got %#v", want, critic)
 		}
@@ -257,11 +257,11 @@ func TestNormalizePlanCriticDowngradesGpt54OperationalCompletenessLanguage(t *te
 	critic := normalizePlanCritic(plan, askcontract.PlanCriticResponse{
 		Blocking: []string{
 			"workflows/scenarios/apply.yaml: The join handoff is not executable as written. reachable through the prepared local file-serving path or equivalent offline shared path is too vague for a shared-state contract",
-			"Execution model / workflows/scenarios/apply.yaml: Final CheckCluster on the control-plane can race worker joins because apply is described as per-node role-based execution with no barrier or wait contract",
+			"Execution model / workflows/scenarios/apply.yaml: Final CheckKubernetesCluster on the control-plane can race worker joins because apply is described as per-node role-based execution with no barrier or wait contract",
 			"workflows/prepare.yaml -> workflows/scenarios/apply.yaml: The offline image artifact contract is underspecified. The plan does not define the produced image format/bundle layout or the exact path apply LoadImage consumes",
 		},
 		MissingContracts: []string{
-			"Execution model: Synchronization contract between worker joins and the final control-plane CheckCluster step.",
+			"Execution model: Synchronization contract between worker joins and the final control-plane CheckKubernetesCluster step.",
 			"Execution model / topology: Role cardinality contract for 3 nodes = 1 control-plane + 2 workers",
 		},
 	})
@@ -327,7 +327,7 @@ func TestNormalizePlanCriticSuppressesRoleAndVerificationNoiseWhenCountsAreExpli
 	}
 	critic := normalizePlanCritic(plan, askcontract.PlanCriticResponse{Findings: []askcontract.PlanCriticFinding{
 		{Code: workflowissues.CodeRoleCardinalityGap, Severity: workflowissues.SeverityAdvisory, Message: "role counts should be more explicit", Recoverable: true},
-		{Code: workflowissues.CodeWeakVerificationStaging, Severity: workflowissues.SeverityAdvisory, Message: "final CheckCluster should wait for worker join completion", Recoverable: true},
+		{Code: workflowissues.CodeWeakVerificationStaging, Severity: workflowissues.SeverityAdvisory, Message: "final CheckKubernetesCluster should wait for worker join completion", Recoverable: true},
 	}})
 	if len(critic.Blocking) != 0 || len(critic.MissingContracts) != 0 || len(critic.Advisory) != 0 {
 		t.Fatalf("expected explicit role counts and final verification contract to suppress residual review noise, got %#v", critic)
@@ -426,7 +426,7 @@ func TestHasFatalPlanReviewIssuesIgnoresRecoverableGpt54PlanCriticBlockers(t *te
 	critic := normalizePlanCritic(plan, askcontract.PlanCriticResponse{Blocking: []string{
 		"workflows/scenarios/apply.yaml join handoff: the join artifact path is named, but the contract does not specify whether the published file contains a full reusable kubeadm join command",
 		"workflows/vars.yaml + apply role logic: the plan says role selector is vars.topology.nodeRole, but it does not define how each running node resolves to one topology entry",
-		"Execution model / workflows/scenarios/apply.yaml: Final CheckCluster on the control-plane can race worker joins because apply is described as per-node role-based execution with no barrier or wait contract",
+		"Execution model / workflows/scenarios/apply.yaml: Final CheckKubernetesCluster on the control-plane can race worker joins because apply is described as per-node role-based execution with no barrier or wait contract",
 	}})
 	if hasFatalPlanReviewIssues(plan, critic) {
 		t.Fatalf("expected recoverable gpt-5.4 blocker language to proceed to generation")
@@ -473,7 +473,7 @@ func TestHasFatalPlanReviewIssuesAllowsSimpleSingleNodeVerificationPlan(t *testi
 		Files:          []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml"}},
 		ExecutionModel: askcontract.ExecutionModel{Verification: askcontract.VerificationStrategy{ExpectedNodeCount: 1, ExpectedControlPlaneReady: 1, FinalVerificationRole: "local"}},
 	}
-	critic := askcontract.PlanCriticResponse{Findings: []askcontract.PlanCriticFinding{{Code: workflowissues.CodeRoleCardinalityGap, Severity: workflowissues.SeverityMissingContract, Message: "single-node role cardinality is not explicit"}, {Code: workflowissues.CodeWeakVerificationStaging, Severity: workflowissues.SeverityAdvisory, Message: "single CheckCluster-only flow is weakly staged"}}}
+	critic := askcontract.PlanCriticResponse{Findings: []askcontract.PlanCriticFinding{{Code: workflowissues.CodeRoleCardinalityGap, Severity: workflowissues.SeverityMissingContract, Message: "single-node role cardinality is not explicit"}, {Code: workflowissues.CodeWeakVerificationStaging, Severity: workflowissues.SeverityAdvisory, Message: "single CheckKubernetesCluster-only flow is weakly staged"}}}
 	if hasFatalPlanReviewIssues(plan, critic) {
 		t.Fatalf("expected simple single-node verification plan to continue past recoverable critic findings")
 	}
@@ -481,7 +481,7 @@ func TestHasFatalPlanReviewIssuesAllowsSimpleSingleNodeVerificationPlan(t *testi
 
 func TestBuildPlanWithReviewFallsBackOnPlannerFailure(t *testing.T) {
 	client := &stubClient{responses: []string{"not-json"}}
-	prompt := "Create a minimal single-node apply-only kubeadm workflow using InitKubeadm and CheckCluster"
+	prompt := "Create a minimal single-node apply-only kubeadm workflow using InitKubeadm and CheckKubernetesCluster"
 	req := askpolicy.BuildScenarioRequirements(prompt, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
 	plan, critic, usedFallback, err := buildPlanWithReview(context.Background(), client, askconfigSettings{provider: "openai", model: "gpt-5.4", apiKey: "test-key"}, askintent.Decision{Route: askintent.RouteDraft}, askretrieve.RetrievalResult{}, prompt, askretrieve.WorkspaceSummary{}, req, newAskLogger(io.Discard, "trace"))
 	if err != nil {
@@ -503,7 +503,7 @@ func TestBuildPlanWithReviewFallsBackOnPlannerFailure(t *testing.T) {
 
 func TestBuildPlanWithReviewBuildsViableArtifactFallbackPlan(t *testing.T) {
 	client := &stubClient{responses: []string{"not-json"}}
-	prompt := "Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker. Generate both workflows/prepare.yaml and workflows/scenarios/apply.yaml. In prepare, stage kubeadm kubelet kubectl cri-tools containerd packages and Kubernetes control-plane images using typed steps only. In apply, use vars.role with allowed values control-plane and worker, bootstrap the control-plane with InitKubeadm writing /tmp/deck/join.txt, join the worker with JoinKubeadm using that same file, and run final CheckCluster only on the control-plane expecting total 2 nodes and controlPlaneReady 1. Do not use remote downloads during apply."
+	prompt := "Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker. Generate both workflows/prepare.yaml and workflows/scenarios/apply.yaml. In prepare, stage kubeadm kubelet kubectl cri-tools containerd packages and Kubernetes control-plane images using typed steps only. In apply, use vars.role with allowed values control-plane and worker, bootstrap the control-plane with InitKubeadm writing /tmp/deck/join.txt, join the worker with JoinKubeadm using that same file, and run final CheckKubernetesCluster only on the control-plane expecting total 2 nodes and controlPlaneReady 1. Do not use remote downloads during apply."
 	req := askpolicy.BuildScenarioRequirements(prompt, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft})
 	plan, _, usedFallback, err := buildPlanWithReview(context.Background(), client, askconfigSettings{provider: "openai", model: "gpt-5.4", apiKey: "test-key"}, askintent.Decision{Route: askintent.RouteDraft}, askretrieve.RetrievalResult{}, prompt, askretrieve.WorkspaceSummary{}, req, newAskLogger(io.Discard, "trace"))
 	if err != nil {
@@ -622,7 +622,7 @@ func TestGenerateWithValidationRepairsKubeadmStyleCheckHostFailure(t *testing.T)
 	enableLegacyAuthoringFallback(t)
 	client := &stubClient{responses: []string{
 		`{"summary":"invalid kubeadm draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: preflight\n    kind: CheckHost\n    spec:\n      os:\n        type: rhel\n        version: \"9\"\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [\"true\"]\n"}]}`,
-		`{"summary":"repaired kubeadm draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: preflight\n    kind: CheckHost\n    spec:\n      checks: [os, arch, swap]\n      failFast: true\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: bootstrap\n    kind: UpgradeKubeadm\n    spec:\n      kubernetesVersion: v1.31.0\n  - id: verify-cluster\n    kind: CheckCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 1\n        ready: 1\n        controlPlaneReady: 1\n"}]}`,
+		`{"summary":"repaired kubeadm draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: preflight\n    kind: CheckHost\n    spec:\n      checks: [os, arch, swap]\n      failFast: true\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: bootstrap\n    kind: UpgradeKubeadm\n    spec:\n      kubernetesVersion: v1.31.0\n  - id: verify-cluster\n    kind: CheckKubernetesCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 1\n        ready: 1\n        controlPlaneReady: 1\n"}]}`,
 	}}
 	plan := askcontract.PlanResponse{
 		Request:             "create an air-gapped rhel9 single-node kubeadm workflow using typed steps where possible",
@@ -659,7 +659,7 @@ func TestGenerateWithValidationRetryPromptIncludesRawValidatorErrorAndRepairGuid
 	enableLegacyAuthoringFallback(t)
 	client := &stubClient{responses: []string{
 		`{"summary":"invalid kubeadm draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: preflight\n    kind: CheckHost\n    spec:\n      os:\n        type: rhel\n        version: \"9\"\n"}]}`,
-		`{"summary":"repaired kubeadm draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: preflight\n    kind: CheckHost\n    spec:\n      checks: [os, arch, swap]\n      failFast: true\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: bootstrap\n    kind: UpgradeKubeadm\n    spec:\n      kubernetesVersion: v1.31.0\n  - id: verify-cluster\n    kind: CheckCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 1\n        ready: 1\n        controlPlaneReady: 1\n"}]}`,
+		`{"summary":"repaired kubeadm draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: preflight\n    kind: CheckHost\n    spec:\n      checks: [os, arch, swap]\n      failFast: true\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: bootstrap\n    kind: UpgradeKubeadm\n    spec:\n      kubernetesVersion: v1.31.0\n  - id: verify-cluster\n    kind: CheckKubernetesCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 1\n        ready: 1\n        controlPlaneReady: 1\n"}]}`,
 	}}
 	plan := askcontract.PlanResponse{
 		Request:       "create an air-gapped rhel9 single-node kubeadm workflow using typed steps where possible",
@@ -736,7 +736,7 @@ func TestCurrentWorkspaceDocumentSummariesParsesWorkflowAndVars(t *testing.T) {
 func TestGenerateWithValidationMergesPartialValidationRepairResponse(t *testing.T) {
 	enableLegacyAuthoringFallback(t)
 	client := &stubClient{responses: []string{
-		`{"summary":"draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: collect\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: rhel9\n          repo:\n            type: rpm\n          outputDir: /tmp/bad\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      outputJoinFile: /tmp/join.sh\n  - id: verify\n    kind: CheckCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 3\n        ready: 1\n        controlPlaneReady: 1\n"}]}`,
+		`{"summary":"draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: collect\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: rhel9\n          repo:\n            type: rpm\n          outputDir: /tmp/bad\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      outputJoinFile: /tmp/join.sh\n  - id: verify\n    kind: CheckKubernetesCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 3\n        ready: 1\n        controlPlaneReady: 1\n"}]}`,
 		`{"summary":"patched prepare only","review":["repaired prepare output root"],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: collect\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: rhel9\n          repo:\n            type: rpm\n          outputDir: packages/\n"}]}`,
 	}}
 	plan := askcontract.PlanResponse{
@@ -761,9 +761,9 @@ func TestGenerateWithValidationMergesPartialValidationRepairResponse(t *testing.
 func TestGenerateWithValidationRepairsOnJudgeBlocking(t *testing.T) {
 	enableLegacyAuthoringFallback(t)
 	client := &stubClient{responses: []string{
-		`{"summary":"draft one","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      repo:\n        type: rpm\n      distro:\n        family: rhel\n        release: rocky9\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      source:\n        type: local-repo\n        path: /tmp/packages\n  - id: init\n    kind: InitKubeadm\n    spec:\n      outputJoinFile: /tmp/join.sh\n  - id: join\n    kind: JoinKubeadm\n    spec:\n      joinFile: /tmp/join.sh\n  - id: verify\n    kind: CheckCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 3\n        ready: 3\n        controlPlaneReady: 1\n"}]}`,
+		`{"summary":"draft one","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      repo:\n        type: rpm\n      distro:\n        family: rhel\n        release: rocky9\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      source:\n        type: local-repo\n        path: /tmp/packages\n  - id: init\n    kind: InitKubeadm\n    spec:\n      outputJoinFile: /tmp/join.sh\n  - id: join\n    kind: JoinKubeadm\n    spec:\n      joinFile: /tmp/join.sh\n  - id: verify\n    kind: CheckKubernetesCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 3\n        ready: 3\n        controlPlaneReady: 1\n"}]}`,
 		`{"summary":"platform mismatch","blocking":["request asked for rhel9 but prepare uses rocky9"],"advisory":[],"missingCapabilities":[],"suggestedFixes":["Use an rhel9-compatible distro.release value instead of rocky9 in DownloadPackage"]}`,
-		`{"summary":"draft two","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      repo:\n        type: rpm\n      distro:\n        family: rhel\n        release: \"9\"\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      source:\n        type: local-repo\n        path: /tmp/packages\n  - id: init\n    kind: InitKubeadm\n    spec:\n      outputJoinFile: /tmp/join.sh\n  - id: join\n    kind: JoinKubeadm\n    spec:\n      joinFile: /tmp/join.sh\n  - id: verify\n    kind: CheckCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 3\n        ready: 3\n        controlPlaneReady: 1\n"}]}`,
+		`{"summary":"draft two","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      repo:\n        type: rpm\n      distro:\n        family: rhel\n        release: \"9\"\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      source:\n        type: local-repo\n        path: /tmp/packages\n  - id: init\n    kind: InitKubeadm\n    spec:\n      outputJoinFile: /tmp/join.sh\n  - id: join\n    kind: JoinKubeadm\n    spec:\n      joinFile: /tmp/join.sh\n  - id: verify\n    kind: CheckKubernetesCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 3\n        ready: 3\n        controlPlaneReady: 1\n"}]}`,
 		`{"summary":"looks good","blocking":[],"advisory":["prepare now matches the requested rhel9 platform"],"missingCapabilities":[],"suggestedFixes":[]}`,
 	}}
 	plan := askcontract.PlanResponse{Request: "create an air-gapped 3-node kubeadm prepare and apply workflow", AuthoringBrief: askcontract.AuthoringBrief{RouteIntent: "draft", TargetScope: "workspace", ModeIntent: "prepare+apply", Topology: "multi-node", NodeCount: 3, RequiredCapabilities: []string{"prepare-artifacts", "kubeadm-bootstrap", "kubeadm-join"}}}
@@ -790,7 +790,7 @@ func TestGenerateWithValidationRepairsOnJudgeBlocking(t *testing.T) {
 func TestGenerateWithValidationKeepsFinalJudgeBlockingAsAdvisory(t *testing.T) {
 	enableLegacyAuthoringFallback(t)
 	client := &stubClient{responses: []string{
-		`{"summary":"draft","review":[],"files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      outputJoinFile: /tmp/join.sh\n  - id: verify\n    kind: CheckCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 3\n        ready: 1\n        controlPlaneReady: 1\n"}]}`,
+		`{"summary":"draft","review":[],"files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n    spec:\n      outputJoinFile: /tmp/join.sh\n  - id: verify\n    kind: CheckKubernetesCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 3\n        ready: 1\n        controlPlaneReady: 1\n"}]}`,
 		`{"summary":"still thin","blocking":["requested worker join behavior is still missing"],"advisory":[],"missingCapabilities":["kubeadm-join"],"suggestedFixes":["Add worker join steps"]}`,
 	}}
 	plan := askcontract.PlanResponse{Request: "create an air-gapped 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{RouteIntent: "draft", TargetScope: "workspace", ModeIntent: "apply-only", Topology: "multi-node", NodeCount: 3, RequiredCapabilities: []string{"kubeadm-bootstrap", "kubeadm-join"}}}
@@ -811,8 +811,8 @@ func TestGenerateWithValidationKeepsFinalJudgeBlockingAsAdvisory(t *testing.T) {
 
 func TestGenerateWithValidationSucceedsForSpecificOfflineTwoNodePrompt(t *testing.T) {
 	enableLegacyAuthoringFallback(t)
-	prompt := "Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker. Generate both workflows/prepare.yaml and workflows/scenarios/apply.yaml. In prepare, stage kubeadm kubelet kubectl cri-tools containerd packages and Kubernetes control-plane images using typed steps only. In apply, use vars.role with allowed values control-plane and worker, bootstrap the control-plane with InitKubeadm writing /tmp/deck/join.txt, join the worker with JoinKubeadm using that same file, and run final CheckCluster only on the control-plane expecting total 2 nodes and controlPlaneReady 1. Do not use remote downloads during apply. Use workflows/vars.yaml if values repeat, and use workflows/components/ only if needed."
-	client := &stubClient{responses: []string{`{"summary":"specific two-node draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: prepare-download-kubernetes-packages\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm, kubelet, kubectl, cri-tools, containerd]\n      distro:\n        family: rhel\n        release: \"9\"\n      repo:\n        type: rpm\n        generate: true\n      backend:\n        mode: container\n        runtime: auto\n        image: rockylinux:9\n      outputDir: packages/rpm/rhel9\n  - id: prepare-download-control-plane-images\n    kind: DownloadImage\n    spec:\n      images: [registry.k8s.io/kube-apiserver:v1.30.0, registry.k8s.io/kube-controller-manager:v1.30.0, registry.k8s.io/kube-scheduler:v1.30.0, registry.k8s.io/etcd:3.5.12-0, registry.k8s.io/pause:3.9]\n      outputDir: images/control-plane\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: install-packages\n    steps:\n      - id: apply-install-kubernetes-packages\n        kind: InstallPackage\n        spec:\n          packages: [kubeadm, kubelet, kubectl, cri-tools, containerd]\n          source:\n            type: local-repo\n            path: packages/rpm/rhel9\n  - name: bootstrap\n    steps:\n      - id: apply-init-control-plane\n        when: vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: \"{{ .vars.joinFile }}\"\n          podNetworkCIDR: \"{{ .vars.podCIDR }}\"\n  - name: join\n    steps:\n      - id: apply-join-worker\n        when: vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: \"{{ .vars.joinFile }}\"\n  - name: verify\n    steps:\n      - id: apply-verify-cluster\n        when: vars.role == \"control-plane\"\n        kind: CheckCluster\n        spec:\n          timeout: 10m\n          interval: 5s\n          nodes:\n            total: 2\n            ready: 2\n            controlPlaneReady: 1\n          reports:\n            nodesPath: /tmp/deck/reports/two-node-cluster.txt\n"},{"path":"workflows/vars.yaml","content":"clusterName: two-node-offline\nrole: control-plane\njoinFile: /tmp/deck/join.txt\npodCIDR: 10.244.0.0/16\n"}]}`}}
+	prompt := "Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker. Generate both workflows/prepare.yaml and workflows/scenarios/apply.yaml. In prepare, stage kubeadm kubelet kubectl cri-tools containerd packages and Kubernetes control-plane images using typed steps only. In apply, use vars.role with allowed values control-plane and worker, bootstrap the control-plane with InitKubeadm writing /tmp/deck/join.txt, join the worker with JoinKubeadm using that same file, and run final CheckKubernetesCluster only on the control-plane expecting total 2 nodes and controlPlaneReady 1. Do not use remote downloads during apply. Use workflows/vars.yaml if values repeat, and use workflows/components/ only if needed."
+	client := &stubClient{responses: []string{`{"summary":"specific two-node draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nsteps:\n  - id: prepare-download-kubernetes-packages\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm, kubelet, kubectl, cri-tools, containerd]\n      distro:\n        family: rhel\n        release: \"9\"\n      repo:\n        type: rpm\n        generate: true\n      backend:\n        mode: container\n        runtime: auto\n        image: rockylinux:9\n      outputDir: packages/rpm/rhel9\n  - id: prepare-download-control-plane-images\n    kind: DownloadImage\n    spec:\n      images: [registry.k8s.io/kube-apiserver:v1.30.0, registry.k8s.io/kube-controller-manager:v1.30.0, registry.k8s.io/kube-scheduler:v1.30.0, registry.k8s.io/etcd:3.5.12-0, registry.k8s.io/pause:3.9]\n      outputDir: images/control-plane\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: install-packages\n    steps:\n      - id: apply-install-kubernetes-packages\n        kind: InstallPackage\n        spec:\n          packages: [kubeadm, kubelet, kubectl, cri-tools, containerd]\n          source:\n            type: local-repo\n            path: packages/rpm/rhel9\n  - name: bootstrap\n    steps:\n      - id: apply-init-control-plane\n        when: vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: \"{{ .vars.joinFile }}\"\n          podNetworkCIDR: \"{{ .vars.podCIDR }}\"\n  - name: join\n    steps:\n      - id: apply-join-worker\n        when: vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: \"{{ .vars.joinFile }}\"\n  - name: verify\n    steps:\n      - id: apply-verify-cluster\n        when: vars.role == \"control-plane\"\n        kind: CheckKubernetesCluster\n        spec:\n          timeout: 10m\n          interval: 5s\n          nodes:\n            total: 2\n            ready: 2\n            controlPlaneReady: 1\n          reports:\n            nodesPath: /tmp/deck/reports/two-node-cluster.txt\n"},{"path":"workflows/vars.yaml","content":"clusterName: two-node-offline\nrole: control-plane\njoinFile: /tmp/deck/join.txt\npodCIDR: 10.244.0.0/16\n"}]}`}}
 	plan := askcontract.PlanResponse{
 		Request:       prompt,
 		NeedsPrepare:  true,
@@ -860,7 +860,7 @@ func TestGenerateWithValidationSucceedsForSpecificOfflineTwoNodePrompt(t *testin
 	if !strings.Contains(byPath["workflows/prepare.yaml"], "kind: DownloadPackage") || !strings.Contains(byPath["workflows/prepare.yaml"], "kind: DownloadImage") {
 		t.Fatalf("expected typed prepare staging steps, got %q", byPath["workflows/prepare.yaml"])
 	}
-	if !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "kind: CheckCluster") || !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "total: 2") {
+	if !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "kind: CheckKubernetesCluster") || !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "total: 2") {
 		t.Fatalf("expected explicit final verification contract, got %q", byPath["workflows/scenarios/apply.yaml"])
 	}
 }
@@ -891,7 +891,7 @@ func TestSemanticCriticUsesExecutionModelForRoleAndJoinContracts(t *testing.T) {
 }
 
 func TestSemanticCriticBlocksWorkerOnlyFinalVerificationAndMissingJoinPublish(t *testing.T) {
-	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      distro:\n        family: rhel\n        release: \"9\"\n      repo:\n        type: rpm\n      outputDir: /tmp/packages\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        when: .vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/deck/join.txt\n  - name: join\n    steps:\n      - id: worker-join\n        when: .vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: /tmp/deck/join.txt\n  - name: verify\n    steps:\n      - id: verify-final\n        when: .vars.role == \"worker\"\n        kind: CheckCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 3\n            ready: 3\n            controlPlaneReady: 3\n"}})
+	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      distro:\n        family: rhel\n        release: \"9\"\n      repo:\n        type: rpm\n      outputDir: /tmp/packages\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        when: .vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/deck/join.txt\n  - name: join\n    steps:\n      - id: worker-join\n        when: .vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: /tmp/deck/join.txt\n  - name: verify\n    steps:\n      - id: verify-final\n        when: .vars.role == \"worker\"\n        kind: CheckKubernetesCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 3\n            ready: 3\n            controlPlaneReady: 3\n"}})
 	plan := askcontract.PlanResponse{Request: "create 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{RouteIntent: "draft", TargetScope: "workspace", ModeIntent: "prepare+apply", Topology: "multi-node", NodeCount: 3}, ExecutionModel: askcontract.ExecutionModel{ArtifactContracts: []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}}, SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "/tmp/deck/server-root/files/cluster/join.txt", ConsumerPaths: []string{"/tmp/deck/server-root/files/cluster/join.txt"}, AvailabilityModel: "published-for-worker-consumption"}}, RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role", PerNodeInvocation: true}, Verification: askcontract.VerificationStrategy{FinalVerificationRole: "control-plane", ExpectedNodeCount: 3, ExpectedControlPlaneReady: 1}}}
 	critic := semanticCritic(gen, askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{})
 	if len(critic.Blocking) != 0 {
@@ -907,13 +907,13 @@ func TestSemanticCriticBlocksWorkerOnlyFinalVerificationAndMissingJoinPublish(t 
 
 func TestMaybePostProcessGenerationAppliesOperationalRepairOnly(t *testing.T) {
 	client := &stubClient{responses: []string{
-		`{"summary":"final verification should be gated to control-plane and inline structure is acceptable","blocking":["final cluster verification should run only on the control-plane role for this draft"],"advisory":["preserve inline structure for now"],"upgradeCandidates":["preserve-inline"],"reviseFiles":["workflows/scenarios/apply.yaml"],"preserveFiles":["workflows/prepare.yaml","workflows/vars.yaml"],"suggestedFixes":["Gate the final CheckCluster step with .vars.role == \"control-plane\""]}`,
-		`{"summary":"post-processed draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: packages\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: \"9\"\n          repo:\n            type: rpm\n          outputDir: packages/kubernetes\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        when: .vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/deck/join.txt\n      - id: join\n        when: .vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: /tmp/deck/join.txt\n      - id: verify\n        when: .vars.role == \"control-plane\"\n        kind: CheckCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 3\n            ready: 3\n            controlPlaneReady: 1\n"},{"path":"workflows/vars.yaml","content":"role: control-plane\n"}]}`,
+		`{"summary":"final verification should be gated to control-plane and inline structure is acceptable","blocking":["final cluster verification should run only on the control-plane role for this draft"],"advisory":["preserve inline structure for now"],"upgradeCandidates":["preserve-inline"],"reviseFiles":["workflows/scenarios/apply.yaml"],"preserveFiles":["workflows/prepare.yaml","workflows/vars.yaml"],"suggestedFixes":["Gate the final CheckKubernetesCluster step with .vars.role == \"control-plane\""]}`,
+		`{"summary":"post-processed draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: packages\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: \"9\"\n          repo:\n            type: rpm\n          outputDir: packages/kubernetes\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        when: .vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/deck/join.txt\n      - id: join\n        when: .vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: /tmp/deck/join.txt\n      - id: verify\n        when: .vars.role == \"control-plane\"\n        kind: CheckKubernetesCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 3\n            ready: 3\n            controlPlaneReady: 1\n"},{"path":"workflows/vars.yaml","content":"role: control-plane\n"}]}`,
 		`{"summary":"post-processed workflow now has control-plane scoped final verification","blocking":[],"advisory":["inline structure is fine for now"],"missingCapabilities":[],"suggestedFixes":[]}`,
 	}}
 	plan := askcontract.PlanResponse{Request: "create 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", CompletenessTarget: "complete", Topology: "multi-node"}, ExecutionModel: askcontract.ExecutionModel{ArtifactContracts: []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}}, SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "local-only"}}, RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role", PerNodeInvocation: true}, Verification: askcontract.VerificationStrategy{ExpectedNodeCount: 3, ExpectedControlPlaneReady: 1}}}
 	brief := plan.AuthoringBrief
-	gen := testMaterialized("draft", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: packages\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: \"9\"\n          repo:\n            type: rpm\n          outputDir: packages/kubernetes\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        when: .vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/deck/join.txt\n      - id: join\n        when: .vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: /tmp/deck/join.txt\n      - id: verify\n        kind: CheckCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 3\n            ready: 3\n            controlPlaneReady: 1\n"}, {Path: "workflows/vars.yaml", Content: "role: control-plane\n"}})
+	gen := testMaterialized("draft", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: packages\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: \"9\"\n          repo:\n            type: rpm\n          outputDir: packages/kubernetes\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        when: .vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/deck/join.txt\n      - id: join\n        when: .vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: /tmp/deck/join.txt\n      - id: verify\n        kind: CheckKubernetesCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 3\n            ready: 3\n            controlPlaneReady: 1\n"}, {Path: "workflows/vars.yaml", Content: "role: control-plane\n"}})
 	judge := askcontract.JudgeResponse{Summary: "usable but final verification should not run on workers", Advisory: []string{"final verification placement should be control-plane only"}}
 	summary, err := maybePostProcessGeneration(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}, t.TempDir(), newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, brief, askretrieve.RetrievalResult{}, gen, gen.Files, "lint ok (1 workflows)", askcontract.CriticResponse{}, judge, askcontract.PlanCriticResponse{Advisory: []string{"shared-state publish path should stay explicit"}})
 	if err != nil {
@@ -935,7 +935,7 @@ func TestMaybePostProcessGenerationSkipsStructuralCleanupOnlyAdvice(t *testing.T
 		`{"summary":"draft is operationally sound; only optional cleanup remains","blocking":[],"advisory":["extract-vars"],"upgradeCandidates":["extract-vars","preserve-inline"],"reviseFiles":[],"preserveFiles":["workflows/prepare.yaml","workflows/scenarios/apply.yaml","workflows/vars.yaml"],"suggestedFixes":[]}`,
 	}}
 	plan := askcontract.PlanResponse{Request: "create 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", CompletenessTarget: "complete", Topology: "multi-node"}}
-	gen := testMaterialized("draft", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      distro:\n        family: rhel\n        release: \"9\"\n      repo:\n        type: rpm\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: verify\n    when: .vars.role == \"control-plane\"\n    kind: CheckCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 3\n        ready: 3\n        controlPlaneReady: 1\n"}})
+	gen := testMaterialized("draft", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      distro:\n        family: rhel\n        release: \"9\"\n      repo:\n        type: rpm\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: verify\n    when: .vars.role == \"control-plane\"\n    kind: CheckKubernetesCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 3\n        ready: 3\n        controlPlaneReady: 1\n"}})
 	judge := askcontract.JudgeResponse{Summary: "mostly good", Advisory: []string{"worker join and verification are acceptable"}}
 	summary, err := maybePostProcessGeneration(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}, t.TempDir(), newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{}, gen, gen.Files, "lint ok (1 workflows)", askcontract.CriticResponse{}, judge, askcontract.PlanCriticResponse{})
 	if err != nil {
@@ -959,10 +959,10 @@ func TestShouldAutoPostProcessStillRunsForPrepareApplyOperationalReview(t *testi
 
 func TestStructuralWorkflowSummaryIncludesWhenConditions(t *testing.T) {
 	doc := askcontract.WorkflowDocument{
-		Steps: []askcontract.WorkflowStep{{ID: "verify", Kind: "CheckCluster", When: "vars.role == \"control-plane\"", Spec: map[string]any{"nodes": map[string]any{"total": 1}}}},
+		Steps: []askcontract.WorkflowStep{{ID: "verify", Kind: "CheckKubernetesCluster", When: "vars.role == \"control-plane\"", Spec: map[string]any{"nodes": map[string]any{"total": 1}}}},
 	}
 	summary := structuralWorkflowSummary(doc)
-	for _, want := range []string{"CheckCluster", "vars.role == \"control-plane\""} {
+	for _, want := range []string{"CheckKubernetesCluster", "vars.role == \"control-plane\""} {
 		if !strings.Contains(summary, want) {
 			t.Fatalf("expected %q in summary, got %q", want, summary)
 		}
@@ -1028,7 +1028,7 @@ func TestLocalExplainDescribesScenarioStructure(t *testing.T) {
 }
 
 func TestLocalExplainUsesRepoBehaviorFallbackForAssemblyQuestion(t *testing.T) {
-	summary, answer := localExplain(askretrieve.WorkspaceSummary{}, "Explain how InitKubeadm and CheckCluster are assembled for ask draft generation in this repo", askintent.Target{Kind: "workspace"})
+	summary, answer := localExplain(askretrieve.WorkspaceSummary{}, "Explain how InitKubeadm and CheckKubernetesCluster are assembled for ask draft generation in this repo", askintent.Target{Kind: "workspace"})
 	if summary != "Repository explanation" {
 		t.Fatalf("expected repository explanation summary, got %q", summary)
 	}
@@ -1412,8 +1412,8 @@ func TestReviewSystemPromptIncludesStructuredValidationIssues(t *testing.T) {
 }
 
 func TestPromptAndDocsShareSchemaRuleSummaryForDownloadFile(t *testing.T) {
-	page := testSchemaDocFamilyPageInput(t, "file")
-	rendered := string(schemadoc.RenderToolPage(page))
+	page := testSchemaDocGroupPageInput(t, "artifact-staging")
+	rendered := string(schemadoc.RenderGroupPage(page))
 	req := askpolicy.ScenarioRequirements{Connectivity: "unspecified", RequiredFiles: []string{"workflows/prepare.yaml"}, NeedsPrepare: true}
 	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}}, askcontract.PlanResponse{}, askknowledge.Current())
 	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}, "create a prepare workflow using DownloadFile", askretrieve.RetrievalResult{}, req, askcontract.PlanResponse{}, askcontract.AuthoringBrief{ModeIntent: "prepare-only", CompletenessTarget: "complete"}, askcontract.ExecutionModel{}, scaffold)
@@ -1426,12 +1426,13 @@ func TestPromptAndDocsShareSchemaRuleSummaryForDownloadFile(t *testing.T) {
 	}
 }
 
-func testSchemaDocFamilyPageInput(t *testing.T, family string) schemadoc.PageInput {
+func testSchemaDocGroupPageInput(t *testing.T, group string) schemadoc.PageInput {
 	t.Helper()
+	meta := schemadoc.MustGroupMeta(group)
 	defs := workflowcontract.StepDefinitions()
-	page := schemadoc.PageInput{Family: family}
+	page := schemadoc.PageInput{Group: group, PageSlug: meta.Key, Title: meta.Title, Summary: meta.Summary, Description: meta.Summary, WhenToUse: meta.WhenToUse, TypicalFlows: meta.TypicalFlows, SeeAlso: meta.SeeAlso}
 	for _, def := range defs {
-		if def.Family != family || def.Visibility != "public" {
+		if def.Group != group || def.Visibility != "public" {
 			continue
 		}
 		raw, err := schemas.ToolSchema(def.SchemaFile)
@@ -1444,25 +1445,20 @@ func testSchemaDocFamilyPageInput(t *testing.T, family string) schemadoc.PageInp
 		}
 		properties, _ := schema["properties"].(map[string]any)
 		spec, _ := properties["spec"].(map[string]any)
-		if page.PageSlug == "" {
-			page.PageSlug = def.DocsPage
-			page.Title = schemadoc.DisplayFamilyTitle(def.Family, "")
-			page.Summary = "Reference for the `" + page.Title + "` family of typed workflow steps."
-		}
 		page.Variants = append(page.Variants, schemadoc.VariantInput{
 			Kind:        def.Kind,
 			Title:       def.FamilyTitle,
 			Description: def.Summary,
-			SchemaPath:  filepath.ToSlash(filepath.Join("schemas", "tools", def.SchemaFile)),
 			Schema:      schema,
 			Meta:        schemadoc.ToolMetaForDefinition(def),
 			Spec:        spec,
 			Outputs:     append([]string(nil), def.Outputs...),
+			GroupOrder:  def.GroupOrder,
 			DocsOrder:   def.DocsOrder,
 		})
 	}
-	if page.PageSlug == "" {
-		t.Fatalf("missing test page for family %s", family)
+	if len(page.Variants) == 0 {
+		t.Fatalf("missing test page for group %s", group)
 	}
 	return page
 }
@@ -1699,7 +1695,7 @@ func TestExecuteAuthoringMCPAugmentationIsGatedByEnv(t *testing.T) {
 			}
 			root := t.TempDir()
 			writeLatestPlanArtifact(t, root)
-			client := &stubClient{responses: []string{`{"summary":"generated starter workflows","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-cluster","overrides":{"nodeCount":1}}]}]}}`}}
+			client := &stubClient{responses: []string{`{"summary":"generated starter workflows","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-kubernetes-cluster","overrides":{"nodeCount":1}}]}]}}`}}
 			if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client); err != nil {
 				t.Fatalf("execute: %v", err)
 			}
@@ -1774,7 +1770,7 @@ func TestExecutePlanResumeInteractiveClarificationCanContinue(t *testing.T) {
 	interactiveSessionProbe = func(io.Reader, io.Writer) bool { return true }
 	defer func() { interactiveSessionProbe = originalProbe }()
 	stdout := &bytes.Buffer{}
-	client := &stubClient{responses: []string{`{"summary":"generated starter workflows","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-cluster","overrides":{"nodeCount":1}}]}]}}`}}
+	client := &stubClient{responses: []string{`{"summary":"generated starter workflows","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-kubernetes-cluster","overrides":{"nodeCount":1}}]}]}}`}}
 	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader("2\n"), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -1909,7 +1905,7 @@ func TestSemanticCriticDetectsRepeatedValuesForVarsAdvisory(t *testing.T) {
 }
 
 func TestSemanticCriticDetectsRepeatedStepSequenceForComponentsAdvisory(t *testing.T) {
-	content := "version: v1alpha1\nsteps:\n  - id: check\n    kind: CheckHost\n    spec:\n      checks: [os]\n  - id: verify\n    kind: CheckCluster\n    spec:\n      checks: [nodes_ready]\n"
+	content := "version: v1alpha1\nsteps:\n  - id: check\n    kind: CheckHost\n    spec:\n      checks: [os]\n  - id: verify\n    kind: CheckKubernetesCluster\n    spec:\n      checks: [nodes_ready]\n"
 	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: content}, {Path: "workflows/scenarios/apply.yaml", Content: content}})
 	critic := semanticCritic(gen, askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{})
 	joined := strings.Join(critic.Advisory, "\n")
