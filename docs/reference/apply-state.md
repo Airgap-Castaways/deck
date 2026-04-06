@@ -34,7 +34,7 @@ When a phase uses explicit `parallelGroup` batches:
 
 Authoring and validation rules still apply before the batch runs:
 
-- `parallelGroup` names must stay contiguous inside the phase
+- `parallelGroup` values must stay contiguous inside the phase
 - apply-time parallel batches only support a limited safe kind allowlist
 - same-batch steps cannot target the same literal path, share the same prepared output root, or consume each other's `runtime.*` outputs
 

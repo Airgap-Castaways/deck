@@ -293,7 +293,7 @@ phases:
 Rules for the first version:
 
 - only consecutive steps with the same `parallelGroup` value are in the same batch
-- once a batch closes, the same `parallelGroup` name cannot reappear later in the phase
+- once a batch closes, the same `parallelGroup` value cannot reappear later in the phase
 - phases still execute in order
 - apply-time parallel batches are intentionally restricted to a small allowlist: `Command`, `CopyFile`, `EnsureDirectory`, `ExtractArchive`, `WaitForCommand`, `WaitForFile`, `WaitForMissingFile`, `WaitForService`, `WaitForTCPPort`, `WaitForMissingTCPPort`, and `WriteFile`
 - same-batch apply steps cannot target the same literal output path or node path
