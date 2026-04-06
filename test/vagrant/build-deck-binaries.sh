@@ -40,9 +40,11 @@ fi
 
 if [[ "${needs_build}" == "1" ]]; then
   echo "[deck] building deck binaries for local vagrant tests"
+  pushd "${ROOT_DIR}" >/dev/null
   GOOS=linux GOARCH=amd64 go build -o "${DECK_BIN_AMD64}" ./cmd/deck
   GOOS=linux GOARCH=arm64 go build -o "${DECK_BIN_ARM64}" ./cmd/deck
   go build -o "${DECK_HOST_BIN}" ./cmd/deck
+  popd >/dev/null
   printf '%s\n' "${desired_stamp}" > "${STAMP_FILE}"
 else
   echo "[deck] reusing existing deck binaries"

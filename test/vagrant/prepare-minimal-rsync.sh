@@ -14,6 +14,7 @@ export DECK_VAGRANT_VM_STAGED_PATH="test/e2e/vagrant/run-scenario-vm.sh"
 export DECK_VAGRANT_VM_DISPATCHER_STAGED_PATH="test/e2e/vagrant/run-scenario-vm.sh"
 
 source "${ROOT_DIR}/test/e2e/vagrant/common.sh"
+source "${ROOT_DIR}/test/vagrant/libvirt-env.sh"
 
 deck_vagrant_prepare_workflow_bundle() {
   "${ROOT_DIR}/test/e2e/vagrant/render-workflows.sh" "${ROOT_DIR}" "${PREPARED_BUNDLE_WORKFLOW_DIR}"
@@ -28,6 +29,7 @@ RUN_BUNDLE_SOURCE_FILE="${ART_DIR_ABS}/bundle-source.txt"
 STATE_ENV_PATH="${CHECKPOINT_DIR}/state.env"
 initialize_run_contract
 prepare_local_run_state
+prepare_libvirt_environment
 "${BUILD_BINARIES_HELPER}" "${ROOT_DIR}"
 resolve_host_build_context
 prepare_shared_bundle_cache "${HOST_BIN}" "${HOST_BACKEND_RUNTIME}" "${HOST_ARCH}"
