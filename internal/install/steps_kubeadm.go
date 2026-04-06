@@ -132,7 +132,7 @@ func runInitKubeadmReal(parent context.Context, spec stepspec.KubeadmInit) error
 		}
 		return errcode.New(errCodeInstallInitFailed, fmt.Errorf("kubeadm token create failed: %w", err))
 	}
-	joinCmd := strings.TrimSpace(joinOut)
+	joinCmd := normalizeKubeadmJoinCommand(joinOut)
 	if joinCmd == "" {
 		return errcode.Newf(errCodeInstallInitFailed, "empty kubeadm join command output")
 	}
@@ -261,7 +261,7 @@ func runJoinKubeadmReal(ctx context.Context, spec stepspec.KubeadmJoin) error {
 		if err != nil {
 			return errcode.New(errCodeInstallJoinFileMissing, fmt.Errorf("join file not found: %w", err))
 		}
-		joinCommand := strings.TrimSpace(string(raw))
+		joinCommand := normalizeKubeadmJoinCommand(string(raw))
 		if joinCommand == "" {
 			return errcode.Newf(errCodeInstallJoinCmdMissing, "join command is empty")
 		}
@@ -284,6 +284,42 @@ func runJoinKubeadmReal(ctx context.Context, spec stepspec.KubeadmJoin) error {
 		return errcode.New(errCodeInstallJoinFailed, fmt.Errorf("kubeadm join failed: %w", err))
 	}
 	return nil
+}
+
+func normalizeKubeadmJoinCommand(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	lines := strings.Split(trimmed, "\n")
+	parts := make([]string, 0, len(lines))
+	collecting := false
+	continueCommand := false
+	for _, line := range lines {
+		candidate := strings.TrimSpace(line)
+		if candidate == "" {
+			continue
+		}
+		if !collecting {
+			if strings.HasPrefix(candidate, "kubeadm join") {
+				collecting = true
+			} else {
+				continue
+			}
+		} else if !continueCommand && !strings.HasPrefix(candidate, "--") {
+			break
+		}
+
+		parts = append(parts, strings.TrimSpace(strings.TrimSuffix(candidate, "\\")))
+		continueCommand = strings.HasSuffix(candidate, "\\")
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, " ")
+	}
+	if len(lines) > 1 {
+		return ""
+	}
+	return trimmed
 }
 
 func runResetKubeadm(ctx context.Context, spec map[string]any, executor kubeadmExecutor) error {
