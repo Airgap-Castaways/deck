@@ -1345,6 +1345,69 @@ func TestRun_KubeadmRealModeAcceptsJoinFileWithWarnings(t *testing.T) {
 	}
 }
 
+func TestRun_KubeadmRealModeAcceptsWrappedJoinFileWithWarnings(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	statePath := filepath.Join(dir, "state", "state.json")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	artifact := filepath.Join(bundle, "files", "a.txt")
+	if err := os.MkdirAll(filepath.Dir(artifact), 0o755); err != nil {
+		t.Fatalf("mkdir files: %v", err)
+	}
+	if err := os.WriteFile(artifact, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := writeManifestForTest(bundle, "files/a.txt", []byte("ok")); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	fakeKubeadmPath := filepath.Join(binDir, "kubeadm")
+	fakeScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" > \"" + filepath.Join(dir, "join-args.log") + "\"\nif [[ \"${1:-}\" == \"join\" ]]; then\n  exit 0\nfi\necho \"unsupported kubeadm invocation\" >&2\nexit 1\n"
+	if err := os.WriteFile(fakeKubeadmPath, []byte(fakeScript), 0o755); err != nil {
+		t.Fatalf("write fake kubeadm: %v", err)
+	}
+
+	originalPath := os.Getenv("PATH")
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, originalPath))
+
+	joinPath := filepath.Join(dir, "join.txt")
+	joinLog := filepath.Join(dir, "join-args.log")
+	joinRaw := "W0000 warning: no default routes found\nkubeadm join 10.1.0.10:6443 \\\n  --token fake.token \\\n  --discovery-token-ca-cert-hash sha256:fake\n"
+	if err := os.WriteFile(joinPath, []byte(joinRaw), 0o644); err != nil {
+		t.Fatalf("write join file: %v", err)
+	}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "kubeadm-join",
+				Kind: "JoinKubeadm",
+				Spec: map[string]any{"joinFile": joinPath},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+		t.Fatalf("wrapped kubeadm join run failed: %v", err)
+	}
+
+	argsRaw, err := os.ReadFile(joinLog)
+	if err != nil {
+		t.Fatalf("read join args log: %v", err)
+	}
+	if got := strings.TrimSpace(string(argsRaw)); got != "join 10.1.0.10:6443 --token fake.token --discovery-token-ca-cert-hash sha256:fake" {
+		t.Fatalf("unexpected kubeadm join args: %q", got)
+	}
+}
+
 func TestRun_KubeadmRealModeRejectsInvalidCommand(t *testing.T) {
 	dir := t.TempDir()
 	bundle := filepath.Join(dir, "bundle")

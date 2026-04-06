@@ -69,31 +69,42 @@ Vagrant.configure("2") do |config|
   prepare_minimal_rsync_script = File.expand_path("prepare-minimal-rsync.sh", __dir__)
   minimal_rsync_env_path = File.expand_path("../artifacts/cache/vagrant/manual/rsync-sources.env", __dir__)
   sync_role_overrides = {}
+  run_helper_script = lambda do |script_path, env_overrides, missing_message, failure_message|
+    raise missing_message unless File.exist?(script_path)
+    raise failure_message unless system(env_overrides, "bash", script_path)
+  end
+  load_env_file = lambda do |env_path, target|
+    return unless File.exist?(env_path)
+
+    File.readlines(env_path, chomp: true).each do |line|
+      next if line.empty? || line.start_with?("#") || !line.include?("=")
+
+      key, value = line.split("=", 2)
+      target[key] = value
+    end
+  end
   explicit_role_sync_override = ["DECK_VAGRANT_SYNC_SOURCE_CONTROL_PLANE", "DECK_VAGRANT_SYNC_SOURCE_WORKER", "DECK_VAGRANT_SYNC_SOURCE_WORKER_2"].any? do |key|
     !ENV.fetch(key, "").strip.empty?
   end
   auto_sanitize_vagrant_state = ARGV.any? { |arg| ["up", "reload", "status"].include?(arg) }
   if auto_sanitize_vagrant_state && File.exist?(sanitize_vagrant_state_script)
-    unless system({ "DECK_VAGRANT_VM_PREFIX" => vm_name_prefix, "DECK_LIBVIRT_URI" => ENV.fetch("DECK_LIBVIRT_URI", "qemu:///system") }, "bash", sanitize_vagrant_state_script)
-      raise "failed to sanitize Vagrant state"
-    end
+    run_helper_script.call(
+      sanitize_vagrant_state_script,
+      { "DECK_VAGRANT_VM_PREFIX" => vm_name_prefix, "DECK_LIBVIRT_URI" => ENV.fetch("DECK_LIBVIRT_URI", "qemu:///system") },
+      "missing Vagrant state sanitizer: #{sanitize_vagrant_state_script}",
+      "failed to sanitize Vagrant state"
+    )
   end
   auto_prepare_minimal_rsync = sync_type == "rsync" && !explicit_role_sync_override && ARGV.any? { |arg| ["up", "reload"].include?(arg) }
   if auto_prepare_minimal_rsync
-    unless File.exist?(prepare_minimal_rsync_script)
-      raise "missing minimal rsync helper: #{prepare_minimal_rsync_script}"
-    end
-    unless system({ "ROOT_DIR" => File.expand_path("../..", __dir__) }, "bash", prepare_minimal_rsync_script)
-      raise "failed to prepare minimal rsync sources"
-    end
+    run_helper_script.call(
+      prepare_minimal_rsync_script,
+      { "ROOT_DIR" => File.expand_path("../..", __dir__) },
+      "missing minimal rsync helper: #{prepare_minimal_rsync_script}",
+      "failed to prepare minimal rsync sources"
+    )
   end
-  if File.exist?(minimal_rsync_env_path)
-    File.readlines(minimal_rsync_env_path, chomp: true).each do |line|
-      next if line.empty? || line.start_with?("#") || !line.include?("=")
-      key, value = line.split("=", 2)
-      sync_role_overrides[key] = value
-    end
-  end
+  load_env_file.call(minimal_rsync_env_path, sync_role_overrides)
   disable_default_sync = ENV.fetch("DECK_VAGRANT_DISABLE_DEFAULT_SYNC", "1") == "1"
   libvirt_pool_name = ENV.fetch("DECK_LIBVIRT_POOL_NAME", ENV.fetch("LIBVIRT_DEFAULT_STORAGE_POOL", "default"))
   libvirt_use_session = ENV.fetch("DECK_LIBVIRT_USE_SESSION", "0") == "1"

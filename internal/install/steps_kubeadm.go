@@ -298,11 +298,33 @@ func normalizeKubeadmJoinCommand(raw string) string {
 	if trimmed == "" {
 		return ""
 	}
-	for _, line := range strings.Split(trimmed, "\n") {
+	lines := strings.Split(trimmed, "\n")
+	parts := make([]string, 0, len(lines))
+	collecting := false
+	continueCommand := false
+	for _, line := range lines {
 		candidate := strings.TrimSpace(line)
-		if strings.HasPrefix(candidate, "kubeadm join") {
-			return candidate
+		if candidate == "" {
+			continue
 		}
+		if !collecting {
+			if strings.HasPrefix(candidate, "kubeadm join") {
+				collecting = true
+			} else {
+				continue
+			}
+		} else if !continueCommand && !strings.HasPrefix(candidate, "--") {
+			break
+		}
+
+		parts = append(parts, strings.TrimSpace(strings.TrimSuffix(candidate, "\\")))
+		continueCommand = strings.HasSuffix(candidate, "\\")
+	}
+	if len(parts) > 0 {
+		return strings.Join(parts, " ")
+	}
+	if len(lines) > 1 {
+		return ""
 	}
 	return trimmed
 }
