@@ -93,7 +93,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		return err
 	}
 	if effective.OAuthTokenSource == "session" || effective.OAuthTokenSource == "session-expired" {
-		session, source, status, err := askconfig.ResolveRuntimeSession(effective.Provider)
+		session, source, status, err := askconfig.ResolveRuntimeSessionWithContext(ctx, effective.Provider)
 		if err != nil {
 			return err
 		}

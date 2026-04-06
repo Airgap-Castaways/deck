@@ -56,7 +56,7 @@ When a PR adds or edits a public step:
 - confirm summary / when / example are present on the type
 - confirm user-facing `spec` fields have descriptions and examples
 - confirm generated schema docs still contain rich examples and notes
-- run `make generate && git diff --exit-code`
+- run `make verify-generated`
 - run `make test && make lint`
 
 ## Failure mode

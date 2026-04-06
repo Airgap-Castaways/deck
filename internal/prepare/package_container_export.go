@@ -25,7 +25,7 @@ func runPackageContainerWithExport(ctx context.Context, runner CommandRunner, ru
 		containerID = containerName
 	}
 	defer func() {
-		_ = runner.Run(context.Background(), runtimeSel, "rm", "-f", containerID)
+		_ = runner.Run(detachedContext(ctx), runtimeSel, "rm", "-f", containerID)
 	}()
 
 	startStderr := &bytes.Buffer{}
@@ -39,6 +39,13 @@ func runPackageContainerWithExport(ctx context.Context, runner CommandRunner, ru
 		return nil, formatContainerCommandError("export package download artifacts", err, exportStderr.String())
 	}
 	return exportStdout.Bytes(), nil
+}
+
+func detachedContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return context.WithoutCancel(ctx)
 }
 
 func formatContainerCommandError(action string, err error, stderr string) error {

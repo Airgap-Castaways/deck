@@ -15,6 +15,11 @@ var _ = stepmeta.MustRegister[DownloadImage](stepmeta.Definition{
 	Outputs:     []string{"artifacts"},
 	SchemaFile:  "image.download.schema.json",
 	SchemaPatch: stepmeta.PatchDownloadImageToolSchema,
+	Notes: []string{
+		"`outputDir` must stay under the prepared `images/` root.",
+		"Omit `outputDir` unless you need a dedicated image subdirectory under `images/`.",
+		"`spec.auth` is optional and only applies to `DownloadImage`.",
+	},
 	Ask: stepmeta.AskMetadata{
 		Capabilities:  []string{"prepare-artifacts", "image-staging"},
 		ContractHints: stepmeta.ContractHints{ProducesArtifacts: []string{"image"}},
@@ -84,4 +89,7 @@ var _ = stepmeta.MustRegister[VerifyImage](stepmeta.Definition{
 	Roles:       []string{"apply"},
 	SchemaFile:  "image.verify.schema.json",
 	SchemaPatch: stepmeta.PatchVerifyImageToolSchema,
+	Notes: []string{
+		"Use this instead of `LoadImage` when the local runtime is expected to be pre-populated already.",
+	},
 })

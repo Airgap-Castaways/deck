@@ -26,42 +26,54 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
-func useStubInitJoinKubeadm(t *testing.T) {
-	t.Helper()
-	origInit := kubeadmInitExecutor
-	origJoin := kubeadmJoinExecutor
-	t.Cleanup(func() {
-		kubeadmInitExecutor = origInit
-		kubeadmJoinExecutor = origJoin
-	})
-	kubeadmInitExecutor = func(_ context.Context, spec stepspec.KubeadmInit) error {
-		return runInitKubeadmStub(spec)
+type stubKubeadmExecutor struct {
+	initFn    func(stepspec.KubeadmInit) error
+	joinFn    func(stepspec.KubeadmJoin) error
+	resetFn   func(stepspec.KubeadmReset) error
+	upgradeFn func(stepspec.KubeadmUpgrade) error
+}
+
+func (s stubKubeadmExecutor) Init(_ context.Context, spec stepspec.KubeadmInit) error {
+	if s.initFn == nil {
+		return fmt.Errorf("unexpected kubeadm init: %+v", spec)
 	}
-	kubeadmJoinExecutor = func(_ context.Context, spec stepspec.KubeadmJoin) error {
-		return runJoinKubeadmStub(spec)
+	return s.initFn(spec)
+}
+
+func (s stubKubeadmExecutor) Join(_ context.Context, spec stepspec.KubeadmJoin) error {
+	if s.joinFn == nil {
+		return fmt.Errorf("unexpected kubeadm join: %+v", spec)
+	}
+	return s.joinFn(spec)
+}
+
+func (s stubKubeadmExecutor) Reset(_ context.Context, spec stepspec.KubeadmReset) error {
+	if s.resetFn == nil {
+		return fmt.Errorf("unexpected kubeadm reset: %+v", spec)
+	}
+	return s.resetFn(spec)
+}
+
+func (s stubKubeadmExecutor) Upgrade(_ context.Context, spec stepspec.KubeadmUpgrade) error {
+	if s.upgradeFn == nil {
+		return fmt.Errorf("unexpected kubeadm upgrade: %+v", spec)
+	}
+	return s.upgradeFn(spec)
+}
+
+func useStubInitJoinKubeadm() kubeadmExecutor {
+	return stubKubeadmExecutor{
+		initFn: runInitKubeadmStub,
+		joinFn: runJoinKubeadmStub,
 	}
 }
 
-func useStubResetKubeadm(t *testing.T) {
-	t.Helper()
-	origReset := kubeadmResetExecutor
-	t.Cleanup(func() {
-		kubeadmResetExecutor = origReset
-	})
-	kubeadmResetExecutor = func(_ context.Context, spec stepspec.KubeadmReset) error {
-		return runResetKubeadmStub(spec)
-	}
+func useStubResetKubeadm() kubeadmExecutor {
+	return stubKubeadmExecutor{resetFn: runResetKubeadmStub}
 }
 
-func useStubUpgradeKubeadm(t *testing.T) {
-	t.Helper()
-	origUpgrade := kubeadmUpgradeExecutor
-	t.Cleanup(func() {
-		kubeadmUpgradeExecutor = origUpgrade
-	})
-	kubeadmUpgradeExecutor = func(_ context.Context, spec stepspec.KubeadmUpgrade) error {
-		return runUpgradeKubeadmStub(spec)
-	}
+func useStubUpgradeKubeadm() kubeadmExecutor {
+	return stubKubeadmExecutor{upgradeFn: runUpgradeKubeadmStub}
 }
 
 func useStubCheckKubernetesCluster(t *testing.T) {
@@ -110,7 +122,7 @@ func TestRun_InstallTools(t *testing.T) {
 	}
 	originalPath := os.Getenv("PATH")
 	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, originalPath))
-	useStubInitJoinKubeadm(t)
+	kubeadm := useStubInitJoinKubeadm()
 
 	wf := &config.Workflow{
 		Version: "v1",
@@ -130,7 +142,7 @@ func TestRun_InstallTools(t *testing.T) {
 		}},
 	}
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath, kubeadm: kubeadm}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -1026,7 +1038,7 @@ func TestRun_CreateSymlink(t *testing.T) {
 }
 
 func TestRun_UpgradeAndClusterChecks(t *testing.T) {
-	useStubUpgradeKubeadm(t)
+	kubeadm := useStubUpgradeKubeadm()
 	useStubCheckKubernetesCluster(t)
 
 	dir := t.TempDir()
@@ -1037,7 +1049,7 @@ func TestRun_UpgradeAndClusterChecks(t *testing.T) {
 		{ID: "check", Kind: "CheckKubernetesCluster", Spec: map[string]any{"reports": map[string]any{"nodesPath": filepath.Join(reportDir, "nodes.txt")}, "versions": map[string]any{"reportPath": filepath.Join(reportDir, "version.txt")}}},
 	}}}}
 
-	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath, kubeadm: kubeadm}); err != nil {
 		t.Fatalf("expected typed kubeadm upgrade and cluster check success, got %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(reportDir, "nodes.txt")); err != nil {
@@ -1975,9 +1987,9 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 			},
 		}},
 	}
-	useStubInitJoinKubeadm(t)
+	kubeadm := useStubInitJoinKubeadm()
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, StatePath: statePath, kubeadm: kubeadm}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
@@ -4556,9 +4568,9 @@ func TestRun_Kubeadm(t *testing.T) {
 				}},
 			}},
 		}
-		useStubResetKubeadm(t)
+		kubeadm := useStubResetKubeadm()
 
-		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath, kubeadm: kubeadm}); err != nil {
 			t.Fatalf("expected stub reset success, got %v", err)
 		}
 

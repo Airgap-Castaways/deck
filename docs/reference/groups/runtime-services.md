@@ -29,7 +29,7 @@ Use this group when runtime settings, local image availability, or service state
 
 ## Shared Step Fields
 
-Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `retry`, `timeout`, `register`, and `metadata` are documented in [Workflow Schema Contract](../workflow-model.md#workflow-schema-contract).
+Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `parallelGroup`, `retry`, `timeout`, `register`, and `metadata` are documented in [Step Envelope Contract](../workflow-model.md#step-envelope-contract).
 
 ## Supported Kinds
 
@@ -251,7 +251,7 @@ spec:
 
 ### Notes
 
-- Use this instead of `LoadImage` when the runtime is expected to be pre-populated.
+- Use this instead of `LoadImage` when the local runtime is expected to be pre-populated already.
 
 ## Related
 
@@ -259,4 +259,4 @@ spec:
 - [Filesystem and Content](filesystem-content.md)
 - [Host Prep](host-prep.md)
 - [Typed Steps](../typed-steps.md)
-- [Workflow Model](../workflow-model.md#workflow-schema-contract)
+- [Step Envelope Contract](../workflow-model.md#step-envelope-contract)

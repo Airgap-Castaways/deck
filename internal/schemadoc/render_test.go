@@ -30,7 +30,7 @@ func TestRenderGroupPageIncludesTypicalFlowsAndSeeAlso(t *testing.T) {
 	page := testGroupPageInput(t, "runtime-services")
 	rendered := string(RenderGroupPage(page))
 
-	for _, want := range []string{"## Typical Flows", "### Configure containerd", "[Waits and Polling](waits-polling.md)", "[Workflow Model](../workflow-model.md#workflow-schema-contract)"} {
+	for _, want := range []string{"## Typical Flows", "### Configure containerd", "[Waits and Polling](waits-polling.md)", "[Step Envelope Contract](../workflow-model.md#step-envelope-contract)"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("expected %q in runtime services page:\n%s", want, rendered)
 		}
@@ -86,7 +86,7 @@ func TestRenderTypedStepsPageListsGroups(t *testing.T) {
 
 func TestRenderTypedStepsPageLinksCoreContracts(t *testing.T) {
 	rendered := string(RenderTypedStepsPage([]PageInput{testGroupPageInput(t, "host-prep")}))
-	for _, want := range []string{"[Workflow Model](workflow-model.md#workflow-schema-contract)", "[Workspace Layout](workspace-layout.md#component-fragment-contract)"} {
+	for _, want := range []string{"[Step Envelope Contract](workflow-model.md#step-envelope-contract)", "[Workflow Model](workflow-model.md#workflow-schema-contract)", "[Workspace Layout](workspace-layout.md#component-fragment-contract)"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("expected %q in typed steps page:\n%s", want, rendered)
 		}

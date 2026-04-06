@@ -74,9 +74,7 @@ type jwtClaims struct {
 }
 
 func LoginOpenAICodexBrowser(ctx context.Context, opts OpenAICodexOptions) (Session, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	opts = normalizeOpenAICodexOptions(opts)
 	pkce, err := generatePKCE()
 	if err != nil {
@@ -91,7 +89,7 @@ func LoginOpenAICodexBrowser(ctx context.Context, opts OpenAICodexOptions) (Sess
 		return Session{}, err
 	}
 	defer func() {
-		_ = server.Stop(context.Background())
+		_ = server.Stop(context.WithoutCancel(ctx))
 	}()
 	redirectURI := callbackURL(opts.CallbackPort)
 	authURL, err := buildAuthURL(opts.Endpoints, redirectURI, state, pkce)
@@ -120,9 +118,7 @@ func LoginOpenAICodexBrowser(ctx context.Context, opts OpenAICodexOptions) (Sess
 }
 
 func LoginOpenAICodexDevice(ctx context.Context, opts OpenAICodexOptions) (Session, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = normalizeContext(ctx)
 	opts = normalizeOpenAICodexOptions(opts)
 	fprintf(opts.Writer, "Requesting OpenAI Codex device code...\n")
 	userCodeResp, err := requestDeviceUserCode(ctx, opts)
@@ -211,6 +207,7 @@ func exchangeOpenAICodexCode(ctx context.Context, opts OpenAICodexOptions, code 
 }
 
 func RefreshOpenAICodex(ctx context.Context, opts OpenAICodexOptions, refreshToken string) (Session, error) {
+	ctx = normalizeContext(ctx)
 	refreshToken = strings.TrimSpace(refreshToken)
 	if refreshToken == "" {
 		return Session{}, fmt.Errorf("refresh token is required")
@@ -230,6 +227,13 @@ func RefreshOpenAICodex(ctx context.Context, opts OpenAICodexOptions, refreshTok
 		resp.RefreshToken = refreshToken
 	}
 	return buildSessionFromTokenResponse(resp, opts.Now), nil
+}
+
+func normalizeContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
 }
 
 func doTokenRequest(ctx context.Context, opts OpenAICodexOptions, form url.Values) (oauthTokenResponse, error) {

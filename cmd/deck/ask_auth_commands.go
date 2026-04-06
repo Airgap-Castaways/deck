@@ -116,7 +116,7 @@ func newAskStatusCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			session, source, status, err := askconfig.ResolveRuntimeSession(providerName)
+			session, source, status, err := askconfig.ResolveRuntimeSessionWithContext(cmd.Context(), providerName)
 			if err != nil {
 				return err
 			}

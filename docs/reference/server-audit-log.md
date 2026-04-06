@@ -10,32 +10,45 @@ Default file location:
 <root>/.deck/logs/server-audit.log
 ```
 
-## Standard fields
+## Current emitted record shape
 
-Each normalized record uses these common fields:
+`deck server up` currently emits audit schema version `2` records with structured top-level fields.
+
+Common fields:
 
 - `ts`: RFC3339Nano timestamp in UTC
-- `schema_version`: currently `1`
-- `source`: log producer, typically `server`
-- `event_type`: event name such as `http_request` or `registry_seed`
-- `level`: `debug`, `info`, `warn`, or `error`
+- `schema_version`: currently `2`
+- `component`: log producer, currently `server`
+- `event`: normalized event name such as `request`
+- `level`: `info`, `warn`, or `error`
 - `message`: short human-readable description
 
-Optional job-related fields appear when relevant:
+Request records also include top-level request attributes such as:
 
-- `job_id`
-- `job_type`
-- `attempt`
-- `max_attempts`
+- `method`
+- `path`
+- `proto`
 - `status`
-- `hostname`
-
-Non-standard details are nested under `extra`.
+- `bytes`
+- `remote_addr`
+- `duration_ms`
 
 ## Typical examples
 
-- HTTP request records carry request fields such as `method`, `path`, `status`, `remote_addr`, and `duration_ms` under `extra`
-- Records are written for all routed server responses, including site API, registry, static file, and health checks
+- Records are written for routed server responses including site API, registry, static file, and health checks
+- The current writer keeps request attributes at the top level rather than under a nested `extra` object
+
+Example request record:
+
+```json
+{"ts":"2026-04-03T05:00:00Z","schema_version":2,"component":"server","event":"request","level":"info","message":"http request handled","method":"GET","path":"/healthz","proto":"HTTP/1.1","status":200,"bytes":0,"remote_addr":"127.0.0.1:53422","duration_ms":1}
+```
+
+## Compatibility note
+
+- current `deck server up` writes the structured version-2 shape above
+- `deck server logs` can still normalize older legacy records that used fields such as `source`, `event_type`, or nested `extra`
+- downstream consumers that read the raw audit file should expect the version-2 top-level structure going forward
 
 ## Rotation
 
