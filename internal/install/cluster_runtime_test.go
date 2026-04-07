@@ -832,303 +832,301 @@ func TestRun_KubeadmAdvertiseAddressDetectionFallback(t *testing.T) {
 	}
 }
 
-func TestRun_Kubeadm(t *testing.T) {
-	t.Run("runs reset command and cleanup actions", func(t *testing.T) {
-		dir := t.TempDir()
-		statePath := filepath.Join(dir, "state", "state.json")
-		binDir := filepath.Join(dir, "bin")
-		if err := os.MkdirAll(binDir, 0o755); err != nil {
-			t.Fatalf("mkdir bin: %v", err)
-		}
+func TestRun_ResetKubeadmRealModeCleansUp(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state", "state.json")
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
 
-		kubeadmLog := filepath.Join(dir, "kubeadm.log")
-		systemctlLog := filepath.Join(dir, "systemctl.log")
-		crictlLog := filepath.Join(dir, "crictl.log")
+	kubeadmLog := filepath.Join(dir, "kubeadm.log")
+	systemctlLog := filepath.Join(dir, "systemctl.log")
+	crictlLog := filepath.Join(dir, "crictl.log")
 
-		kubeadmScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + kubeadmLog + "\"\nexit 0\n"
-		if err := os.WriteFile(filepath.Join(binDir, "kubeadm"), []byte(kubeadmScript), 0o755); err != nil {
-			t.Fatalf("write kubeadm script: %v", err)
-		}
-		systemctlScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + systemctlLog + "\"\nexit 0\n"
-		if err := os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(systemctlScript), 0o755); err != nil {
-			t.Fatalf("write systemctl script: %v", err)
-		}
-		crictlScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + crictlLog + "\"\nif [[ \"$*\" == *\"ps -a --name kube-apiserver -q\"* ]]; then\n  echo cid-apiserver\n  exit 0\nfi\nif [[ \"$*\" == *\"ps -a --name etcd -q\"* ]]; then\n  echo cid-etcd\n  exit 0\nfi\nexit 0\n"
-		if err := os.WriteFile(filepath.Join(binDir, "crictl"), []byte(crictlScript), 0o755); err != nil {
-			t.Fatalf("write crictl script: %v", err)
-		}
-		t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
+	kubeadmScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + kubeadmLog + "\"\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(binDir, "kubeadm"), []byte(kubeadmScript), 0o755); err != nil {
+		t.Fatalf("write kubeadm script: %v", err)
+	}
+	systemctlScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + systemctlLog + "\"\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(systemctlScript), 0o755); err != nil {
+		t.Fatalf("write systemctl script: %v", err)
+	}
+	crictlScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + crictlLog + "\"\nif [[ \"$*\" == *\"ps -a --name kube-apiserver -q\"* ]]; then\n  echo cid-apiserver\n  exit 0\nfi\nif [[ \"$*\" == *\"ps -a --name etcd -q\"* ]]; then\n  echo cid-etcd\n  exit 0\nfi\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(binDir, "crictl"), []byte(crictlScript), 0o755); err != nil {
+		t.Fatalf("write crictl script: %v", err)
+	}
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
 
-		removeDir := filepath.Join(dir, "remove-dir")
-		removeFile := filepath.Join(dir, "remove-file.conf")
-		if err := os.MkdirAll(removeDir, 0o755); err != nil {
-			t.Fatalf("mkdir remove dir: %v", err)
-		}
-		if err := os.WriteFile(removeFile, []byte("stale"), 0o644); err != nil {
-			t.Fatalf("write remove file: %v", err)
-		}
+	removeDir := filepath.Join(dir, "remove-dir")
+	removeFile := filepath.Join(dir, "remove-file.conf")
+	if err := os.MkdirAll(removeDir, 0o755); err != nil {
+		t.Fatalf("mkdir remove dir: %v", err)
+	}
+	if err := os.WriteFile(removeFile, []byte("stale"), 0o644); err != nil {
+		t.Fatalf("write remove file: %v", err)
+	}
 
-		wf := &config.Workflow{
-			Version: "v1",
-			Phases: []config.Phase{{
-				Name: "install",
-				Steps: []config.Step{{
-					ID:   "reset",
-					Kind: "ResetKubeadm",
-					Spec: map[string]any{
-						"mode":                  "real",
-						"force":                 true,
-						"criSocket":             "unix:///run/containerd/containerd.sock",
-						"removePaths":           []any{removeDir},
-						"removeFiles":           []any{removeFile},
-						"cleanupContainers":     []any{"kube-apiserver", "etcd"},
-						"restartRuntimeService": "containerd",
-					},
-				}},
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "reset",
+				Kind: "ResetKubeadm",
+				Spec: map[string]any{
+					"mode":                  "real",
+					"force":                 true,
+					"criSocket":             "unix:///run/containerd/containerd.sock",
+					"removePaths":           []any{removeDir},
+					"removeFiles":           []any{removeFile},
+					"cleanupContainers":     []any{"kube-apiserver", "etcd"},
+					"restartRuntimeService": "containerd",
+				},
 			}},
-		}
+		}},
+	}
 
-		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
-			t.Fatalf("kubeadm reset run failed: %v", err)
-		}
+	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+		t.Fatalf("kubeadm reset run failed: %v", err)
+	}
 
-		if _, err := os.Stat(removeDir); !os.IsNotExist(err) {
-			t.Fatalf("expected remove dir deleted, err=%v", err)
-		}
-		if _, err := os.Stat(removeFile); !os.IsNotExist(err) {
-			t.Fatalf("expected remove file deleted, err=%v", err)
-		}
+	if _, err := os.Stat(removeDir); !os.IsNotExist(err) {
+		t.Fatalf("expected remove dir deleted, err=%v", err)
+	}
+	if _, err := os.Stat(removeFile); !os.IsNotExist(err) {
+		t.Fatalf("expected remove file deleted, err=%v", err)
+	}
 
-		kubeadmRaw, err := os.ReadFile(kubeadmLog)
-		if err != nil {
-			t.Fatalf("read kubeadm log: %v", err)
-		}
-		kubeadmArgs := strings.TrimSpace(string(kubeadmRaw))
-		if !strings.Contains(kubeadmArgs, "reset --force --cri-socket unix:///run/containerd/containerd.sock") {
-			t.Fatalf("unexpected kubeadm args: %q", kubeadmArgs)
-		}
+	kubeadmRaw, err := os.ReadFile(kubeadmLog)
+	if err != nil {
+		t.Fatalf("read kubeadm log: %v", err)
+	}
+	kubeadmArgs := strings.TrimSpace(string(kubeadmRaw))
+	if !strings.Contains(kubeadmArgs, "reset --force --cri-socket unix:///run/containerd/containerd.sock") {
+		t.Fatalf("unexpected kubeadm args: %q", kubeadmArgs)
+	}
 
-		systemctlRaw, err := os.ReadFile(systemctlLog)
-		if err != nil {
-			t.Fatalf("read systemctl log: %v", err)
-		}
-		systemctlLogText := string(systemctlRaw)
-		if !strings.Contains(systemctlLogText, "stop kubelet") {
-			t.Fatalf("expected kubelet stop command, got %q", systemctlLogText)
-		}
-		if !strings.Contains(systemctlLogText, "restart containerd") {
-			t.Fatalf("expected runtime restart command, got %q", systemctlLogText)
-		}
+	systemctlRaw, err := os.ReadFile(systemctlLog)
+	if err != nil {
+		t.Fatalf("read systemctl log: %v", err)
+	}
+	systemctlLogText := string(systemctlRaw)
+	if !strings.Contains(systemctlLogText, "stop kubelet") {
+		t.Fatalf("expected kubelet stop command, got %q", systemctlLogText)
+	}
+	if !strings.Contains(systemctlLogText, "restart containerd") {
+		t.Fatalf("expected runtime restart command, got %q", systemctlLogText)
+	}
 
-		crictlRaw, err := os.ReadFile(crictlLog)
-		if err != nil {
-			t.Fatalf("read crictl log: %v", err)
-		}
-		crictlLogText := string(crictlRaw)
-		if !strings.Contains(crictlLogText, "ps -a --name kube-apiserver -q") || !strings.Contains(crictlLogText, "ps -a --name etcd -q") {
-			t.Fatalf("expected crictl ps cleanup lookups, got %q", crictlLogText)
-		}
-		if !strings.Contains(crictlLogText, "rm -f cid-apiserver") || !strings.Contains(crictlLogText, "rm -f cid-etcd") {
-			t.Fatalf("expected crictl rm cleanup calls, got %q", crictlLogText)
-		}
-	})
+	crictlRaw, err := os.ReadFile(crictlLog)
+	if err != nil {
+		t.Fatalf("read crictl log: %v", err)
+	}
+	crictlLogText := string(crictlRaw)
+	if !strings.Contains(crictlLogText, "ps -a --name kube-apiserver -q") || !strings.Contains(crictlLogText, "ps -a --name etcd -q") {
+		t.Fatalf("expected crictl ps cleanup lookups, got %q", crictlLogText)
+	}
+	if !strings.Contains(crictlLogText, "rm -f cid-apiserver") || !strings.Contains(crictlLogText, "rm -f cid-etcd") {
+		t.Fatalf("expected crictl rm cleanup calls, got %q", crictlLogText)
+	}
+}
 
-	t.Run("ignoreErrors tolerates kubeadm failure and continues cleanup", func(t *testing.T) {
-		dir := t.TempDir()
-		statePath := filepath.Join(dir, "state", "state.json")
-		binDir := filepath.Join(dir, "bin")
-		if err := os.MkdirAll(binDir, 0o755); err != nil {
-			t.Fatalf("mkdir bin: %v", err)
-		}
+func TestRun_ResetKubeadmIgnoreErrorsContinuesCleanup(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state", "state.json")
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
 
-		systemctlLog := filepath.Join(dir, "systemctl.log")
-		kubeadmScript := "#!/usr/bin/env bash\nset -euo pipefail\nexit 1\n"
-		if err := os.WriteFile(filepath.Join(binDir, "kubeadm"), []byte(kubeadmScript), 0o755); err != nil {
-			t.Fatalf("write kubeadm script: %v", err)
-		}
-		systemctlScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + systemctlLog + "\"\nexit 0\n"
-		if err := os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(systemctlScript), 0o755); err != nil {
-			t.Fatalf("write systemctl script: %v", err)
-		}
-		crictlScript := "#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n"
-		if err := os.WriteFile(filepath.Join(binDir, "crictl"), []byte(crictlScript), 0o755); err != nil {
-			t.Fatalf("write crictl script: %v", err)
-		}
-		t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
+	systemctlLog := filepath.Join(dir, "systemctl.log")
+	kubeadmScript := "#!/usr/bin/env bash\nset -euo pipefail\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(binDir, "kubeadm"), []byte(kubeadmScript), 0o755); err != nil {
+		t.Fatalf("write kubeadm script: %v", err)
+	}
+	systemctlScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + systemctlLog + "\"\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(systemctlScript), 0o755); err != nil {
+		t.Fatalf("write systemctl script: %v", err)
+	}
+	crictlScript := "#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(binDir, "crictl"), []byte(crictlScript), 0o755); err != nil {
+		t.Fatalf("write crictl script: %v", err)
+	}
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
 
-		removeDir := filepath.Join(dir, "remove-dir")
-		removeFile := filepath.Join(dir, "remove-file.conf")
-		if err := os.MkdirAll(removeDir, 0o755); err != nil {
-			t.Fatalf("mkdir remove dir: %v", err)
-		}
-		if err := os.WriteFile(removeFile, []byte("stale"), 0o644); err != nil {
-			t.Fatalf("write remove file: %v", err)
-		}
+	removeDir := filepath.Join(dir, "remove-dir")
+	removeFile := filepath.Join(dir, "remove-file.conf")
+	if err := os.MkdirAll(removeDir, 0o755); err != nil {
+		t.Fatalf("mkdir remove dir: %v", err)
+	}
+	if err := os.WriteFile(removeFile, []byte("stale"), 0o644); err != nil {
+		t.Fatalf("write remove file: %v", err)
+	}
 
-		wf := &config.Workflow{
-			Version: "v1",
-			Phases: []config.Phase{{
-				Name: "install",
-				Steps: []config.Step{{
-					ID:   "reset",
-					Kind: "ResetKubeadm",
-					Spec: map[string]any{
-						"mode":                  "real",
-						"ignoreErrors":          true,
-						"removePaths":           []any{removeDir},
-						"removeFiles":           []any{removeFile},
-						"restartRuntimeService": "containerd",
-					},
-				}},
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "reset",
+				Kind: "ResetKubeadm",
+				Spec: map[string]any{
+					"mode":                  "real",
+					"ignoreErrors":          true,
+					"removePaths":           []any{removeDir},
+					"removeFiles":           []any{removeFile},
+					"restartRuntimeService": "containerd",
+				},
 			}},
-		}
+		}},
+	}
 
-		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
-			t.Fatalf("expected ignoreErrors success, got %v", err)
-		}
+	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+		t.Fatalf("expected ignoreErrors success, got %v", err)
+	}
 
-		if _, err := os.Stat(removeDir); !os.IsNotExist(err) {
-			t.Fatalf("expected remove dir deleted, err=%v", err)
-		}
-		if _, err := os.Stat(removeFile); !os.IsNotExist(err) {
-			t.Fatalf("expected remove file deleted, err=%v", err)
-		}
+	if _, err := os.Stat(removeDir); !os.IsNotExist(err) {
+		t.Fatalf("expected remove dir deleted, err=%v", err)
+	}
+	if _, err := os.Stat(removeFile); !os.IsNotExist(err) {
+		t.Fatalf("expected remove file deleted, err=%v", err)
+	}
 
-		systemctlRaw, err := os.ReadFile(systemctlLog)
-		if err != nil {
-			t.Fatalf("read systemctl log: %v", err)
-		}
-		systemctlLogText := string(systemctlRaw)
-		if !strings.Contains(systemctlLogText, "restart containerd") {
-			t.Fatalf("expected runtime restart command, got %q", systemctlLogText)
-		}
-	})
+	systemctlRaw, err := os.ReadFile(systemctlLog)
+	if err != nil {
+		t.Fatalf("read systemctl log: %v", err)
+	}
+	systemctlLogText := string(systemctlRaw)
+	if !strings.Contains(systemctlLogText, "restart containerd") {
+		t.Fatalf("expected runtime restart command, got %q", systemctlLogText)
+	}
+}
 
-	t.Run("real mode passes extra args to kubeadm reset", func(t *testing.T) {
-		dir := t.TempDir()
-		statePath := filepath.Join(dir, "state", "state.json")
-		binDir := filepath.Join(dir, "bin")
-		if err := os.MkdirAll(binDir, 0o755); err != nil {
-			t.Fatalf("mkdir bin: %v", err)
-		}
+func TestRun_ResetKubeadmRealModePassesExtraArgs(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state", "state.json")
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
 
-		kubeadmLog := filepath.Join(dir, "kubeadm.log")
-		kubeadmScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + kubeadmLog + "\"\nexit 0\n"
-		if err := os.WriteFile(filepath.Join(binDir, "kubeadm"), []byte(kubeadmScript), 0o755); err != nil {
-			t.Fatalf("write kubeadm script: %v", err)
-		}
-		systemctlScript := "#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n"
-		if err := os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(systemctlScript), 0o755); err != nil {
-			t.Fatalf("write systemctl script: %v", err)
-		}
-		crictlScript := "#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n"
-		if err := os.WriteFile(filepath.Join(binDir, "crictl"), []byte(crictlScript), 0o755); err != nil {
-			t.Fatalf("write crictl script: %v", err)
-		}
-		t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
+	kubeadmLog := filepath.Join(dir, "kubeadm.log")
+	kubeadmScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + kubeadmLog + "\"\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(binDir, "kubeadm"), []byte(kubeadmScript), 0o755); err != nil {
+		t.Fatalf("write kubeadm script: %v", err)
+	}
+	systemctlScript := "#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(systemctlScript), 0o755); err != nil {
+		t.Fatalf("write systemctl script: %v", err)
+	}
+	crictlScript := "#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(binDir, "crictl"), []byte(crictlScript), 0o755); err != nil {
+		t.Fatalf("write crictl script: %v", err)
+	}
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
 
-		wf := &config.Workflow{
-			Version: "v1",
-			Phases: []config.Phase{{
-				Name: "install",
-				Steps: []config.Step{{
-					ID:   "reset",
-					Kind: "ResetKubeadm",
-					Spec: map[string]any{
-						"mode":      "real",
-						"force":     true,
-						"extraArgs": []any{"--cleanup-tmp-dir"},
-					},
-				}},
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "reset",
+				Kind: "ResetKubeadm",
+				Spec: map[string]any{
+					"mode":      "real",
+					"force":     true,
+					"extraArgs": []any{"--cleanup-tmp-dir"},
+				},
 			}},
-		}
+		}},
+	}
 
-		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
-			t.Fatalf("reset run failed: %v", err)
-		}
+	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath}); err != nil {
+		t.Fatalf("reset run failed: %v", err)
+	}
 
-		raw, err := os.ReadFile(kubeadmLog)
-		if err != nil {
-			t.Fatalf("read kubeadm log: %v", err)
-		}
-		if got := strings.TrimSpace(string(raw)); got != "reset --force --cleanup-tmp-dir" {
-			t.Fatalf("unexpected kubeadm args: %q", got)
-		}
-	})
+	raw, err := os.ReadFile(kubeadmLog)
+	if err != nil {
+		t.Fatalf("read kubeadm log: %v", err)
+	}
+	if got := strings.TrimSpace(string(raw)); got != "reset --force --cleanup-tmp-dir" {
+		t.Fatalf("unexpected kubeadm args: %q", got)
+	}
+}
 
-	t.Run("stub mode skips reset side effects", func(t *testing.T) {
-		dir := t.TempDir()
-		statePath := filepath.Join(dir, "state", "state.json")
-		binDir := filepath.Join(dir, "bin")
-		if err := os.MkdirAll(binDir, 0o755); err != nil {
-			t.Fatalf("mkdir bin: %v", err)
-		}
+func TestRun_ResetKubeadmStubModeSkipsSideEffects(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state", "state.json")
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
 
-		kubeadmLog := filepath.Join(dir, "kubeadm.log")
-		systemctlLog := filepath.Join(dir, "systemctl.log")
-		crictlLog := filepath.Join(dir, "crictl.log")
-		kubeadmScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + kubeadmLog + "\"\nexit 1\n"
-		if err := os.WriteFile(filepath.Join(binDir, "kubeadm"), []byte(kubeadmScript), 0o755); err != nil {
-			t.Fatalf("write kubeadm script: %v", err)
-		}
-		systemctlScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + systemctlLog + "\"\nexit 1\n"
-		if err := os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(systemctlScript), 0o755); err != nil {
-			t.Fatalf("write systemctl script: %v", err)
-		}
-		crictlScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + crictlLog + "\"\nexit 1\n"
-		if err := os.WriteFile(filepath.Join(binDir, "crictl"), []byte(crictlScript), 0o755); err != nil {
-			t.Fatalf("write crictl script: %v", err)
-		}
-		t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
+	kubeadmLog := filepath.Join(dir, "kubeadm.log")
+	systemctlLog := filepath.Join(dir, "systemctl.log")
+	crictlLog := filepath.Join(dir, "crictl.log")
+	kubeadmScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + kubeadmLog + "\"\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(binDir, "kubeadm"), []byte(kubeadmScript), 0o755); err != nil {
+		t.Fatalf("write kubeadm script: %v", err)
+	}
+	systemctlScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + systemctlLog + "\"\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(systemctlScript), 0o755); err != nil {
+		t.Fatalf("write systemctl script: %v", err)
+	}
+	crictlScript := "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >> \"" + crictlLog + "\"\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(binDir, "crictl"), []byte(crictlScript), 0o755); err != nil {
+		t.Fatalf("write crictl script: %v", err)
+	}
+	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))
 
-		removeDir := filepath.Join(dir, "remove-dir")
-		removeFile := filepath.Join(dir, "remove-file.conf")
-		if err := os.MkdirAll(removeDir, 0o755); err != nil {
-			t.Fatalf("mkdir remove dir: %v", err)
-		}
-		if err := os.WriteFile(removeFile, []byte("stale"), 0o644); err != nil {
-			t.Fatalf("write remove file: %v", err)
-		}
+	removeDir := filepath.Join(dir, "remove-dir")
+	removeFile := filepath.Join(dir, "remove-file.conf")
+	if err := os.MkdirAll(removeDir, 0o755); err != nil {
+		t.Fatalf("mkdir remove dir: %v", err)
+	}
+	if err := os.WriteFile(removeFile, []byte("stale"), 0o644); err != nil {
+		t.Fatalf("write remove file: %v", err)
+	}
 
-		wf := &config.Workflow{
-			Version: "v1",
-			Phases: []config.Phase{{
-				Name: "install",
-				Steps: []config.Step{{
-					ID:   "reset",
-					Kind: "ResetKubeadm",
-					Spec: map[string]any{
-						"force":                 true,
-						"criSocket":             "unix:///run/containerd/containerd.sock",
-						"extraArgs":             []any{"--cleanup-tmp-dir"},
-						"removePaths":           []any{removeDir},
-						"removeFiles":           []any{removeFile},
-						"cleanupContainers":     []any{"kube-apiserver"},
-						"restartRuntimeService": "containerd",
-					},
-				}},
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "install",
+			Steps: []config.Step{{
+				ID:   "reset",
+				Kind: "ResetKubeadm",
+				Spec: map[string]any{
+					"force":                 true,
+					"criSocket":             "unix:///run/containerd/containerd.sock",
+					"extraArgs":             []any{"--cleanup-tmp-dir"},
+					"removePaths":           []any{removeDir},
+					"removeFiles":           []any{removeFile},
+					"cleanupContainers":     []any{"kube-apiserver"},
+					"restartRuntimeService": "containerd",
+				},
 			}},
-		}
-		kubeadm := useStubResetKubeadm()
+		}},
+	}
+	kubeadm := useStubResetKubeadm()
 
-		if err := Run(context.Background(), wf, RunOptions{StatePath: statePath, kubeadm: kubeadm}); err != nil {
-			t.Fatalf("expected stub reset success, got %v", err)
-		}
+	if err := Run(context.Background(), wf, RunOptions{StatePath: statePath, kubeadm: kubeadm}); err != nil {
+		t.Fatalf("expected stub reset success, got %v", err)
+	}
 
-		if _, err := os.Stat(kubeadmLog); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("expected kubeadm not to run in stub mode, err=%v", err)
-		}
-		if _, err := os.Stat(systemctlLog); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("expected systemctl not to run in stub mode, err=%v", err)
-		}
-		if _, err := os.Stat(crictlLog); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("expected crictl not to run in stub mode, err=%v", err)
-		}
-		if _, err := os.Stat(removeDir); err != nil {
-			t.Fatalf("expected remove dir to remain in stub mode, err=%v", err)
-		}
-		if _, err := os.Stat(removeFile); err != nil {
-			t.Fatalf("expected remove file to remain in stub mode, err=%v", err)
-		}
-	})
+	if _, err := os.Stat(kubeadmLog); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected kubeadm not to run in stub mode, err=%v", err)
+	}
+	if _, err := os.Stat(systemctlLog); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected systemctl not to run in stub mode, err=%v", err)
+	}
+	if _, err := os.Stat(crictlLog); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected crictl not to run in stub mode, err=%v", err)
+	}
+	if _, err := os.Stat(removeDir); err != nil {
+		t.Fatalf("expected remove dir to remain in stub mode, err=%v", err)
+	}
+	if _, err := os.Stat(removeFile); err != nil {
+		t.Fatalf("expected remove file to remain in stub mode, err=%v", err)
+	}
 }
