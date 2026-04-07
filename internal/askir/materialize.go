@@ -214,14 +214,12 @@ func collectReferencedVarsFromDocument(used map[string]bool, doc askcontract.Gen
 }
 
 func collectReferencedVarsFromWhen(used map[string]bool, expr string) bool {
-	refs, err := workflowrefs.WhenReferences(expr)
+	refs, err := workflowrefs.WhenNamespacePaths(expr, workflowrefs.NamespaceVars)
 	if err != nil {
 		return false
 	}
 	for _, ref := range refs {
-		if ref.Namespace == workflowrefs.NamespaceVars {
-			used[ref.Path] = true
-		}
+		used[ref] = true
 	}
 	return true
 }
@@ -243,42 +241,23 @@ func collectReferencedVarsFromStep(used map[string]bool, step askcontract.Workfl
 }
 
 func collectReferencedVarsFromMap(used map[string]bool, values map[string]any) bool {
-	for _, value := range values {
-		switch typed := value.(type) {
-		case string:
-			if !collectReferencedVarsFromString(used, typed) {
-				return false
-			}
-		case map[string]any:
-			if !collectReferencedVarsFromMap(used, typed) {
-				return false
-			}
-		case []any:
-			for _, item := range typed {
-				if nested, ok := item.(map[string]any); ok {
-					if !collectReferencedVarsFromMap(used, nested) {
-						return false
-					}
-				} else if text, ok := item.(string); ok {
-					if !collectReferencedVarsFromString(used, text) {
-						return false
-					}
-				}
-			}
-		}
+	refs, err := workflowrefs.ValueNamespacePaths(values, workflowrefs.NamespaceVars)
+	if err != nil {
+		return false
+	}
+	for _, ref := range refs {
+		used[ref] = true
 	}
 	return true
 }
 
 func collectReferencedVarsFromString(used map[string]bool, text string) bool {
-	refs, err := workflowrefs.TemplateReferences(text)
+	refs, err := workflowrefs.TemplateNamespacePaths(text, workflowrefs.NamespaceVars)
 	if err != nil {
 		return false
 	}
 	for _, ref := range refs {
-		if ref.Namespace == workflowrefs.NamespaceVars {
-			used[ref.Path] = true
-		}
+		used[ref] = true
 	}
 	return true
 }
