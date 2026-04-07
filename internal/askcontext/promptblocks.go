@@ -64,7 +64,7 @@ func PolicyPromptBlock() PromptBlock {
 	if manifest.Policy.AssumeOfflineByDefault {
 		b.WriteString("- Assume offline unless the request explicitly says online.\n")
 	}
-	b.WriteString("- Prefer typed steps over Command whenever a typed step expresses the change clearly.\n")
+	b.WriteString("- Start with typed step groups first. Prefer typed steps over Command whenever a typed step expresses the change clearly.\n")
 	if len(manifest.Policy.PrepareArtifactKinds) > 0 {
 		b.WriteString("- Use `prepare` when packages, images, binaries, archives, bundles, or repository mirrors must be staged before apply.\n")
 	}

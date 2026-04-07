@@ -91,6 +91,8 @@ func buildStepKinds() []StepKindContext {
 		ctx := StepKindContext{
 			Kind:                     step.Kind,
 			Category:                 step.Category,
+			Group:                    step.Group,
+			GroupTitle:               step.GroupTitle,
 			Summary:                  step.Summary,
 			WhenToUse:                step.WhenToUse,
 			SchemaFile:               step.SchemaFile,

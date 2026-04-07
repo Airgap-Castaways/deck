@@ -92,6 +92,8 @@ type VarsRules struct {
 type Step struct {
 	Kind                     string
 	Category                 string
+	Group                    string
+	GroupTitle               string
 	Summary                  string
 	WhenToUse                string
 	SchemaFile               string

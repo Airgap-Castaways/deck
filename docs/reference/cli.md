@@ -347,5 +347,5 @@ Optional transport override example:
 - Top-level workflow authoring reference for deck workflows.
 - Imports are only valid under phases[].imports and resolve from workflows/components/ using component-relative paths.
 - Prefer workflows/vars.yaml for configurable values that would otherwise be repeated inline across steps or files.
-- Prefer typed steps over `Command` when a typed step exists.
+- Start with typed step groups first. Prefer typed steps over `Command` when a typed step exists.
 <!-- END GENERATED:ASK_AUTHORING_CONTEXT -->

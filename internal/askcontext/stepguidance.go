@@ -111,9 +111,16 @@ func DiscoverCandidateStepsWithOptions(prompt string, options StepGuidanceOption
 			score += 100
 			why = append(why, "request names the step kind")
 		}
-		if category := strings.ToLower(strings.TrimSpace(step.Category)); category != "" && strings.Contains(lower, category) {
+		if groupTitle := strings.ToLower(step.GroupTitle); groupTitle != "" && strings.Contains(lower, groupTitle) {
 			score += 20
-			why = append(why, fmt.Sprintf("matches %s category", step.Category))
+			why = append(why, fmt.Sprintf("matches %s group", step.GroupTitle))
+		} else if groupID := strings.ToLower(step.Group); groupID != "" && (strings.Contains(lower, groupID) || strings.Contains(lower, strings.ReplaceAll(groupID, "-", " "))) {
+			score += 18
+			if step.GroupTitle != "" {
+				why = append(why, fmt.Sprintf("matches %s group", step.GroupTitle))
+			} else {
+				why = append(why, fmt.Sprintf("matches %s group", step.Group))
+			}
 		}
 		for _, signal := range step.MatchSignals {
 			signal = strings.ToLower(strings.TrimSpace(signal))
