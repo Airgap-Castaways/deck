@@ -653,18 +653,18 @@ func TestGenerateWithValidationDraftRetryPromptStaysSelectionBased(t *testing.T)
 	}
 }
 
-func TestGenerateWithValidationUsesAutomaticRepairBeforeModelRetry(t *testing.T) {
+func TestGenerateWithValidationUsesCurrentDraftCompilationBeforeRetry(t *testing.T) {
 	client := &stubClient{responses: []string{generationSelectionResponse(t, "invalid init draft", askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{Path: "workflows/scenarios/apply.yaml", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm"}}}}})}}
 	plan := askcontract.PlanResponse{Request: "create kubeadm workflow", Files: []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}}, AuthoringBrief: askcontract.AuthoringBrief{RouteIntent: "draft", TargetScope: "scenario", TargetPaths: []string{"workflows/scenarios/apply.yaml"}, ModeIntent: "apply-only"}}
 	_, files, _, _, _, retries, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate-fast", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: plan.Request}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
 	if err != nil {
-		t.Fatalf("expected automatic repair success: %v", err)
+		t.Fatalf("expected current draft compilation to succeed: %v", err)
 	}
 	if retries != 0 || client.calls != 1 {
-		t.Fatalf("expected first-attempt automatic repair without extra model retries, got retries=%d calls=%d", retries, client.calls)
+		t.Fatalf("expected first-attempt success without extra model retries, got retries=%d calls=%d", retries, client.calls)
 	}
 	if len(files) != 1 || !strings.Contains(files[0].Content, "outputJoinFile: /tmp/deck/join.txt") {
-		t.Fatalf("expected repaired init output join file, got %#v", files)
+		t.Fatalf("expected compiled init output join file, got %#v", files)
 	}
 }
 
@@ -1279,14 +1279,14 @@ func TestGenerateWithValidationRejectsLegacyRefineReplaceByDefault(t *testing.T)
 }
 
 func TestValidatePrimaryAuthoringContractRejectsDraftDocumentsOnRetry(t *testing.T) {
-	err := validatePrimaryAuthoringContract(askintent.RouteDraft, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1"}}}}, 2)
+	err := validatePrimaryAuthoringContract(askintent.RouteDraft, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1"}}}})
 	if err == nil || !strings.Contains(err.Error(), "builder selection") {
 		t.Fatalf("expected draft primary contract to reject direct documents on retry, got %v", err)
 	}
 }
 
 func TestValidatePrimaryAuthoringContractRejectsLegacyRefineReplaceOnRetry(t *testing.T) {
-	err := validatePrimaryAuthoringContract(askintent.RouteRefine, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "replace", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1"}}}}, 2)
+	err := validatePrimaryAuthoringContract(askintent.RouteRefine, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "replace", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1"}}}})
 	if err == nil || !strings.Contains(err.Error(), "use edit, preserve, or delete only") {
 		t.Fatalf("expected refine primary contract to reject replace actions on retry, got %v", err)
 	}

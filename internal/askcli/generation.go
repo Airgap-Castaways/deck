@@ -117,7 +117,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			}
 			return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
 		}
-		if err := validatePrimaryAuthoringContract(decision.Route, gen, attempt); err != nil {
+		if err := validatePrimaryAuthoringContract(decision.Route, gen); err != nil {
 			lastValidation = err.Error()
 			return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation stopped without repair: %s", lastValidation)
 		}

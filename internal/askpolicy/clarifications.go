@@ -187,16 +187,6 @@ func mentionsComponentRefine(lower string) bool {
 	return strings.Contains(lower, "component") || strings.Contains(lower, "extract component") || strings.Contains(lower, "reusable fragment") || strings.Contains(lower, "shared fragment")
 }
 
-func mentionsEscapeHatch(lower string) bool {
-	tokens := []string{"custom shell", "shell script", "bash", "script", "raw yaml", "free-form", "freeform", "manual command", "arbitrary command"}
-	for _, token := range tokens {
-		if strings.Contains(lower, token) {
-			return true
-		}
-	}
-	return false
-}
-
 func needsRuntimePlatformClarification(prompt string, req ScenarioRequirements) bool {
 	lower := strings.ToLower(strings.TrimSpace(prompt))
 	if containsPlatformToken(lower) {

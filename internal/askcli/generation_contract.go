@@ -9,8 +9,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
-func validatePrimaryAuthoringContract(route askintent.Route, gen askcontract.GenerationResponse, attempt int) error {
-	_ = attempt
+func validatePrimaryAuthoringContract(route askintent.Route, gen askcontract.GenerationResponse) error {
 	if route == askintent.RouteDraft {
 		return validatePrimaryDraftContract(gen)
 	}
