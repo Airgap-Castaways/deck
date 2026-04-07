@@ -126,6 +126,77 @@ func TestBuildResolveArgsIncludesBothLibraryNameAndQueryWhenSchemaRequiresThem(t
 	}
 }
 
+func TestBuildContext7DocsArgsUsesBudgetAliases(t *testing.T) {
+	tests := []struct {
+		name      string
+		tool      mcp.Tool
+		wantKey   string
+		wantQuery string
+	}{
+		{
+			name:      "tokens alias",
+			tool:      mcp.Tool{Name: "get-library-docs", InputSchema: mcp.ToolInputSchema{Type: "object", Properties: map[string]interface{}{"query": map[string]any{"type": "string"}, "tokens": map[string]any{"type": "integer"}}}},
+			wantKey:   "tokens",
+			wantQuery: "Explain github.com/mark3labs/mcp-go",
+		},
+		{
+			name:      "maxTokens alias",
+			tool:      mcp.Tool{Name: "get-library-docs", InputSchema: mcp.ToolInputSchema{Type: "object", Properties: map[string]interface{}{"query": map[string]any{"type": "string"}, "maxTokens": map[string]any{"type": "integer"}}}},
+			wantKey:   "maxTokens",
+			wantQuery: "Explain github.com/mark3labs/mcp-go",
+		},
+		{
+			name:      "tokenLimit alias",
+			tool:      mcp.Tool{Name: "get-library-docs", InputSchema: mcp.ToolInputSchema{Type: "object", Properties: map[string]interface{}{"query": map[string]any{"type": "string"}, "tokenLimit": map[string]any{"type": "integer"}}}},
+			wantKey:   "tokenLimit",
+			wantQuery: "Explain github.com/mark3labs/mcp-go",
+		},
+		{
+			name:      "query docs fallback uses library query",
+			tool:      mcp.Tool{Name: "query-docs", InputSchema: mcp.ToolInputSchema{Type: "object", Properties: map[string]interface{}{"query": map[string]any{"type": "string"}, "tokens": map[string]any{"type": "integer"}}}},
+			wantKey:   "tokens",
+			wantQuery: "github.com/mark3labs/mcp-go",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			args := buildContext7DocsArgs(tc.tool, askintent.RouteExplain, "Explain github.com/mark3labs/mcp-go", "")
+			if got := strings.TrimSpace(fmt.Sprint(args["query"])); got != tc.wantQuery {
+				t.Fatalf("expected query %q, got %#v", tc.wantQuery, args)
+			}
+			if got := intArg(args, tc.wantKey); got != defaultContext7DocsTokenBudget {
+				t.Fatalf("expected %s budget %d, got %#v", tc.wantKey, defaultContext7DocsTokenBudget, args)
+			}
+		})
+	}
+}
+
+func TestBuildContext7DocsArgsFallbackIncludesBudget(t *testing.T) {
+	tool := mcp.Tool{Name: "get-library-docs", InputSchema: mcp.ToolInputSchema{Type: "object", Properties: map[string]interface{}{}}}
+	args := buildContext7DocsArgs(tool, askintent.RouteDraft, strings.Repeat("draft prompt ", 30), "github.com/example/lib")
+	if got := intArg(args, "tokens"); got != maxContext7DocsTokenBudget {
+		t.Fatalf("expected fallback tokens budget %d, got %#v", maxContext7DocsTokenBudget, args)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(args["libraryID"])); got != "github.com/example/lib" {
+		t.Fatalf("expected fallback library id, got %#v", args)
+	}
+}
+
+func TestContext7DocsTokenBudgetByRouteAndPromptLength(t *testing.T) {
+	if got := context7DocsTokenBudget(askintent.RouteExplain, "Explain github.com/mark3labs/mcp-go"); got != defaultContext7DocsTokenBudget {
+		t.Fatalf("expected default explain budget %d, got %d", defaultContext7DocsTokenBudget, got)
+	}
+	if got := context7DocsTokenBudget(askintent.RouteDraft, "Create workflow for github.com/mark3labs/mcp-go"); got != draftContext7DocsTokenBudget {
+		t.Fatalf("expected draft budget %d, got %d", draftContext7DocsTokenBudget, got)
+	}
+	if got := context7DocsTokenBudget(askintent.RouteExplain, strings.Repeat("Explain github.com/mark3labs/mcp-go in depth ", 10)); got != defaultContext7DocsTokenBudget+context7LongPromptBudgetBump {
+		t.Fatalf("expected long prompt explain budget %d, got %d", defaultContext7DocsTokenBudget+context7LongPromptBudgetBump, got)
+	}
+	if got := context7DocsTokenBudget(askintent.RouteDraft, strings.Repeat("Create workflow from library docs ", 20)); got != maxContext7DocsTokenBudget {
+		t.Fatalf("expected capped draft budget %d, got %d", maxContext7DocsTokenBudget, got)
+	}
+}
+
 func TestExtractLibraryIDFromContext7ResolveText(t *testing.T) {
 	text := "Available Libraries:\n\n- Title: MCP Go\n- Context7-compatible library ID: /mark3labs/mcp-go\n- Description: A Go implementation"
 	if got := extractLibraryIDFromText(text); got != "/mark3labs/mcp-go" {
@@ -506,7 +577,8 @@ func helperTools(mode string) []map[string]any {
 				"inputSchema": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"query": map[string]any{"type": "string"},
+						"query":  map[string]any{"type": "string"},
+						"tokens": map[string]any{"type": "integer"},
 					},
 				},
 			},
@@ -562,6 +634,9 @@ func helperToolResult(mode string, req mcpfake.Request) map[string]any {
 				"isError": true,
 			}
 		case "query-docs":
+			if got := intArg(args, "tokens"); got < defaultContext7DocsTokenBudget || got > maxContext7DocsTokenBudget {
+				return map[string]any{"content": []map[string]any{{"type": "text", "text": fmt.Sprintf("unexpected token budget %d", got)}}, "isError": true}
+			}
 			return map[string]any{
 				"content": []map[string]any{{"type": "text", "text": "MCP Go lets Go programs expose MCP servers and clients."}},
 				"structuredContent": map[string]any{
@@ -636,6 +711,9 @@ func helperToolResult(mode string, req mcpfake.Request) map[string]any {
 		case "get-library-docs":
 			if mcpfake.StringArg(args, "context7CompatibleLibraryID") != "github.com/mark3labs/mcp-go" {
 				return map[string]any{"content": []map[string]any{{"type": "text", "text": "missing resolved library id"}}, "isError": true}
+			}
+			if got := intArg(args, "tokens"); got < defaultContext7DocsTokenBudget || got > maxContext7DocsTokenBudget {
+				return map[string]any{"content": []map[string]any{{"type": "text", "text": fmt.Sprintf("unexpected token budget %d", got)}}, "isError": true}
 			}
 			return map[string]any{
 				"content": []map[string]any{{"type": "text", "text": "MCP Go is a Go SDK for MCP."}},
@@ -723,5 +801,27 @@ func helperToolResult(mode string, req mcpfake.Request) map[string]any {
 	return map[string]any{
 		"content": []map[string]any{{"type": "text", "text": "unknown tool"}},
 		"isError": true,
+	}
+}
+
+func intArg(args map[string]any, key string) int {
+	if args == nil {
+		return 0
+	}
+	value, ok := args[key]
+	if !ok {
+		return 0
+	}
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
 	}
 }
