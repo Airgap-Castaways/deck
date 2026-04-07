@@ -52,6 +52,38 @@ func ValueTemplateReferences(value any) ([]Reference, error) {
 	return refs.sorted(), nil
 }
 
+func TemplateNamespacePaths(input string, namespace string) ([]string, error) {
+	refs, err := TemplateReferences(input)
+	if err != nil {
+		return nil, err
+	}
+	return namespacePaths(refs, namespace), nil
+}
+
+func TemplateNamespaceRoots(input string, namespace string) ([]string, error) {
+	refs, err := TemplateReferences(input)
+	if err != nil {
+		return nil, err
+	}
+	return namespaceRoots(refs, namespace), nil
+}
+
+func ValueNamespacePaths(value any, namespace string) ([]string, error) {
+	refs, err := ValueTemplateReferences(value)
+	if err != nil {
+		return nil, err
+	}
+	return namespacePaths(refs, namespace), nil
+}
+
+func ValueNamespaceRoots(value any, namespace string) ([]string, error) {
+	refs, err := ValueTemplateReferences(value)
+	if err != nil {
+		return nil, err
+	}
+	return namespaceRoots(refs, namespace), nil
+}
+
 func WhenReferences(expr string) ([]Reference, error) {
 	trimmed := strings.TrimSpace(expr)
 	if trimmed == "" {
@@ -72,6 +104,22 @@ func WhenReferences(expr string) ([]Reference, error) {
 	refs := newReferenceSet()
 	collectCELRefs(parsed.GetExpr(), refs)
 	return refs.sorted(), nil
+}
+
+func WhenNamespacePaths(expr string, namespace string) ([]string, error) {
+	refs, err := WhenReferences(expr)
+	if err != nil {
+		return nil, err
+	}
+	return namespacePaths(refs, namespace), nil
+}
+
+func WhenNamespaceRoots(expr string, namespace string) ([]string, error) {
+	refs, err := WhenReferences(expr)
+	if err != nil {
+		return nil, err
+	}
+	return namespaceRoots(refs, namespace), nil
 }
 
 func whenEnv() (*cel.Env, error) {
@@ -128,6 +176,41 @@ func (s *referenceSet) sorted() []Reference {
 		}
 		return out[i].Root < out[j].Root
 	})
+	return out
+}
+
+func namespacePaths(refs []Reference, namespace string) []string {
+	return namespaceValues(refs, namespace, false)
+}
+
+func namespaceRoots(refs []Reference, namespace string) []string {
+	return namespaceValues(refs, namespace, true)
+}
+
+func namespaceValues(refs []Reference, namespace string, roots bool) []string {
+	namespace = strings.TrimSpace(namespace)
+	seen := map[string]bool{}
+	for _, ref := range refs {
+		if ref.Namespace != namespace {
+			continue
+		}
+		value := ref.Path
+		if roots {
+			value = ref.Root
+		}
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		seen[value] = true
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(seen))
+	for value := range seen {
+		out = append(out, value)
+	}
+	sort.Strings(out)
 	return out
 }
 

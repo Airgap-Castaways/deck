@@ -21,23 +21,19 @@ func parallelApplyKindAllowed(kind string) bool {
 
 func referencedRuntimeVars(step config.Step) ([]string, error) {
 	seen := map[string]bool{}
-	refs, err := workflowrefs.WhenReferences(step.When)
+	refs, err := workflowrefs.WhenNamespaceRoots(step.When, workflowrefs.NamespaceRuntime)
 	if err != nil {
 		return nil, err
 	}
 	for _, ref := range refs {
-		if ref.Namespace == workflowrefs.NamespaceRuntime {
-			seen[ref.Root] = true
-		}
+		seen[ref] = true
 	}
-	templateRefs, err := workflowrefs.ValueTemplateReferences(step.Spec)
+	templateRefs, err := workflowrefs.ValueNamespaceRoots(step.Spec, workflowrefs.NamespaceRuntime)
 	if err != nil {
 		return nil, err
 	}
 	for _, ref := range templateRefs {
-		if ref.Namespace == workflowrefs.NamespaceRuntime {
-			seen[ref.Root] = true
-		}
+		seen[ref] = true
 	}
 	vars := make([]string, 0, len(seen))
 	for key := range seen {

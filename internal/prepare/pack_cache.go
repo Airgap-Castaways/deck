@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/config"
@@ -211,22 +210,11 @@ func stepArtifactType(kind string) (string, bool) {
 }
 
 func collectStepInputVarNames(spec map[string]any) []string {
-	seen := map[string]bool{}
-	refs, err := workflowrefs.ValueTemplateReferences(spec)
+	refs, err := workflowrefs.ValueNamespaceRoots(spec, workflowrefs.NamespaceVars)
 	if err != nil {
 		return nil
 	}
-	for _, ref := range refs {
-		if ref.Namespace == workflowrefs.NamespaceVars {
-			seen[ref.Root] = true
-		}
-	}
-	keys := make([]string, 0, len(seen))
-	for key := range seen {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
+	return refs
 }
 
 func computeStepCacheKey(step config.Step) string {
