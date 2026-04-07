@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
-	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
@@ -17,7 +17,7 @@ func TestBuildSelectsBootstrapScaffold(t *testing.T) {
 		askretrieve.WorkspaceSummary{},
 		askintent.Decision{Route: askintent.RouteDraft},
 		askcontract.PlanResponse{Request: "create kubeadm workflow"},
-		askknowledge.Current(),
+		askcontext.CurrentBundle(),
 	)
 	if scaffold.Family != FamilyBootstrap {
 		t.Fatalf("expected kubeadm scaffold, got %#v", scaffold)
@@ -33,7 +33,7 @@ func TestBuildSelectsRefineScaffoldForRefineRoute(t *testing.T) {
 		askretrieve.WorkspaceSummary{Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps: []\n"}}},
 		askintent.Decision{Route: askintent.RouteRefine},
 		askcontract.PlanResponse{Files: []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "update", Purpose: "entry"}}},
-		askknowledge.Current(),
+		askcontext.CurrentBundle(),
 	)
 	if scaffold.Family != FamilyRefine {
 		t.Fatalf("expected refine scaffold, got %#v", scaffold)
@@ -49,7 +49,7 @@ func TestBuildSelectsRoleAwareScaffold(t *testing.T) {
 		askretrieve.WorkspaceSummary{},
 		askintent.Decision{Route: askintent.RouteDraft},
 		askcontract.PlanResponse{Request: "create 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{Topology: "multi-node", NodeCount: 3}},
-		askknowledge.Current(),
+		askcontext.CurrentBundle(),
 	)
 	if scaffold.Family != FamilyRoleAware {
 		t.Fatalf("expected multi-node kubeadm scaffold, got %#v", scaffold)

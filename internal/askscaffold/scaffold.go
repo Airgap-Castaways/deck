@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
-	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askpattern"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
@@ -39,7 +39,7 @@ type File struct {
 	SourceHint string
 }
 
-func Build(req askpolicy.ScenarioRequirements, workspace askretrieve.WorkspaceSummary, decision askintent.Decision, plan askcontract.PlanResponse, bundle askknowledge.Bundle) Scaffold {
+func Build(req askpolicy.ScenarioRequirements, workspace askretrieve.WorkspaceSummary, decision askintent.Decision, plan askcontract.PlanResponse, bundle askcontext.Bundle) Scaffold {
 	family := selectFamily(req, workspace, decision, plan)
 	scaffold := Scaffold{Family: family}
 	switch family {
@@ -82,7 +82,7 @@ func selectFamily(req askpolicy.ScenarioRequirements, workspace askretrieve.Work
 	return FamilyApplyOnly
 }
 
-func applyOnlyScaffold(req askpolicy.ScenarioRequirements, bundle askknowledge.Bundle) Scaffold {
+func applyOnlyScaffold(req askpolicy.ScenarioRequirements, bundle askcontext.Bundle) Scaffold {
 	files := []File{{
 		Path:     bundle.Topology.CanonicalApply,
 		Purpose:  "Primary apply entrypoint",
@@ -103,7 +103,7 @@ func applyOnlyScaffold(req askpolicy.ScenarioRequirements, bundle askknowledge.B
 	}
 }
 
-func offlineBundleScaffold(req askpolicy.ScenarioRequirements, bundle askknowledge.Bundle) Scaffold {
+func offlineBundleScaffold(req askpolicy.ScenarioRequirements, bundle askcontext.Bundle) Scaffold {
 	files := []File{
 		{Path: bundle.Topology.CanonicalPrepare, Purpose: "Prepare offline artifacts before apply", Locked: true, Template: "version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: TODO_PREPARE_STEP_ID\n        kind: TODO_PREPARE_TYPED_KIND\n        spec: {}\n"},
 		{Path: bundle.Topology.CanonicalApply, Purpose: "Consume prepared artifacts on the node", Locked: true, Template: "version: v1alpha1\nphases:\n  - name: apply\n    steps:\n      - id: install-packages\n        kind: InstallPackage\n        spec:\n          packages: []\n          source:\n            type: local-repo\n            path: TODO_LOCAL_REPO_PATH\n      - id: load-images\n        kind: LoadImage\n        spec:\n          sourceDir: TODO_LOCAL_IMAGE_DIR\n          runtime: ctr\n          images: []\n"},
@@ -128,7 +128,7 @@ func offlineBundleScaffold(req askpolicy.ScenarioRequirements, bundle askknowled
 	}
 }
 
-func kubeadmScaffold(req askpolicy.ScenarioRequirements, bundle askknowledge.Bundle) Scaffold {
+func kubeadmScaffold(req askpolicy.ScenarioRequirements, bundle askcontext.Bundle) Scaffold {
 	s := offlineBundleScaffold(req, bundle)
 	s.Family = FamilyBootstrap
 	s.Summary = "Cluster bootstrap starter scaffold with offline preparation and apply verification."
@@ -144,7 +144,7 @@ func kubeadmScaffold(req askpolicy.ScenarioRequirements, bundle askknowledge.Bun
 	return s
 }
 
-func kubeadmMultiNodeScaffold(req askpolicy.ScenarioRequirements, plan askcontract.PlanResponse, bundle askknowledge.Bundle) Scaffold {
+func kubeadmMultiNodeScaffold(req askpolicy.ScenarioRequirements, plan askcontract.PlanResponse, bundle askcontext.Bundle) Scaffold {
 	s := offlineBundleScaffold(req, bundle)
 	s.Family = FamilyRoleAware
 	s.Summary = "Role-aware prepare/apply scaffold with explicit bootstrap, join, and verification phases."

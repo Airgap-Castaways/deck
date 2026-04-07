@@ -1,7 +1,5 @@
 package askcontext
 
-import "github.com/Airgap-Castaways/deck/internal/askcommandspec"
-
 type AskCommandMetadata struct {
 	Short  string
 	Plan   AskPlanCommandMetadata
@@ -20,7 +18,7 @@ type AskConfigCommandMetadata struct {
 }
 
 func AskCommandMeta() AskCommandMetadata {
-	spec := askcommandspec.Current()
+	spec := CurrentCommandSpec()
 	planFlags := make([]CLIFlag, 0, len(spec.Plan.Flags))
 	for _, flag := range spec.Plan.Flags {
 		planFlags = append(planFlags, CLIFlag{Name: flag.Name, Description: flag.Description})

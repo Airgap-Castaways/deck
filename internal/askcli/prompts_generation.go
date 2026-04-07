@@ -10,7 +10,6 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askdraft"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askir"
-	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askrefine"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
@@ -60,7 +59,7 @@ func classifierUserPrompt(prompt string, reviewFlag bool, workspace askretrieve.
 }
 
 func generationSystemPrompt(route askintent.Route, target askintent.Target, requestText string, retrieval askretrieve.RetrievalResult, requirements askpolicy.ScenarioRequirements, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, executionModel askcontract.ExecutionModel, scaffold askscaffold.Scaffold) string {
-	bundle := askknowledge.Current()
+	bundle := askcontext.CurrentBundle()
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask, a workflow authoring assistant.\n")
 	b.WriteString("Route: ")

@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcatalog"
+	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
-	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/validate"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
@@ -32,7 +32,7 @@ type Diagnostic struct {
 	SuggestedFix string   `json:"suggestedFix,omitempty"`
 }
 
-func FromValidationError(err error, message string, bundle askknowledge.Bundle) []Diagnostic {
+func FromValidationError(err error, message string, bundle askcontext.Bundle) []Diagnostic {
 	var validationErr *validate.ValidationError
 	if errors.As(err, &validationErr) {
 		structured := FromValidationIssues(validationErr.ValidationIssues())
@@ -317,16 +317,16 @@ func extractMissingPlannedFile(message string) (string, bool) {
 	return path, true
 }
 
-func findStep(bundle askknowledge.Bundle, kind string) (askknowledge.StepKnowledge, bool) {
+func findStep(bundle askcontext.Bundle, kind string) (askcontext.StepKnowledge, bool) {
 	for _, step := range bundle.Steps {
 		if step.Kind == strings.TrimSpace(kind) {
 			return step, true
 		}
 	}
-	return askknowledge.StepKnowledge{}, false
+	return askcontext.StepKnowledge{}, false
 }
 
-func renderKeyFieldList(step askknowledge.StepKnowledge) string {
+func renderKeyFieldList(step askcontext.StepKnowledge) string {
 	paths := make([]string, 0, len(step.KeyFields))
 	for _, field := range step.KeyFields {
 		if strings.TrimSpace(field.Path) != "" {
@@ -345,7 +345,7 @@ func renderKeyFieldList(step askknowledge.StepKnowledge) string {
 	return strings.Join(paths, ", ")
 }
 
-func renderRuleSummaryList(step askknowledge.StepKnowledge) string {
+func renderRuleSummaryList(step askcontext.StepKnowledge) string {
 	rules := make([]string, 0, len(step.SchemaRuleSummaries))
 	for _, rule := range step.SchemaRuleSummaries {
 		rule = strings.TrimSpace(rule)
