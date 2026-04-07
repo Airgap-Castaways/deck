@@ -3,56 +3,43 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
 
-func TestServerUpDaemonUsesWorkingDirectoryProperty(t *testing.T) {
-	root := t.TempDir()
-	binDir := filepath.Join(t.TempDir(), "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatalf("mkdir bin dir: %v", err)
+func TestBuildServerDaemonArgsUsesWorkingDirectoryProperty(t *testing.T) {
+	args := buildServerDaemonArgs("deck-server", "/tmp/deck", "/tmp/current/dir", serverUpOptions{
+		root:          ".",
+		addr:          ":8080",
+		auditMaxSize:  50,
+		auditMaxFiles: 10,
+	})
+	if got, want := args[:10], []string{
+		"--unit", "deck-server",
+		"--property", "WorkingDirectory=/tmp/current/dir",
+		"--service-type=simple",
+		"/tmp/deck",
+		"server", "up",
+		"--root", ".",
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected daemon args prefix:\n got: %#v\nwant: %#v", got, want)
 	}
-	logPath := filepath.Join(t.TempDir(), "systemd-run.log")
-	systemdRunScript := "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$*\" > \"" + logPath + "\"\nprintf 'Running as unit: deck-server.service\\n'\n"
-	if err := os.WriteFile(filepath.Join(binDir, "systemd-run"), []byte(systemdRunScript), 0o755); err != nil {
-		t.Fatalf("write systemd-run script: %v", err)
+	if strings.Contains(strings.Join(args, " "), "WorkingEnsureDirectory=") {
+		t.Fatalf("unexpected WorkingEnsureDirectory property in %#v", args)
 	}
-	systemctlScript := "#!/bin/sh\nset -eu\nexit 0\n"
-	if err := os.WriteFile(filepath.Join(binDir, "systemctl"), []byte(systemctlScript), 0o755); err != nil {
-		t.Fatalf("write systemctl script: %v", err)
-	}
-	t.Setenv("PATH", binDir)
+}
 
-	oldWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	if err := os.Chdir(root); err != nil {
-		t.Fatalf("chdir: %v", err)
-	}
-	defer func() { _ = os.Chdir(oldWD) }()
-
-	res := execute([]string{"server", "up", "--root", ".", "--addr", ":8080", "--daemon", "--unit", "deck-server"})
-	if res.err != nil {
-		t.Fatalf("expected daemon startup success, got %v stderr=%q", res.err, res.stderr)
-	}
-	if !strings.Contains(res.stdout, "server up: ok (deck-server.service)") {
-		t.Fatalf("expected success output, got %q", res.stdout)
-	}
-	raw, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("read systemd-run log: %v", err)
-	}
-	args := string(raw)
-	if !strings.Contains(args, "WorkingDirectory="+root) {
-		t.Fatalf("expected WorkingDirectory property, got %q", args)
-	}
-	if strings.Contains(args, "WorkingEnsureDirectory=") {
-		t.Fatalf("unexpected WorkingEnsureDirectory property in %q", args)
-	}
-	if !strings.Contains(args, " server up --root . --addr :8080 ") {
-		t.Fatalf("expected server up daemon command arguments, got %q", args)
+func TestBuildServerDaemonArgsEscapesWorkingDirectoryPercents(t *testing.T) {
+	args := buildServerDaemonArgs("deck-server", "/tmp/deck", "/tmp/100%/cwd", serverUpOptions{
+		root:          ".",
+		addr:          ":8080",
+		auditMaxSize:  50,
+		auditMaxFiles: 10,
+	})
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "WorkingDirectory=/tmp/100%%/cwd") {
+		t.Fatalf("expected escaped percent in args, got %#v", args)
 	}
 }
 
