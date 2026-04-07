@@ -283,15 +283,7 @@ func exportedPackageCacheAvailable(cacheKey string, inputVars map[string]string)
 	if err != nil || !ok || len(meta.Files) == 0 {
 		return false
 	}
-	cachePayload := exportedPackageCachePayloadPath(cachePath)
-	for _, rel := range meta.Files {
-		info, statErr := os.Stat(filepath.Join(cachePayload, filepath.FromSlash(rel)))
-		if statErr != nil || info.IsDir() || info.Size() == 0 {
-			return false
-		}
-	}
-	checksumsOK, err := verifyArtifactChecksums(cachePayload, meta.Files, meta.Checksums)
-	return err == nil && checksumsOK
+	return artifactFilesPresentNonEmpty(exportedPackageCachePayloadPath(cachePath), meta.Files)
 }
 
 func normalizeTarPath(name string) (string, bool) {

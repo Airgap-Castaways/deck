@@ -153,23 +153,37 @@ func imageMetaFileAbs(bundleRoot, dir string) string {
 	return filepath.Join(bundleRoot, filepath.FromSlash(dir), ".deck-cache-images.json")
 }
 
-func loadImageArtifactMeta(bundleRoot, dir string) (imageArtifactMeta, bool, error) {
-	raw, err := os.ReadFile(imageMetaFileAbs(bundleRoot, dir))
+func readImageArtifactMetaFile(path string) ([]byte, bool) {
+	// #nosec G304 -- path is derived from the internal bundle artifact layout under bundleRoot.
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return imageArtifactMeta{}, false, nil
-		}
-		return imageArtifactMeta{}, false, fmt.Errorf("read image cache metadata: %w", err)
+		return nil, false
 	}
+	return raw, true
+}
+
+func parseImageArtifactMeta(raw []byte) (imageArtifactMeta, bool) {
 	var meta imageArtifactMeta
 	if err := json.Unmarshal(raw, &meta); err != nil {
-		return imageArtifactMeta{}, false, fmt.Errorf("decode image cache metadata: %w", err)
+		return imageArtifactMeta{}, false
 	}
 	meta.Images = normalizeStrings(meta.Images)
 	meta.Files = normalizeStrings(meta.Files)
 	meta.Checksums = normalizeChecksumMap(meta.Checksums)
 	meta.SourceDigests = normalizeChecksumMap(meta.SourceDigests)
 	if len(meta.Images) == 0 || len(meta.Files) == 0 {
+		return imageArtifactMeta{}, false
+	}
+	return meta, true
+}
+
+func loadImageArtifactMeta(bundleRoot, dir string) (imageArtifactMeta, bool, error) {
+	raw, ok := readImageArtifactMetaFile(imageMetaFileAbs(bundleRoot, dir))
+	if !ok {
+		return imageArtifactMeta{}, false, nil
+	}
+	meta, ok := parseImageArtifactMeta(raw)
+	if !ok {
 		return imageArtifactMeta{}, false, nil
 	}
 	return meta, true, nil

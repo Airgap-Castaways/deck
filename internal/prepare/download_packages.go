@@ -434,19 +434,6 @@ func tryReusePackageArtifact(bundleRoot, rootRel string, packages []string, opts
 	if len(files) == 0 {
 		return nil, false, nil
 	}
-	for _, rel := range files {
-		abs := filepath.Join(bundleRoot, filepath.FromSlash(rel))
-		info, statErr := os.Stat(abs)
-		if statErr != nil {
-			if os.IsNotExist(statErr) {
-				return nil, false, nil
-			}
-			return nil, false, fmt.Errorf("stat cached package artifact %s: %w", abs, statErr)
-		}
-		if info.Size() == 0 {
-			return nil, false, nil
-		}
-	}
 	checksumsOK, err := verifyArtifactChecksums(bundleRoot, files, meta.Checksums)
 	if err != nil {
 		if os.IsNotExist(err) {

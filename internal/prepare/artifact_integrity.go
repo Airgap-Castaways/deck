@@ -2,6 +2,7 @@ package prepare
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -49,4 +50,14 @@ func verifyArtifactChecksums(base string, relFiles []string, checksums map[strin
 		}
 	}
 	return true, nil
+}
+
+func artifactFilesPresentNonEmpty(base string, relFiles []string) bool {
+	for _, rel := range normalizeStrings(relFiles) {
+		info, err := os.Stat(filepath.Join(base, filepath.FromSlash(rel)))
+		if err != nil || info.IsDir() || info.Size() == 0 {
+			return false
+		}
+	}
+	return true
 }
