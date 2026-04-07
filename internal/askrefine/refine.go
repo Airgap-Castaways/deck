@@ -8,6 +8,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type Candidate struct {
@@ -61,7 +62,7 @@ func ResolveCandidate(doc askcontract.GeneratedDocument, transform askcontract.R
 		}
 		if transform.Value != nil && strings.TrimSpace(transform.RawPath) != "" && strings.TrimSpace(transform.VarName) != "" {
 			if strings.TrimSpace(transform.VarsPath) == "" {
-				transform.VarsPath = "workflows/vars.yaml"
+				transform.VarsPath = workspacepaths.CanonicalVarsWorkflow
 			}
 			return transform, nil
 		}
@@ -286,7 +287,7 @@ func scalarCandidatesForField(catalog askcatalog.Catalog, kind string, path stri
 		items = append(items, Candidate{ID: candidateID("delete-field", path, rawPath), Path: path, Type: "delete-field", RawPath: rawPath, Summary: fmt.Sprintf("delete %s", rawPath)})
 	}
 	if fieldSupportsExtractVar(field, value) && ctx.allowExtractVar(sanitizeName(leaf), value) {
-		items = append(items, Candidate{ID: candidateID("extract-var", path, rawPath), Path: path, Type: "extract-var", RawPath: rawPath, Summary: fmt.Sprintf("extract %s into workflows/vars.yaml", rawPath), SuggestedVarName: sanitizeName(leaf), SuggestedVarsPath: "workflows/vars.yaml"})
+		items = append(items, Candidate{ID: candidateID("extract-var", path, rawPath), Path: path, Type: "extract-var", RawPath: rawPath, Summary: fmt.Sprintf("extract %s into workflows/vars.yaml", rawPath), SuggestedVarName: sanitizeName(leaf), SuggestedVarsPath: workspacepaths.CanonicalVarsWorkflow})
 	}
 	return items
 }

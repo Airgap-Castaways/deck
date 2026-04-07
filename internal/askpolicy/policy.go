@@ -14,6 +14,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askir"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type ScenarioRequirements struct {
@@ -127,25 +128,25 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 		req.ComponentAdvisories = nil
 	}
 	if requestedMode != "prepare-only" {
-		req.RequiredFiles = append(req.RequiredFiles, "workflows/scenarios/apply.yaml")
-		req.EntryScenario = "workflows/scenarios/apply.yaml"
+		req.RequiredFiles = append(req.RequiredFiles, workspacepaths.CanonicalApplyWorkflow)
+		req.EntryScenario = workspacepaths.CanonicalApplyWorkflow
 	}
 	if needsPrepare || requestedMode == "prepare-only" {
-		req.RequiredFiles = append(req.RequiredFiles, "workflows/prepare.yaml")
+		req.RequiredFiles = append(req.RequiredFiles, workspacepaths.CanonicalPrepareWorkflow)
 	}
 	if strings.Contains(strings.ToLower(prompt), "vars") || len(req.VarsAdvisories) > 0 {
-		req.RequiredFiles = append(req.RequiredFiles, "workflows/vars.yaml")
+		req.RequiredFiles = append(req.RequiredFiles, workspacepaths.CanonicalVarsWorkflow)
 	}
 	for _, path := range askintent.ExtractWorkflowPaths(prompt) {
 		req.RequiredFiles = append(req.RequiredFiles, path)
-		if strings.HasPrefix(path, "workflows/scenarios/") || path == "workflows/prepare.yaml" {
+		if strings.HasPrefix(path, "workflows/scenarios/") || path == workspacepaths.CanonicalPrepareWorkflow {
 			req.EntryScenario = path
 		}
 	}
 	if workspace.HasWorkflowTree && decision.Route == askintent.RouteRefine {
 		// retain known required files for refine if prepare already exists
-		if workspace.HasPrepare && !containsString(req.RequiredFiles, "workflows/prepare.yaml") && needsPrepare {
-			req.RequiredFiles = append(req.RequiredFiles, "workflows/prepare.yaml")
+		if workspace.HasPrepare && !containsString(req.RequiredFiles, workspacepaths.CanonicalPrepareWorkflow) && needsPrepare {
+			req.RequiredFiles = append(req.RequiredFiles, workspacepaths.CanonicalPrepareWorkflow)
 		}
 	}
 	req.RequiredFiles = dedupeStrings(req.RequiredFiles)
@@ -273,10 +274,10 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 	executionModel := plan.ExecutionModel
 	if strings.TrimSpace(brief.ModeIntent) == "prepare+apply" {
 		if len(preparePathsFromGeneration(gen.Files)) == 0 {
-			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_prepare_missing", Message: "request expects both prepare and apply workflows but generated output is missing workflows/prepare.yaml", Fix: "Return both a prepare workflow and at least one apply scenario when the request asks for prepare and apply", Path: "workflows/prepare.yaml"})
+			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_prepare_missing", Message: "request expects both prepare and apply workflows but generated output is missing workflows/prepare.yaml", Fix: "Return both a prepare workflow and at least one apply scenario when the request asks for prepare and apply", Path: workspacepaths.CanonicalPrepareWorkflow})
 		}
 		if len(scenarioLikePathsWithName(gen.Files, "apply")) == 0 {
-			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_apply_missing", Message: "request expects both prepare and apply workflows but generated output is missing an apply scenario", Fix: "Return a scenario entrypoint under workflows/scenarios/ for apply execution", Path: "workflows/scenarios/apply.yaml"})
+			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_apply_missing", Message: "request expects both prepare and apply workflows but generated output is missing an apply scenario", Fix: "Return a scenario entrypoint under workflows/scenarios/ for apply execution", Path: workspacepaths.CanonicalApplyWorkflow})
 		}
 	}
 	if strings.TrimSpace(brief.TargetScope) == "workspace" && len(brief.TargetPaths) > 1 {
@@ -334,25 +335,25 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 	}
 	for _, contract := range executionModel.SharedStateContracts {
 		if !generationAppearsToHandleSharedState(gen.Files, contract) {
-			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_shared_state_missing", Message: fmt.Sprintf("execution model expects shared-state handling for %s but generated output does not clearly model production and consumption", strings.TrimSpace(contract.Name)), Fix: "Add explicit production and consumption steps or clearly model the shared availability contract in the affected workflow", Path: "workflows/scenarios/apply.yaml"})
+			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_shared_state_missing", Message: fmt.Sprintf("execution model expects shared-state handling for %s but generated output does not clearly model production and consumption", strings.TrimSpace(contract.Name)), Fix: "Add explicit production and consumption steps or clearly model the shared availability contract in the affected workflow", Path: workspacepaths.CanonicalApplyWorkflow})
 		}
 		if strings.EqualFold(strings.TrimSpace(contract.AvailabilityModel), "published-for-worker-consumption") && !generationAppearsToPublishSharedState(gen.Files, contract) {
-			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_shared_state_publish_missing", Message: fmt.Sprintf("execution model expects published shared-state availability for %s but generated output does not show an explicit publication or unambiguous handoff", strings.TrimSpace(contract.Name)), Fix: "Publish the shared-state artifact explicitly with a typed file or directory step before consumer steps run", Path: "workflows/scenarios/apply.yaml"})
+			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_shared_state_publish_missing", Message: fmt.Sprintf("execution model expects published shared-state availability for %s but generated output does not show an explicit publication or unambiguous handoff", strings.TrimSpace(contract.Name)), Fix: "Publish the shared-state artifact explicitly with a typed file or directory step before consumer steps run", Path: workspacepaths.CanonicalApplyWorkflow})
 		}
 	}
 	if executionModel.RoleExecution.PerNodeInvocation && strings.TrimSpace(executionModel.RoleExecution.RoleSelector) != "" {
 		if !generationAppearsRoleAware(gen.Files, executionModel.RoleExecution.RoleSelector) {
-			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_role_selector_missing", Message: fmt.Sprintf("execution model expects role-aware per-node invocation via %s but generated workflows do not appear to branch on it", executionModel.RoleExecution.RoleSelector), Fix: "Add role-aware conditions or separate role-specific phases that use the execution model role selector", Path: "workflows/scenarios/apply.yaml"})
+			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_role_selector_missing", Message: fmt.Sprintf("execution model expects role-aware per-node invocation via %s but generated workflows do not appear to branch on it", executionModel.RoleExecution.RoleSelector), Fix: "Add role-aware conditions or separate role-specific phases that use the execution model role selector", Path: workspacepaths.CanonicalApplyWorkflow})
 		}
 		if generationViolatesFinalVerificationRole(gen.Files, executionModel.Verification.FinalVerificationRole) {
-			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_final_verify_role_mismatch", Message: fmt.Sprintf("final cluster verification does not appear to run on the expected %s role", executionModel.Verification.FinalVerificationRole), Fix: "Move final CheckKubernetesCluster verification to the role required by the execution model or make the role gate explicit", Path: "workflows/scenarios/apply.yaml"})
+			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_final_verify_role_mismatch", Message: fmt.Sprintf("final cluster verification does not appear to run on the expected %s role", executionModel.Verification.FinalVerificationRole), Fix: "Move final CheckKubernetesCluster verification to the role required by the execution model or make the role gate explicit", Path: workspacepaths.CanonicalApplyWorkflow})
 		}
 	}
 	if generationViolatesVerificationExpectations(gen.Files, executionModel.Verification) {
-		findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_verification_mismatch", Message: fmt.Sprintf("generated CheckKubernetesCluster expectations do not match the execution model verification contract (expected nodes=%d controlPlaneReady=%d)", executionModel.Verification.ExpectedNodeCount, executionModel.Verification.ExpectedControlPlaneReady), Fix: "Align final CheckKubernetesCluster node expectations with the execution model topology contract", Path: "workflows/scenarios/apply.yaml"})
+		findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "execution_model_verification_mismatch", Message: fmt.Sprintf("generated CheckKubernetesCluster expectations do not match the execution model verification contract (expected nodes=%d controlPlaneReady=%d)", executionModel.Verification.ExpectedNodeCount, executionModel.Verification.ExpectedControlPlaneReady), Fix: "Align final CheckKubernetesCluster node expectations with the execution model topology contract", Path: workspacepaths.CanonicalApplyWorkflow})
 	}
 	if hasCapability(brief.RequiredCapabilities, "cluster-verification") && !hasKind(generatedWorkflowSteps(gen.Files), "CheckKubernetesCluster") {
-		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_cluster_verification", Message: "request requires cluster verification but generated workflow does not include a CheckKubernetesCluster step", Fix: "Use the typed CheckKubernetesCluster step when the plan requires cluster verification", Path: "workflows/scenarios/apply.yaml"})
+		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_cluster_verification", Message: "request requires cluster verification but generated workflow does not include a CheckKubernetesCluster step", Fix: "Use the typed CheckKubernetesCluster step when the plan requires cluster verification", Path: workspacepaths.CanonicalApplyWorkflow})
 	}
 	if req.TypedPreference && countCommands(gen.Files) > 0 {
 		alternatives := askcontext.StrongTypedAlternativesWithOptions(plan.Request, askcontext.StepGuidanceOptions{ModeIntent: plan.AuthoringBrief.ModeIntent, Topology: plan.AuthoringBrief.Topology, RequiredCapabilities: plan.AuthoringBrief.RequiredCapabilities})
@@ -382,12 +383,12 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 		for _, violation := range constrainedLiteralViolations(file.Content) {
 			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "constrained_literal_template", Message: fmt.Sprintf("constrained typed field uses vars template in %s: %s", clean, violation), Fix: fmt.Sprintf("Keep %s as a literal allowed value instead of a vars template", violation), Path: clean})
 		}
-		if clean == "workflows/prepare.yaml" && prepareUsesCommandForArtifacts(file.Content, req.ArtifactKinds) {
+		if clean == workspacepaths.CanonicalPrepareWorkflow && prepareUsesCommandForArtifacts(file.Content, req.ArtifactKinds) {
 			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "prepare_command_artifacts", Message: fmt.Sprintf("prepare workflow uses Command for artifact collection where a typed prepare step should be used: %s", clean), Fix: "Use typed prepare steps such as DownloadImage or DownloadPackage instead of Command for artifact collection in prepare", Path: clean})
 		}
 	}
 	if req.NeedsPrepare && len(preparePaths) == 0 {
-		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_prepare", Message: "artifact-requiring request is missing workflows/prepare.yaml", Fix: "Add workflows/prepare.yaml when packages, images, binaries, or bundles must be prepared before apply", Path: "workflows/prepare.yaml"})
+		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_prepare", Message: "artifact-requiring request is missing workflows/prepare.yaml", Fix: "Add workflows/prepare.yaml when packages, images, binaries, or bundles must be prepared before apply", Path: workspacepaths.CanonicalPrepareWorkflow})
 	}
 	if req.NeedsPrepare && len(req.ArtifactKinds) > 0 && len(preparePaths) > 0 {
 		generated := generatedMap(gen.Files)
@@ -400,7 +401,7 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 	if scenarioAppearsIncomplete(req, gen.Files) {
 		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "scenario_intent_incomplete", Message: fmt.Sprintf("generated workflow does not fully match requested scenario intent: %s", strings.TrimSpace(plan.Request)), Fix: "Add the missing install or bootstrap stages required by the requested scenario before returning the workflow"})
 	}
-	if !generatedHas(gen.Files, "workflows/vars.yaml") {
+	if !generatedHas(gen.Files, workspacepaths.CanonicalVarsWorkflow) {
 		for _, reason := range req.VarsAdvisories {
 			findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "vars_advisory", Message: reason})
 		}
@@ -728,8 +729,8 @@ func inferRequestComplexity(prompt string, req ScenarioRequirements) string {
 }
 
 func inferModeIntent(req ScenarioRequirements) string {
-	hasPrepare := containsString(req.RequiredFiles, "workflows/prepare.yaml") || req.NeedsPrepare
-	hasApply := containsString(req.RequiredFiles, "workflows/scenarios/apply.yaml") || strings.TrimSpace(req.EntryScenario) != ""
+	hasPrepare := containsString(req.RequiredFiles, workspacepaths.CanonicalPrepareWorkflow) || req.NeedsPrepare
+	hasApply := containsString(req.RequiredFiles, workspacepaths.CanonicalApplyWorkflow) || strings.TrimSpace(req.EntryScenario) != ""
 	switch {
 	case hasPrepare && hasApply:
 		return "prepare+apply"
@@ -872,16 +873,16 @@ func scenarioLikePathsWithName(files []askcontract.GeneratedFile, name string) [
 func preparePathsFromGeneration(files []askcontract.GeneratedFile) []string {
 	paths := []string{}
 	for _, file := range files {
-		if filepath.ToSlash(strings.TrimSpace(file.Path)) == "workflows/prepare.yaml" {
-			paths = append(paths, "workflows/prepare.yaml")
+		if filepath.ToSlash(strings.TrimSpace(file.Path)) == workspacepaths.CanonicalPrepareWorkflow {
+			paths = append(paths, workspacepaths.CanonicalPrepareWorkflow)
 		}
 	}
 	return dedupeStrings(paths)
 }
 
 func onlineActivityDetected(content string) bool {
-	if doc, err := askir.ParseDocument("workflows/scenarios/apply.yaml", []byte(content)); err == nil && doc.Workflow != nil {
-		for _, step := range generatedWorkflowSteps([]askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: content}}) {
+	if doc, err := askir.ParseDocument(workspacepaths.CanonicalApplyWorkflow, []byte(content)); err == nil && doc.Workflow != nil {
+		for _, step := range generatedWorkflowSteps([]askcontract.GeneratedFile{{Path: workspacepaths.CanonicalApplyWorkflow, Content: content}}) {
 			switch strings.TrimSpace(step.Kind) {
 			case "DownloadPackage", "DownloadImage", "RefreshRepository":
 				return true
@@ -903,7 +904,7 @@ func onlineActivityDetected(content string) bool {
 }
 
 func prepareAppearsArtifactOriented(content string, artifactKinds []string) bool {
-	steps := generatedWorkflowSteps([]askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: content}})
+	steps := generatedWorkflowSteps([]askcontract.GeneratedFile{{Path: workspacepaths.CanonicalPrepareWorkflow, Content: content}})
 	if len(steps) > 0 {
 		for _, kind := range artifactKinds {
 			switch strings.ToLower(strings.TrimSpace(kind)) {
@@ -998,7 +999,7 @@ func fieldUsesVarsTemplate(content string, path string) bool {
 }
 
 func prepareUsesCommandForArtifacts(content string, artifactKinds []string) bool {
-	steps := generatedWorkflowSteps([]askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: content}})
+	steps := generatedWorkflowSteps([]askcontract.GeneratedFile{{Path: workspacepaths.CanonicalPrepareWorkflow, Content: content}})
 	foundCommand := false
 	for _, step := range steps {
 		if strings.TrimSpace(step.Kind) != "Command" {

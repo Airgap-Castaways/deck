@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type Route string
@@ -119,11 +121,11 @@ func inferTarget(prompt string) Target {
 	if len(paths) > 0 {
 		path := paths[0]
 		switch {
-		case path == "workflows/vars.yaml":
+		case path == workspacepaths.CanonicalVarsWorkflow:
 			return Target{Kind: "vars", Path: path}
 		case strings.HasPrefix(path, "workflows/components/"):
 			return Target{Kind: "component", Path: path, Name: strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))}
-		case path == "workflows/prepare.yaml" || strings.HasPrefix(path, "workflows/scenarios/"):
+		case path == workspacepaths.CanonicalPrepareWorkflow || strings.HasPrefix(path, "workflows/scenarios/"):
 			return Target{Kind: "scenario", Path: path, Name: strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))}
 		}
 	}
@@ -131,16 +133,16 @@ func inferTarget(prompt string) Target {
 		return Target{Kind: "workspace"}
 	}
 	if strings.Contains(prompt, "apply") {
-		return Target{Kind: "scenario", Name: "apply", Path: "workflows/scenarios/apply.yaml"}
+		return Target{Kind: "scenario", Name: "apply", Path: workspacepaths.CanonicalApplyWorkflow}
 	}
 	if strings.Contains(prompt, "prepare") {
-		return Target{Kind: "scenario", Name: "prepare", Path: "workflows/prepare.yaml"}
+		return Target{Kind: "scenario", Name: "prepare", Path: workspacepaths.CanonicalPrepareWorkflow}
 	}
 	if strings.Contains(prompt, "component") {
 		return Target{Kind: "component"}
 	}
 	if strings.Contains(prompt, "vars") {
-		return Target{Kind: "vars", Path: "workflows/vars.yaml"}
+		return Target{Kind: "vars", Path: workspacepaths.CanonicalVarsWorkflow}
 	}
 	return Target{Kind: "workspace"}
 }

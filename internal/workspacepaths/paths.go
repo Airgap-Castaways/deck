@@ -13,6 +13,9 @@ const (
 	CanonicalPrepareWorkflowRel = "prepare.yaml"
 	CanonicalApplyWorkflowRel   = "scenarios/apply.yaml"
 	WorkflowVarsRel             = "vars.yaml"
+	CanonicalPrepareWorkflow    = WorkflowRootDir + "/" + CanonicalPrepareWorkflowRel
+	CanonicalApplyWorkflow      = WorkflowRootDir + "/" + CanonicalApplyWorkflowRel
+	CanonicalVarsWorkflow       = WorkflowRootDir + "/" + WorkflowVarsRel
 	PreparedDirRel              = "outputs"
 	PreparedFilesRoot           = "files"
 	PreparedPackagesRoot        = "packages"
@@ -28,10 +31,10 @@ var canonicalPreparedRoots = []string{
 }
 
 var allowedAuthoringPaths = []string{
-	WorkflowRootDir + "/" + CanonicalPrepareWorkflowRel,
+	CanonicalPrepareWorkflow,
 	WorkflowRootDir + "/" + WorkflowScenariosDir + "/*.yaml",
 	WorkflowRootDir + "/" + WorkflowComponentsDir + "/*.yaml",
-	WorkflowRootDir + "/" + WorkflowVarsRel,
+	CanonicalVarsWorkflow,
 }
 
 func WorkflowPath(root string, rel string) string {
@@ -80,8 +83,8 @@ func IsAllowedAuthoringPath(path string) bool {
 	if clean == "" || strings.Contains(clean, "..") {
 		return false
 	}
-	return clean == WorkflowRootDir+"/"+CanonicalPrepareWorkflowRel ||
-		clean == WorkflowRootDir+"/"+WorkflowVarsRel ||
+	return clean == CanonicalPrepareWorkflow ||
+		clean == CanonicalVarsWorkflow ||
 		strings.HasPrefix(clean, WorkflowRootDir+"/"+WorkflowScenariosDir+"/") ||
 		strings.HasPrefix(clean, WorkflowRootDir+"/"+WorkflowComponentsDir+"/")
 }

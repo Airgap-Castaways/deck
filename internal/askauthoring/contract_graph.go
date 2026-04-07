@@ -5,6 +5,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type ContractGraph struct {
@@ -28,17 +29,17 @@ func BuildContractGraph(facts Facts, req RequirementLike, workspace askretrieve.
 	graph := ContractGraph{}
 	consumerPath := strings.TrimSpace(req.EntryScenario)
 	if consumerPath == "" {
-		consumerPath = "workflows/scenarios/apply.yaml"
+		consumerPath = workspacepaths.CanonicalApplyWorkflow
 	}
 	if req.NeedsPrepare || len(req.ArtifactKinds) > 0 || workspace.HasPrepare {
 		for _, kind := range req.ArtifactKinds {
 			switch strings.TrimSpace(strings.ToLower(kind)) {
 			case "package":
-				graph.Artifacts = append(graph.Artifacts, askcontract.ArtifactContract{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: consumerPath, Description: "prepare downloads package content and apply installs it from a local repository path"})
+				graph.Artifacts = append(graph.Artifacts, askcontract.ArtifactContract{Kind: "package", ProducerPath: workspacepaths.CanonicalPrepareWorkflow, ConsumerPath: consumerPath, Description: "prepare downloads package content and apply installs it from a local repository path"})
 			case "image":
-				graph.Artifacts = append(graph.Artifacts, askcontract.ArtifactContract{Kind: "image", ProducerPath: "workflows/prepare.yaml", ConsumerPath: consumerPath, Description: "prepare downloads container images and apply loads them from a local image bundle path"})
+				graph.Artifacts = append(graph.Artifacts, askcontract.ArtifactContract{Kind: "image", ProducerPath: workspacepaths.CanonicalPrepareWorkflow, ConsumerPath: consumerPath, Description: "prepare downloads container images and apply loads them from a local image bundle path"})
 			case "repository-mirror":
-				graph.Artifacts = append(graph.Artifacts, askcontract.ArtifactContract{Kind: "repository-setup", ProducerPath: "workflows/prepare.yaml", ConsumerPath: consumerPath, Description: "prepare stages repository content and apply configures the node to consume it locally"})
+				graph.Artifacts = append(graph.Artifacts, askcontract.ArtifactContract{Kind: "repository-setup", ProducerPath: workspacepaths.CanonicalPrepareWorkflow, ConsumerPath: consumerPath, Description: "prepare stages repository content and apply configures the node to consume it locally"})
 			}
 		}
 	}

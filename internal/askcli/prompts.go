@@ -20,6 +20,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askstate"
 	"github.com/Airgap-Castaways/deck/internal/validate"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func classifierSystemPrompt() string {
@@ -224,7 +225,7 @@ func refineTransformPromptBlock(plan askcontract.PlanResponse, brief askcontract
 	b.WriteString("- Prefer `transforms` with type `set-field` or `delete-field` for narrow step field changes instead of broad document rewrites.\n")
 	b.WriteString("- Prefer `transforms` with type `extract-component` when moving inline phase steps into workflows/components/ while preserving the scenario phase layout.\n")
 	b.WriteString("- Do not use model-authored `replace` output on the primary refine path.\n")
-	if promptContainsTrimmed(paths, "workflows/vars.yaml") {
+	if promptContainsTrimmed(paths, workspacepaths.CanonicalVarsWorkflow) {
 		b.WriteString("- When extracting repeated values into workflows/vars.yaml, update the scenario file and vars file together as one transform.\n")
 	}
 	b.WriteString("- For `extract-var`, put the variable key in `varName`. Use `varsPath` only for the companion file path such as `workflows/vars.yaml`.\n")

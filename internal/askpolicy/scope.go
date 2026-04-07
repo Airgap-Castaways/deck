@@ -7,6 +7,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func normalizeRefineScope(plan askcontract.PlanResponse, prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) askcontract.PlanResponse {
@@ -64,7 +65,7 @@ func preferredAnchorPath(paths []string) string {
 		if clean == "" {
 			continue
 		}
-		if clean == "workflows/vars.yaml" || strings.HasPrefix(clean, "workflows/components/") {
+		if clean == workspacepaths.CanonicalVarsWorkflow || strings.HasPrefix(clean, "workflows/components/") {
 			continue
 		}
 		return clean
@@ -116,7 +117,7 @@ func normalizeRefinePlanFiles(files []askcontract.PlanFile, targetPaths []string
 		}
 		kind := "scenario"
 		switch {
-		case path == "workflows/vars.yaml":
+		case path == workspacepaths.CanonicalVarsWorkflow:
 			kind = "vars"
 		case strings.HasPrefix(path, "workflows/components/"):
 			kind = "component"
@@ -153,7 +154,7 @@ func refineTargetScope(targetPaths []string) string {
 	}
 	path := filepath.ToSlash(strings.TrimSpace(targetPaths[0]))
 	switch {
-	case path == "workflows/vars.yaml":
+	case path == workspacepaths.CanonicalVarsWorkflow:
 		return "vars"
 	case strings.HasPrefix(path, "workflows/components/"):
 		return "component"
@@ -184,7 +185,7 @@ func disallowedRefinePaths(workspace askretrieve.WorkspaceSummary, allowedPaths 
 func firstScenarioPath(paths []string) string {
 	for _, path := range paths {
 		clean := filepath.ToSlash(strings.TrimSpace(path))
-		if clean == "workflows/prepare.yaml" || strings.HasPrefix(clean, "workflows/scenarios/") {
+		if clean == workspacepaths.CanonicalPrepareWorkflow || strings.HasPrefix(clean, "workflows/scenarios/") {
 			return clean
 		}
 	}

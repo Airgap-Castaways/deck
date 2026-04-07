@@ -13,6 +13,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func buildPlanWithReview(ctx context.Context, client askprovider.Client, cfg askconfigSettings, decision askintent.Decision, retrieval askretrieve.RetrievalResult, requestText string, workspace askretrieve.WorkspaceSummary, requirements askpolicy.ScenarioRequirements, logger askLogger) (askcontract.PlanResponse, askcontract.PlanCriticResponse, bool, error) {
@@ -209,7 +210,7 @@ func fatalPlanGraphReasons(plan askcontract.PlanResponse) []string {
 	if strings.TrimSpace(plan.EntryScenario) == "" {
 		reasons = append(reasons, "no viable entry scenario can be determined")
 	}
-	if strings.TrimSpace(plan.AuthoringBrief.ModeIntent) == "prepare+apply" && !hasPlannedPath(plan.Files, "workflows/prepare.yaml") {
+	if strings.TrimSpace(plan.AuthoringBrief.ModeIntent) == "prepare+apply" && !hasPlannedPath(plan.Files, workspacepaths.CanonicalPrepareWorkflow) {
 		reasons = append(reasons, "required prepare/apply file structure is absent and cannot be defaulted")
 	}
 	if strings.TrimSpace(plan.AuthoringBrief.ModeIntent) == "prepare+apply" && !hasPlannedPath(plan.Files, filepath.ToSlash(strings.TrimSpace(plan.EntryScenario))) {
@@ -503,7 +504,7 @@ func normalizedRequiredArtifactKinds(plan askcontract.PlanResponse) []string {
 func planHasCanonicalArtifactContract(plan askcontract.PlanResponse, kind string) bool {
 	entryScenario := filepath.ToSlash(strings.TrimSpace(plan.EntryScenario))
 	if entryScenario == "" {
-		entryScenario = "workflows/scenarios/apply.yaml"
+		entryScenario = workspacepaths.CanonicalApplyWorkflow
 	}
 	for _, contract := range plan.ExecutionModel.ArtifactContracts {
 		if strings.ToLower(strings.TrimSpace(contract.Kind)) != kind {
@@ -511,10 +512,10 @@ func planHasCanonicalArtifactContract(plan askcontract.PlanResponse, kind string
 		}
 		producer := filepath.ToSlash(strings.TrimSpace(contract.ProducerPath))
 		consumer := filepath.ToSlash(strings.TrimSpace(contract.ConsumerPath))
-		if producer != "workflows/prepare.yaml" {
+		if producer != workspacepaths.CanonicalPrepareWorkflow {
 			continue
 		}
-		if consumer == entryScenario || consumer == "workflows/scenarios/apply.yaml" {
+		if consumer == entryScenario || consumer == workspacepaths.CanonicalApplyWorkflow {
 			return true
 		}
 	}

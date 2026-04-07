@@ -6,6 +6,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func validatePrimaryAuthoringContract(route askintent.Route, gen askcontract.GenerationResponse, attempt int) error {
@@ -91,7 +92,7 @@ func refineAllowsRawTransform(doc askcontract.GeneratedDocument, transform askco
 	case "extract-var":
 		return rawPath != "" && strings.TrimSpace(transform.VarName) != ""
 	case "extract-component":
-		if strings.TrimSpace(doc.Path) == "workflows/vars.yaml" {
+		if strings.TrimSpace(doc.Path) == workspacepaths.CanonicalVarsWorkflow {
 			return false
 		}
 		return strings.TrimSpace(transform.RawPath) != "" && strings.TrimSpace(transform.Path) != ""
