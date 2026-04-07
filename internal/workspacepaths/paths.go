@@ -30,6 +30,12 @@ var canonicalPreparedRoots = []string{
 	PreparedBinRoot,
 }
 
+var canonicalWorkflowPaths = []string{
+	CanonicalPrepareWorkflow,
+	CanonicalApplyWorkflow,
+	CanonicalVarsWorkflow,
+}
+
 var allowedAuthoringPaths = []string{
 	CanonicalPrepareWorkflow,
 	WorkflowRootDir + "/" + WorkflowScenariosDir + "/*.yaml",
@@ -72,6 +78,10 @@ func DefaultPreparedRoot(root string) string {
 
 func CanonicalPreparedRoots() []string {
 	return append([]string(nil), canonicalPreparedRoots...)
+}
+
+func CanonicalWorkflowPaths() []string {
+	return append([]string(nil), canonicalWorkflowPaths...)
 }
 
 func AllowedAuthoringPathPatterns() []string {

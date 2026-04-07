@@ -33,12 +33,12 @@ func classifierSystemPrompt() string {
 		"Do not treat words like workflow, scenario, prepare, or apply as authoring intent by themselves.",
 		"Prefer clarify over guessing when the user intent between explain, review, create, and edit is ambiguous.",
 		"Examples: 'Explain how workflows/scenarios/worker-join.yaml works' -> explain.",
-		"Examples: 'Review workflows/scenarios/apply.yaml for offline issues' -> review.",
-		"Examples: 'Refactor workflows/scenarios/apply.yaml to use workflows/vars.yaml' -> refine.",
+		fmt.Sprintf("Examples: 'Review %s for offline issues' -> review.", workspacepaths.CanonicalApplyWorkflow),
+		fmt.Sprintf("Examples: 'Refactor %s to use %s' -> refine.", workspacepaths.CanonicalApplyWorkflow, workspacepaths.CanonicalVarsWorkflow),
 		"Examples: 'Create an air-gapped kubeadm workflow' -> draft.",
 		"Examples: '3 노드 쿠버네티스 클러스터링 워크플로우를 구성해줘' -> draft.",
-		"Examples: 'workflows/scenarios/apply.yaml 을 설명해줘' -> explain.",
-		"Examples: 'workflows/scenarios/apply.yaml 을 검토해줘' -> review.",
+		fmt.Sprintf("Examples: '%s 을 설명해줘' -> explain.", workspacepaths.CanonicalApplyWorkflow),
+		fmt.Sprintf("Examples: '%s 을 검토해줘' -> review.", workspacepaths.CanonicalApplyWorkflow),
 		"Include target.kind (workspace|scenario|component|vars|unknown) and optional target.path/name when inferable.",
 		"JSON shape: {\"route\":string,\"confidence\":number,\"reason\":string,\"target\":{\"kind\":string,\"path\":string,\"name\":string},\"generationAllowed\":boolean}",
 	}, "\n")
@@ -138,7 +138,7 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, requ
 	}
 	b.WriteString("- Never place summary, description, or review fields inside workflow YAML content.\n")
 	b.WriteString("- Keep the file set minimal unless the request explicitly requires more files or the workspace already depends on them.\n")
-	b.WriteString("- For workspace-scoped complex drafts, prefer a first schema-valid inline result in `workflows/prepare.yaml` and `workflows/scenarios/apply.yaml`; extract `workflows/components/` only when reuse is explicit, the workspace already imports them, or component files are clearly required final outputs.\n")
+	_, _ = fmt.Fprintf(b, "- For workspace-scoped complex drafts, prefer a first schema-valid inline result in `%s` and `%s`; extract `workflows/components/` only when reuse is explicit, the workspace already imports them, or component files are clearly required final outputs.\n", workspacepaths.CanonicalPrepareWorkflow, workspacepaths.CanonicalApplyWorkflow)
 	b.WriteString("- Keep document structure schema-focused: allowed paths, workflow invariants, execution contracts, and repository examples take priority over free-form step prose.\n")
 	b.WriteString("- Do not use Kubernetes-style fields such as apiVersion, kind, metadata, or spec wrappers at the workflow top level.\n")
 	b.WriteString("- Do not invent unsupported fields.\n")
@@ -1106,7 +1106,7 @@ func generationUserPrompt(workspace askretrieve.WorkspaceSummary, state askstate
 	b.WriteString("\n")
 	if !workspace.HasWorkflowTree && route == askintent.RouteDraft {
 		b.WriteString("This is an empty workspace. Return the minimum valid workflow files needed to satisfy the request.\n")
-		b.WriteString("At minimum, the result should usually include a valid workflows/scenarios/apply.yaml file.\n")
+		_, _ = fmt.Fprintf(b, "At minimum, the result should usually include a valid %s file.\n", workspacepaths.CanonicalApplyWorkflow)
 	}
 	if route == askintent.RouteRefine {
 		b.WriteString("For refine requests, prefer structured `edit` actions for narrow in-place changes to existing YAML documents.\n")

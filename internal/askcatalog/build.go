@@ -2,6 +2,7 @@ package askcatalog
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"sort"
 	"strconv"
@@ -135,7 +136,7 @@ steps:
 			AllowedPaths:      AllowedGeneratedPathPatterns(),
 			CanonicalPrepare:  workspacepaths.WorkflowRootDir + "/" + workspacepaths.CanonicalPrepareWorkflowRel,
 			CanonicalApply:    workspacepaths.WorkflowRootDir + "/" + workspacepaths.CanonicalApplyWorkflowRel,
-			GeneratedPathNote: "New ask-generated files must stay under workflows/prepare.yaml, workflows/scenarios/, workflows/components/, or workflows/vars.yaml.",
+			GeneratedPathNote: fmt.Sprintf("New ask-generated files must stay under %s, workflows/scenarios/, workflows/components/, or %s.", workspacepaths.CanonicalPrepareWorkflow, workspacepaths.CanonicalVarsWorkflow),
 			SourceRefs:        []string{"internal/workspacepaths"},
 		},
 		Policy: PolicyRules{
@@ -150,10 +151,10 @@ steps:
 				"online repository sync",
 			},
 			VarsAdvisory: []string{
-				"Repeated package lists, image lists, paths, versions, or environment-specific values should move to workflows/vars.yaml.",
+				fmt.Sprintf("Repeated package lists, image lists, paths, versions, or environment-specific values should move to %s.", workspacepaths.CanonicalVarsWorkflow),
 				"Missing vars should not block generation on its own.",
-				"Detected local host facts belong under runtime.host in when expressions, not in workflows/vars.yaml.",
-				"workflows/vars.yaml must remain plain YAML data. Do not place template expressions in vars values, keys, or unquoted scalar positions.",
+				fmt.Sprintf("Detected local host facts belong under runtime.host in when expressions, not in %s.", workspacepaths.CanonicalVarsWorkflow),
+				fmt.Sprintf("%s must remain plain YAML data. Do not place template expressions in vars values, keys, or unquoted scalar positions.", workspacepaths.CanonicalVarsWorkflow),
 				"Do not replace schema-typed arrays or objects with string templates. Keep arrays as YAML arrays and objects as YAML objects so schema validation still passes.",
 			},
 			ComponentAdvisory: []string{
@@ -195,7 +196,7 @@ steps:
 		},
 		Vars: VarsRules{
 			Path:        workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowVarsRel,
-			Summary:     "Prefer workflows/vars.yaml for configurable values that would otherwise be repeated inline across steps or files.",
+			Summary:     fmt.Sprintf("Prefer %s for configurable values that would otherwise be repeated inline across steps or files.", workspacepaths.CanonicalVarsWorkflow),
 			PreferFor:   []string{"package lists", "repository URLs", "service names", "paths and ports that may vary by environment"},
 			AvoidFor:    []string{"runtime-only outputs registered from previous steps", "detected local host facts such as osFamily or arch that already exist under runtime.host", "tiny one-off literals with no reuse value", "typed step fields whose schema expects a native YAML array or object but the template engine would turn into a string", "typed enum fields or constrained scalar fields that must stay literal to satisfy schema validation"},
 			ExampleKeys: []string{"dockerRepoURL", "dockerPackages", "containerRuntimeConfigPath"},

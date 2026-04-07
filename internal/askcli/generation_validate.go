@@ -198,7 +198,7 @@ func requiredFixesForValidation(message string) []string {
 		fixes = append(fixes, "Do not use whole-value template expressions like `{{ .vars.* }}` for typed YAML arrays or objects such as spec.packages or spec.repositories; inline concrete YAML lists or objects instead")
 	}
 	if strings.Contains(lower, "parse yaml") && strings.Contains(lower, ".vars.") {
-		fixes = append(fixes, "Keep workflows/vars.yaml as plain YAML data only. Do not place template expressions inside vars values, and quote any literal strings that contain special YAML characters")
+		fixes = append(fixes, fmt.Sprintf("Keep %s as plain YAML data only. Do not place template expressions inside vars values, and quote any literal strings that contain special YAML characters", workspacepaths.CanonicalVarsWorkflow))
 	}
 	if strings.Contains(lower, "imports.0") && strings.Contains(lower, "expected: object") && strings.Contains(lower, "given: string") {
 		fixes = append(fixes, "Use phase imports as objects like `imports: [{path: check-host.yaml}]` rather than bare strings")
@@ -211,7 +211,7 @@ func requiredFixesForValidation(message string) []string {
 	}
 	if strings.Contains(lower, "workflows/components/") {
 		fixes = append(fixes, "For starter drafts, avoid generating workflows/components/ unless reusable fragments are clearly required; inline the first working version into prepare/apply instead")
-		fixes = append(fixes, "If component fragments keep failing validation, collapse them back into workflows/prepare.yaml or workflows/scenarios/apply.yaml first, then extract reusable components after validation passes")
+		fixes = append(fixes, fmt.Sprintf("If component fragments keep failing validation, collapse them back into %s or %s first, then extract reusable components after validation passes", workspacepaths.CanonicalPrepareWorkflow, workspacepaths.CanonicalApplyWorkflow))
 	}
 	if strings.Contains(lower, "command") && strings.Contains(lower, "is not supported for role prepare") {
 		fixes = append(fixes, "Use typed prepare steps like DownloadImage or DownloadPackage instead of Command when collecting offline artifacts in prepare")
