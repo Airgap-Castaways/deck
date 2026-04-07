@@ -32,7 +32,7 @@ func classifierSystemPrompt() string {
 		"When user asks analyze/explain/summarize existing scenario, choose explain or review.",
 		"Do not treat words like workflow, scenario, prepare, or apply as authoring intent by themselves.",
 		"Prefer clarify over guessing when the user intent between explain, review, create, and edit is ambiguous.",
-		"Examples: 'Explain how workflows/scenarios/worker-join.yaml works' -> explain.",
+		fmt.Sprintf("Examples: 'Explain how %s/worker-join.yaml works' -> explain.", workspacepaths.CanonicalScenariosDir),
 		fmt.Sprintf("Examples: 'Review %s for offline issues' -> review.", workspacepaths.CanonicalApplyWorkflow),
 		fmt.Sprintf("Examples: 'Refactor %s to use %s' -> refine.", workspacepaths.CanonicalApplyWorkflow, workspacepaths.CanonicalVarsWorkflow),
 		"Examples: 'Create an air-gapped kubeadm workflow' -> draft.",
@@ -138,7 +138,7 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, requ
 	}
 	b.WriteString("- Never place summary, description, or review fields inside workflow YAML content.\n")
 	b.WriteString("- Keep the file set minimal unless the request explicitly requires more files or the workspace already depends on them.\n")
-	_, _ = fmt.Fprintf(b, "- For workspace-scoped complex drafts, prefer a first schema-valid inline result in `%s` and `%s`; extract `workflows/components/` only when reuse is explicit, the workspace already imports them, or component files are clearly required final outputs.\n", workspacepaths.CanonicalPrepareWorkflow, workspacepaths.CanonicalApplyWorkflow)
+	_, _ = fmt.Fprintf(b, "- For workspace-scoped complex drafts, prefer a first schema-valid inline result in `%s` and `%s`; extract `%s/` only when reuse is explicit, the workspace already imports them, or component files are clearly required final outputs.\n", workspacepaths.CanonicalPrepareWorkflow, workspacepaths.CanonicalApplyWorkflow, workspacepaths.CanonicalComponentsDir)
 	b.WriteString("- Keep document structure schema-focused: allowed paths, workflow invariants, execution contracts, and repository examples take priority over free-form step prose.\n")
 	b.WriteString("- Do not use Kubernetes-style fields such as apiVersion, kind, metadata, or spec wrappers at the workflow top level.\n")
 	b.WriteString("- Do not invent unsupported fields.\n")
@@ -223,7 +223,7 @@ func refineTransformPromptBlock(plan askcontract.PlanResponse, brief askcontract
 	b.WriteString("- Primary refine generation should use `edit` actions with code-owned transforms. Candidate ids are preferred when available; otherwise include explicit raw paths. Full replacement documents are fallback-only.\n")
 	_, _ = fmt.Fprintf(b, "- Prefer `transforms` with type `extract-var` for repeated literal extraction into %s when the request is about hoisting repeated values.\n", workspacepaths.CanonicalVarsWorkflow)
 	b.WriteString("- Prefer `transforms` with type `set-field` or `delete-field` for narrow step field changes instead of broad document rewrites.\n")
-	b.WriteString("- Prefer `transforms` with type `extract-component` when moving inline phase steps into workflows/components/ while preserving the scenario phase layout.\n")
+	_, _ = fmt.Fprintf(b, "- Prefer `transforms` with type `extract-component` when moving inline phase steps into %s/ while preserving the scenario phase layout.\n", workspacepaths.CanonicalComponentsDir)
 	b.WriteString("- Do not use model-authored `replace` output on the primary refine path.\n")
 	if promptContainsTrimmed(paths, workspacepaths.CanonicalVarsWorkflow) {
 		_, _ = fmt.Fprintf(b, "- When extracting repeated values into %s, update the scenario file and vars file together as one transform.\n", workspacepaths.CanonicalVarsWorkflow)
