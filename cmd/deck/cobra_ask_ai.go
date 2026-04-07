@@ -12,6 +12,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	openaiprovider "github.com/Airgap-Castaways/deck/internal/askprovider/openai"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 var newAskBackend = func() askprovider.Client {
@@ -36,9 +37,9 @@ func newAskCommand() *cobra.Command {
 		Use:   spec.Root.Use,
 		Short: spec.Root.Short,
 		Example: strings.Join([]string{
-			`  deck ask "explain what workflows/scenarios/apply.yaml does"`,
+			fmt.Sprintf(`  deck ask "explain what %s does"`, workspacepaths.CanonicalApplyWorkflow),
 			`  deck ask --create "create an air-gapped rhel9 single-node kubeadm workflow"`,
-			`  deck ask --edit "refactor workflows/scenarios/apply.yaml to use workflows/vars.yaml"`,
+			fmt.Sprintf(`  deck ask --edit "refactor %s to use %s"`, workspacepaths.CanonicalApplyWorkflow, workspacepaths.CanonicalVarsWorkflow),
 			`  deck ask plan "create an air-gapped rhel9 single-node kubeadm workflow"`,
 		}, "\n"),
 		Args: cobra.ArbitraryArgs,

@@ -2,6 +2,7 @@ package askcatalog
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"sort"
 	"strconv"
@@ -129,13 +130,13 @@ steps:
 		},
 		Workspace: WorkspaceRules{
 			WorkflowRoot:      workspacepaths.WorkflowRootDir,
-			ScenarioDir:       workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowScenariosDir,
-			ComponentDir:      workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowComponentsDir,
+			ScenarioDir:       workspacepaths.CanonicalScenariosDir,
+			ComponentDir:      workspacepaths.CanonicalComponentsDir,
 			VarsPath:          workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowVarsRel,
 			AllowedPaths:      AllowedGeneratedPathPatterns(),
 			CanonicalPrepare:  workspacepaths.WorkflowRootDir + "/" + workspacepaths.CanonicalPrepareWorkflowRel,
 			CanonicalApply:    workspacepaths.WorkflowRootDir + "/" + workspacepaths.CanonicalApplyWorkflowRel,
-			GeneratedPathNote: "New ask-generated files must stay under workflows/prepare.yaml, workflows/scenarios/, workflows/components/, or workflows/vars.yaml.",
+			GeneratedPathNote: fmt.Sprintf("New ask-generated files must stay under %s, %s/, %s/, or %s.", workspacepaths.CanonicalPrepareWorkflow, workspacepaths.CanonicalScenariosDir, workspacepaths.CanonicalComponentsDir, workspacepaths.CanonicalVarsWorkflow),
 			SourceRefs:        []string{"internal/workspacepaths"},
 		},
 		Policy: PolicyRules{
@@ -150,14 +151,14 @@ steps:
 				"online repository sync",
 			},
 			VarsAdvisory: []string{
-				"Repeated package lists, image lists, paths, versions, or environment-specific values should move to workflows/vars.yaml.",
+				fmt.Sprintf("Repeated package lists, image lists, paths, versions, or environment-specific values should move to %s.", workspacepaths.CanonicalVarsWorkflow),
 				"Missing vars should not block generation on its own.",
-				"Detected local host facts belong under runtime.host in when expressions, not in workflows/vars.yaml.",
-				"workflows/vars.yaml must remain plain YAML data. Do not place template expressions in vars values, keys, or unquoted scalar positions.",
+				fmt.Sprintf("Detected local host facts belong under runtime.host in when expressions, not in %s.", workspacepaths.CanonicalVarsWorkflow),
+				fmt.Sprintf("%s must remain plain YAML data. Do not place template expressions in vars values, keys, or unquoted scalar positions.", workspacepaths.CanonicalVarsWorkflow),
 				"Do not replace schema-typed arrays or objects with string templates. Keep arrays as YAML arrays and objects as YAML objects so schema validation still passes.",
 			},
 			ComponentAdvisory: []string{
-				"Reusable repeated logic across phases or scenarios should usually move into workflows/components/.",
+				fmt.Sprintf("Reusable repeated logic across phases or scenarios should usually move into %s/.", workspacepaths.CanonicalComponentsDir),
 				"Missing components should not block generation on its own.",
 			},
 			SourceRefs: []string{"internal/askpolicy", "internal/validate"},
@@ -183,10 +184,10 @@ steps:
 			},
 		},
 		Components: ComponentRules{
-			Summary:         "Reusable workflow fragments belong in workflows/components/ and are imported into scenario phases.",
-			ImportRule:      "Imports are only valid under phases[].imports and resolve from workflows/components/ using component-relative paths.",
+			Summary:         fmt.Sprintf("Reusable workflow fragments belong in %s/ and are imported into scenario phases.", workspacepaths.CanonicalComponentsDir),
+			ImportRule:      fmt.Sprintf("Imports are only valid under phases[].imports and resolve from %s/ using component-relative paths.", workspacepaths.CanonicalComponentsDir),
 			ReuseRule:       "Split repeated or reusable logic into components instead of duplicating steps across scenarios.",
-			LocationRule:    "Scenario entrypoints live under workflows/scenarios/ while imported fragments live under workflows/components/.",
+			LocationRule:    fmt.Sprintf("Scenario entrypoints live under %s/ while imported fragments live under %s/.", workspacepaths.CanonicalScenariosDir, workspacepaths.CanonicalComponentsDir),
 			FragmentRule:    "Component files are fragment documents, not full workflow documents. They should usually contain a top-level `steps:` mapping only and must not add workflow-level fields like version or phases.",
 			ImportExample:   strings.TrimSpace("phases:\n  - name: preflight\n    imports:\n      - path: check-host.yaml"),
 			FragmentExample: strings.TrimSpace("steps:\n  - id: check-host\n    kind: CheckHost\n    spec:\n      checks: [os, arch, swap]\n      failFast: true"),
@@ -195,7 +196,7 @@ steps:
 		},
 		Vars: VarsRules{
 			Path:        workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowVarsRel,
-			Summary:     "Prefer workflows/vars.yaml for configurable values that would otherwise be repeated inline across steps or files.",
+			Summary:     fmt.Sprintf("Prefer %s for configurable values that would otherwise be repeated inline across steps or files.", workspacepaths.CanonicalVarsWorkflow),
 			PreferFor:   []string{"package lists", "repository URLs", "service names", "paths and ports that may vary by environment"},
 			AvoidFor:    []string{"runtime-only outputs registered from previous steps", "detected local host facts such as osFamily or arch that already exist under runtime.host", "tiny one-off literals with no reuse value", "typed step fields whose schema expects a native YAML array or object but the template engine would turn into a string", "typed enum fields or constrained scalar fields that must stay literal to satisfy schema validation"},
 			ExampleKeys: []string{"dockerRepoURL", "dockerPackages", "containerRuntimeConfigPath"},

@@ -1,12 +1,14 @@
 package askcontext
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 var (
@@ -32,7 +34,7 @@ func buildManifest() Manifest {
 			TopLevelDescription: cli.Short,
 			ImportantFlags:      append([]CLIFlag(nil), cli.Flags...),
 			Examples: []string{
-				`deck ask "explain what workflows/scenarios/apply.yaml does"`,
+				fmt.Sprintf(`deck ask "explain what %s does"`, workspacepaths.CanonicalApplyWorkflow),
 				`deck ask --create "create an air-gapped rhel9 single-node kubeadm workflow"`,
 				`deck ask plan "create an air-gapped rhel9 single-node kubeadm workflow"`,
 			},

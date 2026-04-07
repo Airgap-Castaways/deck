@@ -287,7 +287,7 @@ func scalarCandidatesForField(catalog askcatalog.Catalog, kind string, path stri
 		items = append(items, Candidate{ID: candidateID("delete-field", path, rawPath), Path: path, Type: "delete-field", RawPath: rawPath, Summary: fmt.Sprintf("delete %s", rawPath)})
 	}
 	if fieldSupportsExtractVar(field, value) && ctx.allowExtractVar(sanitizeName(leaf), value) {
-		items = append(items, Candidate{ID: candidateID("extract-var", path, rawPath), Path: path, Type: "extract-var", RawPath: rawPath, Summary: fmt.Sprintf("extract %s into workflows/vars.yaml", rawPath), SuggestedVarName: sanitizeName(leaf), SuggestedVarsPath: workspacepaths.CanonicalVarsWorkflow})
+		items = append(items, Candidate{ID: candidateID("extract-var", path, rawPath), Path: path, Type: "extract-var", RawPath: rawPath, Summary: fmt.Sprintf("extract %s into %s", rawPath, workspacepaths.CanonicalVarsWorkflow), SuggestedVarName: sanitizeName(leaf), SuggestedVarsPath: workspacepaths.CanonicalVarsWorkflow})
 	}
 	return items
 }

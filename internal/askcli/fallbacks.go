@@ -50,8 +50,8 @@ func localClarify(prompt string) string {
 func clarificationSuggestions() []string {
 	return []string{
 		"Try: deck ask --create \"create an air-gapped rhel9 single-node kubeadm workflow\"",
-		"Try: deck ask --edit \"refactor workflows/scenarios/apply.yaml to use workflows/vars.yaml\"",
-		"Try: deck ask --review \"review workflows/scenarios/apply.yaml for offline issues\"",
+		fmt.Sprintf("Try: deck ask --edit \"refactor %s to use %s\"", workspacepaths.CanonicalApplyWorkflow, workspacepaths.CanonicalVarsWorkflow),
+		fmt.Sprintf("Try: deck ask --review \"review %s for offline issues\"", workspacepaths.CanonicalApplyWorkflow),
 		"Or add more detail about the target file and whether you want explain, review, create, or edit behavior.",
 	}
 }

@@ -388,7 +388,7 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 		}
 	}
 	if req.NeedsPrepare && len(preparePaths) == 0 {
-		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_prepare", Message: fmt.Sprintf("artifact-requiring request is missing %s", workspacepaths.CanonicalPrepareWorkflow), Fix: "Add workflows/prepare.yaml when packages, images, binaries, or bundles must be prepared before apply", Path: workspacepaths.CanonicalPrepareWorkflow})
+		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_prepare", Message: fmt.Sprintf("artifact-requiring request is missing %s", workspacepaths.CanonicalPrepareWorkflow), Fix: fmt.Sprintf("Add %s when packages, images, binaries, or bundles must be prepared before apply", workspacepaths.CanonicalPrepareWorkflow), Path: workspacepaths.CanonicalPrepareWorkflow})
 	}
 	if req.NeedsPrepare && len(req.ArtifactKinds) > 0 && len(preparePaths) > 0 {
 		generated := generatedMap(gen.Files)
@@ -629,7 +629,7 @@ func defaultValidationChecklist(req ScenarioRequirements) []string {
 		checklist = append(checklist, "Artifact-requiring offline flows include a prepare workflow before apply")
 	}
 	if len(req.VarsAdvisories) > 0 {
-		checklist = append(checklist, "Review whether repeated configurable values belong in workflows/vars.yaml")
+		checklist = append(checklist, fmt.Sprintf("Review whether repeated configurable values belong in %s", workspacepaths.CanonicalVarsWorkflow))
 	}
 	if len(req.ComponentAdvisories) > 0 {
 		checklist = append(checklist, "Review whether reusable repeated logic belongs in workflows/components/")
@@ -645,7 +645,7 @@ func mergedArtifactKinds(prompt string, retrieval askretrieve.RetrievalResult) [
 func inferVarsRecommendation(prompt string) []string {
 	lower := strings.ToLower(strings.TrimSpace(prompt))
 	if strings.Contains(lower, "vars") || strings.Contains(lower, "variable") || strings.Contains(lower, "variables") || strings.Contains(lower, "repeated") || strings.Contains(lower, "parameter") {
-		return []string{"Use workflows/vars.yaml for repeated package, image, path, or version values."}
+		return []string{fmt.Sprintf("Use %s for repeated package, image, path, or version values.", workspacepaths.CanonicalVarsWorkflow)}
 	}
 	return nil
 }
@@ -1053,7 +1053,7 @@ func inferVarsAdvisories(files []askcontract.GeneratedFile) []string {
 	advisories := []string{}
 	for value, count := range counts {
 		if count >= 2 {
-			advisories = append(advisories, fmt.Sprintf("Repeated configurable value %q appears multiple times; consider moving it into workflows/vars.yaml", value))
+			advisories = append(advisories, fmt.Sprintf("Repeated configurable value %q appears multiple times; consider moving it into %s", value, workspacepaths.CanonicalVarsWorkflow))
 		}
 	}
 	return dedupeStrings(advisories)
