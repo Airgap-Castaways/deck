@@ -2,6 +2,7 @@ package prepare
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -370,6 +371,119 @@ func TestRun_DownloadPackageReusesExportedArtifactCache(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, ".cache", "deck", "packages")); !os.IsNotExist(err) {
 		t.Fatalf("expected old package-manager cache path to stay unused, got %v", err)
+	}
+}
+
+func TestRun_DownloadPackageCorruptedBundleArtifactFallsBackToExportedCache(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	bundle := t.TempDir()
+	step := config.Step{
+		ID:   "pkg-cache",
+		Kind: "DownloadPackage",
+		Spec: map[string]any{
+			"packages": []any{"containerd"},
+			"backend":  map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"},
+		},
+	}
+	wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "prepare", Steps: []config.Step{step}}}}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}}); err != nil {
+		t.Fatalf("initial run failed: %v", err)
+	}
+	bundlePkg := filepath.Join(bundle, "packages", "mock-package.deb")
+	if err := os.WriteFile(bundlePkg, []byte("corrupt"), 0o644); err != nil {
+		t.Fatalf("corrupt bundle package: %v", err)
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &noArtifactRunner{}}); err != nil {
+		t.Fatalf("expected exported cache fallback after corruption, got %v", err)
+	}
+	raw, err := os.ReadFile(bundlePkg)
+	if err != nil {
+		t.Fatalf("read restored package: %v", err)
+	}
+	if string(raw) != "pkg" {
+		t.Fatalf("expected restored package payload, got %q", string(raw))
+	}
+}
+
+func TestRun_DownloadPackageCorruptedExportedCacheTriggersFetch(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	bundle := t.TempDir()
+	step := config.Step{
+		ID:   "pkg-cache",
+		Kind: "DownloadPackage",
+		Spec: map[string]any{
+			"packages": []any{"containerd"},
+			"backend":  map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"},
+		},
+	}
+	wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "prepare", Steps: []config.Step{step}}}}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}}); err != nil {
+		t.Fatalf("initial run failed: %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(bundle, "packages")); err != nil {
+		t.Fatalf("remove bundle packages: %v", err)
+	}
+	cachePath, err := exportedPackageCachePath(computeStepCacheKey(step), nil)
+	if err != nil {
+		t.Fatalf("resolve exported cache path: %v", err)
+	}
+	cachePkg := filepath.Join(exportedPackageCachePayloadPath(cachePath), "mock-package.deb")
+	if err := os.WriteFile(cachePkg, []byte("corrupt"), 0o644); err != nil {
+		t.Fatalf("corrupt exported cache package: %v", err)
+	}
+
+	err = Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &noArtifactRunner{}})
+	if !errcode.Is(err, errCodePrepareArtifactEmpty) {
+		t.Fatalf("expected fresh fetch after exported cache corruption, got %v", err)
+	}
+}
+
+func TestRun_DownloadImageCorruptedArchiveTriggersRefetch(t *testing.T) {
+	bundle := t.TempDir()
+	fetches := 0
+	imageOps := imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
+			fetches++
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte(fmt.Sprintf("image-%d", fetches)), 0o644)
+		},
+	}
+	wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "prepare", Steps: []config.Step{{
+		ID:   "img",
+		Kind: "DownloadImage",
+		Spec: map[string]any{"images": []any{"registry.k8s.io/kube-apiserver:v1.30.1"}},
+	}}}}}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, imageDownloadOps: imageOps}); err != nil {
+		t.Fatalf("initial run failed: %v", err)
+	}
+	archive := filepath.Join(bundle, "images", "registry.k8s.io_kube-apiserver_v1.30.1.tar")
+	if err := os.WriteFile(archive, []byte("corrupt"), 0o644); err != nil {
+		t.Fatalf("corrupt image archive: %v", err)
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, imageDownloadOps: imageOps}); err != nil {
+		t.Fatalf("expected refetch after corruption, got %v", err)
+	}
+	if fetches != 2 {
+		t.Fatalf("expected image to be fetched twice, got %d", fetches)
+	}
+	raw, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatalf("read image archive: %v", err)
+	}
+	if string(raw) != "image-2" {
+		t.Fatalf("expected refetched image payload, got %q", string(raw))
 	}
 }
 

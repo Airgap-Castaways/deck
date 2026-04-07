@@ -1,6 +1,8 @@
 package prepare
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -85,5 +87,45 @@ func TestImageAuthKeychainFallsBackWhenRegistryNotConfigured(t *testing.T) {
 	}
 	if config.Username == "robot" {
 		t.Fatalf("expected fallback auth, got explicit credentials: %+v", config)
+	}
+}
+
+func TestLoadImageArtifactMetaTreatsUnreadableFileAsCacheMiss(t *testing.T) {
+	bundle := t.TempDir()
+	dir := "images"
+	path := imageMetaFileAbs(bundle, dir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir image meta dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(`{"images":["registry.k8s.io/pause:3.9"],"files":["images/pause.tar"]}`), 0o000); err != nil {
+		t.Fatalf("write image meta: %v", err)
+	}
+
+	_, ok, err := loadImageArtifactMeta(bundle, dir)
+	if err != nil {
+		t.Fatalf("expected unreadable metadata to be treated as cache miss, got %v", err)
+	}
+	if ok {
+		t.Fatal("expected unreadable metadata cache miss")
+	}
+}
+
+func TestLoadImageArtifactMetaTreatsMalformedJSONAsCacheMiss(t *testing.T) {
+	bundle := t.TempDir()
+	dir := "images"
+	path := imageMetaFileAbs(bundle, dir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir image meta dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(`{not-json`), 0o644); err != nil {
+		t.Fatalf("write image meta: %v", err)
+	}
+
+	_, ok, err := loadImageArtifactMeta(bundle, dir)
+	if err != nil {
+		t.Fatalf("expected malformed metadata to be treated as cache miss, got %v", err)
+	}
+	if ok {
+		t.Fatal("expected malformed metadata cache miss")
 	}
 }

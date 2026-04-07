@@ -18,8 +18,9 @@ import (
 )
 
 type packageCacheMeta struct {
-	Packages []string `json:"packages"`
-	Files    []string `json:"files"`
+	Packages  []string          `json:"packages"`
+	Files     []string          `json:"files"`
+	Checksums map[string]string `json:"checksums,omitempty"`
 }
 
 const containerOutputRoot = "/out"
@@ -433,23 +434,28 @@ func tryReusePackageArtifact(bundleRoot, rootRel string, packages []string, opts
 	if len(files) == 0 {
 		return nil, false, nil
 	}
-	for _, rel := range files {
-		abs := filepath.Join(bundleRoot, filepath.FromSlash(rel))
-		info, statErr := os.Stat(abs)
-		if statErr != nil {
-			return nil, false, fmt.Errorf("stat cached package artifact %s: %w", abs, statErr)
-		}
-		if info.Size() == 0 {
+	checksumsOK, err := verifyArtifactChecksums(bundleRoot, files, meta.Checksums)
+	if err != nil {
+		if os.IsNotExist(err) {
 			return nil, false, nil
 		}
+		return nil, false, err
+	}
+	if !checksumsOK {
+		return nil, false, nil
 	}
 	return files, true, nil
 }
 
 func writePackageArtifactMeta(bundleRoot, rootRel string, packages, files []string) error {
+	checksums, err := computeArtifactChecksums(bundleRoot, files)
+	if err != nil {
+		return err
+	}
 	meta := packageCacheMeta{
-		Packages: normalizeStrings(packages),
-		Files:    normalizeStrings(files),
+		Packages:  normalizeStrings(packages),
+		Files:     normalizeStrings(files),
+		Checksums: checksums,
 	}
 	metaPath := packageMetaFileAbs(bundleRoot, rootRel)
 	if err := filemode.EnsureParentArtifactDir(metaPath); err != nil {

@@ -24,9 +24,10 @@ const exportedPackageCacheMetaFile = "meta.json"
 var packageArtifactStageCounter uint64
 
 type exportedPackageCacheMeta struct {
-	RootRel  string   `json:"root_rel"`
-	Packages []string `json:"packages"`
-	Files    []string `json:"files"`
+	RootRel   string            `json:"root_rel"`
+	Packages  []string          `json:"packages"`
+	Files     []string          `json:"files"`
+	Checksums map[string]string `json:"checksums,omitempty"`
 }
 
 func exportedPackageInputDigest(inputVars map[string]string) string {
@@ -82,12 +83,18 @@ func loadExportedPackageCache(path string) (exportedPackageCacheMeta, bool, erro
 	}
 	meta.Files = normalizeStrings(meta.Files)
 	meta.Packages = normalizeStrings(meta.Packages)
+	meta.Checksums = normalizeChecksumMap(meta.Checksums)
 	return meta, true, nil
 }
 
 func saveExportedPackageCacheMeta(path string, meta exportedPackageCacheMeta) error {
 	meta.Files = normalizeStrings(meta.Files)
 	meta.Packages = normalizeStrings(meta.Packages)
+	checksums, err := computeArtifactChecksums(exportedPackageCachePayloadPath(path), meta.Files)
+	if err != nil {
+		return err
+	}
+	meta.Checksums = checksums
 	raw, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode exported package cache meta: %w", err)
@@ -140,6 +147,16 @@ func tryReuseExportedPackageArtifact(bundleRoot, rootRel, cachePath string, pack
 		if info.IsDir() || info.Size() == 0 {
 			return nil, false, nil
 		}
+	}
+	checksumsOK, err := verifyArtifactChecksums(cachePayload, meta.Files, meta.Checksums)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	if !checksumsOK {
+		return nil, false, nil
 	}
 	if err := publishCachedPackageArtifact(bundleRoot, rootRel, cachePath, meta.Files); err != nil {
 		return nil, false, err
@@ -266,14 +283,7 @@ func exportedPackageCacheAvailable(cacheKey string, inputVars map[string]string)
 	if err != nil || !ok || len(meta.Files) == 0 {
 		return false
 	}
-	cachePayload := exportedPackageCachePayloadPath(cachePath)
-	for _, rel := range meta.Files {
-		info, statErr := os.Stat(filepath.Join(cachePayload, filepath.FromSlash(rel)))
-		if statErr != nil || info.IsDir() || info.Size() == 0 {
-			return false
-		}
-	}
-	return true
+	return artifactFilesPresentNonEmpty(exportedPackageCachePayloadPath(cachePath), meta.Files)
 }
 
 func normalizeTarPath(name string) (string, bool) {
