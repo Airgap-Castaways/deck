@@ -198,9 +198,6 @@ func namespaceValues(refs []Reference, namespace string, roots bool) []string {
 		if roots {
 			value = ref.Root
 		}
-		if strings.TrimSpace(value) == "" {
-			continue
-		}
 		seen[value] = true
 	}
 	if len(seen) == 0 {
