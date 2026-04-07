@@ -15,7 +15,6 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
-	"github.com/Airgap-Castaways/deck/internal/testutil/legacygen"
 )
 
 type mockAskClient struct {
@@ -35,11 +34,6 @@ type mcpHelperResponse struct {
 	JSONRPC string         `json:"jsonrpc"`
 	ID      *mcp.RequestId `json:"id,omitempty"`
 	Result  any            `json:"result,omitempty"`
-}
-
-func enableLegacyAuthoringFallback(t *testing.T) {
-	t.Helper()
-	t.Setenv("DECK_ASK_ENABLE_LEGACY_AUTHORING_FALLBACK", "1")
 }
 
 func enableBuiltInWebSearchTransportHelper(t *testing.T) {
@@ -120,9 +114,9 @@ func (m *mockAskClient) Generate(_ context.Context, req askprovider.Request) (as
 		return askprovider.Response{Content: synthesizeClassification(req.Prompt)}, nil
 	}
 	if m.index >= len(m.responses) {
-		return askprovider.Response{Content: legacygen.MaybeConvert(req.Kind, m.responses[len(m.responses)-1])}, nil
+		return askprovider.Response{Content: m.responses[len(m.responses)-1]}, nil
 	}
-	resp := legacygen.MaybeConvert(req.Kind, m.responses[m.index])
+	resp := m.responses[m.index]
 	m.index++
 	return askprovider.Response{Content: resp}, nil
 }
@@ -352,7 +346,6 @@ func TestAskClarifyDoesNotGenerate(t *testing.T) {
 
 func TestAskRepairLoop(t *testing.T) {
 	t.Setenv("DECK_ASK_API_KEY", "env-key")
-	enableLegacyAuthoringFallback(t)
 	root := t.TempDir()
 	oldWD, err := os.Getwd()
 	if err != nil {
@@ -365,7 +358,7 @@ func TestAskRepairLoop(t *testing.T) {
 
 	originalFactory := newAskBackend
 	newAskBackend = func() askprovider.Client {
-		return &mockAskClient{responses: []string{`{"summary":"bad","documents":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","workflow":{"version":"v1alpha1","steps":[{"id":"run","kind":"Command","spec":{}}]}}]}`, validAskJSON()}}
+		return &mockAskClient{responses: []string{`not-json`, validAskJSON()}}
 	}
 	defer func() { newAskBackend = originalFactory }()
 
@@ -560,7 +553,7 @@ func TestAskComplexPromptShowsJudgeFindingsAndRepairsLoosePlanJSON(t *testing.T)
 	newAskBackend = func() askprovider.Client {
 		return &mockAskClient{responses: []string{
 			`{"version":1,"request":"create an air-gapped rhel9 3-node kubeadm workflow","intent":"draft","complexity":"complex","authoringBrief":{"routeIntent":"draft","targetScope":"workspace","targetPaths":["workflows/prepare.yaml","workflows/scenarios/apply.yaml",],"modeIntent":"prepare+apply","connectivity":"offline","completenessTarget":"complete","topology":"multi-node","nodeCount":3,"requiredCapabilities":["prepare-artifacts","package-staging","image-staging","kubeadm-bootstrap","kubeadm-join",]},"authoringProgram":{"platform":{"family":"rhel","release":"9","repoType":"rpm"},"artifacts":{"packages":["kubeadm","kubelet","kubectl"],"images":["registry.k8s.io/kube-apiserver:v1.30.0"],"packageOutputDir":"packages/rpm/9","imageOutputDir":"images/control-plane"},"cluster":{"joinFile":"/tmp/deck/join.txt","roleSelector":"vars.role","controlPlaneCount":1,"workerCount":2},"verification":{"expectedNodeCount":3,"expectedReadyCount":3,"expectedControlPlaneReady":1}},"executionModel":{"artifactContracts":[{"kind":"package","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"offline package flow"},{"kind":"image","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"offline image flow"}],"sharedStateContracts":[{"name":"join-file","producerPath":"/tmp/deck/join.txt","consumerPaths":["/tmp/deck/join.txt"],"availabilityModel":"published-for-worker-consumption","description":"publish join file for workers"}],"roleExecution":{"roleSelector":"vars.role","controlPlaneFlow":"bootstrap","workerFlow":"join","perNodeInvocation":true},"verification":{"expectedNodeCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane"}},"artifactKinds":["package","image"],"blockers":[],"targetOutcome":"Generate workflows","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"create","purpose":"prepare"},{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"apply"},],"validationChecklist":["lint",]}`,
-			`{"summary":"generated multi-node draft","review":[],"files":[{"path":"workflows/prepare.yaml","content":"version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: collect-packages\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: rocky9\n          repo:\n            type: rpm\n"},{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: runtime\n    steps:\n      - id: install\n        kind: InstallPackage\n        spec:\n          packages: [kubeadm]\n          source:\n            type: local-repo\n            path: /tmp/packages\n  - name: bootstrap\n    steps:\n      - id: init\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/join.sh\n      - id: join\n        kind: JoinKubeadm\n        spec:\n          joinFile: /tmp/join.sh\n      - id: verify\n        kind: CheckKubernetesCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 3\n            ready: 3\n            controlPlaneReady: 1\n"}]}`,
+			validAskJSON(),
 		}}
 	}
 	defer func() { newAskBackend = originalFactory }()

@@ -20,7 +20,6 @@ func clarificationCandidatesFromRequirements(prompt string, req ScenarioRequirem
 	items = append(items, targetClarificationsFromRequirements(prompt, req, decision, workspace)...)
 	items = append(items, refineCompanionClarifications(prompt, decision, workspace)...)
 	items = append(items, runtimeClarifications(prompt, req, decision)...)
-	items = append(items, escapeHatchClarifications(prompt, req, decision)...)
 	return items
 }
 
@@ -78,31 +77,6 @@ func runtimeClarifications(prompt string, req ScenarioRequirements, decision ask
 		RecommendedDefault: "rhel",
 		BlocksGeneration:   true,
 		Affects:            []string{"authoringBrief.platformFamily", "validationChecklist"},
-	}}
-}
-
-func escapeHatchClarifications(prompt string, req ScenarioRequirements, decision askintent.Decision) []askcontract.PlanClarification {
-	if decision.Route != askintent.RouteDraft && decision.Route != askintent.RouteRefine {
-		return nil
-	}
-	lower := strings.ToLower(strings.TrimSpace(prompt))
-	if !mentionsEscapeHatch(lower) {
-		return nil
-	}
-	options := askcontext.StepGuidanceOptions{ModeIntent: inferModeIntent(req), Topology: inferTopology(req), RequiredCapabilities: inferRequiredCapabilities(req)}
-	if len(askcontext.StrongTypedAlternativesWithOptions(prompt, options)) > 0 {
-		return nil
-	}
-	return []askcontract.PlanClarification{{
-		ID:                 "coverage.escapeHatch",
-		Question:           "This request looks like a custom shell or free-form authoring task. Should ask stay inside typed workflow coverage or continue in experimental free-form mode?",
-		Kind:               "enum",
-		Reason:             "Free-form authoring is a migration fallback and should be selected explicitly when typed coverage is weak.",
-		Decision:           "coverage",
-		Options:            []string{"typed-only", "experimental-freeform"},
-		RecommendedDefault: "typed-only",
-		BlocksGeneration:   true,
-		Affects:            []string{"authoringBrief.escapeHatchMode"},
 	}}
 }
 

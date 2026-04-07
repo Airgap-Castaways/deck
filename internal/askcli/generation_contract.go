@@ -10,14 +10,9 @@ import (
 )
 
 func validatePrimaryAuthoringContract(route askintent.Route, gen askcontract.GenerationResponse, attempt int) error {
+	_ = attempt
 	if route == askintent.RouteDraft {
-		if legacyAuthoringFallbackEnabled() {
-			return nil
-		}
 		return validatePrimaryDraftContract(gen)
-	}
-	if attempt > 1 || legacyAuthoringFallbackEnabled() {
-		return nil
 	}
 	switch route {
 	case askintent.RouteRefine:
@@ -27,16 +22,12 @@ func validatePrimaryAuthoringContract(route askintent.Route, gen askcontract.Gen
 	}
 }
 
-func legacyAuthoringFallbackEnabled() bool {
-	return askFeatureEnabled("DECK_ASK_ENABLE_LEGACY_AUTHORING_FALLBACK")
-}
-
 func validatePrimaryDraftContract(gen askcontract.GenerationResponse) error {
 	if gen.Selection == nil {
-		return fmt.Errorf("draft primary path requires builder selection under selection.targets[].builders; legacy free-form document authoring is disabled")
+		return fmt.Errorf("draft primary path requires builder selection under selection.targets[].builders")
 	}
 	if !askcontract.SelectionUsesBuilders(*gen.Selection) {
-		return fmt.Errorf("draft primary path requires selection.targets[].builders; inline selection.steps/phases fallback is disabled")
+		return fmt.Errorf("draft primary path requires selection.targets[].builders; inline selection.steps/phases are not allowed")
 	}
 	if len(gen.Documents) > 0 {
 		return fmt.Errorf("draft primary path must not return documents directly; return builder selection only")
@@ -74,7 +65,7 @@ func validatePrimaryRefineContract(gen askcontract.GenerationResponse) error {
 				}
 			}
 		default:
-			return fmt.Errorf("refine primary path does not allow %s document actions; full-document rewriting is fallback-only", action)
+			return fmt.Errorf("refine primary path does not allow %s document actions; use edit, preserve, or delete only", action)
 		}
 	}
 	return nil

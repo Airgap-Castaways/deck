@@ -63,7 +63,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 				repairDiags = append(repairDiags, askdiagnostic.FromPlanCritic(planCritic)...)
 				repairDiags = append(repairDiags, askdiagnostic.FromCritic(lastCritic)...)
 				logger.trace("repair_diagnostics", "phase", "repair", "content", askdiagnostic.JSON(repairDiags))
-				if decision.Route == askintent.RouteDraft && !legacyAuthoringFallbackEnabled() {
+				if decision.Route == askintent.RouteDraft {
 					currentPrompt = draftSelectionRetryPrompt(req.Prompt, lastValidation, repairDiags)
 				} else {
 					currentSystemPrompt = strings.TrimSpace(req.SystemPrompt) + "\n\n" + documentRepairSystemPrompt(normalizedAuthoringBrief(plan, brief), plan)
