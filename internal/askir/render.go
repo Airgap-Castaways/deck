@@ -164,12 +164,8 @@ func normalizeTemplateAliases(input string) string {
 			out.WriteString(input[i:])
 			break
 		}
-		actionStart := start
-		if start > i && input[start-1] == '$' {
-			actionStart = start - 1
-		}
-		out.WriteString(input[i:actionStart])
-		action := input[actionStart : end+2]
+		out.WriteString(input[i:start])
+		action := input[start : end+2]
 		if normalized, ok := normalizeTemplateAction(action); ok {
 			out.WriteString(normalized)
 		} else {
@@ -414,20 +410,52 @@ func (path templateAliasPath) parseableExpression() string {
 }
 
 func canonicalAliasBody(namespace string, selectors []templateAliasSelector) string {
-	var out strings.Builder
-	out.WriteByte('.')
-	out.WriteString(namespace)
-	for _, selector := range selectors {
-		if selector.Bracket {
-			out.WriteByte('[')
-			out.WriteString(selector.Value)
-			out.WriteByte(']')
-			continue
-		}
+	if usesCanonicalDotPath(selectors) {
+		var out strings.Builder
 		out.WriteByte('.')
-		out.WriteString(selector.Value)
+		out.WriteString(namespace)
+		for _, selector := range selectors {
+			out.WriteByte('.')
+			out.WriteString(selector.Value)
+		}
+		return out.String()
 	}
-	return out.String()
+	parts := []string{"index", "." + namespace}
+	for _, selector := range selectors {
+		parts = append(parts, templateAliasSelectorToken(selector))
+	}
+	return strings.Join(parts, " ")
+}
+
+func usesCanonicalDotPath(selectors []templateAliasSelector) bool {
+	if len(selectors) == 0 {
+		return false
+	}
+	for _, selector := range selectors {
+		if selector.Bracket || !isCanonicalDotIdentifier(selector.Value) {
+			return false
+		}
+	}
+	return true
+}
+
+func templateAliasSelectorToken(selector templateAliasSelector) string {
+	if selector.Bracket {
+		return templateAliasBracketParseToken(selector.Value)
+	}
+	return strconv.Quote(selector.Value)
+}
+
+func isCanonicalDotIdentifier(value string) bool {
+	if value == "" || !isTemplateAliasDotIdentStart(value[0]) {
+		return false
+	}
+	for i := 1; i < len(value); i++ {
+		if !isTemplateAliasDotIdentPart(value[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func templateAliasBracketParseToken(selector string) string {
@@ -464,6 +492,14 @@ func isTemplateAliasSegmentPart(ch byte) bool {
 	return isTemplateAliasSegmentStart(ch) || ch == '-' || (ch >= '0' && ch <= '9')
 }
 
+func isTemplateAliasDotIdentStart(ch byte) bool {
+	return ch == '_' || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
+}
+
+func isTemplateAliasDotIdentPart(ch byte) bool {
+	return isTemplateAliasDotIdentStart(ch) || (ch >= '0' && ch <= '9')
+}
+
 func isQuotedTemplateAliasSelector(selector string) bool {
 	if len(selector) < 2 {
 		return false
@@ -495,7 +531,7 @@ func nextTemplateAction(input string, offset int) (int, int, bool) {
 			if end < 0 {
 				return 0, 0, false
 			}
-			return i + 1, i + 3 + end, true
+			return i, i + 3 + end, true
 		}
 	}
 	return 0, 0, false
@@ -615,11 +651,13 @@ func wholeValueTemplate(value string) (string, bool) {
 	if normalized == "" {
 		return "", false
 	}
-	if normalized != value {
-		value = normalized
+	start, end, ok := nextTemplateAction(normalized, 0)
+	if !ok || start != 0 || end+2 != len(normalized) {
+		return "", false
 	}
-	if strings.HasPrefix(value, "{{ .") && strings.HasSuffix(value, " }}") {
-		return value, true
+	body := strings.TrimSpace(normalized[2 : len(normalized)-2])
+	if _, ok := canonicalTemplateActionBody(body); ok {
+		return normalized, true
 	}
 	return "", false
 }
