@@ -271,8 +271,8 @@ func compactRelevantSchemaPromptBlock(requestText string, target askintent.Targe
 	if len(selected) == 0 {
 		return ""
 	}
-	if len(selected) > 3 {
-		selected = selected[:3]
+	if len(selected) > maxRelevantSchemaItems {
+		selected = selected[:maxRelevantSchemaItems]
 	}
 	b := &strings.Builder{}
 	b.WriteString("Relevant typed-step schemas:\n")
@@ -381,7 +381,7 @@ func generationRetrievalPromptBlock(retrieval askretrieve.RetrievalResult) strin
 			continue
 		}
 		if chunk.Source == "example" {
-			if exampleCount >= 2 {
+			if exampleCount >= maxPromptExamples {
 				continue
 			}
 			exampleCount++
@@ -454,7 +454,7 @@ func currentWorkspaceDocumentSummaries(workspace askretrieve.WorkspaceSummary) [
 func currentWorkspaceDocuments(workspace askretrieve.WorkspaceSummary) []askcontract.GeneratedDocument {
 	documents := make([]askcontract.GeneratedDocument, 0, len(workspace.Files))
 	for _, file := range workspace.Files {
-		if !strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(file.Path)), "workflows/") {
+		if !strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(file.Path)), workflowRootPrefix) {
 			continue
 		}
 		doc, err := askir.ParseDocument(file.Path, []byte(file.Content))

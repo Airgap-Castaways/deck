@@ -81,10 +81,9 @@ func repairOperationPromptBlock(diags []askdiagnostic.Diagnostic) string {
 	if len(ops) == 0 {
 		return ""
 	}
-	order := []string{"fill-field", "remove-field", "fix-literal", "rename-step", "repair-structure", "review-diagnostic"}
 	b := &strings.Builder{}
 	b.WriteString("Suggested repair operations:\n")
-	for _, op := range order {
+	for _, op := range repairOperationOrder {
 		items := dedupe(ops[op])
 		if len(items) == 0 {
 			continue

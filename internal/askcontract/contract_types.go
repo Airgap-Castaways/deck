@@ -7,6 +7,8 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
 )
 
+var flexStringObjectKeys = []string{"question", "text", "message", "title", "label"}
+
 type flexStrings []string
 
 func (f *flexStrings) UnmarshalJSON(data []byte) error {
@@ -67,7 +69,7 @@ func (f *flexStrings) UnmarshalJSON(data []byte) error {
 }
 
 func flexStringFromObject(value map[string]any) (string, bool) {
-	for _, key := range []string{"question", "text", "message", "title", "label"} {
+	for _, key := range flexStringObjectKeys {
 		raw, ok := value[key]
 		if !ok {
 			continue

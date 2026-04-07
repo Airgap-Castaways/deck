@@ -166,7 +166,7 @@ func workspaceStructuredIssuePromptBlock(workspace askretrieve.WorkspaceSummary,
 	issues := []validate.Issue{}
 	for _, file := range workspace.Files {
 		path := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if path == "" || !strings.HasPrefix(path, "workflows/") {
+		if path == "" || !strings.HasPrefix(path, workflowRootPrefix) {
 			continue
 		}
 		if target.Path != "" && path != filepath.ToSlash(strings.TrimSpace(target.Path)) {
@@ -204,7 +204,7 @@ func retrievalDocumentSummaryBlock(retrieval askretrieve.RetrievalResult) string
 	documents := make([]askcontract.GeneratedDocument, 0, len(retrieval.Chunks))
 	for _, chunk := range retrieval.Chunks {
 		path := strings.TrimSpace(chunk.Label)
-		if path == "" || !strings.HasPrefix(filepath.ToSlash(path), "workflows/") {
+		if path == "" || !strings.HasPrefix(filepath.ToSlash(path), workflowRootPrefix) {
 			continue
 		}
 		doc, err := askir.ParseDocument(path, []byte(chunk.Content))

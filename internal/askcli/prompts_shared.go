@@ -6,7 +6,17 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askir"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
+
+const (
+	maxRelevantSchemaItems = 3
+	maxPromptExamples      = 2
+	maxPlanAdvisoryItems   = 10
+	workflowRootPrefix     = workspacepaths.WorkflowRootDir + "/"
+)
+
+var repairOperationOrder = []string{"fill-field", "remove-field", "fix-literal", "rename-step", "repair-structure", "review-diagnostic"}
 
 func appendPlanAdvisoryPrompt(base string, plan askcontract.PlanResponse, critic askcontract.PlanCriticResponse) string {
 	block := planAdvisoryPromptBlock(plan, critic)
@@ -46,8 +56,8 @@ func planAdvisoryPromptBlock(plan askcontract.PlanResponse, critic askcontract.P
 		}
 	}
 	items = dedupe(items)
-	if len(items) > 10 {
-		items = items[:10]
+	if len(items) > maxPlanAdvisoryItems {
+		items = items[:maxPlanAdvisoryItems]
 	}
 	if len(items) == 0 {
 		return ""
