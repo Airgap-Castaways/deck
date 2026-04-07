@@ -8,8 +8,8 @@ import (
 
 	mcpaugment "github.com/Airgap-Castaways/deck/internal/askaugment/mcp"
 	"github.com/Airgap-Castaways/deck/internal/askcli"
-	"github.com/Airgap-Castaways/deck/internal/askcommandspec"
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
+	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	openaiprovider "github.com/Airgap-Castaways/deck/internal/askprovider/openai"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
@@ -31,7 +31,7 @@ func newAskCommand() *cobra.Command {
 	var provider string
 	var model string
 	var endpoint string
-	spec := askcommandspec.Current()
+	spec := askcontext.CurrentCommandSpec()
 
 	cmd := &cobra.Command{
 		Use:   spec.Root.Use,
@@ -98,7 +98,7 @@ func newAskPlanCommand() *cobra.Command {
 	var provider string
 	var model string
 	var endpoint string
-	spec := askcommandspec.Current()
+	spec := askcontext.CurrentCommandSpec()
 	cmd := &cobra.Command{
 		Use:   spec.Plan.Use,
 		Short: spec.Plan.Short,
@@ -139,8 +139,8 @@ func newAskPlanCommand() *cobra.Command {
 
 func newAskConfigCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   askcommandspec.Current().Config.Use,
-		Short: askcommandspec.Current().Config.Short,
+		Use:   askcontext.CurrentCommandSpec().Config.Use,
+		Short: askcontext.CurrentCommandSpec().Config.Short,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()

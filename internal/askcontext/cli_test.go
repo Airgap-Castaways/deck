@@ -2,13 +2,11 @@ package askcontext
 
 import (
 	"testing"
-
-	"github.com/Airgap-Castaways/deck/internal/askcommandspec"
 )
 
 func TestAskCommandMetaMatchesSharedSpec(t *testing.T) {
 	meta := AskCommandMeta()
-	spec := askcommandspec.Current()
+	spec := CurrentCommandSpec()
 	if meta.Short != spec.Root.Short {
 		t.Fatalf("root short mismatch: %q != %q", meta.Short, spec.Root.Short)
 	}

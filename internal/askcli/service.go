@@ -10,10 +10,10 @@ import (
 
 	mcpaugment "github.com/Airgap-Castaways/deck/internal/askaugment/mcp"
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
+	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askhooks"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
-	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
@@ -182,7 +182,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	retrieval := askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, externalChunks)
 	requirements := askpolicy.BuildScenarioRequirements(requestText, retrieval, workspace, decision)
 	authoringBrief := askpolicy.BriefFromRequirements(requirements, decision)
-	bundle := askknowledge.Current()
+	bundle := askcontext.CurrentBundle()
 	result := runResult{
 		Route:         decision.Route,
 		Target:        decision.Target,

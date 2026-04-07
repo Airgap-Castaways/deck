@@ -13,7 +13,6 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
-	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
@@ -60,7 +59,7 @@ func explicitClusterTopology(prompt string) bool {
 
 func planSystemPrompt(decision askintent.Decision, retrieval askretrieve.RetrievalResult, prompt string, workspace askretrieve.WorkspaceSummary) string {
 	requirements := askpolicy.BuildRequirementsForPrompt(prompt, retrieval, workspace, decision.Route)
-	bundle := askknowledge.Current()
+	bundle := askcontext.CurrentBundle()
 	b := &strings.Builder{}
 	b.WriteString("You are deck ask planner. Return strict JSON only.\n")
 	b.WriteString("JSON shape: {\"version\":number,\"request\":string,\"intent\":string,\"complexity\":string,\"authoringBrief\":{\"routeIntent\":string,\"targetScope\":string,\"targetPaths\":[],\"anchorPaths\":[],\"allowedCompanionPaths\":[],\"disallowedExpansionPaths\":[],\"modeIntent\":string,\"connectivity\":string,\"completenessTarget\":string,\"topology\":string,\"nodeCount\":number,\"platformFamily\":string,\"requiredCapabilities\":[]},\"authoringProgram\":{\"platform\":{\"family\":string,\"release\":string,\"repoType\":string,\"backendImage\":string},\"artifacts\":{\"packages\":[],\"images\":[],\"packageOutputDir\":string,\"imageOutputDir\":string},\"cluster\":{\"joinFile\":string,\"podCIDR\":string,\"kubernetesVersion\":string,\"criSocket\":string,\"roleSelector\":string,\"controlPlaneCount\":number,\"workerCount\":number},\"verification\":{\"expectedNodeCount\":number,\"expectedReadyCount\":number,\"expectedControlPlaneReady\":number,\"finalVerificationRole\":string,\"interval\":string,\"timeout\":string}},\"executionModel\":{\"artifactContracts\":[{\"kind\":string,\"producerPath\":string,\"consumerPath\":string,\"description\":string}],\"sharedStateContracts\":[{\"name\":string,\"producerPath\":string,\"consumerPaths\":[],\"availabilityModel\":string,\"description\":string}],\"roleExecution\":{\"roleSelector\":string,\"controlPlaneFlow\":string,\"workerFlow\":string,\"perNodeInvocation\":boolean},\"verification\":{\"bootstrapPhase\":string,\"finalPhase\":string,\"expectedNodeCount\":number,\"expectedControlPlaneReady\":number},\"applyAssumptions\":[]},\"offlineAssumption\":string,\"needsPrepare\":boolean,\"artifactKinds\":[],\"varsRecommendation\":[],\"componentRecommendation\":[],\"blockers\":[],\"targetOutcome\":string,\"assumptions\":[],\"openQuestions\":[],\"clarifications\":[{\"id\":string,\"question\":string,\"kind\":string,\"reason\":string,\"decision\":string,\"options\":[],\"recommendedDefault\":string,\"answer\":string,\"blocksGeneration\":boolean,\"affects\":[]}],\"entryScenario\":string,\"files\":[{\"path\":string,\"kind\":string,\"action\":string,\"purpose\":string}],\"validationChecklist\":[]}.\n")

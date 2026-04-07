@@ -1,4 +1,4 @@
-package askknowledge
+package askcontext
 
 import (
 	"fmt"
@@ -7,8 +7,6 @@ import (
 	"sync"
 
 	"github.com/Airgap-Castaways/deck/internal/askcatalog"
-	"github.com/Airgap-Castaways/deck/internal/askcontext"
-	"github.com/Airgap-Castaways/deck/internal/stepmeta"
 )
 
 type Bundle struct {
@@ -76,9 +74,9 @@ type StepKnowledge struct {
 	AllowedRoles             []string
 	Outputs                  []string
 	Example                  string
-	KeyFields                []askcontext.StepFieldContext
+	KeyFields                []StepFieldContext
 	SchemaRuleSummaries      []string
-	ConstrainedLiteralFields []askcontext.ConstrainedFieldHint
+	ConstrainedLiteralFields []ConstrainedFieldHint
 }
 
 type ConstraintKnowledge struct {
@@ -94,7 +92,7 @@ var (
 	bundleData Bundle
 )
 
-func Current() Bundle {
+func CurrentBundle() Bundle {
 	bundleOnce.Do(func() {
 		bundleData = buildBundle()
 	})
@@ -157,7 +155,7 @@ func buildBundle() Bundle {
 			Outputs:                  append([]string(nil), step.Outputs...),
 			KeyFields:                stepFieldContexts(step),
 			SchemaRuleSummaries:      append([]string(nil), step.RuleSummaries...),
-			ConstrainedLiteralFields: constrainedFieldHints(step.ConstrainedLiteralFields),
+			ConstrainedLiteralFields: constrainedLiteralFields(step.ConstrainedLiteralFields),
 		})
 		for _, field := range step.ConstrainedLiteralFields {
 			bundle.Constraints = append(bundle.Constraints, ConstraintKnowledge{
@@ -177,38 +175,6 @@ func buildBundle() Bundle {
 		return bundle.Constraints[i].StepKind < bundle.Constraints[j].StepKind
 	})
 	return bundle
-}
-
-func stepFieldContexts(step askcatalog.Step) []askcontext.StepFieldContext {
-	keys := append([]string(nil), step.KeyFields...)
-	if len(keys) == 0 {
-		for path, field := range step.Fields {
-			if field.Requirement == "required" {
-				keys = append(keys, path)
-			}
-		}
-		sort.Strings(keys)
-		if len(keys) > 5 {
-			keys = keys[:5]
-		}
-	}
-	out := make([]askcontext.StepFieldContext, 0, len(keys))
-	for _, key := range keys {
-		field, ok := step.Fields[key]
-		if !ok {
-			continue
-		}
-		out = append(out, askcontext.StepFieldContext{Path: key, Description: field.Description, Example: field.Example, Requirement: string(field.Requirement)})
-	}
-	return out
-}
-
-func constrainedFieldHints(items []stepmeta.ConstrainedLiteralField) []askcontext.ConstrainedFieldHint {
-	out := make([]askcontext.ConstrainedFieldHint, 0, len(items))
-	for _, item := range items {
-		out = append(out, askcontext.ConstrainedFieldHint{Path: item.Path, AllowedValues: append([]string(nil), item.AllowedValues...), Guidance: item.Guidance})
-	}
-	return out
 }
 
 func (b Bundle) WorkflowPromptBlock() string {

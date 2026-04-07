@@ -223,6 +223,8 @@ For authoring routes, the intended shape is route classification first, clarify 
 
 The important architectural boundary is that ask may project canonical facts for prompting and assembly, but it should not own a second copy of step validity, field enums, or workspace path rules.
 
+At the code level, `internal/askcontext` is the main home for those canonical ask facts: command metadata, prompt/source-of-truth bundles, and schema-derived authoring context live there, while orchestration stays in `internal/askcli`. That split keeps the metadata surface easier to discover without changing ask behavior.
+
 ## Site-local helper model
 
 When a site needs a shared local source inside the air gap, `deck server` can expose prepared bundle content and audit what it serves. That helper remains secondary to the core local execution path.

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askir"
-	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	"github.com/Airgap-Castaways/deck/internal/askrepair"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
@@ -23,7 +23,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 	var lastJudge askcontract.JudgeResponse
 	var lastFiles []askcontract.GeneratedFile
 	taintedFiles := map[string]bool{}
-	bundle := askknowledge.Current()
+	bundle := askcontext.CurrentBundle()
 	for attempt := 1; attempt <= attempts; attempt++ {
 		currentPrompt := req.Prompt
 		currentSystemPrompt := req.SystemPrompt

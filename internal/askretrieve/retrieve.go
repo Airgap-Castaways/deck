@@ -11,7 +11,6 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
-	"github.com/Airgap-Castaways/deck/internal/askknowledge"
 	"github.com/Airgap-Castaways/deck/internal/askstate"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
@@ -185,7 +184,7 @@ func appendFactGroup(groups []factGroup, items ...factGroup) []factGroup {
 }
 
 func informationalFactChunks(route askintent.Route, prompt string) []Chunk {
-	bundle := askknowledge.Current()
+	bundle := askcontext.CurrentBundle()
 	switch route {
 	case askintent.RouteQuestion:
 		return []Chunk{{ID: "workflow-meta", Source: "askcontext", Label: "workflow-summary", Topic: askcontext.TopicWorkflowInvariants, Content: bundle.WorkflowPromptBlock(), Score: 50}}
