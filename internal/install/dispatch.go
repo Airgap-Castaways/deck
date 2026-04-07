@@ -19,6 +19,45 @@ func (installLookPathRunner) LookPath(file string) (string, error) {
 	return executil.LookPathWorkflowBinary(file)
 }
 
+type installStepHandler func(ctx context.Context, step config.Step, rendered map[string]any, effectiveSpec map[string]any, execCtx ExecutionContext) (map[string]any, error)
+
+var installStepHandlers = map[string]installStepHandler{
+	"CheckHost":                    installCheckHost,
+	"CheckKubernetesCluster":       installCheckKubernetesCluster,
+	"Command":                      installCommand,
+	"ConfigureRepository":          installConfigureRepository,
+	"CopyFile":                     installCopyFile,
+	"CreateSymlink":                installCreateSymlink,
+	"EditFile":                     installEditFile,
+	"EditJSON":                     installEditJSON,
+	"EditTOML":                     installEditTOML,
+	"EditYAML":                     installEditYAML,
+	"EnsureDirectory":              installEnsureDirectory,
+	"ExtractArchive":               installExtractArchive,
+	"InitKubeadm":                  installInitKubeadm,
+	"InstallPackage":               installPackages,
+	"JoinKubeadm":                  installJoinKubeadm,
+	"KernelModule":                 installKernelModule,
+	"LoadImage":                    installLoadImage,
+	"ManageService":                installManageService,
+	"RefreshRepository":            installRefreshRepository,
+	"ResetKubeadm":                 installResetKubeadm,
+	"Swap":                         installSwap,
+	"Sysctl":                       installSysctl,
+	"UpgradeKubeadm":               installUpgradeKubeadm,
+	"VerifyImage":                  installVerifyImage,
+	"WaitForCommand":               installWait,
+	"WaitForFile":                  installWait,
+	"WaitForMissingFile":           installWait,
+	"WaitForMissingTCPPort":        installWait,
+	"WaitForService":               installWait,
+	"WaitForTCPPort":               installWait,
+	"WriteContainerdConfig":        installWriteContainerdConfig,
+	"WriteContainerdRegistryHosts": installWriteContainerdRegistryHosts,
+	"WriteFile":                    installWriteFile,
+	"WriteSystemdUnit":             installWriteSystemdUnit,
+}
+
 func executeWorkflowStep(ctx context.Context, step config.Step, rendered map[string]any, key workflowexec.StepTypeKey, execCtx ExecutionContext) (map[string]any, error) {
 	kind := step.Kind
 	effectiveSpec := specWithStepTimeout(rendered, step.Timeout)
@@ -29,83 +68,11 @@ func executeWorkflowStep(ctx context.Context, step config.Step, rendered map[str
 	if !allowed {
 		return nil, errcode.Newf(errCodeInstallKindUnsupported, "unsupported step kind %s", kind)
 	}
-
-	switch kind {
-	case "InstallPackage":
-		return nil, runInstallPackages(ctx, effectiveSpec)
-	case "WriteFile":
-		return nil, runWriteFile(rendered)
-	case "CopyFile":
-		return nil, runCopyFile(ctx, execCtx.BundleRoot, rendered)
-	case "EditFile":
-		return nil, runEditFile(rendered)
-	case "EditTOML":
-		return nil, runEditTOML(rendered)
-	case "EditYAML":
-		return nil, runEditYAML(rendered)
-	case "EditJSON":
-		return nil, runEditJSON(rendered)
-	case "ExtractArchive":
-		return nil, runExtractArchive(ctx, execCtx.BundleRoot, rendered)
-	case "Sysctl":
-		return nil, runSysctl(ctx, effectiveSpec)
-	case "ManageService":
-		return nil, runManageService(ctx, effectiveSpec)
-	case "EnsureDirectory":
-		return nil, runEnsureDir(rendered)
-	case "CreateSymlink":
-		return nil, runCreateSymlink(rendered)
-	case "WriteSystemdUnit":
-		return nil, runWriteSystemdUnit(ctx, effectiveSpec)
-	case "ConfigureRepository":
-		return nil, runRepoConfig(ctx, rendered)
-	case "RefreshRepository":
-		return nil, runRefreshRepository(ctx, effectiveSpec)
-	case "WriteContainerdConfig":
-		return nil, runWriteContainerdConfig(ctx, effectiveSpec)
-	case "WriteContainerdRegistryHosts":
-		return nil, runWriteContainerdRegistryHosts(rendered)
-	case "Swap":
-		return nil, runSwap(ctx, effectiveSpec)
-	case "KernelModule":
-		return nil, runKernelModule(ctx, effectiveSpec)
-	case "Command":
-		decoded, err := workflowexec.DecodeSpec[stepspec.Command](effectiveSpec)
-		if err != nil {
-			return nil, fmt.Errorf("decode command spec: %w", err)
-		}
-		return nil, runCommandDecoded(ctx, decoded)
-	case "LoadImage":
-		return nil, runLoadImage(ctx, execCtx.BundleRoot, effectiveSpec)
-	case "VerifyImage":
-		return nil, runVerifyImages(ctx, effectiveSpec)
-	case "InitKubeadm":
-		return nil, runInitKubeadm(ctx, effectiveSpec, execCtx.kubeadm)
-	case "JoinKubeadm":
-		return nil, runJoinKubeadm(ctx, effectiveSpec, execCtx.kubeadm)
-	case "ResetKubeadm":
-		return nil, runResetKubeadm(ctx, effectiveSpec, execCtx.kubeadm)
-	case "UpgradeKubeadm":
-		return nil, runUpgradeKubeadm(ctx, effectiveSpec, execCtx.kubeadm)
-	case "CheckKubernetesCluster":
-		return nil, runCheckKubernetesCluster(ctx, effectiveSpec)
-	case "CheckHost":
-		decoded, err := workflowexec.DecodeSpec[stepspec.CheckHost](effectiveSpec)
-		if err != nil {
-			return nil, fmt.Errorf("decode check host spec: %w", err)
-		}
-		return hostcheck.Run(decoded, installLookPathRunner{}, hostcheck.DefaultRuntime(), errCodeInstallCheckHostFailed)
-	case "WaitForService", "WaitForCommand", "WaitForFile", "WaitForMissingFile", "WaitForTCPPort", "WaitForMissingTCPPort":
-		decoded, err := workflowexec.DecodeSpec[stepspec.Wait](effectiveSpec)
-		if err != nil {
-			return nil, fmt.Errorf("decode wait spec: %w", err)
-		}
-		return nil, runWaitDecoded(ctx, kind, decoded, commandTimeout(effectiveSpec))
-	case "DownloadPackage", "DownloadImage":
-		return nil, errcode.Newf(errCodeInstallKindUnsupported, "unsupported step kind %s for apply", kind)
-	default:
+	handler, ok := installStepHandlers[kind]
+	if !ok {
 		return nil, errcode.Newf(errCodeInstallKindUnsupported, "unsupported step kind %s", kind)
 	}
+	return handler(ctx, step, rendered, effectiveSpec, execCtx)
 }
 
 func specWithStepTimeout(rendered map[string]any, stepTimeout string) map[string]any {
@@ -119,4 +86,132 @@ func specWithStepTimeout(rendered map[string]any, stepTimeout string) map[string
 	}
 	cloned["timeout"] = trimmed
 	return cloned
+}
+
+func installPackages(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runInstallPackages(ctx, effectiveSpec)
+}
+
+func installWriteFile(_ context.Context, _ config.Step, rendered map[string]any, _ map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runWriteFile(rendered)
+}
+
+func installCopyFile(ctx context.Context, _ config.Step, rendered map[string]any, _ map[string]any, execCtx ExecutionContext) (map[string]any, error) {
+	return nil, runCopyFile(ctx, execCtx.BundleRoot, rendered)
+}
+
+func installEditFile(_ context.Context, _ config.Step, rendered map[string]any, _ map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runEditFile(rendered)
+}
+
+func installEditTOML(_ context.Context, _ config.Step, rendered map[string]any, _ map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runEditTOML(rendered)
+}
+
+func installEditYAML(_ context.Context, _ config.Step, rendered map[string]any, _ map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runEditYAML(rendered)
+}
+
+func installEditJSON(_ context.Context, _ config.Step, rendered map[string]any, _ map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runEditJSON(rendered)
+}
+
+func installExtractArchive(ctx context.Context, _ config.Step, rendered map[string]any, _ map[string]any, execCtx ExecutionContext) (map[string]any, error) {
+	return nil, runExtractArchive(ctx, execCtx.BundleRoot, rendered)
+}
+
+func installSysctl(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runSysctl(ctx, effectiveSpec)
+}
+
+func installManageService(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runManageService(ctx, effectiveSpec)
+}
+
+func installEnsureDirectory(_ context.Context, _ config.Step, rendered map[string]any, _ map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runEnsureDir(rendered)
+}
+
+func installCreateSymlink(_ context.Context, _ config.Step, rendered map[string]any, _ map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runCreateSymlink(rendered)
+}
+
+func installWriteSystemdUnit(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runWriteSystemdUnit(ctx, effectiveSpec)
+}
+
+func installConfigureRepository(ctx context.Context, _ config.Step, rendered map[string]any, _ map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runRepoConfig(ctx, rendered)
+}
+
+func installRefreshRepository(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runRefreshRepository(ctx, effectiveSpec)
+}
+
+func installWriteContainerdConfig(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runWriteContainerdConfig(ctx, effectiveSpec)
+}
+
+func installWriteContainerdRegistryHosts(_ context.Context, _ config.Step, rendered map[string]any, _ map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runWriteContainerdRegistryHosts(rendered)
+}
+
+func installSwap(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runSwap(ctx, effectiveSpec)
+}
+
+func installKernelModule(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runKernelModule(ctx, effectiveSpec)
+}
+
+func installCommand(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	decoded, err := workflowexec.DecodeSpec[stepspec.Command](effectiveSpec)
+	if err != nil {
+		return nil, fmt.Errorf("decode command spec: %w", err)
+	}
+	return nil, runCommandDecoded(ctx, decoded)
+}
+
+func installLoadImage(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, execCtx ExecutionContext) (map[string]any, error) {
+	return nil, runLoadImage(ctx, execCtx.BundleRoot, effectiveSpec)
+}
+
+func installVerifyImage(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runVerifyImages(ctx, effectiveSpec)
+}
+
+func installInitKubeadm(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, execCtx ExecutionContext) (map[string]any, error) {
+	return nil, runInitKubeadm(ctx, effectiveSpec, execCtx.kubeadm)
+}
+
+func installJoinKubeadm(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, execCtx ExecutionContext) (map[string]any, error) {
+	return nil, runJoinKubeadm(ctx, effectiveSpec, execCtx.kubeadm)
+}
+
+func installResetKubeadm(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, execCtx ExecutionContext) (map[string]any, error) {
+	return nil, runResetKubeadm(ctx, effectiveSpec, execCtx.kubeadm)
+}
+
+func installUpgradeKubeadm(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, execCtx ExecutionContext) (map[string]any, error) {
+	return nil, runUpgradeKubeadm(ctx, effectiveSpec, execCtx.kubeadm)
+}
+
+func installCheckKubernetesCluster(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runCheckKubernetesCluster(ctx, effectiveSpec)
+}
+
+func installCheckHost(_ context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	decoded, err := workflowexec.DecodeSpec[stepspec.CheckHost](effectiveSpec)
+	if err != nil {
+		return nil, fmt.Errorf("decode check host spec: %w", err)
+	}
+	return hostcheck.Run(decoded, installLookPathRunner{}, hostcheck.DefaultRuntime(), errCodeInstallCheckHostFailed)
+}
+
+func installWait(ctx context.Context, step config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	decoded, err := workflowexec.DecodeSpec[stepspec.Wait](effectiveSpec)
+	if err != nil {
+		return nil, fmt.Errorf("decode wait spec: %w", err)
+	}
+	return nil, runWaitDecoded(ctx, step.Kind, decoded, commandTimeout(effectiveSpec))
 }

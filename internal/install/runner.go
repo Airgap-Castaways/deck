@@ -308,21 +308,6 @@ func stringValue(v map[string]any, key string) string {
 	return strings.TrimSpace(s)
 }
 
-func mapValue(v map[string]any, key string) map[string]any {
-	if v == nil {
-		return map[string]any{}
-	}
-	raw, ok := v[key]
-	if !ok {
-		return map[string]any{}
-	}
-	m, ok := raw.(map[string]any)
-	if !ok || m == nil {
-		return map[string]any{}
-	}
-	return m
-}
-
 func stringSlice(v any) []string {
 	items, ok := v.([]any)
 	if !ok {

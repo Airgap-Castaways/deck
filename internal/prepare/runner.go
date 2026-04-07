@@ -18,6 +18,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/executil"
 	"github.com/Airgap-Castaways/deck/internal/filemode"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
+	"github.com/Airgap-Castaways/deck/internal/stepmeta"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
@@ -174,8 +175,9 @@ func prepareExecutionPlan(wf *config.Workflow) ([]config.Phase, []config.Step, e
 }
 
 type prepareBatchResult struct {
-	files   []string
-	outputs map[string]any
+	rendered map[string]any
+	files    []string
+	outputs  map[string]any
 }
 
 type batchEventContext = batchrun.EventContext
@@ -197,7 +199,7 @@ func executePrepareBatch(ctx context.Context, runner CommandRunner, bundleRoot s
 	files := make([]string, 0)
 	for i, step := range batch.Steps {
 		result := results[i]
-		if err := applyRegister(step, result.outputs, runtimeVars); err != nil {
+		if err := applyRegister(step, result.rendered, result.outputs, runtimeVars); err != nil {
 			emitBatchEvent(opts.EventSink, batchCtx, batch.PhaseName, "failed", step.ID)
 			return nil, fmt.Errorf("step %s (%s): %w", step.ID, step.Kind, err)
 		}
@@ -242,7 +244,7 @@ func executePrepareStep(ctx context.Context, runner CommandRunner, bundleRoot st
 			stepFiles, outputs, stepErr := runPrepareRenderedStepWithKey(ctx, runner, bundleRoot, step, rendered, key, inputVars, opts)
 			if stepErr == nil {
 				emitStepEvent(opts.EventSink, withBatchContext(batchCtx, StepEvent{Event: "step_succeeded", StepID: step.ID, Kind: step.Kind, Phase: phaseName, Status: "succeeded", Attempt: i + 1, StartedAt: startedAt, EndedAt: time.Now().UTC().Format(time.RFC3339Nano)}))
-				return prepareBatchResult{files: stepFiles, outputs: outputs}, nil
+				return prepareBatchResult{rendered: rendered, files: stepFiles, outputs: outputs}, nil
 			}
 			execErr = stepErr
 		}
@@ -283,8 +285,12 @@ func failedBatchStep(batch workflowexec.StepBatch, results []prepareBatchResult)
 	return ""
 }
 
-func applyRegister(step config.Step, outputs map[string]any, runtimeVars map[string]any) error {
-	return workflowexec.ApplyRegister(step, outputs, runtimeVars, errCodePrepareRegisterMissing)
+func applyRegister(step config.Step, rendered map[string]any, outputs map[string]any, runtimeVars map[string]any) error {
+	merged, err := stepmeta.ProjectRuntimeOutputsForKind(step.Kind, rendered, outputs, stepmeta.RuntimeOutputOptions{})
+	if err != nil {
+		return err
+	}
+	return workflowexec.ApplyRegister(step, merged, runtimeVars, errCodePrepareRegisterMissing)
 }
 
 func evaluateWhen(expr string, vars map[string]any, runtime map[string]any) (bool, error) {
