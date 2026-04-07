@@ -61,3 +61,26 @@ func TestNormalizeTemplateAliasesSupportsBracketIndexes(t *testing.T) {
 		t.Fatalf("expected bracket-index alias normalization, got %q", normalized)
 	}
 }
+
+func TestNormalizeTemplateAliasesNormalizesSimplePaths(t *testing.T) {
+	normalized := normalizeTemplateAliases("{{ vars.name }} {{ runtime.host.os.family }}")
+	if normalized != "{{ .vars.name }} {{ .runtime.host.os.family }}" {
+		t.Fatalf("expected simple alias normalization, got %q", normalized)
+	}
+}
+
+func TestNormalizeTemplateAliasesPreservesUnrelatedExpressions(t *testing.T) {
+	input := `{{ printf "%s" vars.name }}`
+	normalized := normalizeTemplateAliases(input)
+	if normalized != input {
+		t.Fatalf("expected unrelated expression to be preserved, got %q", normalized)
+	}
+}
+
+func TestNormalizeTemplateAliasesPreservesControlActionsWhileNormalizingSimpleRefs(t *testing.T) {
+	input := `{{ if vars.enabled }}{{ vars.name }}{{ end }}`
+	normalized := normalizeTemplateAliases(input)
+	if normalized != `{{ if vars.enabled }}{{ .vars.name }}{{ end }}` {
+		t.Fatalf("expected simple ref normalization inside control flow, got %q", normalized)
+	}
+}
