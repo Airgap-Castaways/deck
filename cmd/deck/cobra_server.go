@@ -343,9 +343,29 @@ func runServerDaemon(ctx context.Context, opts serverUpOptions) error {
 	if err != nil {
 		return fmt.Errorf("server up: resolve working directory: %w", err)
 	}
+	args := buildServerDaemonArgs(resolvedUnit, execPath, cwd, opts)
+	raw, err := executil.CombinedOutputSystemdRun(ctx, args...)
+	if err != nil {
+		msg := strings.TrimSpace(string(raw))
+		if msg == "" {
+			msg = err.Error()
+		}
+		return fmt.Errorf("server up: %s", msg)
+	}
+	if err := stdoutPrintf("server up: ok (%s.service)\n", resolvedUnit); err != nil {
+		return err
+	}
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" {
+		return nil
+	}
+	return stdoutPrintf("%s\n", trimmed)
+}
+
+func buildServerDaemonArgs(resolvedUnit string, execPath string, cwd string, opts serverUpOptions) []string {
 	args := []string{
 		"--unit", resolvedUnit,
-		"--property", "WorkingEnsureDirectory=" + cwd,
+		"--property", "WorkingDirectory=" + strings.ReplaceAll(cwd, "%", "%%"),
 		"--service-type=simple",
 		execPath,
 		"server", "up",
@@ -363,22 +383,7 @@ func runServerDaemon(ctx context.Context, opts serverUpOptions) error {
 	if opts.tlsSelfSigned {
 		args = append(args, "--tls-self-signed")
 	}
-	raw, err := executil.CombinedOutputSystemdRun(ctx, args...)
-	if err != nil {
-		msg := strings.TrimSpace(string(raw))
-		if msg == "" {
-			msg = err.Error()
-		}
-		return fmt.Errorf("server up: %s", msg)
-	}
-	if err := stdoutPrintf("server up: ok (%s.service)\n", resolvedUnit); err != nil {
-		return err
-	}
-	trimmed := strings.TrimSpace(string(raw))
-	if trimmed == "" {
-		return nil
-	}
-	return stdoutPrintf("%s\n", trimmed)
+	return args
 }
 
 func normalizeServerUnitBaseName(raw string) string {
