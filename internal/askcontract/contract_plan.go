@@ -215,8 +215,8 @@ func validatePlanResponse(resp PlanResponse) (PlanResponse, error) {
 		if resolved := resolvePlannedEntryScenario(resp.EntryScenario, resp.Files); resolved != "" {
 			resp.EntryScenario = resolved
 		}
-		if !workspacepaths.IsAllowedAuthoringPath(resp.EntryScenario) || !strings.HasPrefix(resp.EntryScenario, "workflows/scenarios/") {
-			return PlanResponse{}, fmt.Errorf("plan response entryScenario must be a scenario path under workflows/scenarios/: %s", resp.EntryScenario)
+		if !workspacepaths.IsAllowedAuthoringPath(resp.EntryScenario) || !workspacepaths.IsScenarioAuthoringPath(resp.EntryScenario) {
+			return PlanResponse{}, fmt.Errorf("plan response entryScenario must be a scenario path under %s/: %s", workspacepaths.CanonicalScenariosDir, resp.EntryScenario)
 		}
 		matched := false
 		for _, file := range resp.Files {
@@ -336,13 +336,13 @@ func (c planClarification) toStrict() PlanClarification {
 
 func resolvePlannedEntryScenario(entry string, files []PlanFile) string {
 	entry = filepath.ToSlash(strings.TrimSpace(entry))
-	if strings.HasPrefix(entry, "workflows/scenarios/") {
+	if workspacepaths.IsScenarioAuthoringPath(entry) {
 		return entry
 	}
 	matches := []string{}
 	for _, file := range files {
 		path := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if !strings.HasPrefix(path, "workflows/scenarios/") {
+		if !workspacepaths.IsScenarioAuthoringPath(path) {
 			continue
 		}
 		base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))

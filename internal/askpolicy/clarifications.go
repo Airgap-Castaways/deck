@@ -213,7 +213,7 @@ func containsPlatformToken(lower string) bool {
 
 func hasComponentPath(paths []string) bool {
 	for _, path := range paths {
-		if strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(path)), "workflows/components/") {
+		if workspacepaths.IsComponentAuthoringPath(path) {
 			return true
 		}
 	}
@@ -223,14 +223,14 @@ func hasComponentPath(paths []string) bool {
 func suggestedComponentPath(prompt string, explicitPaths []string, workspace askretrieve.WorkspaceSummary) string {
 	for _, path := range explicitPaths {
 		clean := filepath.ToSlash(strings.TrimSpace(path))
-		if strings.HasPrefix(clean, "workflows/scenarios/") || clean == workspacepaths.CanonicalPrepareWorkflow {
-			return "workflows/components/" + strings.TrimSuffix(filepath.Base(clean), filepath.Ext(clean)) + "-shared.yaml"
+		if workspacepaths.IsScenarioAuthoringPath(clean) || clean == workspacepaths.CanonicalPrepareWorkflow {
+			return filepath.ToSlash(filepath.Join(workspacepaths.CanonicalComponentsDir, strings.TrimSuffix(filepath.Base(clean), filepath.Ext(clean))+"-shared.yaml"))
 		}
 	}
 	for _, file := range workspace.Files {
 		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if strings.HasPrefix(clean, "workflows/scenarios/") || clean == workspacepaths.CanonicalPrepareWorkflow {
-			return "workflows/components/" + strings.TrimSuffix(filepath.Base(clean), filepath.Ext(clean)) + "-shared.yaml"
+		if workspacepaths.IsScenarioAuthoringPath(clean) || clean == workspacepaths.CanonicalPrepareWorkflow {
+			return filepath.ToSlash(filepath.Join(workspacepaths.CanonicalComponentsDir, strings.TrimSuffix(filepath.Base(clean), filepath.Ext(clean))+"-shared.yaml"))
 		}
 	}
 	base := "refined-shared"
@@ -244,5 +244,5 @@ func suggestedComponentPath(prompt string, explicitPaths []string, workspace ask
 	if base == "" {
 		base = "refined-shared"
 	}
-	return "workflows/components/" + base + ".yaml"
+	return filepath.ToSlash(filepath.Join(workspacepaths.CanonicalComponentsDir, base+".yaml"))
 }

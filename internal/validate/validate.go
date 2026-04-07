@@ -87,7 +87,7 @@ func WorkspaceWithContext(ctx context.Context, root string) ([]string, error) {
 		return nil, fmt.Errorf("workflow directory is not a directory: %s", workflowRoot)
 	}
 
-	required := []string{filepath.Join(workflowRoot, "prepare.yaml")}
+	required := []string{workspacepaths.CanonicalPrepareWorkflowPath(resolvedRoot)}
 	for _, path := range required {
 		info, err := os.Stat(path)
 		if err != nil || info.IsDir() {

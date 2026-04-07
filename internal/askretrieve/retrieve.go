@@ -72,8 +72,8 @@ const (
 	exampleTestWorkflowsRoot  = "test/workflows/"
 	exampleTestScenariosRoot  = exampleTestWorkflowsRoot + "scenarios/"
 	exampleTestComponentsRoot = exampleTestWorkflowsRoot + "components/"
-	exampleTestPreparePath    = exampleTestWorkflowsRoot + "prepare.yaml"
-	exampleTestVarsPath       = exampleTestWorkflowsRoot + "vars.yaml"
+	exampleTestPreparePath    = exampleTestWorkflowsRoot + workspacepaths.CanonicalPrepareWorkflowRel
+	exampleTestVarsPath       = exampleTestWorkflowsRoot + workspacepaths.WorkflowVarsRel
 )
 
 func InspectWorkspace(root string) (WorkspaceSummary, error) {
@@ -228,7 +228,7 @@ func workspaceFactChunks(route askintent.Route, lowerPrompt string, target askin
 		if strings.Contains(lowerPrompt, strings.ToLower(filepath.Base(file.Path))) {
 			score += 30
 		}
-		if strings.Contains(file.Path, "workflows/scenarios/") {
+		if workspacepaths.IsScenarioAuthoringPath(file.Path) {
 			score += 10
 		}
 		chunks = append(chunks, Chunk{
@@ -277,7 +277,7 @@ func shouldIncludeWorkspaceFacts(route askintent.Route, lowerPrompt string, targ
 	if strings.HasPrefix(cleanTarget, "workflows/") {
 		return true
 	}
-	for _, token := range []string{"workflows/", "scenario", "component", "vars.yaml", "prepare.yaml", "apply.yaml"} {
+	for _, token := range []string{workspacepaths.WorkflowRootDir + "/", "scenario", "component", workspacepaths.WorkflowVarsRel, workspacepaths.CanonicalPrepareWorkflowRel, filepath.Base(workspacepaths.CanonicalApplyWorkflowRel)} {
 		if strings.Contains(lowerPrompt, token) {
 			return true
 		}
@@ -397,7 +397,7 @@ func relatedWorkspaceTargets(workspace WorkspaceSummary, target askintent.Target
 		return nil
 	}
 	related := map[string]bool{targetPath: true}
-	if !strings.HasPrefix(targetPath, "workflows/scenarios/") {
+	if !workspacepaths.IsScenarioAuthoringPath(targetPath) {
 		return related
 	}
 	for _, importPath := range importPaths(current.Content) {

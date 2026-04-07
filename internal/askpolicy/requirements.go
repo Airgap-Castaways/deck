@@ -6,6 +6,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func InferOfflineAssumption(request string) string {
@@ -85,7 +86,9 @@ func RequirementsPromptBlock(req ScenarioRequirements) string {
 	b.WriteString(req.AcceptanceLevel)
 	b.WriteString("\n")
 	if req.AcceptanceLevel == "starter" {
-		b.WriteString("- starter preference: keep the first working draft minimal and avoid introducing workflows/components/ unless the request clearly requires reusable fragments\n")
+		b.WriteString("- starter preference: keep the first working draft minimal and avoid introducing ")
+		b.WriteString(workspacepaths.CanonicalComponentsDir)
+		b.WriteString("/ unless the request clearly requires reusable fragments\n")
 	}
 	if req.NeedsPrepare {
 		b.WriteString("- prepare required: yes\n")

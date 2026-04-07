@@ -12,6 +12,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/validate"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type Diagnostic struct {
@@ -67,11 +68,11 @@ func FromValidationError(err error, message string, bundle askknowledge.Bundle) 
 	if strings.Contains(lower, "imports.0") && strings.Contains(lower, "expected: object") {
 		appendDiag(Diagnostic{Code: "import_shape", Severity: "blocking", Path: "phases[].imports[]", Message: "phase import must be an object with path", Expected: "{path: component.yaml}", Actual: "string import entry", SourceRef: "workflow import rule", SuggestedFix: "Use imports entries like `- path: check-host.yaml`."})
 	}
-	if strings.Contains(lower, "additional property version is not allowed") && strings.Contains(lower, "workflows/components/") {
-		appendDiag(Diagnostic{Code: "component_fragment_shape", Severity: "blocking", File: "workflows/components/*.yaml", Message: "component fragment includes workflow-level fields", Expected: "fragment object with top-level steps only", Actual: "full workflow document with version/phases", Allowed: bundle.Components.AllowedRootKeys, SourceRef: "deck-component-fragment.schema.json", SuggestedFix: "Keep component files as fragment documents with a top-level `steps:` key only."})
+	if strings.Contains(lower, "additional property version is not allowed") && strings.Contains(lower, workspacepaths.CanonicalComponentsDir+"/") {
+		appendDiag(Diagnostic{Code: "component_fragment_shape", Severity: "blocking", File: workspacepaths.CanonicalComponentsDir + "/*.yaml", Message: "component fragment includes workflow-level fields", Expected: "fragment object with top-level steps only", Actual: "full workflow document with version/phases", Allowed: bundle.Components.AllowedRootKeys, SourceRef: "deck-component-fragment.schema.json", SuggestedFix: "Keep component files as fragment documents with a top-level `steps:` key only."})
 	}
-	if strings.Contains(lower, "invalid type. expected: object, given: array") && strings.Contains(lower, "workflows/components/") {
-		appendDiag(Diagnostic{Code: "component_fragment_shape", Severity: "blocking", File: "workflows/components/*.yaml", Message: "component fragment was emitted as a bare YAML array", Expected: "YAML object", Actual: "array", Allowed: bundle.Components.AllowedRootKeys, SourceRef: "deck-component-fragment.schema.json", SuggestedFix: "Wrap component steps under a top-level `steps:` mapping."})
+	if strings.Contains(lower, "invalid type. expected: object, given: array") && strings.Contains(lower, workspacepaths.CanonicalComponentsDir+"/") {
+		appendDiag(Diagnostic{Code: "component_fragment_shape", Severity: "blocking", File: workspacepaths.CanonicalComponentsDir + "/*.yaml", Message: "component fragment was emitted as a bare YAML array", Expected: "YAML object", Actual: "array", Allowed: bundle.Components.AllowedRootKeys, SourceRef: "deck-component-fragment.schema.json", SuggestedFix: "Wrap component steps under a top-level `steps:` mapping."})
 	}
 	if strings.Contains(lower, "is not supported for role prepare") {
 		appendDiag(Diagnostic{Code: "role_support", Severity: "blocking", Message: "step kind is not supported for prepare", Expected: "prepare-supported typed step", Actual: "unsupported step kind for prepare", SourceRef: "workflow step role declarations", SuggestedFix: "Use a typed prepare step such as DownloadImage or DownloadPackage for artifact collection."})

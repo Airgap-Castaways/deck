@@ -287,7 +287,7 @@ func roleForPath(path string) string {
 	switch {
 	case path == workspacepaths.CanonicalPrepareWorkflow:
 		return "prepare"
-	case strings.HasPrefix(path, "workflows/scenarios/"):
+	case workspacepaths.IsScenarioAuthoringPath(path):
 		return "apply"
 	default:
 		return ""

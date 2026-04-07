@@ -12,6 +12,8 @@ const (
 	WorkflowComponentsDir       = "components"
 	CanonicalScenariosDir       = WorkflowRootDir + "/" + WorkflowScenariosDir
 	CanonicalComponentsDir      = WorkflowRootDir + "/" + WorkflowComponentsDir
+	CanonicalScenariosPrefix    = CanonicalScenariosDir + "/"
+	CanonicalComponentsPrefix   = CanonicalComponentsDir + "/"
 	CanonicalPrepareWorkflowRel = "prepare.yaml"
 	CanonicalApplyWorkflowRel   = "scenarios/apply.yaml"
 	WorkflowVarsRel             = "vars.yaml"
@@ -95,10 +97,42 @@ func IsAllowedAuthoringPath(path string) bool {
 	if clean == "" || strings.Contains(clean, "..") {
 		return false
 	}
-	return clean == CanonicalPrepareWorkflow ||
-		clean == CanonicalVarsWorkflow ||
-		strings.HasPrefix(clean, WorkflowRootDir+"/"+WorkflowScenariosDir+"/") ||
-		strings.HasPrefix(clean, WorkflowRootDir+"/"+WorkflowComponentsDir+"/")
+	return IsCanonicalPrepareWorkflowPath(clean) ||
+		IsCanonicalVarsWorkflowPath(clean) ||
+		IsScenarioAuthoringPath(clean) ||
+		IsComponentAuthoringPath(clean)
+}
+
+func IsCanonicalPrepareWorkflowPath(path string) bool {
+	clean := filepath.ToSlash(strings.TrimSpace(path))
+	if clean == "" {
+		return false
+	}
+	return clean == CanonicalPrepareWorkflow || strings.HasSuffix(clean, "/"+CanonicalPrepareWorkflow)
+}
+
+func IsCanonicalVarsWorkflowPath(path string) bool {
+	clean := filepath.ToSlash(strings.TrimSpace(path))
+	if clean == "" {
+		return false
+	}
+	return clean == CanonicalVarsWorkflow || strings.HasSuffix(clean, "/"+CanonicalVarsWorkflow)
+}
+
+func IsScenarioAuthoringPath(path string) bool {
+	clean := filepath.ToSlash(strings.TrimSpace(path))
+	if clean == "" {
+		return false
+	}
+	return strings.HasPrefix(clean, CanonicalScenariosPrefix) || strings.Contains(clean, "/"+CanonicalScenariosPrefix)
+}
+
+func IsComponentAuthoringPath(path string) bool {
+	clean := filepath.ToSlash(strings.TrimSpace(path))
+	if clean == "" {
+		return false
+	}
+	return strings.HasPrefix(clean, CanonicalComponentsPrefix) || strings.Contains(clean, "/"+CanonicalComponentsPrefix)
 }
 
 func IsCanonicalPreparedPath(rel string) bool {

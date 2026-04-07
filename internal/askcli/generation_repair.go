@@ -9,6 +9,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func isYAMLParseFailure(message string) bool {
@@ -99,7 +100,7 @@ func targetedRepairPromptBlock(prevFiles []askcontract.GeneratedFile, diags []as
 	b.WriteString("- Keep rendered workflow structure stable: preserve top-level keys, list structure, and unaffected phases or steps unless a diagnostic requires a precise change.\n")
 	b.WriteString("- Do not rewrite every document from scratch when only one targeted structural change is needed.\n")
 	if hasComponentRepairTarget(prevFiles, repairPaths) {
-		b.WriteString("- If repeated schema failures are isolated to `workflows/components/`, you may collapse that logic back into the nearest entry workflow first, then re-extract components after the draft validates.\n")
+		_, _ = fmt.Fprintf(b, "- If repeated schema failures are isolated to `%s/`, you may collapse that logic back into the nearest entry workflow first, then re-extract components after the draft validates.\n", workspacepaths.CanonicalComponentsDir)
 	}
 	b.WriteString("- Return structured documents, not raw file payloads. Revised documents may omit unaffected files because the caller preserves them.\n")
 	if len(affected) > 0 {
@@ -135,12 +136,12 @@ func targetedRepairPromptBlock(prevFiles []askcontract.GeneratedFile, diags []as
 
 func hasComponentRepairTarget(prevFiles []askcontract.GeneratedFile, repairPaths []string) bool {
 	for _, path := range repairPaths {
-		if strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(path)), "workflows/components/") {
+		if workspacepaths.IsComponentAuthoringPath(path) {
 			return true
 		}
 	}
 	for _, file := range prevFiles {
-		if strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(file.Path)), "workflows/components/") {
+		if workspacepaths.IsComponentAuthoringPath(file.Path) {
 			return true
 		}
 	}

@@ -118,7 +118,7 @@ func resolveExplainTarget(workspace askretrieve.WorkspaceSummary, target askinte
 		if strings.Contains(lowerPrompt, lowerPath) || strings.Contains(lowerPrompt, base) || (name != "" && strings.Contains(lowerPrompt, name)) {
 			kind := "component"
 			switch {
-			case strings.HasPrefix(filepath.ToSlash(file.Path), "workflows/scenarios/"):
+			case workspacepaths.IsScenarioAuthoringPath(file.Path):
 				kind = "scenario"
 			case filepath.ToSlash(file.Path) == workspacepaths.CanonicalVarsWorkflow:
 				kind = "vars"
@@ -148,10 +148,10 @@ func describeWorkspaceFile(workspace askretrieve.WorkspaceSummary, file askretri
 	if err := yaml.Unmarshal([]byte(file.Content), &doc); err != nil {
 		return filepath.Base(file.Path) + " explanation", fmt.Sprintf("%s exists, but it could not be parsed locally: %v", file.Path, err)
 	}
-	if strings.HasPrefix(cleanPath, "workflows/scenarios/") {
+	if workspacepaths.IsScenarioAuthoringPath(cleanPath) {
 		return describeScenarioFile(workspace, file, doc)
 	}
-	if strings.HasPrefix(cleanPath, "workflows/components/") {
+	if workspacepaths.IsComponentAuthoringPath(cleanPath) {
 		return describeComponentFile(file, doc)
 	}
 	return filepath.Base(file.Path) + " explanation", fmt.Sprintf("%s is present in the workspace.", file.Path)
@@ -229,7 +229,7 @@ func describeScenarioFile(workspace askretrieve.WorkspaceSummary, file askretrie
 		b.WriteString("This file fits into the prepare path for assembling offline artifacts and package inputs. ")
 	}
 	for _, importPath := range dedupe(imports) {
-		resolved := "workflows/components/" + strings.TrimPrefix(filepath.ToSlash(importPath), "./")
+		resolved := filepath.ToSlash(filepath.Join(workspacepaths.CanonicalComponentsDir, strings.TrimPrefix(filepath.ToSlash(importPath), "./")))
 		for _, related := range workspace.Files {
 			if filepath.ToSlash(related.Path) == resolved {
 				b.WriteString("Related component available: ")

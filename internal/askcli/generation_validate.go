@@ -204,13 +204,13 @@ func requiredFixesForValidation(message string) []string {
 		fixes = append(fixes, "Use phase imports as objects like `imports: [{path: check-host.yaml}]` rather than bare strings")
 	}
 	if strings.Contains(lower, "additional property version is not allowed") {
-		fixes = append(fixes, "Do not add workflow-level fields like version to component fragments under workflows/components/. Component files should usually contain only a top-level steps mapping")
+		fixes = append(fixes, fmt.Sprintf("Do not add workflow-level fields like version to component fragments under %s/. Component files should usually contain only a top-level steps mapping", workspacepaths.CanonicalComponentsDir))
 	}
 	if strings.Contains(lower, "invalid type. expected: object, given: array") {
 		fixes = append(fixes, "Do not make a component file a bare YAML array. Component files should be YAML objects, usually with a top-level steps: key")
 	}
-	if strings.Contains(lower, "workflows/components/") {
-		fixes = append(fixes, "For starter drafts, avoid generating workflows/components/ unless reusable fragments are clearly required; inline the first working version into prepare/apply instead")
+	if strings.Contains(lower, workspacepaths.CanonicalComponentsDir+"/") {
+		fixes = append(fixes, fmt.Sprintf("For starter drafts, avoid generating %s/ unless reusable fragments are clearly required; inline the first working version into prepare/apply instead", workspacepaths.CanonicalComponentsDir))
 		fixes = append(fixes, fmt.Sprintf("If component fragments keep failing validation, collapse them back into %s or %s first, then extract reusable components after validation passes", workspacepaths.CanonicalPrepareWorkflow, workspacepaths.CanonicalApplyWorkflow))
 	}
 	if strings.Contains(lower, "command") && strings.Contains(lower, "is not supported for role prepare") {

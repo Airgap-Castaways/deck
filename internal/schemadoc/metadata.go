@@ -1,12 +1,14 @@
 package schemadoc
 
 import (
+	"fmt"
 	"maps"
 	"sort"
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
 	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type FieldDoc struct {
@@ -121,7 +123,7 @@ func WorkflowMeta() PageMetadata {
 			"A workflow must define at least one of `phases` or `steps`.",
 			"A workflow cannot define both top-level `phases` and top-level `steps` at the same time.",
 			"Top-level `steps` execute as an implicit phase named `default`.",
-			"Imports are only supported under `phases[].imports` and resolve from `workflows/components/`.",
+			fmt.Sprintf("Imports are only supported under `phases[].imports` and resolve from `%s/`.", workspacepaths.CanonicalComponentsDir),
 			"When a step omits `apiVersion`, deck resolves it from the top-level workflow `version` before schema and role checks run.",
 			"Workflow mode is determined by command context or file location, not by an in-file `role` field.",
 			"Each step still validates against its own kind-specific schema after the top-level workflow schema passes.",
@@ -158,13 +160,13 @@ func ToolDefinitionMeta() PageMetadata {
 func ComponentFragmentMeta() PageMetadata {
 	return PageMetadata{
 		Title:   "Component Fragment Schema",
-		Summary: "Reference for reusable workflow component fragments located under `workflows/components/`.",
+		Summary: fmt.Sprintf("Reference for reusable workflow component fragments located under `%s/`.", workspacepaths.CanonicalComponentsDir),
 		Example: "steps:\n  - id: write-config\n    kind: WriteFile\n    spec:\n      path: /etc/example.conf\n      content: hello\n  - id: restart-service\n    kind: ManageService\n    spec:\n      name: example\n      state: restarted\n",
 		FieldDocs: map[string]FieldDoc{
 			"steps": {Description: "Ordered list of workflow steps contained in this fragment.", Example: "[{id:example,kind:Command,spec:{...}}]"},
 		},
 		Notes: []string{
-			"Component fragments are stored in the `workflows/components/` directory of your workspace.",
+			fmt.Sprintf("Component fragments are stored in the `%s/` directory of your workspace.", workspacepaths.CanonicalComponentsDir),
 			"They contain only a `steps:` list and follow a restricted schema compared to full scenarios.",
 			"Fragments are imported into a scenario phase using `phases[].imports`.",
 			"The surrounding Workspace Layout documentation explains how component fragments fit into the standard project structure.",

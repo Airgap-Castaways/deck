@@ -202,7 +202,7 @@ func scenarioPaths(root string, candidatePaths []string) []string {
 	seen := map[string]bool{}
 	for _, rel := range candidatePaths {
 		clean := filepath.ToSlash(strings.TrimSpace(rel))
-		if !strings.HasPrefix(clean, "workflows/scenarios/") {
+		if !workspacepaths.IsScenarioAuthoringPath(clean) {
 			continue
 		}
 		path := filepath.Join(root, filepath.FromSlash(clean))
@@ -613,9 +613,9 @@ func semanticCritic(gen askcontract.GenerationResponse, decision askintent.Decis
 			critic.Blocking = append(critic.Blocking, err.Error())
 			critic.RequiredFixes = append(critic.RequiredFixes, "Keep generated files under allowed workflow paths only")
 		}
-		if strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(file.Path)), "workflows/scenarios/") {
+		if workspacepaths.IsScenarioAuthoringPath(file.Path) {
 			for _, importPath := range localImportPaths(file.Content) {
-				resolved := filepath.ToSlash(filepath.Join("workflows/components", importPath))
+				resolved := filepath.ToSlash(filepath.Join(workspacepaths.CanonicalComponentsDir, importPath))
 				if _, ok := generated[resolved]; !ok {
 					critic.Blocking = append(critic.Blocking, fmt.Sprintf("scenario imports missing component: %s -> %s", file.Path, resolved))
 					critic.InvalidImports = append(critic.InvalidImports, resolved)
@@ -627,13 +627,13 @@ func semanticCritic(gen askcontract.GenerationResponse, decision askintent.Decis
 	generatedScenarioRefs := map[string]bool{}
 	for _, file := range gen.Files {
 		for _, importPath := range localImportPaths(file.Content) {
-			generatedScenarioRefs[filepath.ToSlash(filepath.Join("workflows/components", importPath))] = true
+			generatedScenarioRefs[filepath.ToSlash(filepath.Join(workspacepaths.CanonicalComponentsDir, importPath))] = true
 		}
 	}
 	semanticFindings := append([]askpolicy.EvaluationFinding{}, planConformance.Findings...)
 	for _, file := range gen.Files {
 		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if strings.HasPrefix(clean, "workflows/components/") && !generatedScenarioRefs[clean] {
+		if workspacepaths.IsComponentAuthoringPath(clean) && !generatedScenarioRefs[clean] {
 			semanticFindings = append(semanticFindings, askpolicy.EvaluationFinding{Severity: "advisory", Code: "orphan_component", Message: fmt.Sprintf("generated component has no scenario import: %s", clean), Path: clean})
 		}
 	}

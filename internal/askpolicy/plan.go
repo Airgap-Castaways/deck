@@ -58,7 +58,7 @@ func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askre
 		filtered := make([]askcontract.PlanFile, 0, len(plan.Files))
 		for _, file := range plan.Files {
 			clean := filepath.ToSlash(strings.TrimSpace(file.Path))
-			if strings.HasPrefix(clean, "workflows/components/") {
+			if workspacepaths.IsComponentAuthoringPath(clean) {
 				continue
 			}
 			filtered = append(filtered, file)
@@ -78,7 +78,7 @@ func pruneUnsatisfiableDraftComponentPlan(plan askcontract.PlanResponse, decisio
 	blockedComponents := map[string]bool{}
 	for _, file := range plan.Files {
 		path := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if strings.HasPrefix(path, "workflows/components/") && len(askcatalog.Current().BuildersForPath(path)) == 0 {
+		if workspacepaths.IsComponentAuthoringPath(path) && len(askcatalog.Current().BuildersForPath(path)) == 0 {
 			blockedComponents[path] = true
 			continue
 		}
@@ -311,9 +311,9 @@ func applyClarificationAnswers(plan askcontract.PlanResponse) askcontract.PlanRe
 		switch {
 		case path == workspacepaths.CanonicalVarsWorkflow:
 			plan.AuthoringBrief.TargetScope = "vars"
-		case strings.HasPrefix(path, "workflows/components/"):
+		case workspacepaths.IsComponentAuthoringPath(path):
 			plan.AuthoringBrief.TargetScope = "component"
-		case strings.HasPrefix(path, "workflows/scenarios/") || path == workspacepaths.CanonicalPrepareWorkflow:
+		case workspacepaths.IsScenarioAuthoringPath(path) || path == workspacepaths.CanonicalPrepareWorkflow:
 			if len(plan.AuthoringBrief.TargetPaths) > 1 {
 				plan.AuthoringBrief.TargetScope = "workspace"
 			} else {
@@ -621,30 +621,30 @@ func dedupeSharedStateContractModel(model askcontract.ExecutionModel) askcontrac
 
 func normalizeEntryScenario(current string, req ScenarioRequirements, files []askcontract.PlanFile, brief askcontract.AuthoringBrief, decision askintent.Decision) string {
 	candidates := []string{}
-	if clean := filepath.ToSlash(strings.TrimSpace(current)); strings.HasPrefix(clean, "workflows/scenarios/") {
+	if clean := filepath.ToSlash(strings.TrimSpace(current)); workspacepaths.IsScenarioAuthoringPath(clean) {
 		candidates = append(candidates, clean)
 	}
-	if clean := filepath.ToSlash(strings.TrimSpace(decision.Target.Path)); strings.HasPrefix(clean, "workflows/scenarios/") {
+	if clean := filepath.ToSlash(strings.TrimSpace(decision.Target.Path)); workspacepaths.IsScenarioAuthoringPath(clean) {
 		candidates = append(candidates, clean)
 	}
-	if clean := filepath.ToSlash(strings.TrimSpace(req.EntryScenario)); strings.HasPrefix(clean, "workflows/scenarios/") {
+	if clean := filepath.ToSlash(strings.TrimSpace(req.EntryScenario)); workspacepaths.IsScenarioAuthoringPath(clean) {
 		candidates = append(candidates, clean)
 	}
 	for _, path := range brief.AnchorPaths {
 		clean := filepath.ToSlash(strings.TrimSpace(path))
-		if strings.HasPrefix(clean, "workflows/scenarios/") {
+		if workspacepaths.IsScenarioAuthoringPath(clean) {
 			candidates = append(candidates, clean)
 		}
 	}
 	for _, path := range brief.TargetPaths {
 		clean := filepath.ToSlash(strings.TrimSpace(path))
-		if strings.HasPrefix(clean, "workflows/scenarios/") {
+		if workspacepaths.IsScenarioAuthoringPath(clean) {
 			candidates = append(candidates, clean)
 		}
 	}
 	for _, file := range files {
 		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if strings.HasPrefix(clean, "workflows/scenarios/") {
+		if workspacepaths.IsScenarioAuthoringPath(clean) {
 			candidates = append(candidates, clean)
 		}
 	}
@@ -1214,7 +1214,7 @@ func askcontractPathAllowed(path string) bool {
 	if strings.HasSuffix(path, "/") || filepath.Ext(path) == "" {
 		return false
 	}
-	return strings.HasPrefix(path, "workflows/scenarios/") || strings.HasPrefix(path, "workflows/components/")
+	return workspacepaths.IsScenarioAuthoringPath(path) || workspacepaths.IsComponentAuthoringPath(path)
 }
 
 func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.GenerationResponse, decision askintent.Decision) EvaluationResult {
@@ -1245,7 +1245,7 @@ func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.Gene
 			if action != "" && action != "update" && action != "create" {
 				findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "invalid_planned_action", Message: fmt.Sprintf("invalid planned action for %s", clean), Path: clean})
 			}
-			if action == "update" && strings.HasPrefix(clean, "workflows/scenarios/") && strings.Contains(strings.ToLower(clean), "apply") {
+			if action == "update" && workspacepaths.IsScenarioAuthoringPath(clean) && strings.Contains(strings.ToLower(filepath.Base(clean)), "apply") {
 				findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "refine_updates_entry", Message: fmt.Sprintf("refine updates existing entry scenario: %s", clean), Path: clean})
 			}
 		}
