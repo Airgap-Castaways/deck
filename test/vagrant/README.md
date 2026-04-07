@@ -88,7 +88,7 @@ bash test/e2e/vagrant/run-scenario.sh --scenario k8s-node-reset
 
 - 새 유지보수나 문서 갱신은 `test/e2e/vagrant/run-scenario.sh`와 `test/workflows/*`를 기준으로 한다.
 
-## Periodic CI
+## 정기 CI
 
 - 주기 실행 워크플로는 `.github/workflows/vagrant-periodic.yml`이다.
 - nightly 기본 시나리오 세트는 `k8s-control-plane-bootstrap`, `k8s-worker-join`이다.
