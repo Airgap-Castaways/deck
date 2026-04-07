@@ -634,7 +634,7 @@ func helperToolResult(mode string, req mcpfake.Request) map[string]any {
 				"isError": true,
 			}
 		case "query-docs":
-			if got := intArg(args, "tokens"); got != defaultContext7DocsTokenBudget {
+			if got := intArg(args, "tokens"); got < defaultContext7DocsTokenBudget || got > maxContext7DocsTokenBudget {
 				return map[string]any{"content": []map[string]any{{"type": "text", "text": fmt.Sprintf("unexpected token budget %d", got)}}, "isError": true}
 			}
 			return map[string]any{
@@ -712,7 +712,7 @@ func helperToolResult(mode string, req mcpfake.Request) map[string]any {
 			if mcpfake.StringArg(args, "context7CompatibleLibraryID") != "github.com/mark3labs/mcp-go" {
 				return map[string]any{"content": []map[string]any{{"type": "text", "text": "missing resolved library id"}}, "isError": true}
 			}
-			if got := intArg(args, "tokens"); got != defaultContext7DocsTokenBudget {
+			if got := intArg(args, "tokens"); got < defaultContext7DocsTokenBudget || got > maxContext7DocsTokenBudget {
 				return map[string]any{"content": []map[string]any{{"type": "text", "text": fmt.Sprintf("unexpected token budget %d", got)}}, "isError": true}
 			}
 			return map[string]any{

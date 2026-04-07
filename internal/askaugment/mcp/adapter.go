@@ -266,7 +266,7 @@ func buildResolveArgs(tool mcp.Tool, prompt string) map[string]any {
 func buildContext7DocsArgs(tool mcp.Tool, route askintent.Route, prompt string, libraryID string) map[string]any {
 	args := map[string]any{}
 	query := strings.TrimSpace(prompt)
-	budget := context7DocsTokenBudget(route, prompt)
+	budget := context7DocsTokenBudget(route, query)
 	if strings.EqualFold(strings.TrimSpace(tool.Name), "query-docs") && strings.TrimSpace(libraryID) == "" {
 		query = libraryQueryFromPrompt(prompt)
 	}
@@ -286,12 +286,12 @@ func buildContext7DocsArgs(tool mcp.Tool, route askintent.Route, prompt string, 
 	return args
 }
 
-func context7DocsTokenBudget(route askintent.Route, prompt string) int {
+func context7DocsTokenBudget(route askintent.Route, query string) int {
 	budget := defaultContext7DocsTokenBudget
 	if route == askintent.RouteDraft {
 		budget = draftContext7DocsTokenBudget
 	}
-	if len([]rune(strings.TrimSpace(prompt))) > context7LongPromptRuneLimit {
+	if len([]rune(query)) > context7LongPromptRuneLimit {
 		budget += context7LongPromptBudgetBump
 	}
 	if budget > maxContext7DocsTokenBudget {
