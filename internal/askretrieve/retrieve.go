@@ -516,8 +516,8 @@ func exampleReferenceChunks(route askintent.Route, lowerPrompt string) []Chunk {
 		return nil
 	}
 	candidates := []string{
-		filepath.Join(root, "docs", "guides", "examples"),
-		filepath.Join(root, "test", "workflows"),
+		filepath.Join(root, filepath.FromSlash(strings.TrimSuffix(exampleDocsGuidesRoot, "/"))),
+		filepath.Join(root, filepath.FromSlash(strings.TrimSuffix(exampleTestWorkflowsRoot, "/"))),
 	}
 	out := make([]Chunk, 0, 8)
 	for _, dir := range candidates {
