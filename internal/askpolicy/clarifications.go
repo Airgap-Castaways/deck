@@ -34,7 +34,7 @@ func refineCompanionClarifications(prompt string, decision askintent.Decision, w
 	if mentionsVarsRefine(lower) && !containsString(explicitPaths, workspacepaths.CanonicalVarsWorkflow) {
 		items = append(items, askcontract.PlanClarification{
 			ID:                 "refine.companionVars",
-			Question:           "This refine request mentions vars or repeated values, but it does not explicitly allow workflows/vars.yaml to change. Should the refactor be allowed to edit workflows/vars.yaml too?",
+			Question:           fmt.Sprintf("This refine request mentions vars or repeated values, but it does not explicitly allow %s to change. Should the refactor be allowed to edit %s too?", workspacepaths.CanonicalVarsWorkflow, workspacepaths.CanonicalVarsWorkflow),
 			Kind:               "enum",
 			Reason:             "Refine keeps anchor files stable and only edits companion files when they are explicitly approved.",
 			Decision:           "scope",

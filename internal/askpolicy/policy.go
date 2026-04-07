@@ -274,7 +274,7 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 	executionModel := plan.ExecutionModel
 	if strings.TrimSpace(brief.ModeIntent) == "prepare+apply" {
 		if len(preparePathsFromGeneration(gen.Files)) == 0 {
-			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_prepare_missing", Message: "request expects both prepare and apply workflows but generated output is missing workflows/prepare.yaml", Fix: "Return both a prepare workflow and at least one apply scenario when the request asks for prepare and apply", Path: workspacepaths.CanonicalPrepareWorkflow})
+			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_prepare_missing", Message: fmt.Sprintf("request expects both prepare and apply workflows but generated output is missing %s", workspacepaths.CanonicalPrepareWorkflow), Fix: "Return both a prepare workflow and at least one apply scenario when the request asks for prepare and apply", Path: workspacepaths.CanonicalPrepareWorkflow})
 		}
 		if len(scenarioLikePathsWithName(gen.Files, "apply")) == 0 {
 			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_apply_missing", Message: "request expects both prepare and apply workflows but generated output is missing an apply scenario", Fix: "Return a scenario entrypoint under workflows/scenarios/ for apply execution", Path: workspacepaths.CanonicalApplyWorkflow})
@@ -388,7 +388,7 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 		}
 	}
 	if req.NeedsPrepare && len(preparePaths) == 0 {
-		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_prepare", Message: "artifact-requiring request is missing workflows/prepare.yaml", Fix: "Add workflows/prepare.yaml when packages, images, binaries, or bundles must be prepared before apply", Path: workspacepaths.CanonicalPrepareWorkflow})
+		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_prepare", Message: fmt.Sprintf("artifact-requiring request is missing %s", workspacepaths.CanonicalPrepareWorkflow), Fix: "Add workflows/prepare.yaml when packages, images, binaries, or bundles must be prepared before apply", Path: workspacepaths.CanonicalPrepareWorkflow})
 	}
 	if req.NeedsPrepare && len(req.ArtifactKinds) > 0 && len(preparePaths) > 0 {
 		generated := generatedMap(gen.Files)

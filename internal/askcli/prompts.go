@@ -221,16 +221,16 @@ func refineTransformPromptBlock(plan askcontract.PlanResponse, brief askcontract
 		b.WriteString("\n")
 	}
 	b.WriteString("- Primary refine generation should use `edit` actions with code-owned transforms. Candidate ids are preferred when available; otherwise include explicit raw paths. Full replacement documents are fallback-only.\n")
-	b.WriteString("- Prefer `transforms` with type `extract-var` for repeated literal extraction into workflows/vars.yaml when the request is about hoisting repeated values.\n")
+	b.WriteString(fmt.Sprintf("- Prefer `transforms` with type `extract-var` for repeated literal extraction into %s when the request is about hoisting repeated values.\n", workspacepaths.CanonicalVarsWorkflow))
 	b.WriteString("- Prefer `transforms` with type `set-field` or `delete-field` for narrow step field changes instead of broad document rewrites.\n")
 	b.WriteString("- Prefer `transforms` with type `extract-component` when moving inline phase steps into workflows/components/ while preserving the scenario phase layout.\n")
 	b.WriteString("- Do not use model-authored `replace` output on the primary refine path.\n")
 	if promptContainsTrimmed(paths, workspacepaths.CanonicalVarsWorkflow) {
-		b.WriteString("- When extracting repeated values into workflows/vars.yaml, update the scenario file and vars file together as one transform.\n")
+		b.WriteString(fmt.Sprintf("- When extracting repeated values into %s, update the scenario file and vars file together as one transform.\n", workspacepaths.CanonicalVarsWorkflow))
 	}
-	b.WriteString("- For `extract-var`, put the variable key in `varName`. Use `varsPath` only for the companion file path such as `workflows/vars.yaml`.\n")
+	b.WriteString(fmt.Sprintf("- For `extract-var`, put the variable key in `varName`. Use `varsPath` only for the companion file path such as `%s`.\n", workspacepaths.CanonicalVarsWorkflow))
 	if len(plan.VarsRecommendation) > 0 {
-		b.WriteString("- Only extract values into workflows/vars.yaml when they are explicitly recommended or genuinely repeated. Keep other literals inline.\n")
+		b.WriteString(fmt.Sprintf("- Only extract values into %s when they are explicitly recommended or genuinely repeated. Keep other literals inline.\n", workspacepaths.CanonicalVarsWorkflow))
 	}
 	if len(paths) > 1 {
 		b.WriteString("- Keep cross-file transforms coordinated: do not update one target path while silently dropping required companion edits in another approved target path.\n")
@@ -260,7 +260,7 @@ func promptContainsTrimmed(values []string, want string) bool {
 
 func generationResponseShapeRule(route askintent.Route) string {
 	if route == askintent.RouteRefine {
-		return "JSON shape: {\"summary\":string,\"review\":[]string,\"documents\":[{\"path\":string,\"kind\":string,\"action\":string,\"transforms\":[{\"type\":string,\"candidate\":string?,\"rawPath\":string?,\"value\":any?,\"varName\":string?,\"varsPath\":string?,\"path\":string?}]}]}. For `extract-var`, `varName` is the variable key and `varsPath` is only the file path like `workflows/vars.yaml`. On the primary refine path, use actions preserve|delete|edit and prefer transform candidate ids over raw paths."
+		return fmt.Sprintf("JSON shape: {\"summary\":string,\"review\":[]string,\"documents\":[{\"path\":string,\"kind\":string,\"action\":string,\"transforms\":[{\"type\":string,\"candidate\":string?,\"rawPath\":string?,\"value\":any?,\"varName\":string?,\"varsPath\":string?,\"path\":string?}]}]}. For `extract-var`, `varName` is the variable key and `varsPath` is only the file path like `%s`. On the primary refine path, use actions preserve|delete|edit and prefer transform candidate ids over raw paths.", workspacepaths.CanonicalVarsWorkflow)
 	}
 	return "JSON shape: {\"summary\":string,\"review\":[]string,\"selection\":{\"patterns\":[]string,\"targets\":[{\"path\":string,\"kind\":string,\"builders\":[{\"id\":string,\"overrides\":object}],\"vars\":object}],\"vars\":object}}. On the primary draft path, return builder selection only and let code compile the workflow documents."
 }

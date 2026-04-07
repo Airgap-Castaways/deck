@@ -1238,7 +1238,7 @@ func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.Gene
 	}
 	if planRequiresVarsFile(plan) {
 		if _, ok := generated[workspacepaths.CanonicalVarsWorkflow]; !ok {
-			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "vars_required_by_checklist", Message: "validation checklist requires vars but workflows/vars.yaml was not generated", Path: workspacepaths.CanonicalVarsWorkflow})
+			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "vars_required_by_checklist", Message: fmt.Sprintf("validation checklist requires vars but %s was not generated", workspacepaths.CanonicalVarsWorkflow), Path: workspacepaths.CanonicalVarsWorkflow})
 		}
 	}
 	if decision.Route == askintent.RouteRefine && len(planned) > 0 {
@@ -1283,11 +1283,11 @@ func planRequiresVarsFile(plan askcontract.PlanResponse) bool {
 // judge, repair, and post-processing instead of stopping planning.
 func ValidatePlanStructure(plan askcontract.PlanResponse) error {
 	if plan.NeedsPrepare && !containsPlannedPath(plan.Files, workspacepaths.CanonicalPrepareWorkflow) {
-		return fmt.Errorf("plan response requires prepare but does not include workflows/prepare.yaml")
+		return fmt.Errorf("plan response requires prepare but does not include %s", workspacepaths.CanonicalPrepareWorkflow)
 	}
 	if strings.TrimSpace(plan.AuthoringBrief.ModeIntent) == "prepare+apply" {
 		if !containsPlannedPath(plan.Files, workspacepaths.CanonicalPrepareWorkflow) {
-			return fmt.Errorf("plan response authoring brief requires prepare+apply but does not include workflows/prepare.yaml")
+			return fmt.Errorf("plan response authoring brief requires prepare+apply but does not include %s", workspacepaths.CanonicalPrepareWorkflow)
 		}
 		if entry := strings.TrimSpace(plan.EntryScenario); entry == "" || !containsPlannedPath(plan.Files, entry) {
 			return fmt.Errorf("plan response authoring brief requires prepare+apply with a scenario entrypoint")
