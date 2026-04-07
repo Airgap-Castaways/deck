@@ -12,6 +12,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/errcode"
 	"github.com/Airgap-Castaways/deck/internal/executil"
+	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 	"github.com/Airgap-Castaways/deck/internal/stepspec"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
@@ -88,8 +89,9 @@ func runTimedCommandSpecWithContext(parent context.Context, cmdArgs []string, en
 	}
 	// #nosec G204 -- Command intentionally executes the workflow-provided command vector.
 	command := exec.CommandContext(ctx, commandArgs[0], commandArgs[1:]...)
-	command.Stdout = stdout
-	command.Stderr = stderr
+	decoratedStdout, decoratedStderr := ctrllogs.WrapCLISubprocessWriters(subprocessCommandName(commandArgs), stdout, stderr)
+	command.Stdout = decoratedStdout
+	command.Stderr = decoratedStderr
 	if len(env) > 0 {
 		command.Env = os.Environ()
 		for key, value := range env {
@@ -114,6 +116,16 @@ func runTimedCommandSpecWithContext(parent context.Context, cmdArgs []string, en
 		return context.Canceled
 	}
 	return err
+}
+
+func subprocessCommandName(commandArgs []string) string {
+	if len(commandArgs) == 0 {
+		return ""
+	}
+	if strings.TrimSpace(commandArgs[0]) == "sudo" && len(commandArgs) > 1 {
+		return strings.TrimSpace(commandArgs[1])
+	}
+	return strings.TrimSpace(commandArgs[0])
 }
 
 func runCommandOutputWithContext(parent context.Context, cmdArgs []string, timeout time.Duration) (string, error) {

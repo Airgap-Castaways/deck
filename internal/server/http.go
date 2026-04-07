@@ -88,7 +88,7 @@ func writeAccessLog(w io.Writer, start time.Time, r *http.Request, rw *statusRec
 	} else if rw.status >= http.StatusBadRequest {
 		level = "warn"
 	}
-	line, err := ctrllogs.RenderDefaultCLI(ctrllogs.CLIEvent{
+	if err := ctrllogs.WriteCLIEvent(w, ctrllogs.CLIEvent{
 		TS:        start.UTC(),
 		Level:     level,
 		Component: "server",
@@ -102,9 +102,7 @@ func writeAccessLog(w io.Writer, start time.Time, r *http.Request, rw *statusRec
 			"bytes":       rw.bytes,
 			"duration_ms": time.Since(start).Milliseconds(),
 		},
-	})
-	if err != nil {
-		line = ctrllogs.FormatCLIText(ctrllogs.CLIEvent{TS: start.UTC(), Level: "error", Component: "server", Event: "log_render_failed", Attrs: map[string]any{"error": err.Error(), "original_event": "request"}})
+	}); err != nil {
+		_ = ctrllogs.WriteCLIEvent(w, ctrllogs.CLIEvent{TS: start.UTC(), Level: "error", Component: "server", Event: "log_write_failed", Attrs: map[string]any{"error": err.Error(), "original_event": "request"}})
 	}
-	_, _ = fmt.Fprintf(w, "%s\n", line)
 }

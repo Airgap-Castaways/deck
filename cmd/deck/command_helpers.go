@@ -137,6 +137,7 @@ func setCLIWriters(stdout io.Writer, stderr io.Writer) {
 	}
 	cliStdout = stdout
 	cliStderr = stderr
+	refreshCLIStyle()
 }
 
 func setCLILogFormat(format string) {
@@ -146,6 +147,11 @@ func setCLILogFormat(format string) {
 	}
 	cliLogFormat = resolved
 	ctrllogs.SetCLIFormat(resolved)
+	refreshCLIStyle()
+}
+
+func refreshCLIStyle() {
+	ctrllogs.SetCLIColorEnabled(cliLogFormat == "text" && (ctrllogs.WriterSupportsANSI(cliStderr) || ctrllogs.WriterSupportsANSI(cliStdout)))
 }
 
 func stdoutWriter() io.Writer {
@@ -164,30 +170,15 @@ func setCLIVerbosity(level int) {
 }
 
 func formatCLIEvent(event ctrllogs.CLIEvent) string {
-	line, err := ctrllogs.RenderDefaultCLI(event)
-	if err != nil {
-		return ctrllogs.FormatCLIText(ctrllogs.CLIEvent{
-			TS:        event.TS,
-			Level:     "error",
-			Component: "cli",
-			Event:     "log_render_failed",
-			Attrs: map[string]any{
-				"error": err.Error(),
-				"event": event.Event,
-			},
-		})
-	}
-	return line
+	return ctrllogs.RenderCLIOrFallback(event)
 }
 
 func stderrCLIEvent(event ctrllogs.CLIEvent) error {
-	_, err := fmt.Fprintf(cliStderr, "%s\n", formatCLIEvent(event))
-	return err
+	return ctrllogs.WriteCLIEvent(cliStderr, event)
 }
 
 func stdoutCLIEvent(event ctrllogs.CLIEvent) error {
-	_, err := fmt.Fprintf(stdoutWriter(), "%s\n", formatCLIEvent(event))
-	return err
+	return ctrllogs.WriteCLIEvent(stdoutWriter(), event)
 }
 
 func verboseCLIEvent(level int, event ctrllogs.CLIEvent) error {

@@ -127,11 +127,7 @@ func (l askLogger) emit(required string, level string, event string, attrs ...an
 	if !l.enabled(required) {
 		return
 	}
-	line, err := logs.RenderDefaultCLI(logs.CLIEvent{TS: time.Now().UTC(), Level: level, Component: "ask", Event: strings.TrimSpace(event), Attrs: askLogFields(attrs...)})
-	if err != nil {
-		line = logs.FormatCLIText(logs.CLIEvent{TS: time.Now().UTC(), Level: "error", Component: "ask", Event: "log_render_failed", Attrs: map[string]any{"error": err.Error(), "original_event": strings.TrimSpace(event)}})
-	}
-	_, _ = fmt.Fprintf(l.writer, "%s\n", line)
+	_ = logs.WriteCLIEvent(l.writer, logs.CLIEvent{TS: time.Now().UTC(), Level: level, Component: "ask", Event: strings.TrimSpace(event), Attrs: askLogFields(attrs...)})
 	l.flush()
 }
 

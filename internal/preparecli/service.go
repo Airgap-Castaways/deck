@@ -210,19 +210,8 @@ func Run(ctx context.Context, opts Options) error {
 	return printLine(opts.Stdout, fmt.Sprintf("prepare: ok (%s)", preparedRoot.Abs()))
 }
 
-func emitDiagnostic(opts Options, level int, format string, args ...any) error {
-	if opts.Diagnosticf == nil {
-		return nil
-	}
-	return opts.Diagnosticf(level, format, args...)
-}
-
 func emitDiagnosticEvent(opts Options, level int, event logs.CLIEvent) error {
-	line, err := logs.RenderDefaultCLI(event)
-	if err != nil {
-		line = logs.FormatCLIText(logs.CLIEvent{Level: "error", Component: "prepare", Event: "log_render_failed", Attrs: map[string]any{"error": err.Error(), "original_event": event.Event}})
-	}
-	return emitDiagnostic(opts, level, "%s\n", line)
+	return logs.EmitCLIEventf(opts.Diagnosticf, level, event)
 }
 
 func workflowIncludeCount(prepareWorkflowPath, varsWorkflowPath, applyWorkflowPath string) int {

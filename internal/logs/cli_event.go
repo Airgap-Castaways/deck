@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	cliFormatMu      sync.RWMutex
-	defaultCLIFormat = "text"
+	cliFormatMu            sync.RWMutex
+	defaultCLIFormat       = "text"
+	defaultCLIColorEnabled bool
 )
 
 var reservedCLIAttrKeys = map[string]struct{}{
@@ -35,14 +36,19 @@ type CLIEvent struct {
 
 func FormatCLIText(event CLIEvent) string {
 	normalized := normalizeCLIEvent(event)
+	tsKeyCode, tsValueCode := cliFieldCodes("ts", normalized.TS.Format(time.RFC3339Nano))
+	levelKeyCode, levelValueCode := cliFieldCodes("level", normalized.Level)
+	componentKeyCode, componentValueCode := cliFieldCodes("component", normalized.Component)
+	eventKeyCode, eventValueCode := cliFieldCodes("event", normalized.Event)
 	parts := []string{
-		formatCLIKeyValue("ts", normalized.TS.Format(time.RFC3339Nano)),
-		formatCLIKeyValue("level", normalized.Level),
-		formatCLIKeyValue("component", normalized.Component),
-		formatCLIKeyValue("event", normalized.Event),
+		colorizeCLIField("ts", normalized.TS.Format(time.RFC3339Nano), tsKeyCode, tsValueCode),
+		colorizeCLIField("level", normalized.Level, levelKeyCode, levelValueCode),
+		colorizeCLIField("component", normalized.Component, componentKeyCode, componentValueCode),
+		colorizeCLIField("event", normalized.Event, eventKeyCode, eventValueCode),
 	}
 	if normalized.Message != "" {
-		parts = append(parts, formatCLIKeyValue("message", normalized.Message))
+		messageKeyCode, messageValueCode := cliFieldCodes("message", normalized.Message)
+		parts = append(parts, colorizeCLIField("message", normalized.Message, messageKeyCode, messageValueCode))
 	}
 	keys := make([]string, 0, len(normalized.Attrs))
 	for key := range normalized.Attrs {
@@ -50,7 +56,8 @@ func FormatCLIText(event CLIEvent) string {
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		parts = append(parts, formatCLIKeyValue(key, normalized.Attrs[key]))
+		keyCode, valueCode := cliFieldCodes(key, normalized.Attrs[key])
+		parts = append(parts, colorizeCLIField(key, normalized.Attrs[key], keyCode, valueCode))
 	}
 	return strings.Join(parts, " ")
 }
@@ -177,10 +184,6 @@ func normalizeCLIAttrValue(value any) any {
 		return strings.TrimSpace(err.Error())
 	}
 	return value
-}
-
-func formatCLIKeyValue(key string, value any) string {
-	return key + "=" + formatCLIValue(value)
 }
 
 func formatCLIValue(value any) string {
