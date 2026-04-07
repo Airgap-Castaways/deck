@@ -138,6 +138,10 @@ func runDownloadFileItem(ctx context.Context, bundleRoot string, decoded prepare
 	if err != nil {
 		return "", err
 	}
+	if remoteCheck != nil && remoteCheck.response != nil {
+		respBody := remoteCheck.response.Body
+		defer func() { _ = respBody.Close() }()
+	}
 	if reuse {
 		return outPath, nil
 	}
@@ -189,6 +193,7 @@ func runDownloadFileItem(ctx context.Context, bundleRoot string, decoded prepare
 			if err != nil {
 				return "", err
 			}
+			remoteCheck = nil
 			sidecar = &meta
 		} else {
 			meta, err := downloadURLToFile(ctx, f, url, nil)
@@ -223,9 +228,13 @@ func runDownloadFileItem(ctx context.Context, bundleRoot string, decoded prepare
 	}
 	published = true
 	if sidecar != nil {
-		sidecar.LocalSHA256, err = fileSHA256(target)
-		if err != nil {
-			return "", fmt.Errorf("compute downloaded file checksum: %w", err)
+		if expectedSHA != "" {
+			sidecar.LocalSHA256 = expectedSHA
+		} else {
+			sidecar.LocalSHA256, err = fileSHA256(target)
+			if err != nil {
+				return "", fmt.Errorf("compute downloaded file checksum: %w", err)
+			}
 		}
 		if err := writeDownloadFileSidecar(target, *sidecar); err != nil {
 			return "", err
@@ -276,7 +285,7 @@ func openPreparedDownloadRequest(ctx context.Context, url string, headers http.H
 	if client == nil {
 		client = httpfetch.Client(httpfetch.DefaultTimeout)
 	}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:bodyclose // Response body ownership transfers to the caller.
 	if err != nil {
 		return nil, fmt.Errorf("download %s: %w", url, err)
 	}
@@ -296,7 +305,6 @@ func writePreparedDownloadResponse(target *os.File, check *downloadFileRemoteChe
 	if check == nil || check.response == nil {
 		return downloadFileSidecarMetadata{}, fmt.Errorf("download response is nil")
 	}
-	defer func() { _ = check.response.Body.Close() }()
 	if check.response.StatusCode < 200 || check.response.StatusCode >= 300 {
 		return downloadFileSidecarMetadata{}, fmt.Errorf("download %s: unexpected status %d", check.metadata.URL, check.response.StatusCode)
 	}
@@ -351,12 +359,10 @@ func resolveSourceBytesFromSpec(ctx context.Context, spec prepareDownloadFileIte
 }
 
 func verifyFileSHA256(path, expected string) error {
-	raw, err := fsutil.ReadFile(path)
+	actual, err := fileSHA256(path)
 	if err != nil {
 		return fmt.Errorf("read downloaded file for checksum: %w", err)
 	}
-	sum := sha256.Sum256(raw)
-	actual := hex.EncodeToString(sum[:])
 	if !strings.EqualFold(actual, expected) {
 		return errcode.Newf(errCodePrepareChecksumMismatch, "expected %s got %s", expected, actual)
 	}
@@ -384,12 +390,16 @@ func inferDownloadFileName(sourcePath, sourceURL string) string {
 }
 
 func fileSHA256(path string) (string, error) {
-	raw, err := fsutil.ReadFile(path)
+	f, err := os.Open(path) //nolint:gosec // Hashing an already-selected local artifact path.
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:]), nil
+	defer func() { _ = f.Close() }()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func canReuseDownloadFile(ctx context.Context, spec prepareDownloadFileItemSpec, target string, opts RunOptions) (bool, *downloadFileRemoteCheck, error) {
@@ -432,7 +442,7 @@ func canReuseDownloadFile(ctx context.Context, spec prepareDownloadFileItemSpec,
 		if !strings.EqualFold(targetSHA, meta.LocalSHA256) {
 			return false, nil, nil
 		}
-		if strings.TrimSpace(meta.ETag) == "" && strings.TrimSpace(meta.LastModified) == "" {
+		if spec.Fetch.OfflineOnly || (strings.TrimSpace(meta.ETag) == "" && strings.TrimSpace(meta.LastModified) == "") {
 			return true, nil, nil
 		}
 		headers := http.Header{}

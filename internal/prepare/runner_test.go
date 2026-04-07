@@ -1147,6 +1147,53 @@ func TestRun_DownloadFileRemoteValidatorChangeTriggersRedownload(t *testing.T) {
 	}
 }
 
+func TestRun_DownloadFileOfflineOnlySkipsRemoteValidatorCheck(t *testing.T) {
+	bundle := t.TempDir()
+	var mu sync.Mutex
+	requests := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests++
+		mu.Unlock()
+		w.Header().Set("ETag", `"artifact-v1"`)
+		w.Header().Set("Last-Modified", "Tue, 07 Apr 2026 07:00:00 GMT")
+		_, _ = io.WriteString(w, "payload-1")
+	}))
+	defer server.Close()
+
+	stepSpec := map[string]any{
+		"source":     map[string]any{"url": server.URL + "/artifact.bin"},
+		"outputPath": "files/out.bin",
+	}
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{{
+				ID:   "download-file",
+				Kind: "DownloadFile",
+				Spec: stepSpec,
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
+		t.Fatalf("first Run failed: %v", err)
+	}
+	stepSpec["fetch"] = map[string]any{"offlineOnly": true}
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
+		t.Fatalf("second Run failed: %v", err)
+	}
+
+	mu.Lock()
+	gotRequests := requests
+	mu.Unlock()
+	if gotRequests != 1 {
+		t.Fatalf("expected offlineOnly reuse to skip remote validator checks, got %d requests", gotRequests)
+	}
+}
+
 func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 	bundle := t.TempDir()
 	localCache := t.TempDir()
