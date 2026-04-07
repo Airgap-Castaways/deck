@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+
+DECK_LIBVIRT_ENV_RESTORE_SHELL_OPTS="$(set +o)"
 set -euo pipefail
 
 DECK_BACKUP_ROOT="${DECK_BACKUP_ROOT:-}"
@@ -78,7 +80,7 @@ prepare_libvirt_environment() {
 
   if ! command -v virsh >/dev/null 2>&1; then
     echo "[deck] virsh command not found"
-    exit 1
+    return 1
   fi
 
   pool_name_default=0
@@ -130,7 +132,7 @@ PY
     fi
 
     echo "[deck] libvirt pool path mismatch: name=${DECK_LIBVIRT_POOL_NAME} expected=${DECK_LIBVIRT_POOL_PATH}"
-    exit 1
+    return 1
   done
 
   "${virsh_cmd[@]}" pool-build "${DECK_LIBVIRT_POOL_NAME}" >/dev/null 2>&1 || true
@@ -198,7 +200,7 @@ EOF
 
   if ! command -v vagrant >/dev/null 2>&1; then
     echo "[deck] vagrant command not found"
-    exit 1
+    return 1
   fi
 
   if ! vagrant plugin list | grep -q '^vagrant-libvirt '; then
@@ -217,3 +219,6 @@ EOF
   export LIBVIRT_DEFAULT_STORAGE_POOL="${DECK_LIBVIRT_POOL_NAME}"
   export LIBVIRT_DEFAULT_URI="${DECK_LIBVIRT_URI}"
 }
+
+eval "${DECK_LIBVIRT_ENV_RESTORE_SHELL_OPTS}"
+unset DECK_LIBVIRT_ENV_RESTORE_SHELL_OPTS
