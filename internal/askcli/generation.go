@@ -63,7 +63,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 				repairDiags = append(repairDiags, askdiagnostic.FromPlanCritic(planCritic)...)
 				repairDiags = append(repairDiags, askdiagnostic.FromCritic(lastCritic)...)
 				logger.trace("repair_diagnostics", "phase", "repair", "content", askdiagnostic.JSON(repairDiags))
-				if decision.Route == askintent.RouteDraft && !legacyAuthoringFallbackEnabled() {
+				if decision.Route == askintent.RouteDraft {
 					currentPrompt = draftSelectionRetryPrompt(req.Prompt, lastValidation, repairDiags)
 				} else {
 					currentSystemPrompt = strings.TrimSpace(req.SystemPrompt) + "\n\n" + documentRepairSystemPrompt(normalizedAuthoringBrief(plan, brief), plan)
@@ -117,7 +117,7 @@ func generateWithValidation(ctx context.Context, client askprovider.Client, req 
 			}
 			return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation returned invalid JSON: %s", lastValidation)
 		}
-		if err := validatePrimaryAuthoringContract(decision.Route, gen, attempt); err != nil {
+		if err := validatePrimaryAuthoringContract(decision.Route, gen); err != nil {
 			lastValidation = err.Error()
 			return askcontract.GenerationResponse{}, nil, lastValidation, lastCritic, lastJudge, attempt - 1, fmt.Errorf("ask generation stopped without repair: %s", lastValidation)
 		}

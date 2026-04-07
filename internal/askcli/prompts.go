@@ -134,7 +134,7 @@ func generationSystemPrompt(route askintent.Route, target askintent.Target, requ
 	if route == askintent.RouteDraft {
 		b.WriteString("- For draft generation, use `selection.targets[].builders` as the primary path and set only documented override keys.\n")
 		b.WriteString("- Do not author arbitrary typed step specs on the primary draft path. Let code assemble documents from the selected builders.\n")
-		b.WriteString("- Do not return `documents` for draft generation unless an explicit migration fallback is enabled by the caller.\n")
+		b.WriteString("- Do not return `documents` for draft generation. Return builder selection only.\n")
 	}
 	b.WriteString("- Never place summary, description, or review fields inside workflow YAML content.\n")
 	b.WriteString("- Keep the file set minimal unless the request explicitly requires more files or the workspace already depends on them.\n")
@@ -220,7 +220,7 @@ func refineTransformPromptBlock(plan askcontract.PlanResponse, brief askcontract
 		b.WriteString(strings.Join(paths, ", "))
 		b.WriteString("\n")
 	}
-	b.WriteString("- Primary refine generation should use `edit` actions with code-owned transforms. Candidate ids are preferred when available; otherwise include explicit raw paths. Full replacement documents are fallback-only.\n")
+	b.WriteString("- Primary refine generation should use `edit` actions with code-owned transforms. Candidate ids are preferred when available; otherwise include explicit raw paths. Full replacement documents are not allowed.\n")
 	_, _ = fmt.Fprintf(b, "- Prefer `transforms` with type `extract-var` for repeated literal extraction into %s when the request is about hoisting repeated values.\n", workspacepaths.CanonicalVarsWorkflow)
 	b.WriteString("- Prefer `transforms` with type `set-field` or `delete-field` for narrow step field changes instead of broad document rewrites.\n")
 	_, _ = fmt.Fprintf(b, "- Prefer `transforms` with type `extract-component` when moving inline phase steps into %s/ while preserving the scenario phase layout.\n", workspacepaths.CanonicalComponentsDir)
@@ -639,7 +639,6 @@ func authoringBriefPromptBlock(brief askcontract.AuthoringBrief) string {
 	appendLine("completeness target", brief.CompletenessTarget)
 	appendLine("topology", brief.Topology)
 	appendLine("platform family", brief.PlatformFamily)
-	appendLine("escape hatch mode", brief.EscapeHatchMode)
 	if brief.NodeCount > 0 {
 		appendLine("node count", fmt.Sprintf("%d", brief.NodeCount))
 	}

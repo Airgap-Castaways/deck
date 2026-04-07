@@ -131,6 +131,8 @@ Draft no longer treats the model as the author of raw `step.spec` payloads.
   - constants declared in metadata
 - Code assembles workflow steps and documents from those bindings.
 
+There is no longer a legacy free-form document fallback on the draft path. Retries must stay inside builder selection rather than switching to open-ended YAML or document authoring.
+
 If a builder cannot produce a valid required binding, compilation fails with a structured error instead of letting a malformed step leak into output.
 
 ## Refine path
@@ -141,6 +143,8 @@ Refine is selection-based as well.
 - Code computes candidate transforms that are in scope for the requested anchor files.
 - The model selects transform candidates by id.
 - Code applies the selected transforms and re-renders documents.
+
+There is no longer a legacy full-document rewrite fallback on the refine path. Retries must stay inside structured edit documents with code-owned transforms.
 
 Refine should keep anchor files stable and only expand into allowed companion files declared by plan policy.
 

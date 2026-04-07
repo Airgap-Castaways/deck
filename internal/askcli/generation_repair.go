@@ -27,7 +27,7 @@ func jsonResponseRetryPrompt(basePrompt string, validation string, route askinte
 	b.WriteString("\n\nThe previous response was not valid JSON for the required document generation schema. Re-emit the full response as strict JSON only.\n")
 	b.WriteString("Do not add commentary, markdown fences, or unsupported action names.\n")
 	if route == askintent.RouteRefine {
-		b.WriteString("For refine routes, use only actions preserve|replace|create|edit|delete.\n")
+		b.WriteString("For refine routes, use only actions preserve|edit|delete.\n")
 	}
 	b.WriteString("Previous parse error:\n")
 	b.WriteString(strings.TrimSpace(validation))

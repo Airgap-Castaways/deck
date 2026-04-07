@@ -343,9 +343,6 @@ func applyClarificationAnswers(plan askcontract.PlanResponse) askcontract.PlanRe
 	if answer := byID["runtime.platformFamily"]; answer != "" {
 		plan.AuthoringBrief.PlatformFamily = strings.TrimSpace(answer)
 	}
-	if answer := byID["coverage.escapeHatch"]; answer != "" {
-		plan.AuthoringBrief.EscapeHatchMode = strings.TrimSpace(answer)
-	}
 	plan = reconcilePlanTopology(plan)
 	return plan
 }
@@ -1124,9 +1121,6 @@ func normalizeAuthoringBrief(brief askcontract.AuthoringBrief, fallback askcontr
 	}
 	if strings.TrimSpace(brief.PlatformFamily) != "" {
 		brief.PlatformFamily = strings.ToLower(strings.TrimSpace(brief.PlatformFamily))
-	}
-	if strings.TrimSpace(brief.EscapeHatchMode) != "" {
-		brief.EscapeHatchMode = strings.ToLower(strings.TrimSpace(brief.EscapeHatchMode))
 	}
 	brief.RequiredCapabilities = normalizeCapabilities(brief.RequiredCapabilities, fallback.RequiredCapabilities)
 	if len(brief.RequiredCapabilities) == 0 {
