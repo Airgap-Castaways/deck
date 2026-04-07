@@ -1245,7 +1245,7 @@ func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.Gene
 			if action != "" && action != "update" && action != "create" {
 				findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "invalid_planned_action", Message: fmt.Sprintf("invalid planned action for %s", clean), Path: clean})
 			}
-			if action == "update" && workspacepaths.IsScenarioAuthoringPath(clean) && strings.Contains(strings.ToLower(clean), "apply") {
+			if action == "update" && workspacepaths.IsScenarioAuthoringPath(clean) && strings.Contains(strings.ToLower(filepath.Base(clean)), "apply") {
 				findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "refine_updates_entry", Message: fmt.Sprintf("refine updates existing entry scenario: %s", clean), Path: clean})
 			}
 		}

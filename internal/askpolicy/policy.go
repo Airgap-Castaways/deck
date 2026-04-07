@@ -863,7 +863,7 @@ func scenarioLikePathsWithName(files []askcontract.GeneratedFile, name string) [
 	name = strings.ToLower(strings.TrimSpace(name))
 	for _, file := range files {
 		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if workspacepaths.IsScenarioAuthoringPath(clean) && strings.Contains(strings.ToLower(clean), name) {
+		if workspacepaths.IsScenarioAuthoringPath(clean) && strings.Contains(strings.ToLower(filepath.Base(clean)), name) {
 			paths = append(paths, clean)
 		}
 	}
