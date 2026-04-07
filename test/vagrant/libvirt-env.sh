@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-DECK_LIBVIRT_ENV_RESTORE_SHELL_OPTS="$(set +o)"
-set -euo pipefail
-
 DECK_BACKUP_ROOT="${DECK_BACKUP_ROOT:-}"
 DECK_LIBVIRT_POOL_NAME_EXPLICIT="${DECK_LIBVIRT_POOL_NAME:-}"
 DECK_LIBVIRT_POOL_NAME="${DECK_LIBVIRT_POOL_NAME:-deck}"
@@ -26,6 +23,11 @@ DECK_LIBVIRT_POOL_PATH="${DECK_LIBVIRT_POOL_PATH:-${DECK_BACKUP_ROOT}/libvirt/po
 DECK_VAGRANT_HOME="${DECK_VAGRANT_HOME:-${DECK_BACKUP_ROOT}/vagrant/home}"
 
 prepare_libvirt_environment() {
+  local restore_shell_opts
+  restore_shell_opts="$(set +o)"
+  trap 'eval "${restore_shell_opts}"; trap - RETURN' RETURN
+  set -euo pipefail
+
   local uri="${DECK_LIBVIRT_URI}"
   local -a virsh_cmd=(virsh -c "${uri}")
 
@@ -219,6 +221,3 @@ EOF
   export LIBVIRT_DEFAULT_STORAGE_POOL="${DECK_LIBVIRT_POOL_NAME}"
   export LIBVIRT_DEFAULT_URI="${DECK_LIBVIRT_URI}"
 }
-
-eval "${DECK_LIBVIRT_ENV_RESTORE_SHELL_OPTS}"
-unset DECK_LIBVIRT_ENV_RESTORE_SHELL_OPTS

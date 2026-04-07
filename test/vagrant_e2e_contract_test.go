@@ -50,7 +50,7 @@ func TestPrepareLibvirtEnvironmentReturnsInsteadOfExiting(t *testing.T) {
 	if err := os.WriteFile(virshPath, []byte(stub), 0o755); err != nil {
 		t.Fatalf("write virsh stub: %v", err)
 	}
-	cmd := exec.Command("bash", "-lc", "PATH='"+stubDir+":/usr/bin:/bin'; source '"+scriptPath+"'; prepare_libvirt_environment; rc=$?; printf 'rc=%s\nafter\n' \"${rc}\"")
+	cmd := exec.Command("bash", "-lc", "set +e +u; set +o pipefail; PATH='"+stubDir+":/usr/bin:/bin'; source '"+scriptPath+"'; prepare_libvirt_environment; rc=$?; printf 'rc=%s\nafter\n' \"${rc}\"; set -o | grep -E 'errexit|nounset|pipefail'")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("prepare_libvirt_environment should return to caller: %v\n%s", err, string(out))
@@ -61,6 +61,15 @@ func TestPrepareLibvirtEnvironmentReturnsInsteadOfExiting(t *testing.T) {
 	}
 	if !strings.Contains(got, "rc=1") || !strings.Contains(got, "after") {
 		t.Fatalf("expected function return without shell exit, got %q", got)
+	}
+	fields := strings.Fields(got)
+	if len(fields) < 12 {
+		t.Fatalf("unexpected shell option output after function call: %q", got)
+	}
+	for i := len(fields) - 6; i < len(fields); i += 2 {
+		if fields[i+1] != "off" {
+			t.Fatalf("expected %s to remain off after function call, got %q", fields[i], got)
+		}
 	}
 }
 
