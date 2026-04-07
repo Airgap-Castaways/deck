@@ -31,3 +31,17 @@ func TestDiscoverCandidateStepsUsesPublicGroupTitles(t *testing.T) {
 	}
 	t.Fatalf("expected CheckHost candidate for host prep prompt, got %#v", selected)
 }
+
+func TestDiscoverCandidateStepsUsesHyphenatedGroupIDs(t *testing.T) {
+	selected := DiscoverCandidateStepsWithOptions("use the host-prep group for node prerequisites", StepGuidanceOptions{ModeIntent: "apply-only"})
+	for _, item := range selected {
+		if item.Step.Kind != "CheckHost" {
+			continue
+		}
+		if !strings.Contains(item.WhyRelevant, "Host Prep group") {
+			t.Fatalf("expected hyphenated group id to map to public group reason, got %#v", item)
+		}
+		return
+	}
+	t.Fatalf("expected CheckHost candidate for hyphenated group prompt, got %#v", selected)
+}

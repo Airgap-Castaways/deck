@@ -72,7 +72,7 @@ func build() (Catalog, error) {
 		steps[workflowMeta.Kind] = Step{
 			Kind:                     workflowMeta.Kind,
 			Category:                 workflowMeta.Category,
-			Group:                    workflowMeta.Group,
+			Group:                    strings.TrimSpace(workflowMeta.Group),
 			GroupTitle:               strings.TrimSpace(groupMeta.Title),
 			Summary:                  toolMeta.Summary,
 			WhenToUse:                toolMeta.WhenToUse,
