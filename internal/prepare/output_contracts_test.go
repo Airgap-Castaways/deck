@@ -115,12 +115,3 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 func coverageKey(kind, output string) string {
 	return kind + ":" + output
 }
-
-func contains(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}

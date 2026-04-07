@@ -17,7 +17,7 @@ func ProjectRuntimeOutputsForKind(kind string, rendered map[string]any, runtime 
 		return nil, err
 	}
 	if !ok {
-		return nil, fmt.Errorf("missing stepmeta registration for %s", strings.TrimSpace(kind))
+		return nil, fmt.Errorf("missing stepmeta registration for %q", strings.TrimSpace(kind))
 	}
 	return ProjectRuntimeOutputs(entry, rendered, runtime, opts), nil
 }
@@ -197,6 +197,11 @@ func stringListValue(values map[string]any, key string) []string {
 
 func stringList(raw any) []string {
 	switch typed := raw.(type) {
+	case string:
+		if trimmed := strings.TrimSpace(typed); trimmed != "" {
+			return []string{trimmed}
+		}
+		return nil
 	case []string:
 		out := make([]string, 0, len(typed))
 		for _, item := range typed {

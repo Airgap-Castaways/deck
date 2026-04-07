@@ -52,3 +52,14 @@ func TestProjectRuntimeOutputsForKindDoesNotInventArtifactsForOtherFamilies(t *t
 		t.Fatalf("did not expect synthetic artifacts output, got %#v", outputs["artifacts"])
 	}
 }
+
+func TestProjectRuntimeOutputsForKindAcceptsSingleStringListValues(t *testing.T) {
+	outputs, err := stepmeta.ProjectRuntimeOutputsForKind("ManageService", map[string]any{"names": "containerd"}, nil, stepmeta.RuntimeOutputOptions{})
+	if err != nil {
+		t.Fatalf("ProjectRuntimeOutputsForKind(ManageService): %v", err)
+	}
+	names, ok := outputs["names"].([]string)
+	if !ok || len(names) != 1 || names[0] != "containerd" {
+		t.Fatalf("expected names slice from single string, got %#v", outputs["names"])
+	}
+}
