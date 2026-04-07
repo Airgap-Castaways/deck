@@ -107,8 +107,6 @@ func CategoryForEntry(entry Entry) string {
 		return "packages"
 	case "wait":
 		return "control-flow"
-	case "host-check", "kernel-module", "service", "swap", "sysctl", "systemd-unit":
-		return "system"
 	default:
 		return "system"
 	}
