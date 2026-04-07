@@ -67,6 +67,15 @@ type RetrievalResult struct {
 	MaxBytes int
 }
 
+const (
+	exampleDocsGuidesRoot     = "docs/guides/examples/"
+	exampleTestWorkflowsRoot  = "test/workflows/"
+	exampleTestScenariosRoot  = exampleTestWorkflowsRoot + "scenarios/"
+	exampleTestComponentsRoot = exampleTestWorkflowsRoot + "components/"
+	exampleTestPreparePath    = exampleTestWorkflowsRoot + "prepare.yaml"
+	exampleTestVarsPath       = exampleTestWorkflowsRoot + "vars.yaml"
+)
+
 func InspectWorkspace(root string) (WorkspaceSummary, error) {
 	resolvedRoot, err := filepath.Abs(strings.TrimSpace(root))
 	if err != nil {
@@ -507,8 +516,8 @@ func exampleReferenceChunks(route askintent.Route, lowerPrompt string) []Chunk {
 		return nil
 	}
 	candidates := []string{
-		filepath.Join(root, "docs", "user-guide", "examples"),
-		filepath.Join(root, "test", "workflows"),
+		filepath.Join(root, filepath.FromSlash(strings.TrimSuffix(exampleDocsGuidesRoot, "/"))),
+		filepath.Join(root, filepath.FromSlash(strings.TrimSuffix(exampleTestWorkflowsRoot, "/"))),
 	}
 	out := make([]Chunk, 0, 8)
 	for _, dir := range candidates {
@@ -570,14 +579,20 @@ func exampleChunkScore(prompt string, path string, content string) int {
 			score += 12
 		}
 	}
-	if strings.Contains(path, "docs/user-guide/examples/") {
-		score += 4
+	if strings.HasPrefix(path, exampleDocsGuidesRoot) {
+		score += 6
 	}
-	if strings.Contains(path, "test/workflows/") {
+	if strings.HasPrefix(path, exampleTestWorkflowsRoot) {
 		score += 18
 	}
-	if strings.Contains(path, "scenarios/") {
+	if strings.HasPrefix(path, exampleTestScenariosRoot) {
 		score += 8
+	}
+	if strings.HasPrefix(path, exampleTestComponentsRoot) {
+		score += 4
+	}
+	if path == exampleTestPreparePath || path == exampleTestVarsPath {
+		score += 3
 	}
 	if strings.Contains(path, "upgrade") && !strings.Contains(prompt, "upgrade") {
 		score -= 20
@@ -610,11 +625,9 @@ func exampleChunkScore(prompt string, path string, content string) int {
 }
 
 func exampleChunkAllowed(path string, content string) bool {
-	text := strings.ToLower(path + "\n" + content)
-	if strings.Contains(path, "docs/user-guide/examples/") && strings.Contains(text, "apiversion: deck/") {
-		return false
-	}
-	return true
+	_ = content
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	return strings.HasPrefix(path, exampleDocsGuidesRoot) || strings.HasPrefix(path, exampleTestWorkflowsRoot)
 }
 
 func exampleChunkContent(path string, content string) string {
