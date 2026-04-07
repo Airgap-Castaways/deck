@@ -14,11 +14,19 @@ var _ = stepmeta.MustRegister[Command](stepmeta.Definition{
 	Roles:       []string{"apply"},
 	SchemaFile:  "command.schema.json",
 	SchemaPatch: stepmeta.PatchCommandToolSchema,
+	Summary:     "Run a narrowly scoped host command when no typed step models the action.",
+	WhenToUse:   "Use this only as an escape hatch for vendor tools, custom probes, or one-off local commands that do not map cleanly to an existing typed step.",
+	Example:     "kind: Command\nspec:\n  command: [/opt/vendor/bin/node-health, --quick]\n  timeout: 30s",
+	Notes: []string{
+		"Do not use `Command` for service management, directory creation, file copy, sysctl changes, swap control, kernel modules, archive extraction, or symlink creation when the typed steps already cover those actions.",
+		"Prefer a direct command vector over `sh -c` unless shell syntax is truly required.",
+		"Keep command steps small, explicit, and bounded with `spec.timeout`.",
+	},
 	Ask: stepmeta.AskMetadata{
 		Capabilities: []string{"escape-hatch"},
 		MatchSignals: []string{"shell", "command", "script", "escape hatch"},
 		KeyFields:    []string{"spec.command", "spec.env", "spec.sudo", "spec.timeout"},
-		QualityRules: []stepmeta.QualityRule{{Trigger: "typed-preferred", Message: "Prefer a typed step when one clearly matches the requested host action instead of using Command only.", Level: "advisory"}},
+		QualityRules: []stepmeta.QualityRule{{Trigger: "typed-preferred", Message: "Use Command only as an escape hatch. Prefer a typed step when one clearly matches the requested host action.", Level: "advisory"}},
 		AntiSignals:  []string{"typed", "typed steps", "where possible"},
 	},
 })

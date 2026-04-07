@@ -163,7 +163,7 @@ func ComponentFragmentMeta() PageMetadata {
 		Summary: fmt.Sprintf("Reference for reusable workflow component fragments located under `%s/`.", workspacepaths.CanonicalComponentsDir),
 		Example: "steps:\n  - id: write-config\n    kind: WriteFile\n    spec:\n      path: /etc/example.conf\n      content: hello\n  - id: restart-service\n    kind: ManageService\n    spec:\n      name: example\n      state: restarted\n",
 		FieldDocs: map[string]FieldDoc{
-			"steps": {Description: "Ordered list of workflow steps contained in this fragment.", Example: "[{id:example,kind:Command,spec:{...}}]"},
+			"steps": {Description: "Ordered list of workflow steps contained in this fragment.", Example: "[{id:write-config,kind:WriteFile,spec:{path:/etc/example.conf,content:hello}}]"},
 		},
 		Notes: []string{
 			fmt.Sprintf("Component fragments are stored in the `%s/` directory of your workspace.", workspacepaths.CanonicalComponentsDir),

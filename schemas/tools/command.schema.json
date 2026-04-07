@@ -2,7 +2,7 @@
   "$id": "https://deck.local/schemas/tools/command.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Run an explicit command as an escape hatch.",
+  "description": "Run a narrowly scoped host command when no typed step models the action.",
   "properties": {
     "apiVersion": {
       "const": "deck/v1alpha1",

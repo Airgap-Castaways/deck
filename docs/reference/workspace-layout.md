@@ -67,7 +67,7 @@ steps:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `steps` | `array<object>` | yes | `` | `` | Ordered list of workflow steps contained in this fragment. | `[{id:example,kind:Command,spec:{...}}]` |
+| `steps` | `array<object>` | yes | `` | `` | Ordered list of workflow steps contained in this fragment. | `[{id:write-config,kind:WriteFile,spec:{path:/etc/example.conf,content:hello}}]` |
 
 ##### Notes
 

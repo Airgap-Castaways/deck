@@ -38,6 +38,7 @@ func WorkflowInvariantNotes() []string {
 		workflowissues.MustSpec(workflowissues.CodeDuplicateStepID).Details,
 		workflowImportRule,
 		"Workflow mode is determined by command context or file location, not by an in-file role field.",
+		"Command is an escape hatch. Prefer typed steps for service, filesystem, archive, sysctl, swap, kernel-module, and symlink actions when deck already models them.",
 		"Each step still validates against its own kind-specific schema after the top-level workflow schema passes.",
 	}
 }

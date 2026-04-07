@@ -50,6 +50,6 @@ Use these pages when you are deciding which kind to author. For shared step enve
 ## [Advanced](groups/advanced.md)
 
 - **Summary**: Use escape-hatch steps only when no typed step clearly matches the requested action.
-- **When to use**: Start with typed groups first. Use this group only when the built-in typed steps do not fit the required host action.
+- **When to use**: Start with typed groups first. Use the advanced group only for vendor tools, custom probes, or one-off local commands that deck does not model directly.
 - **Kinds**: `Command`
 

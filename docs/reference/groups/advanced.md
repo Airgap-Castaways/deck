@@ -10,14 +10,14 @@ Use escape-hatch steps only when no typed step clearly matches the requested act
 
 ## When To Use This Group
 
-Start with typed groups first. Use this group only when the built-in typed steps do not fit the required host action.
+Start with typed groups first. Use the advanced group only for vendor tools, custom probes, or one-off local commands that deck does not model directly.
 
 ## Typical Flows
 
 ### Fallback path
 
 - kinds: `Command`
-- note: Prefer a typed step whenever one clearly fits.
+- note: Do not reimplement service, file, archive, sysctl, swap, kernel-module, or symlink actions with shell when typed steps already exist.
 
 ## Shared Step Fields
 
@@ -25,19 +25,19 @@ Shared step envelope fields such as `id`, `apiVersion`, `kind`, `when`, `paralle
 
 ## `Command`
 
-Run an explicit command as an escape hatch.
+Run a narrowly scoped host command when no typed step models the action.
 
 
 ### When To Use
 
-Use this only when no typed step expresses the change clearly enough.
+Use this only as an escape hatch for vendor tools, custom probes, or one-off local commands that do not map cleanly to an existing typed step.
 
 ### Example
 
 ```yaml
 kind: Command
 spec:
-  command: [systemctl, status, containerd]
+  command: [/opt/vendor/bin/node-health, --quick]
   timeout: 30s
 ```
 
@@ -52,8 +52,9 @@ spec:
 
 ### Notes
 
-- Prefer a typed step kind over `Command` whenever one is available.
-- Use `spec.timeout` to bound commands that may hang instead of relying only on the outer step timeout.
+- Do not use `Command` for service management, directory creation, file copy, sysctl changes, swap control, kernel modules, archive extraction, or symlink creation when the typed steps already cover those actions.
+- Prefer a direct command vector over `sh -c` unless shell syntax is truly required.
+- Keep command steps small, explicit, and bounded with `spec.timeout`.
 
 ## Related
 
