@@ -41,11 +41,7 @@ func StepDefinitions() ([]StepDefinition, error) {
 		if err != nil {
 			return nil, err
 		}
-		category, err := categoryForKind(kind)
-		if err != nil {
-			return nil, err
-		}
-		def, err := stepDefFromMeta(kind, generator, category)
+		def, err := stepDefFromMeta(kind, generator)
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +88,7 @@ func stepDef(kind, family, familyTitle, group string, groupOrder int, docsPage s
 	return def
 }
 
-func stepDefFromMeta(kind string, generator string, category string) (StepDefinition, error) {
+func stepDefFromMeta(kind string, generator string) (StepDefinition, error) {
 	entry, ok, err := stepmeta.LookupCatalogEntry(kind)
 	if err != nil {
 		return StepDefinition{}, fmt.Errorf("lookup step metadata for %s: %w", kind, err)
@@ -100,7 +96,7 @@ func stepDefFromMeta(kind string, generator string, category string) (StepDefini
 	if !ok {
 		return StepDefinition{}, fmt.Errorf("missing stepmeta registration for %s", kind)
 	}
-	projection := stepmeta.ProjectWorkflow(entry, category, generator)
+	projection := stepmeta.ProjectWorkflow(entry, generator)
 	return stepDef(
 		projection.Kind,
 		projection.Family,
@@ -128,40 +124,10 @@ func generatorForKind(kind string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("missing stepmeta registration for %s", kind)
 	}
-	projection := stepmeta.ProjectWorkflow(entry, "", "")
+	projection := stepmeta.ProjectWorkflow(entry, "")
 	schemaFile := strings.TrimSpace(projection.SchemaFile)
 	if strings.HasSuffix(schemaFile, ".schema.json") {
 		return strings.TrimSuffix(schemaFile, ".schema.json"), nil
 	}
 	return strings.ToLower(strings.TrimSpace(kind)), nil
-}
-
-func categoryForKind(kind string) (string, error) {
-	entry, ok, err := stepmeta.LookupCatalogEntry(kind)
-	if err != nil {
-		return "", fmt.Errorf("lookup step metadata for %s: %w", kind, err)
-	}
-	if !ok {
-		return "", fmt.Errorf("missing stepmeta registration for %s", kind)
-	}
-	switch strings.TrimSpace(entry.Definition.Family) {
-	case "command":
-		return "advanced", nil
-	case "containerd":
-		return "runtime", nil
-	case "directory", "file", "symlink":
-		return "filesystem", nil
-	case "image":
-		return "containers", nil
-	case "cluster-check", "kubeadm":
-		return "kubernetes", nil
-	case "package", "repository":
-		return "packages", nil
-	case "wait":
-		return "control-flow", nil
-	case "host-check", "kernel-module", "service", "swap", "sysctl", "systemd-unit":
-		return "system", nil
-	default:
-		return "system", nil
-	}
 }

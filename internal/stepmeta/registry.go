@@ -14,6 +14,7 @@ type Definition struct {
 	Kind        string
 	Family      string
 	FamilyTitle string
+	Category    string
 	Group       string
 	GroupOrder  int
 	DocsPage    string
@@ -220,6 +221,7 @@ func typeNameFor[T any]() string {
 
 func cloneDefinition(def Definition) Definition {
 	cloned := def
+	cloned.Category = strings.TrimSpace(def.Category)
 	cloned.Roles = append([]string(nil), def.Roles...)
 	cloned.Outputs = append([]string(nil), def.Outputs...)
 	cloned.Notes = append([]string(nil), def.Notes...)

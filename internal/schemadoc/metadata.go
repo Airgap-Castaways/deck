@@ -55,7 +55,7 @@ func ToolMetaForDefinition(def workflowcontract.StepDefinition) ToolMetadata {
 }
 
 func toolMetaFromStepMeta(def workflowcontract.StepDefinition, entry stepmeta.Entry) ToolMetadata {
-	projection := stepmeta.ProjectTool(entry, def.Category)
+	projection := stepmeta.ProjectTool(entry)
 	meta := ToolMetadata{
 		Kind:      projection.Kind,
 		Category:  projection.Category,

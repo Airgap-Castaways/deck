@@ -1,6 +1,9 @@
 package stepmeta
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 // StepCatalogEntry is the explicit source-of-truth entry consumed by workflow,
 // schema, docs, and ask projections.
@@ -44,11 +47,12 @@ type SchemaProjection struct {
 	Source   SourceRef
 }
 
-func ProjectWorkflow(entry Entry, category, generator string) WorkflowProjection {
+func ProjectWorkflow(entry Entry, generator string) WorkflowProjection {
 	roles := append([]string(nil), entry.Definition.Roles...)
 	outputs := append([]string(nil), entry.Definition.Outputs...)
 	sort.Strings(roles)
 	sort.Strings(outputs)
+	category := CategoryForEntry(entry)
 	return WorkflowProjection{
 		Kind:        entry.Definition.Kind,
 		Family:      entry.Definition.Family,
@@ -68,19 +72,45 @@ func ProjectWorkflow(entry Entry, category, generator string) WorkflowProjection
 	}
 }
 
-func ProjectTool(entry Entry, category string) ToolProjection {
+func ProjectTool(entry Entry) ToolProjection {
 	fieldDocs := make(map[string]FieldDoc, len(entry.Docs.Fields))
 	for _, field := range entry.Docs.Fields {
 		fieldDocs[field.Path] = FieldDoc{Description: field.Description, Example: field.Example}
 	}
 	return ToolProjection{
 		Kind:      entry.Definition.Kind,
-		Category:  category,
+		Category:  CategoryForEntry(entry),
 		Summary:   entry.Docs.Summary,
 		WhenToUse: entry.Docs.WhenToUse,
 		Example:   entry.Docs.Example,
 		Notes:     append([]string(nil), entry.Docs.Notes...),
 		FieldDocs: fieldDocs,
+	}
+}
+
+func CategoryForEntry(entry Entry) string {
+	if category := strings.TrimSpace(entry.Definition.Category); category != "" {
+		return category
+	}
+	switch strings.TrimSpace(entry.Definition.Family) {
+	case "command":
+		return "advanced"
+	case "containerd":
+		return "runtime"
+	case "directory", "file", "symlink":
+		return "filesystem"
+	case "image":
+		return "containers"
+	case "cluster-check", "kubeadm":
+		return "kubernetes"
+	case "package", "repository":
+		return "packages"
+	case "wait":
+		return "control-flow"
+	case "host-check", "kernel-module", "service", "swap", "sysctl", "systemd-unit":
+		return "system"
+	default:
+		return "system"
 	}
 }
 
