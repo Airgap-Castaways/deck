@@ -9,6 +9,12 @@ The files in this directory are starting points for real procedures. They show h
 - Replace repetitive shell with typed steps when a step kind already fits.
 - Validate the result before packaging or transport.
 
+## Command policy
+
+- These examples intentionally stay typed-first and avoid `Command` when a built-in step already models the action.
+- Reserve `Command` for vendor tools, custom probes, or one-off local commands that deck does not model directly.
+- If a workflow needs service lifecycle changes, file operations, archive extraction, sysctl changes, swap control, kernel modules, or symlink management, prefer the dedicated typed steps instead.
+
 ## Files
 
 - `offline-k8s-control-plane.yaml`: kubeadm-based control-plane bootstrap example

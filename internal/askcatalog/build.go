@@ -112,6 +112,7 @@ func build() (Catalog, error) {
 				"Each step needs id, kind, and spec.",
 				"Step ids belong on steps, not phases.",
 				workflowissues.MustSpec(workflowissues.CodeDuplicateStepID).Details,
+				"Use Command only as an escape hatch when no typed step clearly matches the host action.",
 			},
 			PhaseExample: strings.TrimSpace(`version: v1alpha1
 phases:
@@ -124,10 +125,10 @@ phases:
           failFast: true`),
 			StepsExample: strings.TrimSpace(`version: v1alpha1
 steps:
-  - id: run-command
-    kind: Command
+  - id: check-host
+    kind: CheckHost
     spec:
-      command: [echo, hello]`),
+      checks: [os, arch]`),
 			InvariantNotes: append([]string(nil), validate.WorkflowInvariantNotes()...),
 			SourceRefs:     []string{"schemas/workflow.schema.json", "internal/validate", "internal/workflowissues"},
 		},

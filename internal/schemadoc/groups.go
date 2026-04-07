@@ -89,9 +89,9 @@ var groupMetadata = map[string]GroupMetadata{
 		Key:          "advanced",
 		Title:        "Advanced",
 		Summary:      "Use escape-hatch steps only when no typed step clearly matches the requested action.",
-		WhenToUse:    "Start with typed groups first. Use this group only when the built-in typed steps do not fit the required host action.",
+		WhenToUse:    "Start with typed groups first. Use the advanced group only for vendor tools, custom probes, or one-off local commands that deck does not model directly.",
 		Order:        80,
-		TypicalFlows: []GroupFlow{{Title: "Fallback path", Kinds: []string{"Command"}, Note: "Prefer a typed step whenever one clearly fits."}},
+		TypicalFlows: []GroupFlow{{Title: "Fallback path", Kinds: []string{"Command"}, Note: "Do not reimplement service, file, archive, sysctl, swap, kernel-module, or symlink actions with shell when typed steps already exist."}},
 	},
 }
 
