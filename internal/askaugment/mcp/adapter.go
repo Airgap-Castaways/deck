@@ -92,6 +92,14 @@ var sourceHostDomains = map[string]struct{}{
 	"npmjs.com":             {},
 }
 
+const (
+	defaultContext7DocsTokenBudget = 1800
+	draftContext7DocsTokenBudget   = 2200
+	maxContext7DocsTokenBudget     = 2400
+	context7LongPromptRuneLimit    = 240
+	context7LongPromptBudgetBump   = 200
+)
+
 func (context7ProviderAdapter) Fetch(ctx context.Context, server resolvedServer, c *client.Client, route askintent.Route, prompt string, tools *mcp.ListToolsResult) (*askretrieve.Chunk, string) {
 	request := capabilityRequestForRoute(server.Profile, route, prompt)
 	if len(request.Capabilities) == 0 {
@@ -102,7 +110,7 @@ func (context7ProviderAdapter) Fetch(ctx context.Context, server resolvedServer,
 		return nil, fmt.Sprintf("mcp:%s no known tool for route %s", server.Profile.ID, route)
 	}
 	if hasCapability(request, capabilityEntityResolve) && strings.EqualFold(strings.TrimSpace(docTool.Name), "query-docs") {
-		result, failure := callTool(ctx, c, server.Profile.ID, docTool, buildContext7DocsArgs(docTool, prompt, ""))
+		result, failure := callTool(ctx, c, server.Profile.ID, docTool, buildContext7DocsArgs(docTool, route, prompt, ""))
 		if failure == "" {
 			evidence := normalizeEvidence(server.Profile.ID, docTool.Name, prompt, result, normalizedEvidence{Official: true, Freshness: "external-docs"})
 			return evidenceChunk(evidence), fmt.Sprintf("mcp:%s call %s ok", server.Profile.ID, docTool.Name)
@@ -112,7 +120,7 @@ func (context7ProviderAdapter) Fetch(ctx context.Context, server resolvedServer,
 	if hasCapability(request, capabilityEntityResolve) {
 		tool, ok := findTool(tools, "resolve-library-id")
 		if !ok {
-			result, failure := callTool(ctx, c, server.Profile.ID, docTool, buildContext7DocsArgs(docTool, prompt, ""))
+			result, failure := callTool(ctx, c, server.Profile.ID, docTool, buildContext7DocsArgs(docTool, route, prompt, ""))
 			if failure != "" {
 				return nil, failure
 			}
@@ -121,7 +129,7 @@ func (context7ProviderAdapter) Fetch(ctx context.Context, server resolvedServer,
 		}
 		resolved, failure := callTool(ctx, c, server.Profile.ID, tool, buildResolveArgs(tool, prompt))
 		if failure != "" {
-			result, docFailure := callTool(ctx, c, server.Profile.ID, docTool, buildContext7DocsArgs(docTool, prompt, ""))
+			result, docFailure := callTool(ctx, c, server.Profile.ID, docTool, buildContext7DocsArgs(docTool, route, prompt, ""))
 			if docFailure != "" {
 				return nil, failure
 			}
@@ -133,7 +141,7 @@ func (context7ProviderAdapter) Fetch(ctx context.Context, server resolvedServer,
 			return nil, fmt.Sprintf("mcp:%s call %s returned no library id", server.Profile.ID, tool.Name)
 		}
 	}
-	result, failure := callTool(ctx, c, server.Profile.ID, docTool, buildContext7DocsArgs(docTool, prompt, entity.LibraryID))
+	result, failure := callTool(ctx, c, server.Profile.ID, docTool, buildContext7DocsArgs(docTool, route, prompt, entity.LibraryID))
 	if failure != "" {
 		return nil, failure
 	}
@@ -255,9 +263,10 @@ func buildResolveArgs(tool mcp.Tool, prompt string) map[string]any {
 	return args
 }
 
-func buildContext7DocsArgs(tool mcp.Tool, prompt string, libraryID string) map[string]any {
+func buildContext7DocsArgs(tool mcp.Tool, route askintent.Route, prompt string, libraryID string) map[string]any {
 	args := map[string]any{}
 	query := strings.TrimSpace(prompt)
+	budget := context7DocsTokenBudget(route, prompt)
 	if strings.EqualFold(strings.TrimSpace(tool.Name), "query-docs") && strings.TrimSpace(libraryID) == "" {
 		query = libraryQueryFromPrompt(prompt)
 	}
@@ -266,15 +275,29 @@ func buildContext7DocsArgs(tool mcp.Tool, prompt string, libraryID string) map[s
 	}
 	setToolArg(tool, args, []string{"topic", "query", "question", "prompt"}, query)
 	setToolArg(tool, args, []string{"libraryName", "library", "name"}, query)
-	setToolArg(tool, args, []string{"tokens", "maxTokens", "tokenLimit"}, 1800)
+	setToolArg(tool, args, []string{"tokens", "maxTokens", "tokenLimit"}, budget)
 	if len(args) == 0 {
 		if libraryID != "" {
 			args["libraryID"] = libraryID
 		}
 		args["query"] = query
-		args["tokens"] = 1800
+		args["tokens"] = budget
 	}
 	return args
+}
+
+func context7DocsTokenBudget(route askintent.Route, prompt string) int {
+	budget := defaultContext7DocsTokenBudget
+	if route == askintent.RouteDraft {
+		budget = draftContext7DocsTokenBudget
+	}
+	if len([]rune(strings.TrimSpace(prompt))) > context7LongPromptRuneLimit {
+		budget += context7LongPromptBudgetBump
+	}
+	if budget > maxContext7DocsTokenBudget {
+		return maxContext7DocsTokenBudget
+	}
+	return budget
 }
 
 func buildSearchArgs(tool mcp.Tool, prompt string) map[string]any {
