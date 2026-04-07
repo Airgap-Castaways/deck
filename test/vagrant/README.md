@@ -87,3 +87,11 @@ bash test/e2e/vagrant/run-scenario.sh --scenario k8s-node-reset
 ## 유지보수 메모
 
 - 새 유지보수나 문서 갱신은 `test/e2e/vagrant/run-scenario.sh`와 `test/workflows/*`를 기준으로 한다.
+
+## 정기 CI
+
+- 주기 실행 워크플로는 `.github/workflows/vagrant-periodic.yml`이다.
+- nightly 기본 시나리오 세트는 `k8s-control-plane-bootstrap`, `k8s-worker-join`이다.
+- 수동 `workflow_dispatch`에서는 `full` 세트로 `k8s-node-reset`, `k8s-upgrade`까지 함께 돌릴 수 있다.
+- 실행 runner는 `self-hosted`, `linux`, `vagrant`, `libvirt` label을 모두 가져야 한다.
+- 각 시나리오 job은 `test/artifacts/runs/<scenario>/<run-id>/`를 artifact로 업로드하고 step summary에 `result.json`, `run-summary.txt`, `logs/error-*.log`를 요약한다.
