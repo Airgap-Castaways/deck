@@ -146,7 +146,7 @@ func typedCommandReplacementHint(spec map[string]any) (commandReplacement, bool)
 	}
 	switch name {
 	case "systemctl":
-		if len(command) >= 3 && isServiceLifecycleAction(command[1]) {
+		if action := firstNonFlagArg(command[1:]); isServiceLifecycleAction(action) {
 			return commandReplacement{kind: "ManageService", hint: "Use `ManageService` with `spec.name`, `spec.state`, and `spec.enabled` for service lifecycle changes instead of wrapping `systemctl`."}, true
 		}
 	case "mkdir":
@@ -154,7 +154,7 @@ func typedCommandReplacementHint(spec map[string]any) (commandReplacement, bool)
 			return commandReplacement{kind: "EnsureDirectory", hint: "Use `EnsureDirectory` for directory creation and mode management instead of shelling out to `mkdir -p`."}, true
 		}
 	case "cp":
-		if len(command) >= 3 {
+		if len(command) >= 3 && !hasAnyArg(command[1:], "-r", "-R", "--recursive") {
 			return commandReplacement{kind: "CopyFile", hint: "Use `CopyFile` for direct file copy operations instead of wrapping `cp`."}, true
 		}
 	case "tar":
@@ -242,9 +242,12 @@ func hasAnyArg(args []string, candidates ...string) bool {
 }
 
 func hasExtractFlag(args []string) bool {
-	for _, arg := range args {
+	for i, arg := range args {
 		trimmed := strings.TrimSpace(arg)
 		if trimmed == "--extract" || strings.HasPrefix(trimmed, "--extract=") {
+			return true
+		}
+		if i == 0 && trimmed != "" && !strings.HasPrefix(trimmed, "-") && strings.Contains(trimmed, "x") {
 			return true
 		}
 		if strings.HasPrefix(trimmed, "-") && strings.Contains(trimmed, "x") {
@@ -252,6 +255,17 @@ func hasExtractFlag(args []string) bool {
 		}
 	}
 	return false
+}
+
+func firstNonFlagArg(args []string) string {
+	for _, arg := range args {
+		trimmed := strings.TrimSpace(arg)
+		if trimmed == "" || strings.HasPrefix(trimmed, "-") {
+			continue
+		}
+		return trimmed
+	}
+	return ""
 }
 
 func relativeOrOriginal(path string) string {
