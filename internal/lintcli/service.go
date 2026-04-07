@@ -227,11 +227,7 @@ func logReport(verbose func(level int, format string, args ...any) error, report
 }
 
 func verboseEvent(fn func(level int, format string, args ...any) error, level int, event logs.CLIEvent) error {
-	line, err := logs.RenderDefaultCLI(event)
-	if err != nil {
-		line = logs.FormatCLIText(logs.CLIEvent{Level: "error", Component: "lint", Event: "log_render_failed", Attrs: map[string]any{"error": err.Error(), "original_event": event.Event}})
-	}
-	return verbosef(fn, level, "%s\n", line)
+	return logs.EmitCLIEventf(fn, level, event)
 }
 
 func resolveScenarioPath(root, scenario, workflowRootDir, scenarioDirName string) (string, error) {
@@ -278,13 +274,6 @@ func isLocalScenarioWorkflowPath(path, workflowRootDir, scenarioDirName string) 
 	}
 	marker := string(filepath.Separator) + workflowRootDir + string(filepath.Separator) + scenarioDirName + string(filepath.Separator)
 	return strings.Contains(resolved, marker)
-}
-
-func verbosef(fn func(level int, format string, args ...any) error, level int, format string, args ...any) error {
-	if fn == nil {
-		return nil
-	}
-	return fn(level, format, args...)
 }
 
 func displayValueOrDash(value string) string {

@@ -152,17 +152,6 @@ func combineStepEventSinks(sinks ...install.StepEventSink) install.StepEventSink
 	}
 }
 
-func verbosef(fn func(level int, format string, args ...any) error, level int, format string, args ...any) error {
-	if fn == nil {
-		return nil
-	}
-	return fn(level, format, args...)
-}
-
 func verboseEvent(fn func(level int, format string, args ...any) error, level int, event logs.CLIEvent) error {
-	line, err := logs.RenderDefaultCLI(event)
-	if err != nil {
-		line = logs.FormatCLIText(logs.CLIEvent{Level: "error", Component: "apply", Event: "log_render_failed", Attrs: map[string]any{"error": err.Error(), "original_event": event.Event}})
-	}
-	return verbosef(fn, level, "%s\n", line)
+	return logs.EmitCLIEventf(fn, level, event)
 }

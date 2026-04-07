@@ -18,6 +18,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/executil"
 	"github.com/Airgap-Castaways/deck/internal/filemode"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
+	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
@@ -41,10 +42,12 @@ type CommandRunner interface {
 type osCommandRunner struct{}
 
 func (o osCommandRunner) Run(ctx context.Context, name string, args ...string) error {
-	return executil.RunWorkflowCommandWithIO(ctx, os.Stdout, os.Stderr, name, args...)
+	stdout, stderr := ctrllogs.WrapCLISubprocessWriters(name, os.Stdout, os.Stderr)
+	return executil.RunWorkflowCommandWithIO(ctx, stdout, stderr, name, args...)
 }
 
 func (o osCommandRunner) RunWithIO(ctx context.Context, stdout io.Writer, stderr io.Writer, name string, args ...string) error {
+	stdout, stderr = ctrllogs.WrapCLISubprocessWriters(name, stdout, stderr)
 	return executil.RunWorkflowCommandWithIO(ctx, stdout, stderr, name, args...)
 }
 
