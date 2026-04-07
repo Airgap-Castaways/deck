@@ -48,9 +48,11 @@ func TestStepOutputsCoverApplyContracts(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			stepKey := workflowexec.StepTypeKey{APIVersion: workflowcontract.BuiltInStepAPIVersion, Kind: tc.kind}
-			outputs := stepOutputs(tc.kind, tc.spec)
+			outputs, err := stepOutputs(tc.kind, tc.spec)
+			if err != nil {
+				t.Fatalf("stepOutputs(%s): %v", tc.kind, err)
+			}
 			if tc.kind == "CheckHost" {
-				var err error
 				outputs, err = executeWorkflowStep(t.Context(), config.Step{Kind: tc.kind, Spec: tc.spec}, tc.spec, stepKey, ExecutionContext{})
 				if err != nil {
 					t.Fatalf("execute CheckHost: %v", err)
