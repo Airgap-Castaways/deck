@@ -212,6 +212,24 @@ func TestLookupContainerdAndClusterKinds(t *testing.T) {
 	}
 }
 
+func TestCategoryForEntryUsesDefinitionOverrideOrFamilyFallback(t *testing.T) {
+	entry, ok, err := stepmeta.Lookup("DownloadFile")
+	if err != nil {
+		t.Fatalf("Lookup(DownloadFile): %v", err)
+	}
+	if !ok {
+		t.Fatal("expected DownloadFile registration")
+	}
+	if got := stepmeta.CategoryForEntry(entry); got != "filesystem" {
+		t.Fatalf("expected filesystem category for DownloadFile, got %q", got)
+	}
+	override := entry
+	override.Definition.Category = "custom"
+	if got := stepmeta.CategoryForEntry(override); got != "custom" {
+		t.Fatalf("expected explicit category override to win, got %q", got)
+	}
+}
+
 func TestLookupStructuredEditKinds(t *testing.T) {
 	entry, ok, err := stepmeta.Lookup("EditTOML")
 	if err != nil {

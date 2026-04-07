@@ -58,7 +58,7 @@ func build() (Catalog, error) {
 		if err != nil || !ok {
 			continue
 		}
-		workflowMeta := stepmeta.ProjectWorkflow(entry, def.Step.Category, def.Step.ToolSchemaGenerator)
+		workflowMeta := stepmeta.ProjectWorkflow(entry, def.Step.ToolSchemaGenerator)
 		toolMeta := schemadoc.ToolMetaForDefinition(def.Step)
 		schemaMeta := stepmeta.ProjectSchema(entry)
 		askMeta := stepmeta.ProjectAsk(entry)

@@ -55,7 +55,7 @@ func ToolSchemaDefinitions() (map[string]map[string]any, error) {
 		if !ok {
 			return nil, fmt.Errorf("missing stepmeta entry for %s", def.Step.Kind)
 		}
-		generated[stepmeta.ProjectWorkflow(entry, def.Step.Category, def.Step.ToolSchemaGenerator).SchemaFile] = schema
+		generated[stepmeta.ProjectWorkflow(entry, def.Step.ToolSchemaGenerator).SchemaFile] = schema
 	}
 	return generated, nil
 }
@@ -68,7 +68,7 @@ func generateToolSchemaFromRegistry(def workflowexec.BuiltInTypeDefinition) (map
 	if !ok {
 		return nil, fmt.Errorf("missing stepmeta entry for %s", def.Step.Kind)
 	}
-	workflowMeta := stepmeta.ProjectWorkflow(entry, def.Step.Category, def.Step.ToolSchemaGenerator)
+	workflowMeta := stepmeta.ProjectWorkflow(entry, def.Step.ToolSchemaGenerator)
 	root := stepEnvelopeSchema(workflowMeta.Kind, workflowMeta.Kind+"Step", workflowMeta.Summary, workflowMeta.Visibility)
 	spec, err := reflectedSpecSchema(def.Schema.SpecType)
 	if err != nil {
