@@ -2,6 +2,7 @@ package prepare
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,13 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/stepspec"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
+
+type imageArtifactMeta struct {
+	Images        []string          `json:"images"`
+	Files         []string          `json:"files"`
+	Checksums     map[string]string `json:"checksums,omitempty"`
+	SourceDigests map[string]string `json:"sourceDigests,omitempty"`
+}
 
 type imageDownloadOps struct {
 	parseReference func(string) (name.Reference, error)
@@ -85,23 +93,20 @@ func runDownloadImage(ctx context.Context, runner CommandRunner, bundleRoot stri
 
 func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string, images []string, auth imageRegistryAuthMap, opts RunOptions) ([]string, error) {
 	deps := resolveDownloadImageOps(opts)
+	if files, reused, err := tryReuseImageArtifact(bundleRoot, dir, images, opts); err != nil {
+		return nil, err
+	} else if reused {
+		return files, nil
+	}
 	files := make([]string, 0, len(images))
+	sourceDigests := map[string]string{}
 	for _, img := range images {
 		rel := filepath.ToSlash(filepath.Join(dir, sanitizeImageName(img)+".tar"))
 		target := filepath.Join(bundleRoot, filepath.FromSlash(rel))
 		if err := filemode.EnsureParentDir(target, filemode.PublishedArtifact); err != nil {
 			return nil, err
 		}
-		if !opts.ForceRedownload {
-			if info, err := os.Stat(target); err == nil {
-				if info.Size() > 0 {
-					files = append(files, rel)
-					continue
-				}
-			} else if !os.IsNotExist(err) {
-				return nil, err
-			}
-		} else if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
 			return nil, err
 		}
 
@@ -126,6 +131,9 @@ func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string
 		if err := deps.writeArchive(target, ref, imageObj); err != nil {
 			return nil, fmt.Errorf("write image archive %s: %w", img, err)
 		}
+		if digest, digestErr := imageObj.Digest(); digestErr == nil {
+			sourceDigests[img] = digest.String()
+		}
 
 		if info, err := os.Stat(target); err != nil {
 			return nil, err
@@ -135,7 +143,85 @@ func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string
 
 		files = append(files, rel)
 	}
+	if err := writeImageArtifactMeta(bundleRoot, dir, images, files, sourceDigests); err != nil {
+		return nil, err
+	}
 	return files, nil
+}
+
+func imageMetaFileAbs(bundleRoot, dir string) string {
+	return filepath.Join(bundleRoot, filepath.FromSlash(dir), ".deck-cache-images.json")
+}
+
+func loadImageArtifactMeta(bundleRoot, dir string) (imageArtifactMeta, bool, error) {
+	raw, err := os.ReadFile(imageMetaFileAbs(bundleRoot, dir))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return imageArtifactMeta{}, false, nil
+		}
+		return imageArtifactMeta{}, false, fmt.Errorf("read image cache metadata: %w", err)
+	}
+	var meta imageArtifactMeta
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return imageArtifactMeta{}, false, fmt.Errorf("decode image cache metadata: %w", err)
+	}
+	meta.Images = normalizeStrings(meta.Images)
+	meta.Files = normalizeStrings(meta.Files)
+	meta.Checksums = normalizeChecksumMap(meta.Checksums)
+	meta.SourceDigests = normalizeChecksumMap(meta.SourceDigests)
+	if len(meta.Images) == 0 || len(meta.Files) == 0 {
+		return imageArtifactMeta{}, false, nil
+	}
+	return meta, true, nil
+}
+
+func writeImageArtifactMeta(bundleRoot, dir string, images, files []string, sourceDigests map[string]string) error {
+	checksums, err := computeArtifactChecksums(bundleRoot, files)
+	if err != nil {
+		return err
+	}
+	meta := imageArtifactMeta{
+		Images:        normalizeStrings(images),
+		Files:         normalizeStrings(files),
+		Checksums:     checksums,
+		SourceDigests: normalizeChecksumMap(sourceDigests),
+	}
+	raw, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	path := imageMetaFileAbs(bundleRoot, dir)
+	if err := filemode.EnsureParentArtifactDir(path); err != nil {
+		return err
+	}
+	return filemode.WriteArtifactFile(path, raw)
+}
+
+func tryReuseImageArtifact(bundleRoot, dir string, images []string, opts RunOptions) ([]string, bool, error) {
+	if opts.ForceRedownload {
+		return nil, false, nil
+	}
+	meta, ok, err := loadImageArtifactMeta(bundleRoot, dir)
+	if err != nil {
+		return nil, false, err
+	}
+	if !ok {
+		return nil, false, nil
+	}
+	if !equalStrings(normalizeStrings(images), meta.Images) {
+		return nil, false, nil
+	}
+	checksumsOK, err := verifyArtifactChecksums(bundleRoot, meta.Files, meta.Checksums)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	if !checksumsOK {
+		return nil, false, nil
+	}
+	return meta.Files, true, nil
 }
 
 type imageRegistryAuth struct {

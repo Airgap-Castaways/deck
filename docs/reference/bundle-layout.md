@@ -37,6 +37,19 @@ outputs/files/kubeadm.conf
 
 The operator unpacks this on the target node, then runs `./deck apply`. The launcher selects the matching runtime binary from `outputs/bin/<os>/<arch>/deck` when that platform is included in the bundle.
 
+## Prepare Reuse Integrity
+
+`deck prepare` may reuse previously fetched artifacts between runs, but the reuse rules differ by artifact family:
+
+- `DownloadFile` re-checks local SHA256 state and, for URL sources, can also consult remote validators such as `ETag` and `Last-Modified`.
+- `DownloadPackage` now records SHA256 metadata for published package outputs and exported package cache payloads, then revalidates those checksums before reuse.
+- `DownloadImage` now records SHA256 metadata for saved image archives and revalidates those checksums before reuse.
+
+Remaining drift gap:
+
+- package reuse still does not detect upstream repository drift on its own; closing that gap likely requires repository snapshot metadata such as repodata/release fingerprints or explicit mirror version contracts.
+- image reuse now preserves fetched source digests in metadata, but mutable tag drift is not yet probed on reuse; a follow-up can compare saved digests against current registry manifests when remote access is allowed.
+
 ## Core rule
 
 If the site needs it to run the workflow, place it in the canonical bundle inputs rather than assume it already exists on the target machine.
