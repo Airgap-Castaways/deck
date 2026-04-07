@@ -562,7 +562,7 @@ func renderUserCommand(opts Options) string {
 }
 
 func isVarsPath(path string) bool {
-	return filepath.ToSlash(strings.TrimSpace(path)) == "workflows/vars.yaml"
+	return filepath.ToSlash(strings.TrimSpace(path)) == workspacepaths.CanonicalVarsWorkflow
 }
 
 func filePaths(files []askcontract.GeneratedFile) []string {

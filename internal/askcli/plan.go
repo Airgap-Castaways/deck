@@ -17,6 +17,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func isAuthoringRoute(route askintent.Route) bool {
@@ -629,11 +630,11 @@ func planTarget(plan askcontract.PlanResponse, fallback askintent.Target) askint
 	for _, path := range plan.AuthoringBrief.AnchorPaths {
 		clean := filepath.ToSlash(strings.TrimSpace(path))
 		switch {
-		case clean == "workflows/vars.yaml":
+		case clean == workspacepaths.CanonicalVarsWorkflow:
 			return askintent.Target{Kind: "vars", Path: clean}
 		case strings.HasPrefix(clean, "workflows/components/"):
 			return askintent.Target{Kind: "component", Path: clean, Name: strings.TrimSuffix(filepath.Base(clean), filepath.Ext(clean))}
-		case strings.HasPrefix(clean, "workflows/scenarios/") || clean == "workflows/prepare.yaml":
+		case strings.HasPrefix(clean, "workflows/scenarios/") || clean == workspacepaths.CanonicalPrepareWorkflow:
 			return askintent.Target{Kind: "scenario", Path: clean, Name: strings.TrimSuffix(filepath.Base(clean), filepath.Ext(clean))}
 		}
 	}

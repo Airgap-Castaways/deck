@@ -12,6 +12,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/validate"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func validateGeneration(ctx context.Context, root string, gen askcontract.GenerationResponse, files []askcontract.GeneratedFile, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult) (string, askcontract.CriticResponse, error) {
@@ -166,7 +167,7 @@ func requiredDraftPaths(plan askcontract.PlanResponse) []string {
 		}
 	}
 	if plan.NeedsPrepare {
-		required = append(required, "workflows/prepare.yaml")
+		required = append(required, workspacepaths.CanonicalPrepareWorkflow)
 	}
 	if requiresEntryScenario(plan) && strings.TrimSpace(plan.EntryScenario) != "" {
 		required = append(required, filepath.ToSlash(strings.TrimSpace(plan.EntryScenario)))

@@ -11,6 +11,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/askreview"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func applyLocalFallback(result *runResult, root string, workspace askretrieve.WorkspaceSummary, prompt string) {
@@ -119,7 +120,7 @@ func resolveExplainTarget(workspace askretrieve.WorkspaceSummary, target askinte
 			switch {
 			case strings.HasPrefix(filepath.ToSlash(file.Path), "workflows/scenarios/"):
 				kind = "scenario"
-			case filepath.ToSlash(file.Path) == "workflows/vars.yaml":
+			case filepath.ToSlash(file.Path) == workspacepaths.CanonicalVarsWorkflow:
 				kind = "vars"
 			}
 			return askintent.Target{Kind: kind, Path: file.Path, Name: name}
@@ -140,7 +141,7 @@ func explainWorkspaceFile(workspace askretrieve.WorkspaceSummary, target askinte
 
 func describeWorkspaceFile(workspace askretrieve.WorkspaceSummary, file askretrieve.WorkspaceFile) (string, string) {
 	cleanPath := filepath.ToSlash(file.Path)
-	if cleanPath == "workflows/vars.yaml" {
+	if cleanPath == workspacepaths.CanonicalVarsWorkflow {
 		return describeVarsFile(file)
 	}
 	var doc map[string]any

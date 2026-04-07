@@ -16,6 +16,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/stepspec"
 	"github.com/Airgap-Castaways/deck/internal/structurededit"
 	"github.com/Airgap-Castaways/deck/internal/structuredpath"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func applyDocumentEdits(root string, baseContent map[string]string, path string, doc askcontract.GeneratedDocument) (string, []askcontract.GeneratedFile, error) {
@@ -31,7 +32,7 @@ func applyDocumentEdits(root string, baseContent map[string]string, path string,
 		if os.IsNotExist(err) {
 			if existing, ok := baseContent[path]; ok {
 				raw = []byte(existing)
-			} else if filepath.ToSlash(strings.TrimSpace(path)) == "workflows/vars.yaml" {
+			} else if filepath.ToSlash(strings.TrimSpace(path)) == workspacepaths.CanonicalVarsWorkflow {
 				raw = []byte("{}\n")
 			} else {
 				return "", nil, fmt.Errorf("read refine target %s: %w", path, err)
@@ -88,7 +89,7 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 		case "extract-var":
 			varsPath := strings.TrimSpace(transform.VarsPath)
 			if varsPath == "" || !strings.HasPrefix(filepath.ToSlash(varsPath), "workflows/") {
-				varsPath = "workflows/vars.yaml"
+				varsPath = workspacepaths.CanonicalVarsWorkflow
 			}
 			varName := strings.TrimSpace(transform.VarName)
 			if varName == "" {
@@ -217,7 +218,7 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 }
 
 func prunePendingVarsWrites(root string, baseContent map[string]string, currentPath string, currentContent string, pending map[string]string, orderedExtraPaths []string) (map[string]string, []string, error) {
-	varsPath := filepath.ToSlash("workflows/vars.yaml")
+	varsPath := filepath.ToSlash(workspacepaths.CanonicalVarsWorkflow)
 	used := map[string]bool{}
 	for path, content := range baseContent {
 		path = filepath.ToSlash(strings.TrimSpace(path))

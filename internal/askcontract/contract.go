@@ -910,14 +910,14 @@ func compileDraftSelection(selection DraftSelection) []GeneratedDocument {
 		}
 	}
 	if len(selection.Vars) > 0 && !selectionHasVarsTarget(selection) {
-		documents = append(documents, GeneratedDocument{Path: "workflows/vars.yaml", Kind: "vars", Vars: cloneMap(selection.Vars)})
+		documents = append(documents, GeneratedDocument{Path: workspacepaths.CanonicalVarsWorkflow, Kind: "vars", Vars: cloneMap(selection.Vars)})
 	}
 	return documents
 }
 
 func selectionHasVarsTarget(selection DraftSelection) bool {
 	for _, target := range selection.Targets {
-		if normalizeDocumentKind(target.Kind) == "vars" || strings.TrimSpace(target.Path) == "workflows/vars.yaml" {
+		if normalizeDocumentKind(target.Kind) == "vars" || strings.TrimSpace(target.Path) == workspacepaths.CanonicalVarsWorkflow {
 			return true
 		}
 	}

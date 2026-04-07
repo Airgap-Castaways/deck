@@ -13,6 +13,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 var (
@@ -122,11 +123,11 @@ func ensureRoleVarsPlanned(plan askcontract.PlanResponse, decision askintent.Dec
 	if roleSelector == "" {
 		return plan
 	}
-	if !containsString(plan.AuthoringBrief.TargetPaths, "workflows/vars.yaml") {
-		plan.AuthoringBrief.TargetPaths = append(plan.AuthoringBrief.TargetPaths, "workflows/vars.yaml")
+	if !containsString(plan.AuthoringBrief.TargetPaths, workspacepaths.CanonicalVarsWorkflow) {
+		plan.AuthoringBrief.TargetPaths = append(plan.AuthoringBrief.TargetPaths, workspacepaths.CanonicalVarsWorkflow)
 	}
-	if !planHasFilePath(plan.Files, "workflows/vars.yaml") {
-		plan.Files = append(plan.Files, askcontract.PlanFile{Path: "workflows/vars.yaml", Kind: "vars", Action: "create", Purpose: "Role selector values for multi-role draft execution"})
+	if !planHasFilePath(plan.Files, workspacepaths.CanonicalVarsWorkflow) {
+		plan.Files = append(plan.Files, askcontract.PlanFile{Path: workspacepaths.CanonicalVarsWorkflow, Kind: "vars", Action: "create", Purpose: "Role selector values for multi-role draft execution"})
 	}
 	if !containsString(plan.VarsRecommendation, "role") {
 		plan.VarsRecommendation = append(plan.VarsRecommendation, "role")
@@ -299,20 +300,20 @@ func applyClarificationAnswers(plan askcontract.PlanResponse) askcontract.PlanRe
 	if answer := byID["refine.anchorPath"]; answer != "" {
 		path := filepath.ToSlash(strings.TrimSpace(answer))
 		paths := []string{path}
-		if !containsString(paths, "workflows/vars.yaml") {
+		if !containsString(paths, workspacepaths.CanonicalVarsWorkflow) {
 			for _, existing := range plan.AuthoringBrief.TargetPaths {
-				if filepath.ToSlash(strings.TrimSpace(existing)) == "workflows/vars.yaml" {
-					paths = append(paths, "workflows/vars.yaml")
+				if filepath.ToSlash(strings.TrimSpace(existing)) == workspacepaths.CanonicalVarsWorkflow {
+					paths = append(paths, workspacepaths.CanonicalVarsWorkflow)
 				}
 			}
 		}
 		plan.AuthoringBrief.TargetPaths = dedupeStrings(paths)
 		switch {
-		case path == "workflows/vars.yaml":
+		case path == workspacepaths.CanonicalVarsWorkflow:
 			plan.AuthoringBrief.TargetScope = "vars"
 		case strings.HasPrefix(path, "workflows/components/"):
 			plan.AuthoringBrief.TargetScope = "component"
-		case strings.HasPrefix(path, "workflows/scenarios/") || path == "workflows/prepare.yaml":
+		case strings.HasPrefix(path, "workflows/scenarios/") || path == workspacepaths.CanonicalPrepareWorkflow:
 			if len(plan.AuthoringBrief.TargetPaths) > 1 {
 				plan.AuthoringBrief.TargetScope = "workspace"
 			} else {
@@ -321,8 +322,8 @@ func applyClarificationAnswers(plan askcontract.PlanResponse) askcontract.PlanRe
 		}
 	}
 	if answer := byID["refine.companionVars"]; strings.EqualFold(answer, "yes") {
-		plan.AuthoringBrief.AllowedCompanionPaths = dedupeStrings(append(plan.AuthoringBrief.AllowedCompanionPaths, "workflows/vars.yaml"))
-		plan.AuthoringBrief.TargetPaths = dedupeStrings(append(plan.AuthoringBrief.TargetPaths, "workflows/vars.yaml"))
+		plan.AuthoringBrief.AllowedCompanionPaths = dedupeStrings(append(plan.AuthoringBrief.AllowedCompanionPaths, workspacepaths.CanonicalVarsWorkflow))
+		plan.AuthoringBrief.TargetPaths = dedupeStrings(append(plan.AuthoringBrief.TargetPaths, workspacepaths.CanonicalVarsWorkflow))
 	}
 	if answer := byID["refine.componentPath"]; answer != "" && !strings.EqualFold(answer, "none") {
 		path := filepath.ToSlash(strings.TrimSpace(answer))
@@ -1213,7 +1214,7 @@ func isCanonicalTopology(value string) bool {
 
 func askcontractPathAllowed(path string) bool {
 	path = filepath.ToSlash(strings.TrimSpace(path))
-	if path == "workflows/prepare.yaml" || path == "workflows/vars.yaml" {
+	if path == workspacepaths.CanonicalPrepareWorkflow || path == workspacepaths.CanonicalVarsWorkflow {
 		return true
 	}
 	if strings.HasSuffix(path, "/") || filepath.Ext(path) == "" {
@@ -1236,8 +1237,8 @@ func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.Gene
 		}
 	}
 	if planRequiresVarsFile(plan) {
-		if _, ok := generated["workflows/vars.yaml"]; !ok {
-			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "vars_required_by_checklist", Message: "validation checklist requires vars but workflows/vars.yaml was not generated", Path: "workflows/vars.yaml"})
+		if _, ok := generated[workspacepaths.CanonicalVarsWorkflow]; !ok {
+			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "vars_required_by_checklist", Message: fmt.Sprintf("validation checklist requires vars but %s was not generated", workspacepaths.CanonicalVarsWorkflow), Path: workspacepaths.CanonicalVarsWorkflow})
 		}
 	}
 	if decision.Route == askintent.RouteRefine && len(planned) > 0 {
@@ -1265,12 +1266,12 @@ func EvaluatePlanConformance(plan askcontract.PlanResponse, gen askcontract.Gene
 
 func planRequiresVarsFile(plan askcontract.PlanResponse) bool {
 	for _, path := range plan.AuthoringBrief.TargetPaths {
-		if path == "workflows/vars.yaml" {
+		if path == workspacepaths.CanonicalVarsWorkflow {
 			return true
 		}
 	}
 	for _, file := range plan.Files {
-		if filepath.ToSlash(strings.TrimSpace(file.Path)) == "workflows/vars.yaml" {
+		if filepath.ToSlash(strings.TrimSpace(file.Path)) == workspacepaths.CanonicalVarsWorkflow {
 			return true
 		}
 	}
@@ -1281,12 +1282,12 @@ func planRequiresVarsFile(plan askcontract.PlanResponse) bool {
 // Recoverable execution-detail weaknesses are carried forward into generation,
 // judge, repair, and post-processing instead of stopping planning.
 func ValidatePlanStructure(plan askcontract.PlanResponse) error {
-	if plan.NeedsPrepare && !containsPlannedPath(plan.Files, "workflows/prepare.yaml") {
-		return fmt.Errorf("plan response requires prepare but does not include workflows/prepare.yaml")
+	if plan.NeedsPrepare && !containsPlannedPath(plan.Files, workspacepaths.CanonicalPrepareWorkflow) {
+		return fmt.Errorf("plan response requires prepare but does not include %s", workspacepaths.CanonicalPrepareWorkflow)
 	}
 	if strings.TrimSpace(plan.AuthoringBrief.ModeIntent) == "prepare+apply" {
-		if !containsPlannedPath(plan.Files, "workflows/prepare.yaml") {
-			return fmt.Errorf("plan response authoring brief requires prepare+apply but does not include workflows/prepare.yaml")
+		if !containsPlannedPath(plan.Files, workspacepaths.CanonicalPrepareWorkflow) {
+			return fmt.Errorf("plan response authoring brief requires prepare+apply but does not include %s", workspacepaths.CanonicalPrepareWorkflow)
 		}
 		if entry := strings.TrimSpace(plan.EntryScenario); entry == "" || !containsPlannedPath(plan.Files, entry) {
 			return fmt.Errorf("plan response authoring brief requires prepare+apply with a scenario entrypoint")

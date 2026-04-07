@@ -12,6 +12,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func clarificationCandidatesFromRequirements(prompt string, req ScenarioRequirements, decision askintent.Decision, workspace askretrieve.WorkspaceSummary, facts askauthoring.Facts) []askcontract.PlanClarification {
@@ -30,10 +31,10 @@ func refineCompanionClarifications(prompt string, decision askintent.Decision, w
 	lower := strings.ToLower(strings.TrimSpace(prompt))
 	explicitPaths := askintent.ExtractWorkflowPaths(prompt)
 	items := []askcontract.PlanClarification{}
-	if mentionsVarsRefine(lower) && !containsString(explicitPaths, "workflows/vars.yaml") {
+	if mentionsVarsRefine(lower) && !containsString(explicitPaths, workspacepaths.CanonicalVarsWorkflow) {
 		items = append(items, askcontract.PlanClarification{
 			ID:                 "refine.companionVars",
-			Question:           "This refine request mentions vars or repeated values, but it does not explicitly allow workflows/vars.yaml to change. Should the refactor be allowed to edit workflows/vars.yaml too?",
+			Question:           fmt.Sprintf("This refine request mentions vars or repeated values, but it does not explicitly allow %s to change. Should the refactor be allowed to edit %s too?", workspacepaths.CanonicalVarsWorkflow, workspacepaths.CanonicalVarsWorkflow),
 			Kind:               "enum",
 			Reason:             "Refine keeps anchor files stable and only edits companion files when they are explicitly approved.",
 			Decision:           "scope",
@@ -258,13 +259,13 @@ func hasComponentPath(paths []string) bool {
 func suggestedComponentPath(prompt string, explicitPaths []string, workspace askretrieve.WorkspaceSummary) string {
 	for _, path := range explicitPaths {
 		clean := filepath.ToSlash(strings.TrimSpace(path))
-		if strings.HasPrefix(clean, "workflows/scenarios/") || clean == "workflows/prepare.yaml" {
+		if strings.HasPrefix(clean, "workflows/scenarios/") || clean == workspacepaths.CanonicalPrepareWorkflow {
 			return "workflows/components/" + strings.TrimSuffix(filepath.Base(clean), filepath.Ext(clean)) + "-shared.yaml"
 		}
 	}
 	for _, file := range workspace.Files {
 		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if strings.HasPrefix(clean, "workflows/scenarios/") || clean == "workflows/prepare.yaml" {
+		if strings.HasPrefix(clean, "workflows/scenarios/") || clean == workspacepaths.CanonicalPrepareWorkflow {
 			return "workflows/components/" + strings.TrimSuffix(filepath.Base(clean), filepath.Ext(clean)) + "-shared.yaml"
 		}
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askir"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type postProcessSummary struct {
@@ -128,8 +129,8 @@ func renderPostProcessNotes(findings askcontract.PostProcessResponse) []string {
 func enrichPostProcessFindings(findings askcontract.PostProcessResponse, rendered []askcontract.GeneratedFile) askcontract.PostProcessResponse {
 	files := filePathSet(rendered)
 	if len(findings.ReviseFiles) == 0 && len(findings.Blocking) > 0 {
-		if files["workflows/scenarios/apply.yaml"] {
-			findings.ReviseFiles = append(findings.ReviseFiles, "workflows/scenarios/apply.yaml")
+		if files[workspacepaths.CanonicalApplyWorkflow] {
+			findings.ReviseFiles = append(findings.ReviseFiles, workspacepaths.CanonicalApplyWorkflow)
 		}
 	}
 	for path := range files {

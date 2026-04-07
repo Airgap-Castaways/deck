@@ -7,6 +7,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/schemafacts"
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type Catalog struct {
@@ -282,7 +283,7 @@ func (b Builder) OptionalOverrideKeys() []string {
 func roleForPath(path string) string {
 	path = filepath.ToSlash(strings.TrimSpace(path))
 	switch {
-	case path == "workflows/prepare.yaml":
+	case path == workspacepaths.CanonicalPrepareWorkflow:
 		return "prepare"
 	case strings.HasPrefix(path, "workflows/scenarios/"):
 		return "apply"

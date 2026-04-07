@@ -9,6 +9,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type Candidate struct {
@@ -125,7 +126,7 @@ func CompileWithProgram(program askcontract.AuthoringProgram, selection askcontr
 		}
 	}
 	if len(selection.Vars) > 0 && !hasVarsTarget(selection.Targets) {
-		documents = append(documents, askcontract.GeneratedDocument{Path: "workflows/vars.yaml", Kind: "vars", Vars: cloneMap(selection.Vars)})
+		documents = append(documents, askcontract.GeneratedDocument{Path: workspacepaths.CanonicalVarsWorkflow, Kind: "vars", Vars: cloneMap(selection.Vars)})
 	}
 	documents = ensureRoleVarInDraftDocuments(documents)
 	if len(documents) == 0 {
@@ -152,7 +153,7 @@ func ensureRoleVarInDraftDocuments(documents []askcontract.GeneratedDocument) []
 		}
 	}
 	if !hasVarsDoc {
-		documents = append(documents, askcontract.GeneratedDocument{Path: "workflows/vars.yaml", Kind: "vars", Vars: map[string]any{"role": "control-plane"}})
+		documents = append(documents, askcontract.GeneratedDocument{Path: workspacepaths.CanonicalVarsWorkflow, Kind: "vars", Vars: map[string]any{"role": "control-plane"}})
 	}
 	return documents
 }
@@ -634,7 +635,7 @@ func targetRole(path string) string {
 		return ""
 	}
 	path = filepath.ToSlash(strings.TrimSpace(path))
-	if path == "workflows/prepare.yaml" {
+	if path == workspacepaths.CanonicalPrepareWorkflow {
 		return "prepare"
 	}
 	return "apply"
@@ -829,7 +830,7 @@ func sanitizeStepID(value string) string {
 
 func documentKind(path string, kind string) string {
 	clean := filepath.ToSlash(strings.TrimSpace(path))
-	if clean == "workflows/vars.yaml" {
+	if clean == workspacepaths.CanonicalVarsWorkflow {
 		return "vars"
 	}
 	if strings.HasPrefix(clean, "workflows/components/") {

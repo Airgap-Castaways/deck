@@ -10,15 +10,16 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) askcontract.PlanResponse {
-	files := []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Kind: "scenario", Action: "create", Purpose: "Primary workflow entrypoint"}}
+	files := []askcontract.PlanFile{{Path: workspacepaths.CanonicalApplyWorkflow, Kind: "scenario", Action: "create", Purpose: "Primary workflow entrypoint"}}
 	if req.NeedsPrepare {
-		files = append(files, askcontract.PlanFile{Path: "workflows/prepare.yaml", Kind: "scenario", Action: "create", Purpose: "Prepare bundle inputs and dependencies"})
+		files = append(files, askcontract.PlanFile{Path: workspacepaths.CanonicalPrepareWorkflow, Kind: "scenario", Action: "create", Purpose: "Prepare bundle inputs and dependencies"})
 	}
 	if strings.Contains(strings.ToLower(prompt), "vars") || len(req.VarsAdvisories) > 0 {
-		files = append(files, askcontract.PlanFile{Path: "workflows/vars.yaml", Kind: "vars", Action: "create", Purpose: "Workspace variables"})
+		files = append(files, askcontract.PlanFile{Path: workspacepaths.CanonicalVarsWorkflow, Kind: "vars", Action: "create", Purpose: "Workspace variables"})
 	}
 	if workspace.HasWorkflowTree {
 		for i := range files {
@@ -70,7 +71,7 @@ func targetClarificationsFromRequirements(prompt string, req ScenarioRequirement
 	options := []string{}
 	for _, file := range workspace.Files {
 		path := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if path == "workflows/vars.yaml" || path == "workflows/prepare.yaml" || strings.HasPrefix(path, "workflows/scenarios/") || strings.HasPrefix(path, "workflows/components/") {
+		if path == workspacepaths.CanonicalVarsWorkflow || path == workspacepaths.CanonicalPrepareWorkflow || strings.HasPrefix(path, "workflows/scenarios/") || strings.HasPrefix(path, "workflows/components/") {
 			options = append(options, path)
 		}
 	}
