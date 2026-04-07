@@ -22,6 +22,8 @@ const (
 	ansiBrightGray = "90"
 )
 
+var ansiResetBytes = []byte(ansiReset)
+
 type ansiAwareWriter interface {
 	SupportsANSI() bool
 }
@@ -95,19 +97,16 @@ func (w *subprocessPrefixWriter) Write(p []byte) (int, error) {
 	var out bytes.Buffer
 	start := 0
 	for start < len(p) {
-		if w.atLineStart {
-			out.WriteString(colorizeCLIText(w.prefix, ansiBrightGray))
-			w.atLineStart = false
-		}
 		idx := bytes.IndexByte(p[start:], '\n')
 		if idx < 0 {
-			out.WriteString(colorizeCLIText(string(p[start:]), ansiBrightGray))
+			w.writeLine(&out, p[start:])
 			break
 		}
-		chunkEnd := start + idx + 1
-		out.WriteString(colorizeCLIText(string(p[start:chunkEnd]), ansiBrightGray))
+		chunkEnd := start + idx
+		w.writeLine(&out, p[start:chunkEnd])
+		out.WriteByte('\n')
 		w.atLineStart = true
-		start = chunkEnd
+		start = chunkEnd + 1
 	}
 	if _, err := w.writer.Write(out.Bytes()); err != nil {
 		return 0, err
@@ -115,11 +114,58 @@ func (w *subprocessPrefixWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func (w *subprocessPrefixWriter) writeLine(out *bytes.Buffer, line []byte) {
+	if w == nil || out == nil {
+		return
+	}
+	if w.atLineStart {
+		writeColorizedCLIBytes(out, []byte(w.prefix), ansiBrightGray)
+		w.atLineStart = false
+	}
+	writeColorizedCLIBytes(out, line, ansiBrightGray)
+}
+
 func colorizeCLIText(raw string, code string) string {
 	if raw == "" || code == "" || !CLIColorEnabled() {
 		return raw
 	}
+	if strings.HasSuffix(raw, "\n") {
+		trimmed := strings.TrimSuffix(raw, "\n")
+		return colorizeCLIText(trimmed, code) + "\n"
+	}
 	return "\x1b[" + code + "m" + raw + ansiReset
+}
+
+func writeColorizedCLIBytes(out *bytes.Buffer, raw []byte, code string) {
+	if out == nil || len(raw) == 0 {
+		return
+	}
+	if code == "" || !CLIColorEnabled() {
+		out.Write(raw)
+		return
+	}
+	prefix := ansiCodePrefix(code)
+	out.WriteString(prefix)
+	remaining := raw
+	for len(remaining) > 0 {
+		idx := bytes.Index(remaining, ansiResetBytes)
+		if idx < 0 {
+			out.Write(remaining)
+			break
+		}
+		out.Write(remaining[:idx])
+		out.Write(ansiResetBytes)
+		out.WriteString(prefix)
+		remaining = remaining[idx+len(ansiResetBytes):]
+	}
+	out.Write(ansiResetBytes)
+}
+
+func ansiCodePrefix(code string) string {
+	if code == "" {
+		return ""
+	}
+	return "\x1b[" + code + "m"
 }
 
 func colorizeCLIField(key string, value any, keyCode string, valueCode string) string {
@@ -199,8 +245,12 @@ func cliAttrValueColor(key, value string) string {
 }
 
 func subprocessLabel(command string) string {
-	base := strings.ToLower(strings.TrimSpace(filepath.Base(command)))
-	if base == "" {
+	trimmed := strings.TrimSpace(command)
+	if trimmed == "" {
+		return ""
+	}
+	base := strings.ToLower(strings.TrimSpace(filepath.Base(trimmed)))
+	if base == "" || base == "." {
 		return ""
 	}
 	switch base {

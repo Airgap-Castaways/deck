@@ -83,6 +83,43 @@ func TestWrapCLISubprocessWriter(t *testing.T) {
 	if strings.Count(got, "[kubeadm]") != 2 {
 		t.Fatalf("expected prefix for each line, got %q", got)
 	}
+	if strings.Contains(got, "\n\x1b[0m") {
+		t.Fatalf("expected reset before newline, got %q", got)
+	}
+}
+
+func TestWrapCLISubprocessWriterReappliesColorAfterReset(t *testing.T) {
+	SetCLIColorEnabled(true)
+	t.Cleanup(func() {
+		SetCLIColorEnabled(false)
+	})
+	var buf ansiTestBuffer
+	wrapped := WrapCLISubprocessWriter("kubeadm", &buf)
+	if _, err := wrapped.Write([]byte("prefix \x1b[0m suffix\n")); err != nil {
+		t.Fatalf("write wrapped output: %v", err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "\x1b[0m\x1b[90m suffix") {
+		t.Fatalf("expected dim color to resume after reset, got %q", got)
+	}
+	if strings.Contains(got, "\n\x1b[0m") {
+		t.Fatalf("expected reset before newline, got %q", got)
+	}
+	if strings.Count(got, "[kubeadm]") != 1 {
+		t.Fatalf("expected single prefix, got %q", got)
+	}
+}
+
+func TestWrapCLISubprocessWriterSkipsEmptyCommand(t *testing.T) {
+	SetCLIColorEnabled(true)
+	t.Cleanup(func() {
+		SetCLIColorEnabled(false)
+	})
+	var buf ansiTestBuffer
+	wrapped := WrapCLISubprocessWriter("", &buf)
+	if wrapped != &buf {
+		t.Fatalf("expected original writer for empty command")
+	}
 }
 
 func TestRenderCLIOrFallbackUsesEventComponent(t *testing.T) {
