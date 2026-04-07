@@ -8,6 +8,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/config"
 	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func stableLiteralPath(value string) string {
@@ -42,10 +43,10 @@ func validateRoleKinds(name string, wf *config.Workflow) error {
 
 func inferWorkflowMode(name string, wf *config.Workflow) string {
 	trimmed := filepath.ToSlash(strings.TrimSpace(name))
-	if filepath.Base(trimmed) == "prepare.yaml" {
+	if workspacepaths.IsCanonicalPrepareWorkflowPath(trimmed) {
 		return "prepare"
 	}
-	if strings.Contains(trimmed, "/workflows/scenarios/") || strings.HasPrefix(trimmed, "workflows/scenarios/") {
+	if workspacepaths.IsScenarioAuthoringPath(trimmed) {
 		return "apply"
 	}
 	seenPrepare := false

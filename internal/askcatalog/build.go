@@ -181,7 +181,7 @@ steps:
 				Summary:     "Apply changes the local node using prepared inputs and typed host actions.",
 				WhenToUse:   "Use apply for package installation, file writes, service changes, runtime config, host convergence steps, and host suitability validation.",
 				Prefer:      []string{"typed steps such as File, ConfigureRepository, RefreshRepository, ManageService, WriteContainerdConfig, Package, and CheckHost", "runtime.host.* for detected local host branching", "named phases for multi-step installs", "components for reusable imported logic"},
-				Avoid:       []string{"online collection logic that should happen during prepare", "large repeated literals that belong in vars.yaml"},
+				Avoid:       []string{"online collection logic that should happen during prepare", fmt.Sprintf("large repeated literals that belong in %s", workspacepaths.CanonicalVarsWorkflow)},
 				OutputFiles: []string{workspacepaths.WorkflowRootDir + "/" + workspacepaths.CanonicalApplyWorkflowRel, workspacepaths.WorkflowRootDir + "/" + workspacepaths.WorkflowVarsRel},
 				SourceRefs:  []string{"internal/askpolicy", "internal/workspacepaths"},
 			},

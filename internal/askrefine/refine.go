@@ -207,7 +207,7 @@ func candidatesForDocument(doc askcontract.GeneratedDocument, ctx candidateConte
 			}
 			rawPath := fmt.Sprintf("phases[%d]", i)
 			phaseName := strings.TrimSpace(phase.Name)
-			componentPath := "workflows/components/" + sanitizeName(firstNonEmpty(phaseName, "phase")) + ".yaml"
+			componentPath := filepath.ToSlash(filepath.Join(workspacepaths.CanonicalComponentsDir, sanitizeName(firstNonEmpty(phaseName, "phase"))+".yaml"))
 			items = append(items, Candidate{ID: candidateID("extract-component", path, rawPath), Path: path, Type: "extract-component", RawPath: rawPath, Summary: fmt.Sprintf("extract phase %q into %s", firstNonEmpty(phaseName, "phase"), componentPath), SuggestedComponentPath: componentPath})
 		}
 		items = append(items, stepFieldCandidates(path, doc.Workflow.Steps, "steps", ctx)...)

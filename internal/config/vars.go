@@ -11,6 +11,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/cloneutil"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, error) {
@@ -18,9 +19,9 @@ func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, e
 		workflowRoot, err := WorkflowRootForPath(origin.localPath)
 		varsPath := ""
 		if err == nil {
-			varsPath = filepath.Join(workflowRoot, "vars.yaml")
+			varsPath = filepath.Join(workflowRoot, workspacepaths.WorkflowVarsRel)
 		} else {
-			varsPath = filepath.Join(filepath.Dir(origin.localPath), "vars.yaml")
+			varsPath = filepath.Join(filepath.Dir(origin.localPath), workspacepaths.WorkflowVarsRel)
 		}
 		root, err := fsutil.NewRoot(filepath.Dir(varsPath))
 		if err != nil {
@@ -38,10 +39,10 @@ func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, e
 
 	if origin.remoteURL != nil {
 		workflowRoot, err := remoteWorkflowRoot(origin.remoteURL)
-		varsURL := *siblingURL(origin.remoteURL, "vars.yaml")
+		varsURL := *siblingURL(origin.remoteURL, workspacepaths.WorkflowVarsRel)
 		if err == nil {
 			varsURL = *workflowRoot
-			varsURL.Path = path.Join(varsURL.Path, "vars.yaml")
+			varsURL.Path = path.Join(varsURL.Path, workspacepaths.WorkflowVarsRel)
 		}
 		b, ok, err := getOptionalHTTP(ctx, varsURL.String())
 		if err != nil {

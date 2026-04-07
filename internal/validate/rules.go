@@ -3,13 +3,14 @@ package validate
 import (
 	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 var workflowTopLevelModes = []string{"phases", "steps"}
 
 const (
 	workflowSupportedVersion = workflowcontract.SupportedWorkflowVersion
-	workflowImportRule       = "Imports are only supported under phases[].imports and resolve from workflows/components/."
+	workflowImportRule       = "Imports are only supported under phases[].imports and resolve from " + workspacepaths.CanonicalComponentsDir + "/."
 )
 
 func SupportedWorkflowRoles() []string {

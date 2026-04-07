@@ -609,13 +609,13 @@ func planWorkspaceChunks(plan askcontract.PlanResponse, workspace askretrieve.Wo
 			seen[path] = true
 			chunks = append(chunks, askretrieve.Chunk{ID: "planned-" + strings.ReplaceAll(path, "/", "_"), Source: "plan-workspace", Label: path, Topic: askcontext.Topic("workspace:" + path), Content: file.Content, Score: 95})
 		}
-		if strings.HasPrefix(path, "workflows/scenarios/") {
+		if workspacepaths.IsScenarioAuthoringPath(path) {
 			file, ok := byPath[path]
 			if !ok {
 				continue
 			}
 			for _, importPath := range localImportPaths(file.Content) {
-				resolved := filepath.ToSlash(filepath.Join("workflows/components", importPath))
+				resolved := filepath.ToSlash(filepath.Join(workspacepaths.CanonicalComponentsDir, importPath))
 				if component, exists := byPath[resolved]; exists && !seen[resolved] {
 					seen[resolved] = true
 					chunks = append(chunks, askretrieve.Chunk{ID: "planned-import-" + strings.ReplaceAll(resolved, "/", "_"), Source: "plan-workspace", Label: resolved, Topic: askcontext.Topic("workspace:" + resolved), Content: component.Content, Score: 92})
@@ -632,15 +632,15 @@ func planTarget(plan askcontract.PlanResponse, fallback askintent.Target) askint
 		switch {
 		case clean == workspacepaths.CanonicalVarsWorkflow:
 			return askintent.Target{Kind: "vars", Path: clean}
-		case strings.HasPrefix(clean, "workflows/components/"):
+		case workspacepaths.IsComponentAuthoringPath(clean):
 			return askintent.Target{Kind: "component", Path: clean, Name: strings.TrimSuffix(filepath.Base(clean), filepath.Ext(clean))}
-		case strings.HasPrefix(clean, "workflows/scenarios/") || clean == workspacepaths.CanonicalPrepareWorkflow:
+		case workspacepaths.IsScenarioAuthoringPath(clean) || clean == workspacepaths.CanonicalPrepareWorkflow:
 			return askintent.Target{Kind: "scenario", Path: clean, Name: strings.TrimSuffix(filepath.Base(clean), filepath.Ext(clean))}
 		}
 	}
 	for _, file := range plan.Files {
 		path := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if strings.HasPrefix(path, "workflows/scenarios/") {
+		if workspacepaths.IsScenarioAuthoringPath(path) {
 			name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 			return askintent.Target{Kind: "scenario", Path: path, Name: name}
 		}
@@ -681,10 +681,10 @@ func localStepKinds(content string) []string {
 
 func localWorkflowMode(path string, content string) string {
 	clean := filepath.ToSlash(strings.TrimSpace(path))
-	if filepath.Base(clean) == "prepare.yaml" {
+	if workspacepaths.IsCanonicalPrepareWorkflowPath(clean) {
 		return "prepare"
 	}
-	if strings.Contains(clean, "/workflows/scenarios/") || strings.HasPrefix(clean, "workflows/scenarios/") {
+	if workspacepaths.IsScenarioAuthoringPath(clean) {
 		return "apply"
 	}
 	return ""

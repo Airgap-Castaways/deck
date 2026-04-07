@@ -833,7 +833,7 @@ func documentKind(path string, kind string) string {
 	if clean == workspacepaths.CanonicalVarsWorkflow {
 		return "vars"
 	}
-	if strings.HasPrefix(clean, "workflows/components/") {
+	if workspacepaths.IsComponentAuthoringPath(clean) {
 		return "component"
 	}
 	if strings.TrimSpace(kind) != "" {

@@ -1,6 +1,10 @@
 package askcontext
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
+)
 
 func InvariantPromptBlock() PromptBlock {
 	manifest := Current()
@@ -191,9 +195,13 @@ func VarsGuidanceBlock() string {
 	b.WriteString("Variables guidance:\n")
 	b.WriteString("- ")
 	b.WriteString(manifest.Vars.Summary)
-	b.WriteString("\n- Prefer vars.yaml for: ")
+	b.WriteString("\n- Prefer ")
+	b.WriteString(workspacepaths.WorkflowVarsRel)
+	b.WriteString(" for: ")
 	b.WriteString(strings.Join(manifest.Vars.PreferFor, ", "))
-	b.WriteString("\n- Avoid vars.yaml for: ")
+	b.WriteString("\n- Avoid ")
+	b.WriteString(workspacepaths.WorkflowVarsRel)
+	b.WriteString(" for: ")
 	b.WriteString(strings.Join(manifest.Vars.AvoidFor, ", "))
 	b.WriteString("\n- Keep schema-typed arrays/objects inline as real YAML arrays/objects when the step schema requires them.")
 	b.WriteString("\n- Example vars keys: ")

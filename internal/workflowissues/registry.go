@@ -1,6 +1,11 @@
 package workflowissues
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
+)
 
 const (
 	CodeDuplicateStepID              Code = "duplicate_step_id"
@@ -27,7 +32,7 @@ var registry = map[Code]Spec{
 	CodeMissingPrepareApplyStructure: {Code: CodeMissingPrepareApplyStructure, Class: ClassContract, DefaultSeverity: SeverityBlocking, Summary: "Prepare/apply workflows need both prepare and apply files.", Details: "When the plan targets prepare+apply, it must include a prepare workflow and an apply entry scenario."},
 	CodeMissingRoleSelector:          {Code: CodeMissingRoleSelector, Class: ClassContract, DefaultSeverity: SeverityBlocking, Summary: "Multi-role plans need an execution role selector.", Details: "Multi-node or role-aware apply flows need a role selector or equivalent branching model."},
 	CodeMissingArtifactConsumer:      {Code: CodeMissingArtifactConsumer, Class: ClassContract, DefaultSeverity: SeverityBlocking, Summary: "Artifact-dependent plans need a viable consumer path.", Details: "If prepare stages artifacts, apply must have a concrete consumer path for those artifacts."},
-	CodeInvalidImportTarget:          {Code: CodeInvalidImportTarget, Class: ClassStructural, DefaultSeverity: SeverityBlocking, Summary: "Imports must point at valid component paths.", Details: "Phase imports must resolve under workflows/components/."},
+	CodeInvalidImportTarget:          {Code: CodeInvalidImportTarget, Class: ClassStructural, DefaultSeverity: SeverityBlocking, Summary: "Imports must point at valid component paths.", Details: fmt.Sprintf("Phase imports must resolve under %s/.", workspacepaths.CanonicalComponentsDir)},
 	CodeUnsupportedRoleStepKind:      {Code: CodeUnsupportedRoleStepKind, Class: ClassSemantic, DefaultSeverity: SeverityBlocking, Summary: "Selected step kind is not supported for the current workflow role.", Details: "Prepare and apply have different supported step kinds."},
 	CodeAmbiguousJoinContract:        {Code: CodeAmbiguousJoinContract, Class: ClassQuality, DefaultSeverity: SeverityAdvisory, DefaultRecoverable: true, Summary: "Join handoff contracts should be explicit and unambiguous.", Details: "Worker join publication and consumption should reference one authoritative join handoff contract.", PromptHint: "Use one authoritative join handoff contract and make the producer/consumer path explicit."},
 	CodeArtifactContractGap:          {Code: CodeArtifactContractGap, Class: ClassQuality, DefaultSeverity: SeverityMissingContract, DefaultRecoverable: true, Summary: "Artifact contracts should be explicit enough for generation.", Details: "Artifact producers, consumers, and bundle layout should be explicit when apply depends on prepared assets."},

@@ -65,7 +65,7 @@ func preferredAnchorPath(paths []string) string {
 		if clean == "" {
 			continue
 		}
-		if clean == workspacepaths.CanonicalVarsWorkflow || strings.HasPrefix(clean, "workflows/components/") {
+		if clean == workspacepaths.CanonicalVarsWorkflow || workspacepaths.IsComponentAuthoringPath(clean) {
 			continue
 		}
 		return clean
@@ -119,7 +119,7 @@ func normalizeRefinePlanFiles(files []askcontract.PlanFile, targetPaths []string
 		switch {
 		case path == workspacepaths.CanonicalVarsWorkflow:
 			kind = "vars"
-		case strings.HasPrefix(path, "workflows/components/"):
+		case workspacepaths.IsComponentAuthoringPath(path):
 			kind = "component"
 		}
 		action := "create"
@@ -156,7 +156,7 @@ func refineTargetScope(targetPaths []string) string {
 	switch {
 	case path == workspacepaths.CanonicalVarsWorkflow:
 		return "vars"
-	case strings.HasPrefix(path, "workflows/components/"):
+	case workspacepaths.IsComponentAuthoringPath(path):
 		return "component"
 	default:
 		return "scenario"
@@ -185,7 +185,7 @@ func disallowedRefinePaths(workspace askretrieve.WorkspaceSummary, allowedPaths 
 func firstScenarioPath(paths []string) string {
 	for _, path := range paths {
 		clean := filepath.ToSlash(strings.TrimSpace(path))
-		if clean == workspacepaths.CanonicalPrepareWorkflow || strings.HasPrefix(clean, "workflows/scenarios/") {
+		if clean == workspacepaths.CanonicalPrepareWorkflow || workspacepaths.IsScenarioAuthoringPath(clean) {
 			return clean
 		}
 	}

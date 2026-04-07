@@ -23,7 +23,7 @@ func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askinte
 	}
 	if workspace.HasWorkflowTree {
 		for i := range files {
-			if strings.HasPrefix(files[i].Path, "workflows/scenarios/") {
+			if workspacepaths.IsScenarioAuthoringPath(files[i].Path) {
 				files[i].Action = "update"
 			}
 		}
@@ -71,7 +71,7 @@ func targetClarificationsFromRequirements(prompt string, req ScenarioRequirement
 	options := []string{}
 	for _, file := range workspace.Files {
 		path := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if path == workspacepaths.CanonicalVarsWorkflow || path == workspacepaths.CanonicalPrepareWorkflow || strings.HasPrefix(path, "workflows/scenarios/") || strings.HasPrefix(path, "workflows/components/") {
+		if path == workspacepaths.CanonicalVarsWorkflow || path == workspacepaths.CanonicalPrepareWorkflow || workspacepaths.IsScenarioAuthoringPath(path) || workspacepaths.IsComponentAuthoringPath(path) {
 			options = append(options, path)
 		}
 	}
@@ -81,7 +81,7 @@ func targetClarificationsFromRequirements(prompt string, req ScenarioRequirement
 	}
 	defaultPath := ""
 	for _, path := range options {
-		if strings.HasPrefix(path, "workflows/scenarios/") {
+		if workspacepaths.IsScenarioAuthoringPath(path) {
 			defaultPath = path
 			break
 		}

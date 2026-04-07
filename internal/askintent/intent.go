@@ -123,9 +123,9 @@ func inferTarget(prompt string) Target {
 		switch {
 		case path == workspacepaths.CanonicalVarsWorkflow:
 			return Target{Kind: "vars", Path: path}
-		case strings.HasPrefix(path, "workflows/components/"):
+		case workspacepaths.IsComponentAuthoringPath(path):
 			return Target{Kind: "component", Path: path, Name: strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))}
-		case path == workspacepaths.CanonicalPrepareWorkflow || strings.HasPrefix(path, "workflows/scenarios/"):
+		case path == workspacepaths.CanonicalPrepareWorkflow || workspacepaths.IsScenarioAuthoringPath(path):
 			return Target{Kind: "scenario", Path: path, Name: strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))}
 		}
 	}

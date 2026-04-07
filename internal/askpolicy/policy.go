@@ -139,7 +139,7 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 	}
 	for _, path := range askintent.ExtractWorkflowPaths(prompt) {
 		req.RequiredFiles = append(req.RequiredFiles, path)
-		if strings.HasPrefix(path, "workflows/scenarios/") || path == workspacepaths.CanonicalPrepareWorkflow {
+		if workspacepaths.IsScenarioAuthoringPath(path) || path == workspacepaths.CanonicalPrepareWorkflow {
 			req.EntryScenario = path
 		}
 	}
@@ -277,7 +277,7 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_prepare_missing", Message: fmt.Sprintf("request expects both prepare and apply workflows but generated output is missing %s", workspacepaths.CanonicalPrepareWorkflow), Fix: "Return both a prepare workflow and at least one apply scenario when the request asks for prepare and apply", Path: workspacepaths.CanonicalPrepareWorkflow})
 		}
 		if len(scenarioLikePathsWithName(gen.Files, "apply")) == 0 {
-			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_apply_missing", Message: "request expects both prepare and apply workflows but generated output is missing an apply scenario", Fix: "Return a scenario entrypoint under workflows/scenarios/ for apply execution", Path: workspacepaths.CanonicalApplyWorkflow})
+			findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "brief_apply_missing", Message: "request expects both prepare and apply workflows but generated output is missing an apply scenario", Fix: fmt.Sprintf("Return a scenario entrypoint under %s/ for apply execution", workspacepaths.CanonicalScenariosDir), Path: workspacepaths.CanonicalApplyWorkflow})
 		}
 	}
 	if strings.TrimSpace(brief.TargetScope) == "workspace" && len(brief.TargetPaths) > 1 {
@@ -422,7 +422,7 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 
 func isAdvisoryComponentTarget(path string, brief askcontract.AuthoringBrief) bool {
 	path = filepath.ToSlash(strings.TrimSpace(path))
-	if !strings.HasPrefix(path, "workflows/components/") {
+	if !workspacepaths.IsComponentAuthoringPath(path) {
 		return false
 	}
 	if strings.TrimSpace(brief.TargetScope) == "component" {
@@ -632,7 +632,7 @@ func defaultValidationChecklist(req ScenarioRequirements) []string {
 		checklist = append(checklist, fmt.Sprintf("Review whether repeated configurable values belong in %s", workspacepaths.CanonicalVarsWorkflow))
 	}
 	if len(req.ComponentAdvisories) > 0 {
-		checklist = append(checklist, "Review whether reusable repeated logic belongs in workflows/components/")
+		checklist = append(checklist, fmt.Sprintf("Review whether reusable repeated logic belongs in %s/", workspacepaths.CanonicalComponentsDir))
 	}
 	return checklist
 }
@@ -653,7 +653,7 @@ func inferVarsRecommendation(prompt string) []string {
 func inferComponentRecommendation(prompt string) []string {
 	lower := strings.ToLower(strings.TrimSpace(prompt))
 	if strings.Contains(lower, "component") || strings.Contains(lower, "components") || strings.Contains(lower, "reusable") || strings.Contains(lower, "shared fragment") {
-		return []string{"Consider workflows/components/ for reusable repeated logic across phases or scenarios."}
+		return []string{fmt.Sprintf("Consider %s/ for reusable repeated logic across phases or scenarios.", workspacepaths.CanonicalComponentsDir)}
 	}
 	return nil
 }
@@ -863,7 +863,7 @@ func scenarioLikePathsWithName(files []askcontract.GeneratedFile, name string) [
 	name = strings.ToLower(strings.TrimSpace(name))
 	for _, file := range files {
 		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if strings.HasPrefix(clean, "workflows/scenarios/") && strings.Contains(strings.ToLower(clean), name) {
+		if workspacepaths.IsScenarioAuthoringPath(clean) && strings.Contains(strings.ToLower(clean), name) {
 			paths = append(paths, clean)
 		}
 	}
@@ -1085,7 +1085,7 @@ func inferComponentAdvisories(files []askcontract.GeneratedFile) []string {
 	advisories := []string{}
 	for seq, count := range sequenceCounts {
 		if count >= 2 {
-			advisories = append(advisories, fmt.Sprintf("Repeated step sequence %q appears across generated files; consider moving it into workflows/components/", seq))
+			advisories = append(advisories, fmt.Sprintf("Repeated step sequence %q appears across generated files; consider moving it into %s/", seq, workspacepaths.CanonicalComponentsDir))
 		}
 	}
 	return dedupeStrings(advisories)
@@ -1153,7 +1153,7 @@ func hasCapability(values []string, want string) bool {
 
 func hasGeneratedComponents(files []askcontract.GeneratedFile) bool {
 	for _, file := range files {
-		if strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(file.Path)), "workflows/components/") {
+		if workspacepaths.IsComponentAuthoringPath(file.Path) {
 			return true
 		}
 	}
