@@ -57,7 +57,58 @@ func TestRenderDocumentPreservesBlockScalarTemplateLines(t *testing.T) {
 
 func TestNormalizeTemplateAliasesSupportsBracketIndexes(t *testing.T) {
 	normalized := normalizeTemplateAliases("${{ vars.nodes[0].ip }}")
-	if normalized != "{{ .vars.nodes[0].ip }}" {
+	if normalized != `{{ index .vars "nodes" 0 "ip" }}` {
 		t.Fatalf("expected bracket-index alias normalization, got %q", normalized)
+	}
+}
+
+func TestNormalizeTemplateAliasesUsesIndexForHyphenatedKeys(t *testing.T) {
+	normalized := normalizeTemplateAliases("{{ vars.node-role }}")
+	if normalized != `{{ index .vars "node-role" }}` {
+		t.Fatalf("expected hyphenated key normalization, got %q", normalized)
+	}
+}
+
+func TestNormalizeTemplateAliasesNormalizesSimplePaths(t *testing.T) {
+	normalized := normalizeTemplateAliases("{{ vars.name }} {{ runtime.host.os.family }}")
+	if normalized != "{{ .vars.name }} {{ .runtime.host.os.family }}" {
+		t.Fatalf("expected simple alias normalization, got %q", normalized)
+	}
+}
+
+func TestNormalizeTemplateAliasesPreservesUnrelatedExpressions(t *testing.T) {
+	input := `{{ printf "%s" vars.name }}`
+	normalized := normalizeTemplateAliases(input)
+	if normalized != input {
+		t.Fatalf("expected unrelated expression to be preserved, got %q", normalized)
+	}
+}
+
+func TestNormalizeTemplateAliasesPreservesControlActionsWhileNormalizingSimpleRefs(t *testing.T) {
+	input := `{{ if vars.enabled }}{{ vars.name }}{{ end }}`
+	normalized := normalizeTemplateAliases(input)
+	if normalized != `{{ if vars.enabled }}{{ .vars.name }}{{ end }}` {
+		t.Fatalf("expected simple ref normalization inside control flow, got %q", normalized)
+	}
+}
+
+func TestRenderDocumentQuotesWholeValueIndexedTemplateScalars(t *testing.T) {
+	content, err := renderDocument("workflows/scenarios/apply.yaml", askcontract.GeneratedDocument{
+		Path: "workflows/scenarios/apply.yaml",
+		Kind: "workflow",
+		Workflow: &askcontract.WorkflowDocument{
+			Version: "v1alpha1",
+			Steps: []askcontract.WorkflowStep{{
+				ID:   "write",
+				Kind: "WriteFile",
+				Spec: map[string]any{"content": "${{ vars.nodes[0].ip }}"},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("render workflow with indexed template scalar: %v", err)
+	}
+	if !strings.Contains(content, `content: "{{ index .vars \"nodes\" 0 \"ip\" }}"`) {
+		t.Fatalf("expected quoted indexed whole-value template scalar, got %q", content)
 	}
 }
