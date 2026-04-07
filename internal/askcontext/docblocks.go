@@ -18,7 +18,7 @@ func AuthoringDocBlock() string {
 	b.WriteString(Current().Components.ImportRule)
 	b.WriteString("\n- ")
 	b.WriteString(Current().Vars.Summary)
-	b.WriteString("\n- Prefer typed steps over `Command` when a typed step exists.\n")
+	b.WriteString("\n- Start with typed step groups first. Prefer typed steps over `Command` when a typed step exists.\n")
 	return b.String()
 }
 

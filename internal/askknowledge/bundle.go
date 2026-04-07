@@ -68,6 +68,8 @@ type PolicyKnowledge struct {
 type StepKnowledge struct {
 	Kind                     string
 	Category                 string
+	Group                    string
+	GroupTitle               string
 	Summary                  string
 	WhenToUse                string
 	SchemaFile               string
@@ -146,6 +148,8 @@ func buildBundle() Bundle {
 		bundle.Steps = append(bundle.Steps, StepKnowledge{
 			Kind:                     step.Kind,
 			Category:                 step.Category,
+			Group:                    step.Group,
+			GroupTitle:               step.GroupTitle,
 			Summary:                  step.Summary,
 			WhenToUse:                step.WhenToUse,
 			SchemaFile:               step.SchemaFile,

@@ -111,6 +111,8 @@ type VarsGuidance struct {
 type StepKindContext struct {
 	Kind                     string
 	Category                 string
+	Group                    string
+	GroupTitle               string
 	Summary                  string
 	WhenToUse                string
 	SchemaFile               string

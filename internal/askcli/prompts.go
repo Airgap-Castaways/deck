@@ -283,6 +283,11 @@ func compactRelevantSchemaPromptBlock(requestText string, target askintent.Targe
 	for _, item := range selected {
 		b.WriteString("- ")
 		b.WriteString(item.Step.Kind)
+		if strings.TrimSpace(item.Step.GroupTitle) != "" {
+			b.WriteString(" [group: ")
+			b.WriteString(strings.TrimSpace(item.Step.GroupTitle))
+			b.WriteString("]")
+		}
 		if len(item.Step.AllowedRoles) > 0 {
 			b.WriteString(" [roles: ")
 			b.WriteString(strings.Join(item.Step.AllowedRoles, ", "))

@@ -240,12 +240,15 @@ func TestBuildStepKindsUsesStepmetaAskMetadata(t *testing.T) {
 	manifest := Current()
 	var command StepKindContext
 	var downloadImage StepKindContext
+	var checkHost StepKindContext
 	for _, kind := range manifest.StepKinds {
 		switch kind.Kind {
 		case "Command":
 			command = kind
 		case "DownloadImage":
 			downloadImage = kind
+		case "CheckHost":
+			checkHost = kind
 		}
 	}
 	if len(command.MatchSignals) == 0 || command.MatchSignals[0] != "shell" {
@@ -259,6 +262,9 @@ func TestBuildStepKindsUsesStepmetaAskMetadata(t *testing.T) {
 	}
 	if len(downloadImage.ConstrainedLiteralFields) == 0 || downloadImage.ConstrainedLiteralFields[0].Path != "spec.backend.engine" {
 		t.Fatalf("expected download image constrained field from stepmeta, got %+v", downloadImage.ConstrainedLiteralFields)
+	}
+	if checkHost.Group != "host-prep" || checkHost.GroupTitle != "Host Prep" {
+		t.Fatalf("expected public group metadata on CheckHost, got group=%q title=%q", checkHost.Group, checkHost.GroupTitle)
 	}
 }
 

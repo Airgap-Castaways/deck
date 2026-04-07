@@ -62,6 +62,7 @@ func build() (Catalog, error) {
 		toolMeta := schemadoc.ToolMetaForDefinition(def.Step)
 		schemaMeta := stepmeta.ProjectSchema(entry)
 		askMeta := stepmeta.ProjectAsk(entry)
+		groupMeta, _ := schemadoc.GroupMeta(workflowMeta.Group)
 		facts := schemaFactsForSchemaFile(workflowMeta.SchemaFile)
 		stepSourceRefs := uniqueSourceRefs(
 			sourceRefString(entry.Docs.Source),
@@ -71,6 +72,8 @@ func build() (Catalog, error) {
 		steps[workflowMeta.Kind] = Step{
 			Kind:                     workflowMeta.Kind,
 			Category:                 workflowMeta.Category,
+			Group:                    workflowMeta.Group,
+			GroupTitle:               strings.TrimSpace(groupMeta.Title),
 			Summary:                  toolMeta.Summary,
 			WhenToUse:                toolMeta.WhenToUse,
 			SchemaFile:               workflowMeta.SchemaFile,
