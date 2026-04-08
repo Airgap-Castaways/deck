@@ -156,7 +156,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends ca-certificates tar
 
-run_workspace_flow /repo /workspace \"${DECK_HOSTED_E2E_INSTALL_PACKAGES}\"
+run_workspace_flow /repo /workspace \"\${DECK_HOSTED_E2E_INSTALL_PACKAGES}\"
 "
 else
   run_workspace_flow "${ROOT_DIR}" "${WORKDIR}" "${INSTALL_PACKAGES}"
