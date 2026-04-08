@@ -1,6 +1,8 @@
 package install
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -113,4 +115,46 @@ func writeManifestForTest(bundleRoot, relPath string, content []byte) error {
 		return err
 	}
 	return os.WriteFile(manifestPath, raw, 0o644)
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func writeTestTarGz(path string, files map[string]string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := f.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
+	gz := gzip.NewWriter(f)
+	defer func() {
+		if closeErr := gz.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
+	tw := tar.NewWriter(gz)
+	defer func() {
+		if closeErr := tw.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
+	for name, content := range files {
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content))}); err != nil {
+			return err
+		}
+		if _, err := tw.Write([]byte(content)); err != nil {
+			return err
+		}
+	}
+	return nil
 }

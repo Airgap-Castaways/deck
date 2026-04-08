@@ -141,20 +141,6 @@ func TestRun_DownloadImageRejectsNonCanonicalOutputDir(t *testing.T) {
 	}
 }
 
-func stubDownloadImageOps() imageDownloadOps {
-	return imageDownloadOps{
-		parseReference: func(v string) (name.Reference, error) {
-			return name.ParseReference(v, name.WeakValidation)
-		},
-		fetchImage: func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
-			return empty.Image, nil
-		},
-		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
-			return os.WriteFile(path, []byte("image"), 0o644)
-		},
-	}
-}
-
 func TestRun_PackagesContainerBackend(t *testing.T) {
 	bundle := t.TempDir()
 	r := &fakeRunner{}

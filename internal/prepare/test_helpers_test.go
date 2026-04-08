@@ -11,6 +11,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/empty"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
 )
 
 func contains(values []string, want string) bool {
@@ -20,6 +26,22 @@ func contains(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func nilContextForPrepareTest() context.Context { return nil }
+
+func stubDownloadImageOps() imageDownloadOps {
+	return imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte("image"), 0o644)
+		},
+	}
 }
 
 type fakeRunner struct {
