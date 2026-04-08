@@ -2,13 +2,21 @@ version: v1alpha1
 phases:
   - name: prepare
     steps:
-      - id: stage-hosted-input
+      - id: stage-hosted-assets
         kind: DownloadFile
         spec:
-          source:
-            path: files/input.txt
-          fetch:
-            sources:
-              - type: local
-                path: __FIXTURE_ROOT__/seed
-          outputPath: files/hosted-e2e/input.txt
+          items:
+            - source:
+                path: files/input.txt
+              fetch:
+                sources:
+                  - type: local
+                    path: seed
+              outputPath: files/hosted-e2e/input.txt
+            - source:
+                path: files/archive.tgz
+              fetch:
+                sources:
+                  - type: local
+                    path: seed
+              outputPath: files/hosted-e2e/archive.tgz
