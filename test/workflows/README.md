@@ -6,16 +6,17 @@
 
 - `components/`, reusable step fragments grouped by concern
 - `prepare.yaml`, shared prepare entry workflow used to build the prepared bundle cache
-- `scenarios/`, workflow entrypoints
+- `scenarios/`, workflow entrypoints for apply and verify flows
 - `vars.yaml`, shared defaults applied to the scenario entrypoints
 
 ## Expected scenario shape
 
-Each canonical scenario keeps scenario meaning in one entry workflow file instead of spreading it across per-scenario subdirectories:
+Each canonical scenario keeps scenario meaning in explicit entry workflow files instead of spreading it across harness scripts or per-scenario subdirectories:
 
 - `scenarios/<name>.yaml`, the scenario entry workflow passed to `deck lint --file` and the scenario runner
+- `scenarios/<name>-verify.yaml`, explicit verification entrypoints when a scenario needs a separate verify workflow
 - `components/...`, reusable step fragments imported by the scenario entrypoints
-- `vars.yaml`, shared workflow defaults loaded automatically and overridden by scenario `vars:` blocks and CLI `--var`
+- `vars.yaml`, shared workflow defaults loaded automatically and overridden by scenario `vars:` blocks when needed
 - scenario entrypoints should split major execution stages into separate phases so readers can follow the scenario flow at a glance
 - each phase imports reusable components directly from `components/`
 - component files are `steps:`-only fragments and should not declare their own `role`, `version`, `vars`, or `phases`
@@ -23,9 +24,8 @@ Each canonical scenario keeps scenario meaning in one entry workflow file instea
 
 Component imports resolve from the `components/` root, so workflows should use paths like `k8s/prereq.yaml` or `bootstrap.yaml` instead of `../components/...`.
 
-E2E harness sidecars live outside the workflow tree:
+E2E orchestration manifests live outside the workflow tree:
 
-- `test/e2e/scenario-meta/<name>.env`, VM topology and verify-stage metadata
-- `test/e2e/scenario-hooks/<name>.sh`, scenario-specific VM helper hooks
+- `test/e2e/scenarios/<name>.json`, VM topology plus ordered role-to-workflow mapping only
 
 `test/workflows/prepare.yaml` is the canonical shared `prepare` workflow for the regression scenarios.

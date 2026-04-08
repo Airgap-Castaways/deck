@@ -67,78 +67,84 @@ control_plane_action() {
 }
 
 step_prepare_bundle() { control_plane_action "prepare-bundle"; }
-role_release() {
-  local role="$1"
-  case "${role}" in
-    worker-2)
-      printf '%s\n' "rocky9"
-      ;;
-    *)
-      printf '%s\n' "ubuntu2404"
-      ;;
-  esac
+
+manifest_actions() {
+  local phase="$1"
+  local stage="${2:-}"
+  python3 "${SCENARIO_MANIFEST_HELPER}" "${ROOT_DIR}" "${SCENARIO_ID}" actions "${phase}" "${stage}"
 }
 
-build_role_env() {
+decode_manifest_action() {
+  local action_json="$1"
+  python3 - <<'PY' "${action_json}"
+import json
+import sys
+
+action = json.loads(sys.argv[1])
+fields = [
+    action["id"],
+    action["role"],
+    action["workflow"],
+]
+print("\t".join(fields))
+PY
+}
+
+run_role_workflow_action() {
   local role="$1"
-  local kubernetes_version="$2"
-  local upgrade_kubernetes_version="$3"
-  local -a env_parts=()
-  local worker_release=""
+  local action_name="$2"
+  local workflow_rel="$3"
 
-  case "${role}" in
-    control-plane)
-      env_parts=(
-        "DECK_KUBEADM_ADVERTISE_ADDRESS=${SERVER_IP}"
-        "DECK_OFFLINE_RELEASE_CONTROL_PLANE=ubuntu2204"
-        "DECK_OFFLINE_RELEASE_WORKER=ubuntu2404"
-        "DECK_OFFLINE_RELEASE_WORKER_2=rocky9"
-      )
-      ;;
-    worker|worker-2)
-      worker_release="$(role_release "${role}")"
-      env_parts=("DECK_OFFLINE_RELEASE=${worker_release}")
-      ;;
-  esac
+  load_state_env
 
-  env_parts+=(
-    "DECK_PREPARED_BUNDLE_REL=${PREPARED_BUNDLE_REL:-}"
-    "DECK_PREPARED_BUNDLE_TAR_REL=${PREPARED_BUNDLE_TAR_REL:-}"
-    "DECK_KUBERNETES_VERSION=${kubernetes_version}"
-    "DECK_KUBERNETES_UPGRADE_VERSION=${upgrade_kubernetes_version}"
-  )
-
-  printf '%s' "${env_parts[*]}"
+  echo "[deck] role=${role} workflow=${workflow_rel} action=${action_name} scenario=${SCENARIO_ID}"
+  run_vagrant_ssh "${role}" "ART_DIR_REL=${ART_DIR_REL} SERVER_URL=${SERVER_URL} DECK_PREPARED_BUNDLE_REL=${PREPARED_BUNDLE_REL:-} DECK_PREPARED_BUNDLE_TAR_REL=${PREPARED_BUNDLE_TAR_REL:-} DECK_E2E_ACTION_NAME=${action_name} DECK_E2E_WORKFLOW_REL=${workflow_rel} DECK_E2E_SCENARIO=${SCENARIO_ID} DECK_E2E_RUN_ID=${RUN_ID} DECK_E2E_PROVIDER=${DECK_VAGRANT_PROVIDER} DECK_E2E_CACHE_KEY=${CACHE_KEY} DECK_E2E_STARTED_AT=${RUN_STARTED_AT} $(guest_vm_action_command "${role}" run-workflow)"
 }
 
 run_role_action() {
   local role="$1"
   local action="$2"
   local stage="${3:-}"
-  local role_env=""
-  local kubernetes_version=""
-  local upgrade_kubernetes_version=""
-
   load_state_env
-  kubernetes_version="$(scenario_kubernetes_version || printf '%s' 'v1.30.1')"
-  upgrade_kubernetes_version="$(scenario_upgrade_kubernetes_version || true)"
-  role_env="$(build_role_env "${role}" "${kubernetes_version}" "${upgrade_kubernetes_version}")"
 
   echo "[deck] role=${role} action=${action} scenario=${SCENARIO_ID}"
-  run_vagrant_ssh "${role}" "ART_DIR_REL=${ART_DIR_REL} SERVER_URL=${SERVER_URL} ${role_env} DECK_E2E_SCENARIO=${SCENARIO_ID} DECK_E2E_RUN_ID=${RUN_ID} DECK_E2E_PROVIDER=${DECK_VAGRANT_PROVIDER} DECK_E2E_CACHE_KEY=${CACHE_KEY} DECK_E2E_STARTED_AT=${RUN_STARTED_AT} $(guest_vm_action_command "${role}" "${action}" "${stage}")"
+  run_vagrant_ssh "${role}" "ART_DIR_REL=${ART_DIR_REL} SERVER_URL=${SERVER_URL} DECK_PREPARED_BUNDLE_REL=${PREPARED_BUNDLE_REL:-} DECK_PREPARED_BUNDLE_TAR_REL=${PREPARED_BUNDLE_TAR_REL:-} DECK_E2E_SCENARIO=${SCENARIO_ID} DECK_E2E_RUN_ID=${RUN_ID} DECK_E2E_PROVIDER=${DECK_VAGRANT_PROVIDER} DECK_E2E_CACHE_KEY=${CACHE_KEY} DECK_E2E_STARTED_AT=${RUN_STARTED_AT} $(guest_vm_action_command "${role}" "${action}" "${stage}")"
 }
 
 step_apply_scenario() {
-  local -a nodes=()
-  local node=""
-  mapfile -t nodes < <(active_nodes)
-  for node in "${nodes[@]}"; do
-    run_role_action "${node}" "apply-scenario"
+  local -a actions=()
+  local action_json=""
+  local decoded=""
+  local role=""
+  local action_name=""
+  local workflow_rel=""
+
+  mapfile -t actions < <(manifest_actions apply)
+  for action_json in "${actions[@]}"; do
+    [[ -n "${action_json}" ]] || continue
+    decoded="$(decode_manifest_action "${action_json}")"
+    IFS=$'\t' read -r action_name role workflow_rel <<< "${decoded}"
+    run_role_workflow_action "${role}" "${action_name}" "${workflow_rel}"
   done
 }
 
 step_verify_scenario() {
-  control_plane_action "verify-scenario"
+  local stage=""
+  local -a actions=()
+  local action_json=""
+  local decoded=""
+  local role=""
+  local action_name=""
+  local workflow_rel=""
+
+  stage="$(scenario_verify_stage_default || true)"
+  mapfile -t actions < <(manifest_actions verify "${stage}")
+  for action_json in "${actions[@]}"; do
+    [[ -n "${action_json}" ]] || continue
+    decoded="$(decode_manifest_action "${action_json}")"
+    IFS=$'\t' read -r action_name role workflow_rel <<< "${decoded}"
+    run_role_workflow_action "${role}" "${action_name}" "${workflow_rel}"
+  done
 }
 
 deck_vagrant_main "$@"

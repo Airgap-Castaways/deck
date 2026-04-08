@@ -112,7 +112,7 @@ Vagrant.configure("2") do |config|
   qemu_use_session = qemu_use_session_env.empty? ? libvirt_use_session : qemu_use_session_env == "1"
   libvirt_default_uri = ENV.fetch("LIBVIRT_DEFAULT_URI", "").strip
   private_network_name = ENV.fetch("DECK_VAGRANT_PRIVATE_NETWORK_NAME", "deck-vagrant")
-  enable_private_network = ENV.fetch("DECK_VAGRANT_ENABLE_PRIVATE_NETWORK", "0") == "1"
+  enable_private_network = ENV.fetch("DECK_VAGRANT_ENABLE_PRIVATE_NETWORK", "1") == "1"
   management_network_name = ENV.fetch("DECK_VAGRANT_MANAGEMENT_NETWORK_NAME", private_network_name)
   management_network_address = ENV.fetch("DECK_VAGRANT_MANAGEMENT_NETWORK_ADDRESS", "192.168.57.0/24")
   ip_timeout = ENV.fetch("DECK_VAGRANT_IP_ADDRESS_TIMEOUT", "300").to_i

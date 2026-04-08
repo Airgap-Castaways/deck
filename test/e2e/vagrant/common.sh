@@ -6,6 +6,7 @@ ROOT_DIR="${ROOT_DIR:-$(cd "${COMMON_DIR}/../../.." && pwd)}"
 VAGRANT_DIR="${ROOT_DIR}/test/vagrant"
 LIBVIRT_ENV_HELPER="${ROOT_DIR}/test/vagrant/libvirt-env.sh"
 BUILD_BINARIES_HELPER="${ROOT_DIR}/test/vagrant/build-deck-binaries.sh"
+SCENARIO_MANIFEST_HELPER="${ROOT_DIR}/test/e2e/vagrant/scenario-manifest.py"
 
 TS="$(date +%Y%m%d-%H%M%S)"
 SCENARIO_ID="${DECK_VAGRANT_SCENARIO:-k8s-worker-join}"
@@ -58,6 +59,9 @@ DECK_VAGRANT_SKIP_CLEANUP="${DECK_VAGRANT_SKIP_CLEANUP:-1}"
 DECK_VAGRANT_SKIP_COLLECT="${DECK_VAGRANT_SKIP_COLLECT:-0}"
 DECK_VAGRANT_COLLECT_PARALLEL="${DECK_VAGRANT_COLLECT_PARALLEL:-3}"
 DECK_VAGRANT_HELPER_ROOT_REL="${DECK_VAGRANT_HELPER_ROOT_REL:-test/vagrant}"
+DECK_VAGRANT_CONTROL_PLANE_IP="${DECK_VAGRANT_CONTROL_PLANE_IP:-192.168.57.10}"
+DECK_VAGRANT_WORKER_IP="${DECK_VAGRANT_WORKER_IP:-192.168.57.11}"
+DECK_VAGRANT_WORKER_2_IP="${DECK_VAGRANT_WORKER_2_IP:-192.168.57.12}"
 
 STEP=""
 FROM_STEP=""
@@ -81,6 +85,7 @@ SCENARIO_METADATA_NODES=""
 SCENARIO_METADATA_USES_WORKERS=""
 SCENARIO_METADATA_KUBERNETES_VERSION=""
 SCENARIO_METADATA_UPGRADE_KUBERNETES_VERSION=""
+SCENARIO_METADATA_VERIFY_STAGE_DEFAULT=""
 BUNDLE_KUBERNETES_VERSION=""
 BUNDLE_UPGRADE_KUBERNETES_VERSION=""
 
@@ -97,27 +102,38 @@ scenario_basename() {
 }
 
 load_scenario_metadata() {
-  local metadata_path="${ROOT_DIR}/test/e2e/scenario-meta/${SCENARIO_ID}.env"
-  local normalized_metadata_path="${ROOT_DIR}/test/e2e/scenario-meta/$(scenario_basename "${SCENARIO_ID}").env"
+  local resolved=""
   SCENARIO_METADATA_LOADED=0
   SCENARIO_METADATA_NODES=""
   SCENARIO_METADATA_USES_WORKERS=""
   SCENARIO_METADATA_KUBERNETES_VERSION=""
   SCENARIO_METADATA_UPGRADE_KUBERNETES_VERSION=""
-  if [[ -f "${metadata_path}" ]]; then
-    source "${metadata_path}"
-  elif [[ "${normalized_metadata_path}" != "${metadata_path}" && -f "${normalized_metadata_path}" ]]; then
-    source "${normalized_metadata_path}"
-  fi
-  if [[ -n "${NODES:-}" || -n "${USES_WORKERS:-}" ]]; then
-    SCENARIO_METADATA_NODES="${NODES:-}"
-    SCENARIO_METADATA_USES_WORKERS="${USES_WORKERS:-}"
-    SCENARIO_METADATA_KUBERNETES_VERSION="${KUBERNETES_VERSION:-v1.30.1}"
-    SCENARIO_METADATA_UPGRADE_KUBERNETES_VERSION="${UPGRADE_KUBERNETES_VERSION:-}"
-    if [[ -n "${SCENARIO_METADATA_NODES}" && -n "${SCENARIO_METADATA_USES_WORKERS}" ]]; then
-      SCENARIO_METADATA_LOADED=1
-      return 0
+  SCENARIO_METADATA_VERIFY_STAGE_DEFAULT=""
+  resolved="$(python3 "${SCENARIO_MANIFEST_HELPER}" "${ROOT_DIR}" "${SCENARIO_ID}" metadata)" || return 1
+  while IFS='=' read -r key value; do
+    case "${key}" in
+      NODES)
+        SCENARIO_METADATA_NODES="${value}"
+        ;;
+      KUBERNETES_VERSION)
+        SCENARIO_METADATA_KUBERNETES_VERSION="${value:-v1.30.1}"
+        ;;
+      UPGRADE_KUBERNETES_VERSION)
+        SCENARIO_METADATA_UPGRADE_KUBERNETES_VERSION="${value}"
+        ;;
+      VERIFY_STAGE_DEFAULT)
+        SCENARIO_METADATA_VERIFY_STAGE_DEFAULT="${value}"
+        ;;
+    esac
+  done <<< "${resolved}"
+  if [[ -n "${SCENARIO_METADATA_NODES}" ]]; then
+    if [[ "${SCENARIO_METADATA_NODES}" == *" "* ]]; then
+      SCENARIO_METADATA_USES_WORKERS="1"
+    else
+      SCENARIO_METADATA_USES_WORKERS="0"
     fi
+    SCENARIO_METADATA_LOADED=1
+    return 0
   fi
   return 1
 }
@@ -160,8 +176,15 @@ scenario_upgrade_kubernetes_version() {
   printf '%s\n' "${SCENARIO_METADATA_UPGRADE_KUBERNETES_VERSION:-}"
 }
 
+scenario_verify_stage_default() {
+  if ! ensure_scenario_metadata_loaded; then
+    return 1
+  fi
+  printf '%s\n' "${SCENARIO_METADATA_VERIFY_STAGE_DEFAULT:-}"
+}
+
 resolve_shared_bundle_versions() {
-  local metadata_root="${ROOT_DIR}/test/e2e/scenario-meta"
+  local metadata_root="${ROOT_DIR}/test/e2e/scenarios"
   local default_kubernetes_version="v1.30.1"
   local versions=""
   local upgrade_versions=""
@@ -174,6 +197,7 @@ resolve_shared_bundle_versions() {
 
   local resolved
   resolved="$(python3 - <<'PY' "${metadata_root}" "${default_kubernetes_version}"
+import json
 from pathlib import Path
 import sys
 
@@ -182,18 +206,10 @@ default = sys.argv[2]
 base_versions = set()
 upgrade_versions = set()
 
-for path in sorted(root.glob('*.env')):
-    values = {}
-    for raw in path.read_text(encoding='utf-8').splitlines():
-        line = raw.strip()
-        if not line or line.startswith('#') or '=' not in line:
-            continue
-        key, value = line.split('=', 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        values[key] = value
-    base_versions.add(values.get('KUBERNETES_VERSION', default) or default)
-    upgrade = values.get('UPGRADE_KUBERNETES_VERSION', '')
+for path in sorted(root.glob('*.json')):
+    values = json.loads(path.read_text(encoding='utf-8'))
+    base_versions.add(values.get('kubernetesVersion', default) or default)
+    upgrade = values.get('upgradeKubernetesVersion', '')
     if upgrade:
         upgrade_versions.add(upgrade)
 
@@ -613,9 +629,6 @@ if dispatcher_script:
     paths.append(dispatcher_script)
 if dispatcher_scenario_helper and dispatcher_scenario_helper.is_file():
     paths.append(dispatcher_scenario_helper)
-for base in (root / 'test/e2e/scenario-meta', root / 'test/e2e/scenario-hooks'):
-    if base.exists():
-        paths.extend(sorted(p for p in base.rglob('*') if p.is_file()))
 if include_bundle_tar and bundle_stamp.is_file():
     paths.append(bundle_stamp)
 
@@ -650,9 +663,6 @@ PY
     mkdir -p "${stage_stage_abs}/$(dirname "${dispatcher_scenario_helper_stage_path}")"
     cp "${dispatcher_scenario_helper_source}" "${stage_stage_abs}/${dispatcher_scenario_helper_stage_path}"
   fi
-  mkdir -p "${stage_stage_abs}/test/e2e"
-  cp -a "${ROOT_DIR}/test/e2e/scenario-meta" "${stage_stage_abs}/test/e2e/"
-  cp -a "${ROOT_DIR}/test/e2e/scenario-hooks" "${stage_stage_abs}/test/e2e/"
   if [[ "${include_bundle_tar}" == "1" ]]; then
     mkdir -p "${stage_stage_abs}/$(dirname "${PREPARED_BUNDLE_TAR_REL}")"
     cp "${PREPARED_BUNDLE_TAR_ABS}" "${stage_stage_abs}/${PREPARED_BUNDLE_TAR_REL}"
@@ -724,6 +734,82 @@ fetch_vm_artifacts_serial() {
   for node in "${nodes[@]}"; do
     fetch_vm_artifacts "${node}"
   done
+}
+
+scenario_result_spec() {
+  python3 "${SCENARIO_MANIFEST_HELPER}" "${ROOT_DIR}" "${SCENARIO_ID}" result
+}
+
+validate_collected_artifacts() {
+  local spec_json=""
+  spec_json="$(scenario_result_spec)" || return 1
+  python3 - <<'PY' "${ART_DIR_ABS}" "${spec_json}"
+import json
+from pathlib import Path
+import sys
+
+art_dir = Path(sys.argv[1])
+spec = json.loads(sys.argv[2])
+missing = []
+content_errors = []
+
+for item in spec.get("requiredArtifacts", []):
+    path = art_dir / item["path"]
+    if not path.is_file():
+        missing.append(item["path"])
+        continue
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    for want in item.get("contains", []):
+        if want not in text:
+            content_errors.append(f"{item['path']}: missing {want}")
+
+if missing or content_errors:
+    for item in missing:
+        print(f"missing artifact: {item}")
+    for item in content_errors:
+        print(item)
+    raise SystemExit(1)
+PY
+}
+
+write_result_contract() {
+  local spec_json=""
+  local finished_at=""
+  spec_json="$(scenario_result_spec)" || return 1
+  finished_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  python3 - <<'PY' "${ART_DIR_ABS}" "${SCENARIO_ID}" "${RUN_ID}" "${DECK_VAGRANT_PROVIDER}" "${CACHE_KEY}" "${RUN_STARTED_AT}" "${finished_at}" "${SERVER_URL}" "${spec_json}"
+import json
+from pathlib import Path
+import sys
+
+art_dir = Path(sys.argv[1])
+scenario = sys.argv[2]
+run_id = sys.argv[3]
+provider = sys.argv[4]
+cache_key = sys.argv[5]
+started_at = sys.argv[6]
+finished_at = sys.argv[7]
+server_url = sys.argv[8]
+spec = json.loads(sys.argv[9])
+
+evidence = {"server": server_url}
+for key, value in spec.get("resultEvidenceFiles", {}).items():
+    evidence[key] = value
+
+payload = {
+    "scenario": scenario,
+    "result": "PASS",
+    "runId": run_id,
+    "provider": provider,
+    "cacheKey": cache_key,
+    "startedAt": started_at,
+    "finishedAt": finished_at,
+    "evidence": evidence,
+}
+
+(art_dir / "result.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+(art_dir / "pass.txt").write_text("PASS\n", encoding="utf-8")
+PY
 }
 
 delete_stale_volume() {
@@ -879,19 +965,7 @@ step_up_vms() {
   elif [[ ${up_rc} -ne 0 ]]; then
     exit ${up_rc}
   fi
-  local ip_try=""
-  local ip_attempt=0
-  for ((ip_attempt=1; ip_attempt<=30; ip_attempt++)); do
-    ip_try="$(DECK_VAGRANT_BOX="${DECK_VAGRANT_BOX}" DECK_VAGRANT_PROVIDER="${DECK_VAGRANT_PROVIDER}" DECK_VAGRANT_VM_PREFIX="${DECK_VAGRANT_VM_PREFIX}" vagrant ssh-config control-plane 2>/dev/null | awk '/^[[:space:]]*HostName[[:space:]]+/ {print $2; exit}')"
-    if [[ -n "${ip_try}" ]]; then
-      break
-    fi
-    sleep 2
-  done
-  if [[ -z "${ip_try}" ]]; then
-    ip_try="$(virsh -c "${DECK_LIBVIRT_URI}" domifaddr "${DECK_VAGRANT_VM_PREFIX}control-plane" --source lease 2>/dev/null | awk '/ipv4/ {print $4; exit}' | cut -d/ -f1)"
-  fi
-  SERVER_IP="${ip_try}"
+  SERVER_IP="${DECK_VAGRANT_CONTROL_PLANE_IP}"
   if [[ -z "${SERVER_IP}" ]]; then
     echo "[deck] failed to resolve control-plane IPv4 address"
     exit 1
@@ -899,6 +973,8 @@ step_up_vms() {
   SERVER_URL="http://${SERVER_IP}:18080"
   cat > "${ART_DIR_ABS}/vm-ips.txt" <<EOF
 control-plane=${SERVER_IP}
+worker=${DECK_VAGRANT_WORKER_IP}
+worker-2=${DECK_VAGRANT_WORKER_2_IP}
 EOF
   DECK_VAGRANT_BOX="${DECK_VAGRANT_BOX}" DECK_VAGRANT_PROVIDER="${DECK_VAGRANT_PROVIDER}" DECK_VAGRANT_VM_PREFIX="${DECK_VAGRANT_VM_PREFIX}" vagrant status > "${ART_DIR_ABS}/vagrant-status.txt"
   save_state_env
@@ -922,12 +998,12 @@ step_collect() {
     echo "[deck] collect fetch skipped"
   fi
 
-  if [[ ! -f "${ART_DIR_ABS}/pass.txt" ]]; then
-    echo "[deck] PASS marker missing: ${ART_DIR_ABS}/pass.txt"
+  if ! validate_collected_artifacts; then
+    echo "[deck] collected artifacts failed validation"
     exit 1
   fi
-  if [[ ! -f "${ART_DIR_ABS}/reports/cluster-nodes.txt" ]]; then
-    echo "[deck] missing nodes report: ${ART_DIR_ABS}/reports/cluster-nodes.txt"
+  if ! write_result_contract; then
+    echo "[deck] failed to write result contract"
     exit 1
   fi
 }
@@ -988,14 +1064,14 @@ deck_vagrant_main() {
   export DECK_VAGRANT_MANAGEMENT_NETWORK_ADDRESS="${DECK_VAGRANT_MANAGEMENT_NETWORK_ADDRESS:-192.168.57.0/24}"
   export DECK_VAGRANT_IP_ADDRESS_TIMEOUT="${DECK_VAGRANT_IP_ADDRESS_TIMEOUT:-300}"
   export DECK_VAGRANT_QEMU_USE_AGENT="${DECK_VAGRANT_QEMU_USE_AGENT:-0}"
-  export DECK_VAGRANT_ENABLE_PRIVATE_NETWORK="${DECK_VAGRANT_ENABLE_PRIVATE_NETWORK:-0}"
+  export DECK_VAGRANT_ENABLE_PRIVATE_NETWORK="${DECK_VAGRANT_ENABLE_PRIVATE_NETWORK:-1}"
   export DECK_VAGRANT_MGMT_ATTACH="${DECK_VAGRANT_MGMT_ATTACH:-1}"
   export DECK_VAGRANT_SYNC_TYPE
   export DECK_VAGRANT_BOX_CONTROL_PLANE
   export DECK_VAGRANT_BOX_WORKER
   export DECK_VAGRANT_BOX_WORKER_2
 
-  for p in "${VAGRANT_DIR}/Vagrantfile" "${DECK_VAGRANT_VM_SCENARIO_SCRIPT}" "${LIBVIRT_ENV_HELPER}" "${BUILD_BINARIES_HELPER}"; do
+  for p in "${VAGRANT_DIR}/Vagrantfile" "${DECK_VAGRANT_VM_SCENARIO_SCRIPT}" "${LIBVIRT_ENV_HELPER}" "${BUILD_BINARIES_HELPER}" "${SCENARIO_MANIFEST_HELPER}"; do
     if [[ ! -e "${p}" ]]; then
       echo "[deck] missing required path: ${p}"
       exit 1

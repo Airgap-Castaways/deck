@@ -1,0 +1,57 @@
+version: v1alpha1
+phases:
+  - name: verify
+    steps:
+      - id: verify-reset-report-present
+        kind: WaitForFile
+        spec:
+          path: /tmp/deck/reports/reset-state.txt
+          type: file
+          nonEmpty: true
+          timeout: 2m
+          interval: 2s
+      - id: verify-kubelet-config-present
+        kind: WaitForFile
+        spec:
+          path: /var/lib/kubelet/config.yaml
+          type: file
+          nonEmpty: true
+          timeout: 2m
+          interval: 2s
+      - id: verify-kubelet-active
+        kind: WaitForService
+        spec:
+          name: kubelet
+          timeout: 2m
+          interval: 5s
+      - id: write-rejoin-proof
+        kind: Command
+        spec:
+          timeout: 30s
+          command:
+            - bash
+            - -lc
+            - |
+              set -euo pipefail
+              python3 - <<'PY'
+              from pathlib import Path
+              path = Path('/tmp/deck/reports/reset-state.txt')
+              lines = path.read_text(encoding='utf-8').splitlines()
+              updated = []
+              found = False
+              for line in lines:
+                  if line.startswith('kubeletService='):
+                      updated.append('kubeletService=active')
+                      found = True
+                  else:
+                      updated.append(line)
+              if not found:
+                  updated.append('kubeletService=active')
+              path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
+              PY
+              printf 'kubeletServiceAfterRejoin=active\nkubeletConfigAfterRejoin=present\n' > /tmp/deck/reports/rejoin-kubelet.txt
+              grep -Eq '^kubeadmReset=ok$' /tmp/deck/reports/reset-state.txt
+              grep -Eq '^containerd=active$' /tmp/deck/reports/reset-state.txt
+              grep -Eq '^kubeletService=active$' /tmp/deck/reports/reset-state.txt
+              grep -Eq '^kubeletServiceAfterRejoin=active$' /tmp/deck/reports/rejoin-kubelet.txt
+              grep -Eq '^kubeletConfigAfterRejoin=present$' /tmp/deck/reports/rejoin-kubelet.txt

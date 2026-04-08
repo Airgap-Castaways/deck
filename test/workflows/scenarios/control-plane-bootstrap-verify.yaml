@@ -1,0 +1,24 @@
+version: v1alpha1
+phases:
+  - name: verify
+    steps:
+      - id: verify-join-published
+        kind: WaitForFile
+        spec:
+          path: /tmp/deck/server-root/files/cluster/join.txt
+          type: file
+          nonEmpty: true
+          timeout: 4m
+          interval: 2s
+      - id: verify-control-plane-ready
+        kind: CheckKubernetesCluster
+        spec:
+          timeout: 10m
+          interval: 5s
+          nodes:
+            total: 1
+            ready: 1
+            controlPlaneReady: 1
+          reports:
+            nodesPath: /tmp/deck/reports/bootstrap-nodes.txt
+            clusterNodesPath: /tmp/deck/reports/cluster-nodes.txt

@@ -34,6 +34,8 @@ func TestVagrantHarnessBehaviorCanonicalScripts(t *testing.T) {
 	renderPath := filepath.Join(root, "test", "e2e", "vagrant", "render-workflows.sh")
 	manualRsyncPath := filepath.Join(root, "test", "vagrant", "prepare-minimal-rsync.sh")
 	sanitizeStatePath := filepath.Join(root, "test", "vagrant", "sanitize-vagrant-state.sh")
+	bootstrapVerifyPath := filepath.Join(root, "test", "workflows", "scenarios", "control-plane-bootstrap-verify.yaml")
+	legacyVerifyDir := filepath.Join(root, "test", "workflows", "verifications")
 	if _, err := os.Stat(runnerPath); err != nil {
 		t.Fatalf("stat canonical runner: %v", err)
 	}
@@ -49,8 +51,14 @@ func TestVagrantHarnessBehaviorCanonicalScripts(t *testing.T) {
 	if _, err := os.Stat(sanitizeStatePath); err != nil {
 		t.Fatalf("stat sanitize state helper: %v", err)
 	}
+	if _, err := os.Stat(bootstrapVerifyPath); err != nil {
+		t.Fatalf("stat explicit verify workflow: %v", err)
+	}
+	if _, err := os.Stat(legacyVerifyDir); !os.IsNotExist(err) {
+		t.Fatalf("expected legacy verification tree to be removed, got err=%v", err)
+	}
 	requireScriptHelpContainsAll(t, runnerPath, "--scenario", "--fresh-cache", "--art-dir")
-	requireScriptHelpContainsAll(t, vmdPath, "prepare-bundle", "apply-scenario", "verify-scenario", "bootstrap|cluster|all")
+	requireScriptHelpContainsAll(t, vmdPath, "prepare-bundle", "run-workflow", "collect", "cleanup")
 }
 
 func TestVagrantHarnessBehaviorFresh(t *testing.T) {

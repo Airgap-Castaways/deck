@@ -1,11 +1,13 @@
 version: v1alpha1
 vars:
-  clusterName: worker-join
+  clusterName: worker-join-debian
   serverURL: 192.168.57.10:18080
   registryHost: 192.168.57.10:18080
+  release: ubuntu2404
+  osFamily: debian
   joinSource: cluster-file
   joinFile: /tmp/deck/join.txt
-  applyReportPath: ""
+  applyReportPath: /tmp/deck/reports/worker-apply.txt
 phases:
   - name: host-prereqs
     imports:
@@ -43,7 +45,6 @@ phases:
           timeout: 2m
           interval: 5s
       - id: write-worker-join-report
-        when: vars.applyReportPath != ""
         kind: Command
         spec:
           timeout: 30s
@@ -52,5 +53,5 @@ phases:
             - -lc
             - |
               set -euo pipefail
-              mkdir -p "$(dirname '{{ .vars.applyReportPath }}')"
-              printf 'ok\n' > '{{ .vars.applyReportPath }}'
+              mkdir -p /tmp/deck/reports
+              printf 'ok\n' > /tmp/deck/reports/worker-apply.txt

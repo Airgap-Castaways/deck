@@ -2,6 +2,10 @@ version: v1alpha1
 vars:
   clusterName: upgrade
   enableBootstrap: "true"
+  serverURL: 192.168.57.10:18080
+  registryHost: 192.168.57.10:18080
+  release: ubuntu2204
+  upgradeKubernetesVersion: v1.31.0
 phases:
   - name: host-prereqs
     imports:

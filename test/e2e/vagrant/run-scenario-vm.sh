@@ -7,8 +7,7 @@ Usage: test/e2e/vagrant/run-scenario-vm.sh <role> <action> [stage]
 
 Actions:
   prepare-bundle   control-plane only; prepare bundle, render workflows, start server, apply offline guard
-  apply-scenario   apply control-plane bootstrap or worker join based on role
-  verify-scenario  control-plane only; verify stage=bootstrap|cluster|all (default: cluster)
+  run-workflow     run a manifest-selected workflow
   collect          ensure artifact directory exists
   cleanup          stop server and offline guard, restore ownership
 
@@ -17,10 +16,7 @@ Roles:
 
 Examples:
   bash test/e2e/vagrant/run-scenario-vm.sh control-plane prepare-bundle
-  bash test/e2e/vagrant/run-scenario-vm.sh control-plane apply-scenario
-  bash test/e2e/vagrant/run-scenario-vm.sh worker apply-scenario
-  bash test/e2e/vagrant/run-scenario-vm.sh control-plane verify-scenario bootstrap
-  bash test/e2e/vagrant/run-scenario-vm.sh control-plane verify-scenario cluster
+  bash test/e2e/vagrant/run-scenario-vm.sh control-plane run-workflow
 EOF
 }
 
@@ -43,12 +39,6 @@ SERVER_ENDPOINT="${SERVER_URL#http://}"
 SERVER_ENDPOINT="${SERVER_ENDPOINT#https://}"
 SERVER_HOST="${SERVER_ENDPOINT%%:*}"
 KUBEADM_ADVERTISE_ADDRESS="${DECK_KUBEADM_ADVERTISE_ADDRESS:-${SERVER_HOST}}"
-OFFLINE_RELEASE="${DECK_OFFLINE_RELEASE:-ubuntu2204}"
-OFFLINE_RELEASE_CONTROL_PLANE="${DECK_OFFLINE_RELEASE_CONTROL_PLANE:-ubuntu2204}"
-OFFLINE_RELEASE_WORKER="${DECK_OFFLINE_RELEASE_WORKER:-ubuntu2404}"
-OFFLINE_RELEASE_WORKER_2="${DECK_OFFLINE_RELEASE_WORKER_2:-rocky9}"
-KUBERNETES_VERSION="${DECK_KUBERNETES_VERSION:-v1.30.1}"
-KUBERNETES_UPGRADE_VERSION="${DECK_KUBERNETES_UPGRADE_VERSION:-}"
 PREPARED_BUNDLE_REL="${DECK_PREPARED_BUNDLE_REL:-}"
 PREPARED_BUNDLE_TAR_REL="${DECK_PREPARED_BUNDLE_TAR_REL:-}"
 E2E_SCENARIO="${DECK_E2E_SCENARIO:-k8s-worker-join}"
@@ -66,6 +56,8 @@ KEEP_PROCESSES=0
 SERVER_PID_FILE="/tmp/deck/offline-server.pid"
 CONTROL_PLANE_WORKFLOW_URL="${SERVER_URL}/workflows/scenarios/control-plane-bootstrap.yaml"
 SCENARIO_HELPERS="/workspace/test/e2e/vagrant/run-scenario-vm-scenario.sh"
+WORKFLOW_REL="${DECK_E2E_WORKFLOW_REL:-}"
+ACTION_NAME="${DECK_E2E_ACTION_NAME:-${ACTION}}"
 
 if [[ ! -f "${SCENARIO_HELPERS}" ]]; then
   echo "[deck] missing scenario helper script: ${SCENARIO_HELPERS}"
@@ -255,7 +247,7 @@ start_server_background() {
 }
 
 clear_install_state() {
-  sudo -n rm -f /root/.deck/state/*.json
+  sudo -n rm -f /root/.deck/state/*.json /root/.local/state/deck/state/*.json
 }
 
 require_control_plane() {
@@ -275,18 +267,19 @@ action_prepare_bundle() {
     echo "[deck] server health check failed" | tee "${CASE_DIR}/06-assertions.log"
     exit 1
   fi
-  scenario_action_prepare
 }
 
-action_apply_scenario() {
-  ensure_deck_runtime_binary
-  scenario_action_apply
-}
+run_workflow_action() {
+  local workflow_rel="${WORKFLOW_REL:?DECK_E2E_WORKFLOW_REL is required}"
+  local workflow_url="${SERVER_URL}/workflows/${workflow_rel}"
+  local log_path="${CASE_DIR}/${ACTION_NAME}.log"
+  local -a apply_args=(apply --workflow "${workflow_url}" --fresh)
 
-action_verify_scenario() {
-  require_control_plane
+  clear_install_state
   ensure_deck_runtime_binary
-  scenario_action_verify "${SCENARIO_STAGE:-}"
+  sudo -n "${DECK_BIN}" "${apply_args[@]}" > "${log_path}" 2>&1
+  mkdir -p "${REPORT_DIR}"
+  sudo -n cp -a /tmp/deck/reports/. "${REPORT_DIR}/" >/dev/null 2>&1 || true
 }
 
 if [[ "${ACTION}" != "cleanup" ]]; then
@@ -297,11 +290,8 @@ case "${ACTION}" in
   prepare-bundle)
     action_prepare_bundle
     ;;
-  apply-scenario)
-    action_apply_scenario
-    ;;
-  verify-scenario)
-    action_verify_scenario
+  run-workflow|apply-scenario|verify-scenario)
+    run_workflow_action
     ;;
   collect)
     mkdir -p "${ART_DIR}"

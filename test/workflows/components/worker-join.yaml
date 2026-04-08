@@ -10,3 +10,25 @@ steps:
     spec:
       joinFile: "{{ .vars.joinFile }}"
       extraArgs: ["--cri-socket", "unix:///run/containerd/containerd.sock", "--ignore-preflight-errors=Swap,FileExisting-crictl,FileExisting-conntrack,FileExisting-socat"]
+  - id: reconcile-worker-join
+    kind: Command
+    spec:
+      timeout: 2m
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          if [[ -s /var/lib/kubelet/config.yaml ]]; then
+            exit 0
+          fi
+          if [[ ! -s "{{ .vars.joinFile }}" ]]; then
+            echo "missing join file: {{ .vars.joinFile }}" >&2
+            exit 1
+          fi
+          raw_join_cmd="$(tr -d '\r' < "{{ .vars.joinFile }}")"
+          if [[ -z "${raw_join_cmd}" ]]; then
+            echo "empty join command: {{ .vars.joinFile }}" >&2
+            exit 1
+          fi
+          sudo -n bash -o pipefail -c "${raw_join_cmd} --cri-socket unix:///run/containerd/containerd.sock --ignore-preflight-errors=Swap,FileExisting-crictl,FileExisting-conntrack,FileExisting-socat,FileAvailable--etc-kubernetes-pki-ca.crt"

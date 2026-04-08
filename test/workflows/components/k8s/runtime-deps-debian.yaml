@@ -5,11 +5,29 @@ steps:
       packages: "{{ .vars.runtimeDepPackages.debian }}"
       restrictToRepos:
         - /etc/apt/sources.list.d/offline.list
+  - id: stop-kubelet-debian
+    kind: ManageService
+    spec:
+      name: kubelet
+      state: stopped
   - id: stop-containerd-debian
     kind: ManageService
     spec:
       name: containerd
       state: stopped
+  - id: kill-containerd-shims-debian
+    kind: Command
+    spec:
+      timeout: 30s
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          pids="$(ps -eo pid=,comm= | awk '$2 ~ /^containerd-shim/ {print $1}')"
+          if [[ -n "${pids}" ]]; then
+            kill ${pids} >/dev/null 2>&1 || true
+          fi
   - id: extract-containerd-runtime-debian
     kind: ExtractArchive
     timeout: 20m
