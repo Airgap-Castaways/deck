@@ -9,6 +9,92 @@ KEEP_WORKDIR="${DECK_HOSTED_E2E_KEEP_WORKDIR:-}"
 RUNTIME="${DECK_HOSTED_E2E_RUNTIME:-docker}"
 INSTALL_PACKAGES="${DECK_HOSTED_E2E_INSTALL_PACKAGES:-true}"
 
+resolve_realpath() {
+  python3 - <<'PY' "$1"
+from pathlib import Path
+import sys
+
+print(Path(sys.argv[1]).resolve())
+PY
+}
+
+mtime_seconds() {
+  if stat -c %Y "$1" >/dev/null 2>&1; then
+    stat -c %Y "$1"
+    return
+  fi
+  stat -f %m "$1"
+}
+
+extract_bundle() {
+  local archive_path="$1"
+  local output_dir="$2"
+
+  mkdir -p "${output_dir}"
+  tar -m -xf "${archive_path}" -C "${output_dir}"
+}
+
+run_workspace_flow() {
+  local repo_root="$1"
+  local workspace="$2"
+  local install_packages="$3"
+  local first_mtime
+  local second_mtime
+
+  export HOME="${workspace}/home"
+  mkdir -p "${HOME}"
+
+  pushd "${workspace}" >/dev/null
+  "${repo_root}/bin/deck" lint --root "${workspace}"
+  "${repo_root}/bin/deck" prepare --root "${workspace}/outputs" --bundle-binary-source local
+  "${repo_root}/bin/deck" bundle verify --file "${workspace}"
+  "${repo_root}/bin/deck" bundle build --root "${workspace}" --out "${workspace}/bundle.tar"
+  popd >/dev/null
+
+  extract_bundle "${workspace}/bundle.tar" "${workspace}/unpacked"
+
+  pushd "${workspace}/unpacked/bundle" >/dev/null
+  ./deck apply --var "installPackages=${install_packages}"
+
+  test -f .deck-hosted-e2e/input.txt
+  test "$(cat .deck-hosted-e2e/input.txt)" = "hosted-e2e bundle seed"
+  test -f .deck-hosted-e2e/config.env
+  grep -qxF "MESSAGE=hosted-e2e-ok" .deck-hosted-e2e/config.env
+  test -L .deck-hosted-e2e/latest-input.txt
+  test "$(readlink .deck-hosted-e2e/latest-input.txt)" = "input.txt"
+  if [[ "${install_packages}" == "true" ]]; then
+    jq --version
+  fi
+
+  first_mtime="$(mtime_seconds .deck-hosted-e2e/config.env)"
+  sleep 1
+  ./deck apply --var "installPackages=${install_packages}"
+  second_mtime="$(mtime_seconds .deck-hosted-e2e/config.env)"
+  test "${first_mtime}" = "${second_mtime}"
+  popd >/dev/null
+}
+
+safe_reset_workdir() {
+  local candidate="$1"
+  local resolved
+
+  resolved="$(resolve_realpath "${candidate}")"
+  case "${resolved}" in
+    /|.)
+      printf 'refusing to reset unsafe hosted e2e workdir: %s\n' "${resolved}" >&2
+      exit 1
+      ;;
+  esac
+  if [[ "${resolved}" == "${ROOT_DIR}" ]]; then
+    printf 'refusing to reset repository root as hosted e2e workdir: %s\n' "${resolved}" >&2
+    exit 1
+  fi
+
+  rm -rf "${resolved}"
+  mkdir -p "${resolved}"
+  WORKDIR="${resolved}"
+}
+
 cleanup() {
   if [[ -z "${KEEP_WORKDIR}" ]]; then
     rm -rf "${WORKDIR}"
@@ -38,8 +124,7 @@ if [[ "${RUNTIME}" == "docker" ]] && ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-rm -rf "${WORKDIR}"
-mkdir -p "${WORKDIR}"
+safe_reset_workdir "${WORKDIR}"
 cp -R "${FIXTURE_DIR}/." "${WORKDIR}/"
 
 python3 - <<'PY' "${WORKDIR}/workflows/prepare.yaml" "${WORKDIR}"
@@ -55,45 +140,6 @@ PY
 
 mkdir -p "${WORKDIR}/home"
 
-run_workspace_flow() {
-  local repo_root="$1"
-  local workspace="$2"
-  local install_packages="$3"
-
-  export HOME="${workspace}/home"
-  mkdir -p "${HOME}"
-
-  pushd "${workspace}" >/dev/null
-  "${repo_root}/bin/deck" lint --root "${workspace}"
-  "${repo_root}/bin/deck" prepare --root "${workspace}/outputs" --bundle-binary-source local
-  "${repo_root}/bin/deck" bundle verify --file "${workspace}"
-  "${repo_root}/bin/deck" bundle build --root "${workspace}" --out "${workspace}/bundle.tar"
-  popd >/dev/null
-
-  mkdir -p "${workspace}/unpacked"
-  tar --warning=no-timestamp -xf "${workspace}/bundle.tar" -C "${workspace}/unpacked"
-
-  pushd "${workspace}/unpacked/bundle" >/dev/null
-  ./deck apply --var "installPackages=${install_packages}"
-
-  test -f .deck-hosted-e2e/input.txt
-  test "$(cat .deck-hosted-e2e/input.txt)" = "hosted-e2e bundle seed"
-  test -f .deck-hosted-e2e/config.env
-  grep -qxF "MESSAGE=hosted-e2e-ok" .deck-hosted-e2e/config.env
-  test -L .deck-hosted-e2e/latest-input.txt
-  test "$(readlink .deck-hosted-e2e/latest-input.txt)" = "input.txt"
-  if [[ "${install_packages}" == "true" ]]; then
-    jq --version
-  fi
-
-  first_mtime="$(stat -c %Y .deck-hosted-e2e/config.env)"
-  sleep 1
-  ./deck apply --var "installPackages=${install_packages}"
-  second_mtime="$(stat -c %Y .deck-hosted-e2e/config.env)"
-  test "${first_mtime}" = "${second_mtime}"
-  popd >/dev/null
-}
-
 if [[ "${RUNTIME}" == "docker" ]]; then
   docker run --rm \
     --volume "${ROOT_DIR}:/repo:ro" \
@@ -101,52 +147,17 @@ if [[ "${RUNTIME}" == "docker" ]]; then
     --workdir /workspace \
     --env DECK_HOSTED_E2E_INSTALL_PACKAGES="${INSTALL_PACKAGES}" \
     "${IMAGE}" \
-    bash -lc '
-      set -euo pipefail
-      export DEBIAN_FRONTEND=noninteractive
+    bash -lc "$(declare -f mtime_seconds)
+$(declare -f extract_bundle)
+$(declare -f run_workspace_flow)
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
 
-      apt-get update
-      apt-get install -y --no-install-recommends ca-certificates tar
+apt-get update
+apt-get install -y --no-install-recommends ca-certificates tar
 
-      run_workspace_flow() {
-        local repo_root="$1"
-        local workspace="$2"
-        local install_packages="$3"
-
-        export HOME="${workspace}/home"
-        mkdir -p "${HOME}"
-
-        cd "${workspace}"
-        "${repo_root}/bin/deck" lint --root "${workspace}"
-        "${repo_root}/bin/deck" prepare --root "${workspace}/outputs" --bundle-binary-source local
-        "${repo_root}/bin/deck" bundle verify --file "${workspace}"
-        "${repo_root}/bin/deck" bundle build --root "${workspace}" --out "${workspace}/bundle.tar"
-
-        mkdir -p "${workspace}/unpacked"
-        tar --warning=no-timestamp -xf "${workspace}/bundle.tar" -C "${workspace}/unpacked"
-
-        cd "${workspace}/unpacked/bundle"
-        ./deck apply --var "installPackages=${install_packages}"
-
-        test -f .deck-hosted-e2e/input.txt
-        test "$(cat .deck-hosted-e2e/input.txt)" = "hosted-e2e bundle seed"
-        test -f .deck-hosted-e2e/config.env
-        grep -qxF "MESSAGE=hosted-e2e-ok" .deck-hosted-e2e/config.env
-        test -L .deck-hosted-e2e/latest-input.txt
-        test "$(readlink .deck-hosted-e2e/latest-input.txt)" = "input.txt"
-        if [[ "${install_packages}" == "true" ]]; then
-          jq --version
-        fi
-
-        first_mtime="$(stat -c %Y .deck-hosted-e2e/config.env)"
-        sleep 1
-        ./deck apply --var "installPackages=${install_packages}"
-        second_mtime="$(stat -c %Y .deck-hosted-e2e/config.env)"
-        test "${first_mtime}" = "${second_mtime}"
-      }
-
-      run_workspace_flow /repo /workspace "${DECK_HOSTED_E2E_INSTALL_PACKAGES}"
-    '
+run_workspace_flow /repo /workspace \"${DECK_HOSTED_E2E_INSTALL_PACKAGES}\"
+"
 else
   run_workspace_flow "${ROOT_DIR}" "${WORKDIR}" "${INSTALL_PACKAGES}"
 fi
