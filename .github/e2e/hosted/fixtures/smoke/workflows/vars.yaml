@@ -1,1 +1,3 @@
 installPackages: "true"
+packageManager: apt
+packageName: jq

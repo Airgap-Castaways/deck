@@ -19,6 +19,16 @@ jobs:
   hosted-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: ubuntu24
+            image: ubuntu:24.04
+            package_manager: apt
+          - id: rocky9
+            image: rockylinux:9
+            package_manager: dnf
 
     steps:
       - name: Checkout
@@ -35,14 +45,16 @@ jobs:
       - name: Run GitHub-hosted deck E2E smoke
         env:
           DECK_HOSTED_E2E_KEEP_WORKDIR: "1"
-          DECK_HOSTED_E2E_WORKDIR: ${{ runner.temp }}/deck-hosted-e2e
+          DECK_HOSTED_E2E_WORKDIR: ${{ runner.temp }}/deck-hosted-e2e-${{ matrix.id }}
+          DECK_HOSTED_E2E_IMAGE: ${{ matrix.image }}
+          DECK_HOSTED_E2E_PACKAGE_MANAGER: ${{ matrix.package_manager }}
         run: bash .github/scripts/run-hosted-e2e.sh
 
       - name: Upload hosted E2E workspace
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: hosted-e2e-workspace-${{ github.run_id }}-${{ github.run_attempt }}
+          name: hosted-e2e-workspace-${{ matrix.id }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: ignore
           retention-days: 14
-          path: ${{ runner.temp }}/deck-hosted-e2e
+          path: ${{ runner.temp }}/deck-hosted-e2e-${{ matrix.id }}

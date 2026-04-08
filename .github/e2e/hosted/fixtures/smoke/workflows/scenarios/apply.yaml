@@ -3,11 +3,18 @@ phases:
   - name: install
     steps:
       - id: refresh-apt-cache
-        when: vars.installPackages == "true"
+        when: vars.installPackages == "true" && vars.packageManager == "apt"
         kind: RefreshRepository
         timeout: 2m
         spec:
           manager: apt
+          update: true
+      - id: refresh-dnf-cache
+        when: vars.installPackages == "true" && vars.packageManager == "dnf"
+        kind: RefreshRepository
+        timeout: 2m
+        spec:
+          manager: dnf
           update: true
       - id: install-jq
         when: vars.installPackages == "true"
@@ -20,6 +27,11 @@ phases:
         spec:
           path: .deck-hosted-e2e
           mode: "0755"
+      - id: ensure-extract-dir
+        kind: EnsureDirectory
+        spec:
+          path: .deck-hosted-e2e/extracted
+          mode: "0755"
       - id: copy-bundled-input
         kind: CopyFile
         spec:
@@ -27,12 +39,19 @@ phases:
             path: outputs/files/hosted-e2e/input.txt
           path: .deck-hosted-e2e/input.txt
           mode: "0644"
+      - id: extract-bundled-archive
+        kind: ExtractArchive
+        spec:
+          source:
+            path: outputs/files/hosted-e2e/archive.tgz
+          path: .deck-hosted-e2e/extracted
       - id: write-hosted-config
         kind: WriteFile
         spec:
           path: .deck-hosted-e2e/config.env
           template: |
-            PACKAGE=jq
+            PACKAGE={{ .vars.packageName }}
+            PACKAGE_MANAGER={{ .vars.packageManager }}
             OS={{ .runtime.host.os }}
             ARCH={{ .runtime.host.arch }}
             MESSAGE=hosted-e2e
@@ -54,6 +73,13 @@ phases:
         kind: WaitForFile
         spec:
           path: .deck-hosted-e2e/config.env
+          type: file
+          nonEmpty: true
+          timeout: 30s
+      - id: wait-for-extracted-message
+        kind: WaitForFile
+        spec:
+          path: .deck-hosted-e2e/extracted/message.txt
           type: file
           nonEmpty: true
           timeout: 30s

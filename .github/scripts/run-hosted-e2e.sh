@@ -8,6 +8,8 @@ WORKDIR="${DECK_HOSTED_E2E_WORKDIR:-$(mktemp -d "${TMPDIR:-/tmp}/deck-hosted-e2e
 KEEP_WORKDIR="${DECK_HOSTED_E2E_KEEP_WORKDIR:-}"
 RUNTIME="${DECK_HOSTED_E2E_RUNTIME:-docker}"
 INSTALL_PACKAGES="${DECK_HOSTED_E2E_INSTALL_PACKAGES:-true}"
+PACKAGE_MANAGER="${DECK_HOSTED_E2E_PACKAGE_MANAGER:-apt}"
+PACKAGE_NAME="${DECK_HOSTED_E2E_PACKAGE_NAME:-jq}"
 
 resolve_realpath() {
   python3 - <<'PY' "$1"
@@ -34,10 +36,41 @@ extract_bundle() {
   tar -m -xf "${archive_path}" -C "${output_dir}"
 }
 
+prepare_fixture_assets() {
+  local workspace="$1"
+
+  mkdir -p "${workspace}/seed/files/archive-src"
+  cat >"${workspace}/seed/files/archive-src/message.txt" <<'EOF'
+hosted-e2e archive payload
+EOF
+  tar -czf "${workspace}/seed/files/archive.tgz" -C "${workspace}/seed/files/archive-src" .
+}
+
+container_bootstrap() {
+  local image="$1"
+
+  case "${image}" in
+    ubuntu:*|debian:*)
+      apt-get update
+      apt-get install -y --no-install-recommends ca-certificates tar gzip
+      ;;
+    rockylinux:*|quay.io/rockylinux/rockylinux:*)
+      dnf install -y ca-certificates tar gzip
+      update-ca-trust
+      ;;
+    *)
+      printf 'unsupported hosted e2e container image bootstrap: %s\n' "${image}" >&2
+      exit 1
+      ;;
+  esac
+}
+
 run_workspace_flow() {
   local repo_root="$1"
   local workspace="$2"
   local install_packages="$3"
+  local package_manager="$4"
+  local package_name="$5"
   local first_mtime
   local second_mtime
 
@@ -54,21 +87,31 @@ run_workspace_flow() {
   extract_bundle "${workspace}/bundle.tar" "${workspace}/unpacked"
 
   pushd "${workspace}/unpacked/bundle" >/dev/null
-  ./deck apply --var "installPackages=${install_packages}"
+  ./deck apply \
+    --var "installPackages=${install_packages}" \
+    --var "packageManager=${package_manager}" \
+    --var "packageName=${package_name}"
 
   test -f .deck-hosted-e2e/input.txt
   test "$(cat .deck-hosted-e2e/input.txt)" = "hosted-e2e bundle seed"
+  test -f .deck-hosted-e2e/extracted/message.txt
+  test "$(cat .deck-hosted-e2e/extracted/message.txt)" = "hosted-e2e archive payload"
   test -f .deck-hosted-e2e/config.env
+  grep -qxF "PACKAGE=${package_name}" .deck-hosted-e2e/config.env
+  grep -qxF "PACKAGE_MANAGER=${package_manager}" .deck-hosted-e2e/config.env
   grep -qxF "MESSAGE=hosted-e2e-ok" .deck-hosted-e2e/config.env
   test -L .deck-hosted-e2e/latest-input.txt
   test "$(readlink .deck-hosted-e2e/latest-input.txt)" = "input.txt"
   if [[ "${install_packages}" == "true" ]]; then
-    jq --version
+    "${package_name}" --version
   fi
 
   first_mtime="$(mtime_seconds .deck-hosted-e2e/config.env)"
   sleep 1
-  ./deck apply --var "installPackages=${install_packages}"
+  ./deck apply \
+    --var "installPackages=${install_packages}" \
+    --var "packageManager=${package_manager}" \
+    --var "packageName=${package_name}"
   second_mtime="$(mtime_seconds .deck-hosted-e2e/config.env)"
   test "${first_mtime}" = "${second_mtime}"
   popd >/dev/null
@@ -126,6 +169,7 @@ fi
 
 safe_reset_workdir "${WORKDIR}"
 cp -R "${FIXTURE_DIR}/." "${WORKDIR}/"
+prepare_fixture_assets "${WORKDIR}"
 
 mkdir -p "${WORKDIR}/home"
 
@@ -135,18 +179,23 @@ if [[ "${RUNTIME}" == "docker" ]]; then
     --volume "${WORKDIR}:/workspace" \
     --workdir /workspace \
     --env DECK_HOSTED_E2E_INSTALL_PACKAGES="${INSTALL_PACKAGES}" \
+    --env DECK_HOSTED_E2E_PACKAGE_MANAGER="${PACKAGE_MANAGER}" \
+    --env DECK_HOSTED_E2E_PACKAGE_NAME="${PACKAGE_NAME}" \
     "${IMAGE}" \
     bash -lc "$(declare -f mtime_seconds)
 $(declare -f extract_bundle)
+$(declare -f container_bootstrap)
 $(declare -f run_workspace_flow)
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
-apt-get update
-apt-get install -y --no-install-recommends ca-certificates tar
+container_bootstrap '${IMAGE}'
 
-run_workspace_flow /repo /workspace \"\${DECK_HOSTED_E2E_INSTALL_PACKAGES}\"
+run_workspace_flow /repo /workspace \
+  \"\${DECK_HOSTED_E2E_INSTALL_PACKAGES}\" \
+  \"\${DECK_HOSTED_E2E_PACKAGE_MANAGER}\" \
+  \"\${DECK_HOSTED_E2E_PACKAGE_NAME}\"
 "
 else
-  run_workspace_flow "${ROOT_DIR}" "${WORKDIR}" "${INSTALL_PACKAGES}"
+  run_workspace_flow "${ROOT_DIR}" "${WORKDIR}" "${INSTALL_PACKAGES}" "${PACKAGE_MANAGER}" "${PACKAGE_NAME}"
 fi
