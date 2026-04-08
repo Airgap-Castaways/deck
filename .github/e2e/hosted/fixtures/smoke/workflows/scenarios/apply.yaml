@@ -1,0 +1,59 @@
+version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: refresh-apt-cache
+        when: vars.installPackages == "true"
+        kind: RefreshRepository
+        timeout: 2m
+        spec:
+          manager: apt
+          update: true
+      - id: install-jq
+        when: vars.installPackages == "true"
+        kind: InstallPackage
+        timeout: 5m
+        spec:
+          packages: [jq]
+      - id: ensure-hosted-output-dir
+        kind: EnsureDirectory
+        spec:
+          path: .deck-hosted-e2e
+          mode: "0755"
+      - id: copy-bundled-input
+        kind: CopyFile
+        spec:
+          source:
+            path: outputs/files/hosted-e2e/input.txt
+          path: .deck-hosted-e2e/input.txt
+          mode: "0644"
+      - id: write-hosted-config
+        kind: WriteFile
+        spec:
+          path: .deck-hosted-e2e/config.env
+          template: |
+            PACKAGE=jq
+            OS={{ .runtime.host.os }}
+            ARCH={{ .runtime.host.arch }}
+            MESSAGE=hosted-e2e
+          mode: "0644"
+      - id: edit-hosted-config
+        kind: EditFile
+        spec:
+          path: .deck-hosted-e2e/config.env
+          edits:
+            - match: MESSAGE=hosted-e2e
+              replaceWith: MESSAGE=hosted-e2e-ok
+          mode: "0644"
+      - id: symlink-latest-input
+        kind: CreateSymlink
+        spec:
+          path: .deck-hosted-e2e/latest-input.txt
+          target: input.txt
+      - id: wait-for-hosted-config
+        kind: WaitForFile
+        spec:
+          path: .deck-hosted-e2e/config.env
+          type: file
+          nonEmpty: true
+          timeout: 30s

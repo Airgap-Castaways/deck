@@ -1,0 +1,14 @@
+version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: stage-hosted-input
+        kind: DownloadFile
+        spec:
+          source:
+            path: files/input.txt
+          fetch:
+            sources:
+              - type: local
+                path: __FIXTURE_ROOT__/seed
+          outputPath: files/hosted-e2e/input.txt

@@ -1,0 +1,1 @@
+hosted-e2e bundle seed

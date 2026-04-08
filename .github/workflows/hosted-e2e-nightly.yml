@@ -1,0 +1,45 @@
+name: Hosted E2E Nightly
+
+on:
+  schedule:
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-e2e-nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  hosted-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build deck CLI
+        run: make build
+
+      - name: Run GitHub-hosted deck E2E smoke
+        env:
+          DECK_HOSTED_E2E_KEEP_WORKDIR: "1"
+          DECK_HOSTED_E2E_WORKDIR: ${{ runner.temp }}/deck-hosted-e2e
+        run: bash .github/scripts/run-hosted-e2e.sh
+
+      - name: Upload hosted E2E workspace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosted-e2e-workspace-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: ${{ runner.temp }}/deck-hosted-e2e
