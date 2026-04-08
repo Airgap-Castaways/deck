@@ -267,6 +267,10 @@ action_prepare_bundle() {
     echo "[deck] server health check failed" | tee "${CASE_DIR}/06-assertions.log"
     exit 1
   fi
+  if ! apply_offline_guard; then
+    echo "[deck] offline guard setup failed" | tee -a "${CASE_DIR}/06-assertions.log"
+    exit 1
+  fi
 }
 
 run_workflow_action() {

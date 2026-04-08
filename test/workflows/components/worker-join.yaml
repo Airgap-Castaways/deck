@@ -9,7 +9,7 @@ steps:
     kind: JoinKubeadm
     spec:
       joinFile: "{{ .vars.joinFile }}"
-      extraArgs: ["--cri-socket", "unix:///run/containerd/containerd.sock", "--ignore-preflight-errors=Swap,FileExisting-crictl,FileExisting-conntrack,FileExisting-socat"]
+      extraArgs: ["--cri-socket", "unix:///run/containerd/containerd.sock", "--ignore-preflight-errors=Swap,FileExisting-crictl,FileExisting-conntrack,FileExisting-socat,FileAvailable--etc-kubernetes-pki-ca.crt"]
   - id: reconcile-worker-join
     kind: Command
     spec:
@@ -25,10 +25,49 @@ steps:
           if [[ ! -s "{{ .vars.joinFile }}" ]]; then
             echo "missing join file: {{ .vars.joinFile }}" >&2
             exit 1
-          fi
-          raw_join_cmd="$(tr -d '\r' < "{{ .vars.joinFile }}")"
-          if [[ -z "${raw_join_cmd}" ]]; then
-            echo "empty join command: {{ .vars.joinFile }}" >&2
+           fi
+           raw_join_cmd="$(tr -d '\r' < "{{ .vars.joinFile }}")"
+           if [[ -z "${raw_join_cmd}" ]]; then
+             echo "empty join command: {{ .vars.joinFile }}" >&2
+             exit 1
+           fi
+           sudo -n bash -o pipefail -c "${raw_join_cmd} --cri-socket unix:///run/containerd/containerd.sock --ignore-preflight-errors=Swap,FileExisting-crictl,FileExisting-conntrack,FileExisting-socat,FileAvailable--etc-kubernetes-pki-ca.crt"
+  - id: reconcile-kubelet-resolver-path
+    kind: Command
+    spec:
+      timeout: 2m
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          config_path=/var/lib/kubelet/config.yaml
+          if [[ ! -s "${config_path}" ]]; then
+            echo "missing kubelet config: ${config_path}" >&2
             exit 1
           fi
-          sudo -n bash -o pipefail -c "${raw_join_cmd} --cri-socket unix:///run/containerd/containerd.sock --ignore-preflight-errors=Swap,FileExisting-crictl,FileExisting-conntrack,FileExisting-socat,FileAvailable--etc-kubernetes-pki-ca.crt"
+          if [[ -f /run/systemd/resolve/resolv.conf ]]; then
+            exit 0
+          fi
+          if [[ ! -f /etc/resolv.conf ]]; then
+            echo "missing fallback resolver file: /etc/resolv.conf" >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('/var/lib/kubelet/config.yaml')
+          lines = path.read_text(encoding='utf-8').splitlines()
+          updated = []
+          found = False
+          for line in lines:
+              if line.startswith('resolvConf:'):
+                  updated.append('resolvConf: /etc/resolv.conf')
+                  found = True
+              else:
+                  updated.append(line)
+          if not found:
+              updated.append('resolvConf: /etc/resolv.conf')
+          path.write_text('\n'.join(updated) + '\n', encoding='utf-8')
+          PY
+          systemctl restart kubelet
