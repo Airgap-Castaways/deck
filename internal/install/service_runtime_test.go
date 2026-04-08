@@ -223,14 +223,14 @@ func TestWriteSystemdUnitStep(t *testing.T) {
 	t.Run("writes unit file from template content", func(t *testing.T) {
 		dir := t.TempDir()
 		target := filepath.Join(dir, "systemd", "templated.service")
-		if err := runWriteSystemdUnit(context.Background(), map[string]any{"path": target, "template": "[ManageService]\nExecStart=/usr/bin/true"}); err != nil {
+		if err := runWriteSystemdUnit(context.Background(), map[string]any{"path": target, "template": "[Service]\nExecStart=/usr/bin/true"}); err != nil {
 			t.Fatalf("runWriteSystemdUnit failed: %v", err)
 		}
 		raw, err := os.ReadFile(target)
 		if err != nil {
 			t.Fatalf("read unit file: %v", err)
 		}
-		if string(raw) != "[ManageService]\nExecStart=/usr/bin/true\n" {
+		if string(raw) != "[Service]\nExecStart=/usr/bin/true\n" {
 			t.Fatalf("unexpected unit template content: %q", string(raw))
 		}
 	})

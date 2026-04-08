@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/config"
@@ -120,11 +121,16 @@ func TestRun_EmitsStepEvents(t *testing.T) {
 		}},
 	}
 
-	var events []StepEvent
+	var (
+		events []StepEvent
+		mu     sync.Mutex
+	)
 	if err := Run(context.Background(), wf, RunOptions{
 		BundleRoot: bundle,
 		EventSink: func(event StepEvent) {
+			mu.Lock()
 			events = append(events, event)
+			mu.Unlock()
 		},
 	}); err != nil {
 		t.Fatalf("Run failed: %v", err)

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -148,8 +149,14 @@ func writeTestTarGz(path string, files map[string]string) (err error) {
 			err = closeErr
 		}
 	}()
-	for name, content := range files {
-		if err = tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content))}); err != nil {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		content := files[name]
+		if err = tw.WriteHeader(&tar.Header{Name: filepath.ToSlash(name), Mode: 0o644, Size: int64(len(content))}); err != nil {
 			return err
 		}
 		if _, err = tw.Write([]byte(content)); err != nil {

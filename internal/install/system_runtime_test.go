@@ -41,7 +41,7 @@ func TestSwapStep(t *testing.T) {
 	if err := os.WriteFile(fstab, []byte(content), 0o644); err != nil {
 		t.Fatalf("write fstab: %v", err)
 	}
-	if err := runSwap(context.Background(), map[string]any{"disable": false, "persist": true, "fstabPath": fstab}); err != nil {
+	if err := runSwap(context.Background(), map[string]any{"disable": true, "persist": true, "fstabPath": fstab}); err != nil {
 		t.Fatalf("runSwap failed: %v", err)
 	}
 	raw, err := os.ReadFile(fstab)
