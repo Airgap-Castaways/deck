@@ -20,8 +20,13 @@ func TestManageServiceStep(t *testing.T) {
 	}
 	logPath := filepath.Join(dir, "systemctl.log")
 	scriptPath := filepath.Join(binDir, "systemctl")
-	script := "#!/usr/bin/env bash\nset -euo pipefail\ncontains_unit() {\n  local list=\"${1:-}\"\n  local unit=\"${2:-}\"\n  [[ -n \"${unit}\" ]] || return 1\n  if [[ \",${list},\" == *\",${unit},\"* ]]; then\n    return 0\n  fi\n  if [[ \"${unit}\" == *.service ]]; then\n    local base=\"${unit%.service}\"\n    [[ \",${list},\" == *\",${base},\"* ]]\n    return\n  fi\n  [[ \",${list},\" == *\",${unit}.service,\"* ]]\n}\ncmd=\"${1:-}\"\ncase \"${cmd}\" in\n  is-enabled)\n    if contains_unit \"${SYSTEMCTL_ENABLED_UNITS:-}\" \"${2:-}\"; then\n      exit 0\n    fi\n    exit 1\n    ;;\n  is-active)\n    unit=\"${2:-}\"\n    if [[ \"${unit}\" == \"--quiet\" ]]; then\n      unit=\"${3:-}\"\n    fi\n    if contains_unit \"${SYSTEMCTL_ACTIVE_UNITS:-}\" \"${unit}\"; then\n      exit 0\n    fi\n    exit 1\n    ;;\n  list-unit-files)\n    if contains_unit \"${SYSTEMCTL_EXISTING_UNITS:-}\" \"${2:-}\"; then\n      printf '%s enabled\\n' \"${2:-}\"\n      exit 0\n    fi\n    exit 1\n    ;;\n  daemon-reload)\n    printf '%s\\n' \"$*\" >> \"" + logPath + "\"\n    exit 0\n    ;;\n  enable|disable|start|stop|restart|reload)\n    if contains_unit \"${SYSTEMCTL_MISSING_UNITS:-}\" \"${2:-}\"; then\n      printf 'Unit %s not found.\\n' \"${2:-}\" >&2\n      exit 1\n    fi\n    ;;\nesac\nprintf '%s\\n' \"$*\" >> \"" + logPath + "\"\n"
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+	script, err := os.ReadFile(filepath.Join("testdata", "systemctl_manage_service.sh"))
+	if err != nil {
+		t.Fatalf("read systemctl test script: %v", err)
+	}
+	rendered := strings.ReplaceAll(string(script), "__LOG_PATH__", logPath)
+	//nolint:gosec // scriptPath stays under t.TempDir() for this test-only fake systemctl binary.
+	if err := os.WriteFile(scriptPath, []byte(rendered), 0o755); err != nil {
 		t.Fatalf("write systemctl script: %v", err)
 	}
 	t.Setenv("PATH", fmt.Sprintf("%s:%s", binDir, os.Getenv("PATH")))

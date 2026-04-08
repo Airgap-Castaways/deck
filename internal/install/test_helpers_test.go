@@ -126,7 +126,7 @@ func contains(values []string, want string) bool {
 	return false
 }
 
-func writeTestTarGz(path string, files map[string]string) error {
+func writeTestTarGz(path string, files map[string]string) (err error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -149,10 +149,10 @@ func writeTestTarGz(path string, files map[string]string) error {
 		}
 	}()
 	for name, content := range files {
-		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content))}); err != nil {
+		if err = tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content))}); err != nil {
 			return err
 		}
-		if _, err := tw.Write([]byte(content)); err != nil {
+		if _, err = tw.Write([]byte(content)); err != nil {
 			return err
 		}
 	}
