@@ -37,7 +37,7 @@ jobs:
 
       - name: Upload hosted E2E workspace
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: hosted-e2e-workspace-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: ignore

@@ -127,17 +127,6 @@ fi
 safe_reset_workdir "${WORKDIR}"
 cp -R "${FIXTURE_DIR}/." "${WORKDIR}/"
 
-python3 - <<'PY' "${WORKDIR}/workflows/prepare.yaml" "${WORKDIR}"
-from pathlib import Path
-import sys
-
-prepare_path = Path(sys.argv[1])
-workdir = Path(sys.argv[2]).as_posix()
-content = prepare_path.read_text(encoding="utf-8")
-content = content.replace("__FIXTURE_ROOT__", workdir)
-prepare_path.write_text(content, encoding="utf-8")
-PY
-
 mkdir -p "${WORKDIR}/home"
 
 if [[ "${RUNTIME}" == "docker" ]]; then

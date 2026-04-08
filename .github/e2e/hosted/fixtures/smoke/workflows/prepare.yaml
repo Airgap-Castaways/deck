@@ -10,5 +10,5 @@ phases:
           fetch:
             sources:
               - type: local
-                path: __FIXTURE_ROOT__/seed
+                path: seed
           outputPath: files/hosted-e2e/input.txt
