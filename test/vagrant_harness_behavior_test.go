@@ -57,7 +57,7 @@ func TestVagrantHarnessBehaviorCanonicalScripts(t *testing.T) {
 	if _, err := os.Stat(legacyVerifyDir); !os.IsNotExist(err) {
 		t.Fatalf("expected legacy verification tree to be removed, got err=%v", err)
 	}
-	requireScriptHelpContainsAll(t, runnerPath, "--scenario", "--fresh-cache", "--art-dir")
+	requireScriptHelpContainsAll(t, runnerPath, "--scenario", "--fresh", "--fresh-cache", "--art-dir")
 	requireScriptHelpContainsAll(t, vmdPath, "prepare-bundle", "run-workflow", "collect", "cleanup")
 }
 
@@ -111,34 +111,5 @@ func TestVagrantHarnessBehaviorFreshCache(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("fresh-cache behavior check failed: %v\n%s", err, string(out))
-	}
-}
-
-func TestVagrantHarnessBehaviorCacheReuse(t *testing.T) {
-	root := testProjectRoot(t)
-	artDir := filepath.Join("test", "tmp", "cache-reuse-behavior")
-	checkpointDir := filepath.Join(root, artDir, "checkpoints")
-	bundleDir := filepath.Join(root, "test", "artifacts", "cache", "bundles", "shared", "compat")
-	if err := os.MkdirAll(checkpointDir, 0o755); err != nil {
-		t.Fatalf("mkdir checkpoints: %v", err)
-	}
-	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
-		t.Fatalf("mkdir bundle dir: %v", err)
-	}
-	for _, marker := range []string{"cleanup.done", "collect.done", "verify-scenario.done"} {
-		if err := os.WriteFile(filepath.Join(checkpointDir, marker), []byte("x"), 0o644); err != nil {
-			t.Fatalf("write checkpoint marker %s: %v", marker, err)
-		}
-	}
-	bundleSentinel := filepath.Join(bundleDir, "reuse-sentinel")
-	if err := os.WriteFile(bundleSentinel, []byte("cache"), 0o644); err != nil {
-		t.Fatalf("write bundle sentinel: %v", err)
-	}
-
-	cmd := exec.Command("bash", "-lc", "ROOT_DIR='"+root+"'; DECK_VAGRANT_SCENARIO=k8s-worker-join; DECK_VAGRANT_RUN_ID=test-run; DECK_VAGRANT_ART_DIR='"+artDir+"'; source test/e2e/vagrant/common.sh; FRESH=0; FRESH_CACHE=0; RESUME=1; STEP=''; FROM_STEP=''; TO_STEP=''; refresh_layout_contracts; CHECKPOINT_DIR='"+checkpointDir+"'; prepare_local_run_state; test \"${FROM_STEP}\" = prepare-bundle; test ! -e '"+filepath.Join(checkpointDir, "cleanup.done")+"'; test ! -e '"+filepath.Join(checkpointDir, "collect.done")+"'; test ! -e '"+filepath.Join(checkpointDir, "verify-scenario.done")+"'; test -e '"+bundleSentinel+"'")
-	cmd.Dir = root
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("cache-reuse behavior check failed: %v\n%s", err, string(out))
 	}
 }

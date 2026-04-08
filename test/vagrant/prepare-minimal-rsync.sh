@@ -26,7 +26,6 @@ RUN_LOG_DIR="${ART_DIR_ABS}/logs"
 RUN_REPORT_DIR="${ART_DIR_ABS}/reports"
 RUN_RENDERED_WORKFLOWS_DIR="${ART_DIR_ABS}/rendered-workflows"
 RUN_BUNDLE_SOURCE_FILE="${ART_DIR_ABS}/bundle-source.txt"
-STATE_ENV_PATH="${CHECKPOINT_DIR}/state.env"
 initialize_run_contract
 prepare_local_run_state
 prepare_libvirt_environment

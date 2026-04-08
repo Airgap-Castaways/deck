@@ -34,7 +34,7 @@ func TestE2ELayoutContracts(t *testing.T) {
 	if _, err := os.Stat(legacyVerifyDir); !os.IsNotExist(err) {
 		t.Fatalf("expected legacy verification tree to be removed, got err=%v", err)
 	}
-	requireScriptHelpContainsAll(t, runnerPath, "--scenario", "--resume", "--fresh", "--fresh-cache", "--art-dir")
+	requireScriptHelpContainsAll(t, runnerPath, "--scenario", "--fresh", "--fresh-cache", "--art-dir")
 
 	layoutContractCmd := "ROOT_DIR='" + root + "'; DECK_VAGRANT_SCENARIO=k8s-worker-join; DECK_VAGRANT_RUN_ID=contract-run; DECK_VAGRANT_CACHE_KEY=contract-cache; source '" + filepath.Join(root, "test", "e2e", "vagrant", "common.sh") + "'; parse_args --art-dir test/tmp/e2e-layout-contract-run; test \"${ART_DIR_REL}\" = test/tmp/e2e-layout-contract-run; test \"${CHECKPOINT_DIR}\" = \"${ROOT_DIR}/test/tmp/e2e-layout-contract-run/checkpoints\"; test \"${RUN_LOG_DIR}\" = \"${ROOT_DIR}/test/tmp/e2e-layout-contract-run/logs\"; test \"${RUN_REPORT_DIR}\" = \"${ROOT_DIR}/test/tmp/e2e-layout-contract-run/reports\"; test \"${RUN_BUNDLE_SOURCE_FILE}\" = \"${ROOT_DIR}/test/tmp/e2e-layout-contract-run/bundle-source.txt\"; test \"${DECK_VAGRANT_CONTROL_PLANE_IP}\" = 192.168.57.10; refresh_layout_contracts; test \"${PREPARED_BUNDLE_REL}\" = test/artifacts/cache/bundles/shared/contract-cache/bundle; test \"${PREPARED_BUNDLE_TAR_REL}\" = test/artifacts/cache/bundles/shared/contract-cache/prepared-bundle.tar; test \"${PREPARED_BUNDLE_WORK_REL}\" = test/artifacts/cache/staging/shared/contract-cache; test \"${CONTROL_PLANE_RSYNC_STAGE_REL}\" = test/artifacts/cache/vagrant/shared/contract-cache/control-plane-rsync-root; test \"${WORKER_RSYNC_STAGE_REL}\" = test/artifacts/cache/vagrant/shared/contract-cache/worker-rsync-root"
 	runBashScript(t, root, layoutContractCmd)

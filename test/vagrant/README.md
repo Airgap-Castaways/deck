@@ -36,15 +36,12 @@ The default behavior is tuned for repeated local runs.
 - Default artifact path: `test/artifacts/runs/<scenario>/<run-id>/`
 - Default VM prefix: `deck-<scenario>-local`
 - Default cleanup behavior: keep VMs
-- A repeated run restarts from the canonical `prepare-bundle` step when a prior local run already exists
 
 Common maintenance commands:
 
 - Bootstrap only: `bash test/e2e/vagrant/run-scenario.sh --scenario k8s-control-plane-bootstrap`
 - Worker join: `bash test/e2e/vagrant/run-scenario.sh --scenario k8s-worker-join`
 - Node reset: `bash test/e2e/vagrant/run-scenario.sh --scenario k8s-node-reset`
-- Run a single step: `bash test/e2e/vagrant/run-scenario.sh --scenario k8s-worker-join --step up-vms`
-- Resume from an existing run: `bash test/e2e/vagrant/run-scenario.sh --scenario k8s-worker-join --resume --art-dir test/artifacts/runs/k8s-worker-join/local`
 - Start fresh: `bash test/e2e/vagrant/run-scenario.sh --scenario k8s-worker-join --fresh`
 - Skip artifact fetch: `bash test/e2e/vagrant/run-scenario.sh --scenario k8s-worker-join --skip-collect`
 - Clean up VMs at the end: `bash test/e2e/vagrant/run-scenario.sh --scenario k8s-worker-join --cleanup`
@@ -59,8 +56,8 @@ Common maintenance commands:
 
 Important outputs:
 
-- `checkpoints/<step>.done`
-- `error-<step>.log`
+- `logs/error-<step>.log`
+- `logs/step-<step>.log`
 - `reports/cluster-nodes.txt`
 - `result.json`
 - `pass.txt`
@@ -79,7 +76,7 @@ This document is for maintaining the Vagrant regression environment. The product
 - Shared fragments live under `test/workflows/components/`, and shared defaults live in `test/workflows/vars.yaml`
 - Scenario topology and ordered role-level workflow orchestration are described under `test/e2e/scenarios/*.json`
 - Repeated local runs reuse the same artifact path and VM prefix by default
-- To narrow the scope of a rerun, use `--from-step`, `--to-step`, `--resume`, or `--art-dir`
+- To preserve a prior run while experimenting, change `--art-dir`
 - Changing `--art-dir` does not change the shared prepared bundle cache path
 - To fully reset local state, remove `test/vagrant/.vagrant`, the relevant `test/artifacts/runs/...` directory, and the shared bundle/staging/vagrant cache trees before re-running
 - Direct `vagrant up control-plane worker worker-2 --provider libvirt` automatically uses `test/vagrant/prepare-minimal-rsync.sh` to prepare the shared cache and role-specific rsync sources

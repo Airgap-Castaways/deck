@@ -63,10 +63,6 @@ DECK_VAGRANT_CONTROL_PLANE_IP="${DECK_VAGRANT_CONTROL_PLANE_IP:-192.168.57.10}"
 DECK_VAGRANT_WORKER_IP="${DECK_VAGRANT_WORKER_IP:-192.168.57.11}"
 DECK_VAGRANT_WORKER_2_IP="${DECK_VAGRANT_WORKER_2_IP:-192.168.57.12}"
 
-STEP=""
-FROM_STEP=""
-TO_STEP=""
-RESUME="${DECK_VAGRANT_RESUME:-1}"
 IN_VAGRANT_DIR=0
 LIBVIRT_ENV_INITIALIZED=0
 FRESH=0
@@ -77,9 +73,6 @@ HOST_BACKEND_RUNTIME=""
 HOST_ARCH=""
 SERVER_IP=""
 SERVER_URL=""
-STATE_ENV_PATH=""
-STEP_FROM_INDEX=0
-STEP_TO_INDEX=0
 SCENARIO_METADATA_LOADED=0
 SCENARIO_METADATA_NODES=""
 SCENARIO_METADATA_USES_WORKERS=""
@@ -230,21 +223,7 @@ PY
   BUNDLE_UPGRADE_KUBERNETES_VERSION="$(printf '%s\n' "${resolved}" | sed -n '2p')"
 }
 
-active_nodes() {
-  scenario_nodes
-}
-
-step_index() {
-  local step_name="$1"
-  local i
-  for i in "${!STEPS[@]}"; do
-    if [[ "${STEPS[$i]}" == "${step_name}" ]]; then
-      echo "${i}"
-      return 0
-    fi
-  done
-  return 1
-}
+active_nodes() { scenario_nodes; }
 
 deck_vagrant_usage() {
   local entrypoint="${DECK_VAGRANT_ENTRYPOINT:-test/e2e/vagrant/run-scenario.sh}"
@@ -253,10 +232,6 @@ Usage: ${entrypoint} [options]
 
 Options:
   --scenario <name>    Override the scenario cache/artifact namespace.
-  --step <name>       Run only one step.
-  --from-step <name>  Start from step.
-  --to-step <name>    End at step.
-  --resume            Skip completed checkpoints and continue.
   --fresh             Recreate VMs and rerun from a clean local state.
   --fresh-cache       Remove run artifacts and scenario cache, then rerun.
   --art-dir <path>    Reuse artifact directory (absolute or workspace-relative).
@@ -326,32 +301,14 @@ parse_args() {
         refresh_layout_contracts
         shift 2
         ;;
-      --step)
-        STEP="${2:?--step requires value}"
-        shift 2
-        ;;
-      --from-step)
-        FROM_STEP="${2:?--from-step requires value}"
-        shift 2
-        ;;
-      --to-step)
-        TO_STEP="${2:?--to-step requires value}"
-        shift 2
-        ;;
-      --resume)
-        RESUME=1
-        shift
-        ;;
       --fresh)
         FRESH=1
-        RESUME=0
         DECK_VAGRANT_SKIP_CLEANUP="0"
         shift
         ;;
       --fresh-cache)
         FRESH=1
         FRESH_CACHE=1
-        RESUME=0
         DECK_VAGRANT_SKIP_CLEANUP="0"
         shift
         ;;
@@ -383,23 +340,11 @@ parse_args() {
     esac
   done
 
-  if [[ -n "${STEP}" ]]; then
-    FROM_STEP="${STEP}"
-    TO_STEP="${STEP}"
-  fi
-
   CHECKPOINT_DIR="${ART_DIR_ABS}/checkpoints"
   RUN_LOG_DIR="${ART_DIR_ABS}/logs"
   RUN_REPORT_DIR="${ART_DIR_ABS}/reports"
   RUN_RENDERED_WORKFLOWS_DIR="${ART_DIR_ABS}/rendered-workflows"
   RUN_BUNDLE_SOURCE_FILE="${ART_DIR_ABS}/bundle-source.txt"
-  STATE_ENV_PATH="${CHECKPOINT_DIR}/state.env"
-
-  if [[ ${FRESH} -eq 0 && -f "${STATE_ENV_PATH}" ]]; then
-    sync_type_live="${DECK_VAGRANT_SYNC_TYPE}"
-    source "${STATE_ENV_PATH}"
-    DECK_VAGRANT_SYNC_TYPE="${sync_type_live}"
-  fi
 }
 
 prepare_local_run_state() {
@@ -414,13 +359,6 @@ prepare_local_run_state() {
     fi
     return 0
   fi
-  if [[ ${RESUME} -eq 1 && -z "${STEP}" && -z "${FROM_STEP}" && -z "${TO_STEP}" && -f "${CHECKPOINT_DIR}/cleanup.done" ]]; then
-    local step_name=""
-    for step_name in prepare-bundle apply-scenario verify-scenario collect cleanup; do
-      rm -f "${CHECKPOINT_DIR}/${step_name}.done"
-    done
-    FROM_STEP="prepare-bundle"
-  fi
 }
 
 initialize_run_contract() {
@@ -431,21 +369,7 @@ initialize_run_contract() {
 }
 
 resolve_step_range() {
-  local from_idx=0
-  local to_idx
-  to_idx=$((${#STEPS[@]} - 1))
-  if [[ -n "${FROM_STEP}" ]]; then
-    from_idx="$(step_index "${FROM_STEP}")" || { echo "[deck] unknown from-step: ${FROM_STEP}"; exit 1; }
-  fi
-  if [[ -n "${TO_STEP}" ]]; then
-    to_idx="$(step_index "${TO_STEP}")" || { echo "[deck] unknown to-step: ${TO_STEP}"; exit 1; }
-  fi
-  if (( from_idx > to_idx )); then
-    echo "[deck] from-step must be before to-step"
-    exit 1
-  fi
-  STEP_FROM_INDEX="${from_idx}"
-  STEP_TO_INDEX="${to_idx}"
+  return 0
 }
 
 ensure_libvirt_environment() {
@@ -850,35 +774,6 @@ run_vagrant_ssh() {
   return ${result}
 }
 
-load_state_env() {
-  if [[ -f "${STATE_ENV_PATH}" ]]; then
-    local sync_type_live="${DECK_VAGRANT_SYNC_TYPE}"
-    source "${STATE_ENV_PATH}"
-    DECK_VAGRANT_SYNC_TYPE="${sync_type_live}"
-  fi
-}
-
-save_state_env() {
-  mkdir -p "${CHECKPOINT_DIR}"
-  cat > "${STATE_ENV_PATH}" <<EOF
-DECK_VAGRANT_VM_PREFIX=${DECK_VAGRANT_VM_PREFIX}
-SERVER_IP=${SERVER_IP:-}
-SERVER_URL=${SERVER_URL:-}
-PREPARED_BUNDLE_REL=${PREPARED_BUNDLE_REL:-}
-PREPARED_BUNDLE_TAR_REL=${PREPARED_BUNDLE_TAR_REL:-}
-SCENARIO_ID=${SCENARIO_ID:-k8s-worker-join}
-RUN_ID=${RUN_ID:-local}
-CACHE_KEY=${CACHE_KEY:-compat}
-RUN_STARTED_AT=${RUN_STARTED_AT:-}
-EOF
-}
-
-mark_done() {
-  local step_name="$1"
-  mkdir -p "${CHECKPOINT_DIR}"
-  date -u +"%Y-%m-%dT%H:%M:%SZ" > "${CHECKPOINT_DIR}/${step_name}.done"
-}
-
 cleanup() {
   set +e
   if [[ "${IN_VAGRANT_DIR}" == "1" ]]; then
@@ -922,8 +817,6 @@ step_prepare_host() {
   resolve_host_build_context
   prepare_shared_bundle_cache "${HOST_BIN}" "${HOST_BACKEND_RUNTIME}" "${HOST_ARCH}"
   prepare_rsync_stage_roots
-  load_state_env
-  save_state_env
 }
 
 step_up_vms() {
@@ -977,7 +870,6 @@ worker=${DECK_VAGRANT_WORKER_IP}
 worker-2=${DECK_VAGRANT_WORKER_2_IP}
 EOF
   DECK_VAGRANT_BOX="${DECK_VAGRANT_BOX}" DECK_VAGRANT_PROVIDER="${DECK_VAGRANT_PROVIDER}" DECK_VAGRANT_VM_PREFIX="${DECK_VAGRANT_VM_PREFIX}" vagrant status > "${ART_DIR_ABS}/vagrant-status.txt"
-  save_state_env
   popd >/dev/null
   IN_VAGRANT_DIR=0
 }
@@ -1022,33 +914,16 @@ step_cleanup() {
 
 run_step() {
   local step_name="$1"
-  local idx
-  idx="$(step_index "${step_name}")"
-  local done_marker="${CHECKPOINT_DIR}/${step_name}.done"
   local err_file="${RUN_LOG_DIR}/error-${step_name}.log"
   local step_log="${RUN_LOG_DIR}/step-${step_name}.log"
-  local err_file_legacy="${ART_DIR_ABS}/error-${step_name}.log"
-  local step_log_legacy="${ART_DIR_ABS}/step-${step_name}.log"
-  if (( idx < STEP_FROM_INDEX || idx > STEP_TO_INDEX )); then
-    return 0
-  fi
-  if [[ ${RESUME} -eq 1 && -f "${done_marker}" ]]; then
-    echo "[deck] step=${step_name} skip(resume)"
-    return 0
-  fi
   echo "[deck] step=${step_name} start"
-  rm -f "${step_log}" "${err_file}" "${step_log_legacy}" "${err_file_legacy}"
+  rm -f "${step_log}" "${err_file}"
   if ! "step_${step_name//-/_}" > >(tee "${step_log}") 2> >(tee "${err_file}" >&2); then
     echo "[deck] step failed: ${step_name}"
-    cp "${step_log}" "${step_log_legacy}" 2>/dev/null || true
-    cp "${err_file}" "${err_file_legacy}" 2>/dev/null || true
-    echo "last_completed=$(ls "${CHECKPOINT_DIR}"/*.done 2>/dev/null | sed 's#.*/##; s#.done$##' | tr '\n' ',' | sed 's/,$//')" >> "${RUN_REPORT_DIR}/run-summary.txt"
+    printf 'failed_step=%s\n' "${step_name}" >> "${RUN_REPORT_DIR}/run-summary.txt"
     cp "${RUN_REPORT_DIR}/run-summary.txt" "${ART_DIR_ABS}/run-summary.txt" 2>/dev/null || true
     exit 1
   fi
-  cp "${step_log}" "${step_log_legacy}" 2>/dev/null || true
-  cp "${err_file}" "${err_file_legacy}" 2>/dev/null || true
-  mark_done "${step_name}"
   echo "[deck] step=${step_name} done"
 }
 
