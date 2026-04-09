@@ -28,6 +28,10 @@ func BuildEvidencePlan(prompt string, workspace askretrieve.WorkspaceSummary, de
 	if trimmed == "" {
 		return plan
 	}
+	if decision.Route == askintent.RouteRefine {
+		plan.Reason = "refine requests should stay grounded in the local deck workspace"
+		return plan
+	}
 	if looksLikeLocalDeckPrompt(lower, decision, workspace) && !mentionsExternalEvidenceNeed(cuePrompt) {
 		plan.Reason = "request is grounded in the local deck workspace"
 		return plan

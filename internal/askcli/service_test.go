@@ -25,6 +25,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/schemadoc"
 	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 	"github.com/Airgap-Castaways/deck/schemas"
 )
 
@@ -1328,6 +1329,27 @@ func TestValidatePrimaryRefineContractRejectsExtractComponentWithoutSourceRawPat
 	}
 }
 
+func TestValidateRepairAuthoringContractAllowsRawStructuredEditsForRefine(t *testing.T) {
+	err := validateRepairAuthoringContract(askintent.RouteRefine, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "edit", Edits: []askcontract.StructuredEditAction{{Op: "set", RawPath: "steps[0].timeout", Value: "10m"}}}}}, []string{"workflows/scenarios/apply.yaml"})
+	if err != nil {
+		t.Fatalf("expected refine repair contract to allow raw edits, got %v", err)
+	}
+}
+
+func TestValidateRepairAuthoringContractAllowsTargetedReplaceForRefine(t *testing.T) {
+	err := validateRepairAuthoringContract(askintent.RouteRefine, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "replace", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1"}}}}, []string{"workflows/scenarios/apply.yaml"})
+	if err != nil {
+		t.Fatalf("expected refine repair contract to allow targeted replace, got %v", err)
+	}
+}
+
+func TestValidateRepairAuthoringContractRejectsOutsideTargetedFiles(t *testing.T) {
+	err := validateRepairAuthoringContract(askintent.RouteRefine, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "replace", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1"}}}}, []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/vars.yaml"})
+	if err == nil || !strings.Contains(err.Error(), "targeted files") {
+		t.Fatalf("expected targeted-file guard, got %v", err)
+	}
+}
+
 func TestGenerationSystemPromptAddsComponentTransformHintsForRefine(t *testing.T) {
 	req := askpolicy.ScenarioRequirements{AcceptanceLevel: "refine", RequiredFiles: []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/components/bootstrap.yaml"}}
 	workspace := askretrieve.WorkspaceSummary{HasWorkflowTree: true}
@@ -1620,7 +1642,7 @@ func TestExecutePlanResumeStopsWhenClarificationsRemain(t *testing.T) {
 	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader(""), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "saved plan still requires clarification") {
+	if !strings.Contains(stdout.String(), "authoring needs clarification") {
 		t.Fatalf("expected clarification stop, got %q", stdout.String())
 	}
 }
@@ -1641,7 +1663,7 @@ func TestExecuteAuthoringMCPAugmentationIsGatedByEnv(t *testing.T) {
 			name:    "disabled-by-default",
 			enabled: false,
 			want: []string{
-				"mcp: disabled for default local pipeline",
+				"mcp: skipped until requested in authoring tool loop",
 			},
 			avoid: []string{"mcp:web-search initialize failed:"},
 		},
@@ -1649,10 +1671,9 @@ func TestExecuteAuthoringMCPAugmentationIsGatedByEnv(t *testing.T) {
 			name:    "enabled-via-env",
 			enabled: true,
 			want: []string{
-				"mcp:web-search initialize failed:",
-				"transport closed",
+				"mcp: skipped until requested in authoring tool loop",
 			},
-			avoid: []string{"mcp: disabled for default local pipeline"},
+			avoid: []string{"mcp:web-search initialize failed:"},
 		},
 	}
 	for _, tc := range tests {
@@ -1662,7 +1683,7 @@ func TestExecuteAuthoringMCPAugmentationIsGatedByEnv(t *testing.T) {
 			}
 			root := t.TempDir()
 			writeLatestPlanArtifact(t, root)
-			client := &stubClient{responses: []string{`{"summary":"generated starter workflows","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-kubernetes-cluster","overrides":{"nodeCount":1}}]}]}}`}}
+			client := &stubClient{responses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: workspacepaths.CanonicalApplyWorkflow, Content: waitForHostsWorkflow("5s")})}
 			if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client); err != nil {
 				t.Fatalf("execute: %v", err)
 			}
@@ -1707,7 +1728,7 @@ func TestExecutePlanResumeInteractiveClarificationCanQuit(t *testing.T) {
 	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader("q\n"), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "saved plan after interactive clarification exit") {
+	if !strings.Contains(stdout.String(), "authoring clarification stopped") {
 		t.Fatalf("expected interactive quit output, got %q", stdout.String())
 	}
 	stored, _, err := loadPlanArtifact(root, ".deck/plan/latest.json")
@@ -1737,7 +1758,7 @@ func TestExecutePlanResumeInteractiveClarificationCanContinue(t *testing.T) {
 	interactiveSessionProbe = func(io.Reader, io.Writer) bool { return true }
 	defer func() { interactiveSessionProbe = originalProbe }()
 	stdout := &bytes.Buffer{}
-	client := &stubClient{responses: []string{`{"summary":"generated starter workflows","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-kubernetes-cluster","overrides":{"nodeCount":1}}]}]}}`}}
+	client := &stubClient{responses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: workspacepaths.CanonicalApplyWorkflow, Content: waitForHostsWorkflow("5s")})}
 	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader("2\n"), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -1774,6 +1795,34 @@ func TestValidateGenerationAllowsPreserveOnlyRefineNoop(t *testing.T) {
 	}
 	if summary == "" || len(critic.Blocking) != 0 {
 		t.Fatalf("expected noop validation success, got summary=%q critic=%#v", summary, critic)
+	}
+}
+
+func TestValidateGenerationRefineAllowsUntouchedExistingComponentImports(t *testing.T) {
+	root := t.TempDir()
+	componentDir := filepath.Join(root, "workflows", "components", "k8s")
+	scenarioDir := filepath.Join(root, "workflows", "scenarios")
+	if err := os.MkdirAll(componentDir, 0o755); err != nil {
+		t.Fatalf("mkdir components: %v", err)
+	}
+	if err := os.MkdirAll(scenarioDir, 0o755); err != nil {
+		t.Fatalf("mkdir scenarios: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(componentDir, "prereq.yaml"), []byte("steps:\n  - id: prereq\n    kind: CheckHost\n    spec:\n      checks: [os]\n"), 0o644); err != nil {
+		t.Fatalf("write component: %v", err)
+	}
+	files := []askcontract.GeneratedFile{
+		{Path: "workflows/scenarios/control-plane-bootstrap.yaml", Content: "version: v1alpha1\nphases:\n  - name: host-prereqs\n    imports:\n      - path: k8s/prereq.yaml\n  - name: verify\n    steps:\n      - id: bootstrap-report\n        kind: CheckKubernetesCluster\n        spec:\n          interval: 5s\n          timeout: 10m\n          nodes:\n            total: 1\n            ready: 1\n            controlPlaneReady: 1\n"},
+		{Path: "workflows/vars.yaml", Content: "clusterName: bootstrap-root\n"},
+	}
+	gen := testMaterialized("refine", files)
+	plan := askcontract.PlanResponse{Intent: "refine", Files: []askcontract.PlanFile{{Path: "workflows/scenarios/control-plane-bootstrap.yaml", Action: "update"}, {Path: "workflows/vars.yaml", Action: "update"}}, AuthoringBrief: askcontract.AuthoringBrief{TargetPaths: []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/vars.yaml"}}}
+	summary, critic, err := validateGeneration(context.Background(), root, gen, files, askintent.Decision{Route: askintent.RouteRefine}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{})
+	if err != nil {
+		t.Fatalf("expected refine validation with existing imports to pass, got err=%v critic=%#v", err, critic)
+	}
+	if summary == "" || len(critic.Blocking) != 0 {
+		t.Fatalf("expected successful refine validation, got summary=%q critic=%#v", summary, critic)
 	}
 }
 
@@ -1822,6 +1871,14 @@ func TestSemanticCriticWarnsWhenTypedStepsRequestedButOnlyCommandUsed(t *testing
 	joined := strings.Join(critic.Advisory, "\n")
 	if !strings.Contains(joined, "Prefer") && !strings.Contains(joined, "typed") {
 		t.Fatalf("expected typed-step advisory, got %#v", critic)
+	}
+}
+
+func TestSemanticCriticRefineDoesNotRequireUntouchedImportedComponentsToBeRegenerated(t *testing.T) {
+	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/scenarios/control-plane-bootstrap.yaml", Content: "version: v1alpha1\nphases:\n  - name: host-prereqs\n    imports:\n      - path: k8s/prereq.yaml\n  - name: verify\n    steps:\n      - id: bootstrap-report\n        kind: CheckKubernetesCluster\n        spec:\n          interval: 5s\n          timeout: 10m\n          nodes:\n            total: 1\n            ready: 1\n            controlPlaneReady: 1\n"}, {Path: "workflows/vars.yaml", Content: "clusterName: bootstrap-root\n"}})
+	critic := semanticCritic(gen, askintent.Decision{Route: askintent.RouteRefine}, askcontract.PlanResponse{}, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{})
+	if strings.Contains(strings.Join(critic.Blocking, "\n"), "scenario imports missing component") {
+		t.Fatalf("expected refine semantic critic not to require untouched imported components, got %#v", critic)
 	}
 }
 

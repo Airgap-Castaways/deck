@@ -81,28 +81,24 @@ func TestExecuteSkipsMCPWhenEvidencePlanIsUnnecessary(t *testing.T) {
 	}
 }
 
-func TestExecuteAuthoringBlocksWhenRequiredExternalEvidenceFails(t *testing.T) {
+func TestExecuteAuthoringDefersExternalEvidenceToToolLoop(t *testing.T) {
 	t.Setenv("DECK_ASK_API_KEY", "test-key")
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
 	if err := askconfig.SaveStored(askconfig.Settings{MCP: askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{{Name: "web-search", RunCommand: "/bin/sh", Args: []string{"-c", "exit 0"}}}}}); err != nil {
 		t.Fatalf("save stored config: %v", err)
 	}
-	client := &stubClient{responses: []string{
-		`{"version":1,"request":"create Kubernetes 1.35.1 workflow","intent":"draft","complexity":"complex","authoringProgram":{"verification":{"expectedNodeCount":1,"expectedReadyCount":1,"expectedControlPlaneReady":1}},"blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`,
-		`{"summary":"ok","blocking":[],"advisory":[],"missingContracts":[],"suggestedFixes":[],"findings":[]}`,
-		`{"summary":"generated","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-kubernetes-cluster","overrides":{"nodeCount":1}}]}]}}`,
-	}}
 	root := t.TempDir()
-	err := Execute(context.Background(), Options{Root: root, Prompt: "Create a Kubernetes 1.35.1 workflow", Create: true, Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client)
-	if err == nil || !strings.Contains(err.Error(), "required external evidence could not be fetched") {
-		t.Fatalf("expected required evidence failure, got %v", err)
+	client := &stubClient{responses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: "workflows/scenarios/apply.yaml", Content: kubernetesWaitWorkflow()})}
+	if err := Execute(context.Background(), Options{Root: root, Prompt: "Create a Kubernetes 1.35.1 workflow", Create: true, Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client); err != nil {
+		t.Fatalf("execute: %v", err)
 	}
 	state, err := askstate.Load(root)
 	if err != nil {
 		t.Fatalf("load ask state: %v", err)
 	}
-	if len(state.LastAugmentEvents) != 0 {
-		t.Fatalf("expected failed authoring request not to persist ask state, got %#v", state.LastAugmentEvents)
+	joined := strings.Join(state.LastAugmentEvents, "\n")
+	if !strings.Contains(joined, "mcp: available as in-loop authoring tool") {
+		t.Fatalf("expected authoring mcp tool-loop event, got %#v", state.LastAugmentEvents)
 	}
 }
 

@@ -24,6 +24,11 @@ type Context struct {
 	LastPrompt          string    `json:"lastPrompt,omitempty"`
 	LastFiles           []string  `json:"lastFiles,omitempty"`
 	LastLint            string    `json:"lastLint,omitempty"`
+	LastVerifierSummary string    `json:"lastVerifierSummary,omitempty"`
+	LastApprovedPaths   []string  `json:"lastApprovedPaths,omitempty"`
+	LastToolCalls       []string  `json:"lastToolCalls,omitempty"`
+	LastToolTranscript  string    `json:"lastToolTranscript,omitempty"`
+	LastCandidateFiles  []string  `json:"lastCandidateFiles,omitempty"`
 	LastLLMUsed         bool      `json:"lastLlmUsed,omitempty"`
 	LastClassifierLLM   bool      `json:"lastClassifierLlmUsed,omitempty"`
 	LastChunkIDs        []string  `json:"lastChunkIds,omitempty"`

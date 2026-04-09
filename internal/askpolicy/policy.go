@@ -124,10 +124,11 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 		ComponentAdvisories: inferComponentRecommendation(prompt),
 		ScenarioIntent:      append([]string(nil), facts.Intents...),
 	}
+	explicitPaths := askintent.ExtractWorkflowPaths(prompt)
 	if req.AcceptanceLevel == "starter" {
 		req.ComponentAdvisories = nil
 	}
-	if requestedMode != "prepare-only" {
+	if requestedMode != "prepare-only" && (decision.Route != askintent.RouteRefine || len(explicitPaths) == 0) {
 		req.RequiredFiles = append(req.RequiredFiles, workspacepaths.CanonicalApplyWorkflow)
 		req.EntryScenario = workspacepaths.CanonicalApplyWorkflow
 	}
@@ -137,7 +138,7 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 	if strings.Contains(strings.ToLower(prompt), "vars") || len(req.VarsAdvisories) > 0 {
 		req.RequiredFiles = append(req.RequiredFiles, workspacepaths.CanonicalVarsWorkflow)
 	}
-	for _, path := range askintent.ExtractWorkflowPaths(prompt) {
+	for _, path := range explicitPaths {
 		req.RequiredFiles = append(req.RequiredFiles, path)
 		if workspacepaths.IsScenarioAuthoringPath(path) || path == workspacepaths.CanonicalPrepareWorkflow {
 			req.EntryScenario = path

@@ -16,6 +16,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
+	"github.com/Airgap-Castaways/deck/internal/askrecipe"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/askreview"
 	"github.com/Airgap-Castaways/deck/internal/askscaffold"
@@ -147,38 +148,50 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		return fmt.Errorf("cannot refine workflow files because this workspace has no workflow tree yet; run a draft generation first")
 	}
 
-	evidencePlan, evidenceEvents, err := buildEvidencePlan(ctx, client, effective, requestText, decision, workspace, logger)
-	if err != nil {
-		return err
+	var evidencePlan askcontract.EvidencePlan
+	var evidenceEvents []string
+	if askrecipe.SkipsExternalEvidence(requestText, decision) {
+		evidencePlan = askcontract.EvidencePlan{Decision: "unnecessary", Reason: "local authoring request does not need external evidence"}
+		evidenceEvents = []string{"evidence-plan: source=local-policy decision=unnecessary freshness=false install=false compatibility=false troubleshooting=false entities="}
+	} else {
+		evidencePlan, evidenceEvents, err = buildEvidencePlan(ctx, client, effective, requestText, decision, workspace, logger)
+		if err != nil {
+			return err
+		}
 	}
 	mcpChunks := []askretrieve.Chunk{}
 	mcpEvents := append([]string(nil), evidenceEvents...)
-	forceAuthoringAugment := isAuthoringRoute(decision.Route) && askFeatureEnabled("DECK_ASK_ENABLE_AUGMENT")
-	switch {
-	case forceAuthoringAugment || strings.TrimSpace(evidencePlan.Decision) != "unnecessary":
-		mcpChunks, mcpEvents = mcpaugment.Gather(ctx, effective.MCP, decision.Route, requestText)
-		mcpEvents = append(evidenceEvents, mcpEvents...)
-	case isAuthoringRoute(decision.Route):
-		mcpEvents = append(mcpEvents, "mcp: disabled for default local pipeline")
-	default:
-		mcpEvents = append(mcpEvents, "mcp: skipped by evidence plan (unnecessary)")
-	}
-	externalChunks := append([]askretrieve.Chunk{}, mcpChunks...)
-	mcpEvents = append(mcpEvents, externalEvidenceWarningEvents(mcpChunks)...)
-	if failure := requiredExternalEvidenceFailure(evidencePlan, mcpChunks, mcpEvents); failure != "" {
-		if isAuthoringRoute(decision.Route) {
-			return fmt.Errorf("required external evidence could not be fetched for this request: %s; check `deck ask config health`", failure)
+	externalChunks := []askretrieve.Chunk{}
+	if isAuthoringRoute(decision.Route) {
+		switch {
+		case effective.MCP.Enabled && strings.TrimSpace(evidencePlan.Decision) != "unnecessary":
+			mcpEvents = append(mcpEvents, "mcp: available as in-loop authoring tool")
+		case !effective.MCP.Enabled:
+			mcpEvents = append(mcpEvents, "mcp: disabled for authoring tool loop")
+		default:
+			mcpEvents = append(mcpEvents, "mcp: skipped until requested in authoring tool loop")
 		}
-		externalChunks = append(externalChunks, externalEvidenceFailureChunk(failure))
-		mcpEvents = append(mcpEvents, "mcp: required external evidence unavailable")
-	}
-	if warning := weakExternalEvidenceMessage(evidencePlan, mcpChunks, mcpEvents); warning != "" {
-		externalChunks = append(externalChunks, weakExternalEvidenceChunk(warning))
-		mcpEvents = append(mcpEvents, "mcp: weak install evidence fallback enabled")
-	}
-	if !isAuthoringRoute(decision.Route) {
+	} else {
+		if strings.TrimSpace(evidencePlan.Decision) != "unnecessary" {
+			mcpChunks, mcpEvents = mcpaugment.Gather(ctx, effective.MCP, decision.Route, requestText)
+			mcpEvents = append(evidenceEvents, mcpEvents...)
+		} else {
+			mcpEvents = append(mcpEvents, "mcp: skipped by evidence plan (unnecessary)")
+		}
+		mcpEvents = normalizeAugmentEvents(mcpEvents)
+		externalChunks = append(externalChunks, mcpChunks...)
+		mcpEvents = append(mcpEvents, externalEvidenceWarningEvents(mcpChunks)...)
+		if failure := requiredExternalEvidenceFailure(evidencePlan, mcpChunks, mcpEvents); failure != "" {
+			externalChunks = append(externalChunks, externalEvidenceFailureChunk(failure))
+			mcpEvents = append(mcpEvents, "mcp: required external evidence unavailable")
+		}
+		if warning := weakExternalEvidenceMessage(evidencePlan, mcpChunks, mcpEvents); warning != "" {
+			externalChunks = append(externalChunks, weakExternalEvidenceChunk(warning))
+			mcpEvents = append(mcpEvents, "mcp: weak install evidence fallback enabled")
+		}
 		externalChunks = append(externalChunks, projectContextChunk(resolvedRoot))
 	}
+	mcpEvents = normalizeAugmentEvents(mcpEvents)
 	retrieval := askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, externalChunks)
 	requirements := askpolicy.BuildScenarioRequirements(requestText, retrieval, workspace, decision)
 	authoringBrief := askpolicy.BriefFromRequirements(requirements, decision)
@@ -216,6 +229,39 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 	if opts.PlanOnly && !isAuthoringRoute(decision.Route) {
 		return fmt.Errorf("ask plan is intended for draft/refine authoring requests; got route %s. Try `deck ask %q` instead", decision.Route, strings.TrimSpace(requestText))
+	}
+	if updatedResult, handled, runtimeErr := maybeExecuteAuthoringRuntime(ctx, opts, client, effective, logger, progress, requestText, decision, workspace, state, retrieval, evidencePlan, result, resumedPlan); runtimeErr != nil {
+		return runtimeErr
+	} else if handled {
+		result = updatedResult
+		if err := askstate.Save(resolvedRoot, askstate.Context{
+			LastMode:            string(result.Route),
+			LastRoute:           string(result.Route),
+			LastConfidence:      result.Confidence,
+			LastReason:          result.Reason,
+			LastTargetKind:      result.Target.Kind,
+			LastTargetPath:      result.Target.Path,
+			LastTargetName:      result.Target.Name,
+			LastPrompt:          strings.TrimSpace(requestText),
+			LastFiles:           filePaths(result.Files),
+			LastLint:            result.LintSummary,
+			LastVerifierSummary: result.LintSummary,
+			LastApprovedPaths:   append([]string(nil), result.ApprovedPaths...),
+			LastToolCalls:       append([]string(nil), result.ToolCalls...),
+			LastToolTranscript:  strings.TrimSpace(result.ToolTranscriptPath),
+			LastCandidateFiles:  append([]string(nil), result.CandidateFiles...),
+			LastLLMUsed:         result.LLMUsed,
+			LastClassifierLLM:   result.ClassifierLLM,
+			LastChunkIDs:        chunkIDs(result.Chunks),
+			LastDroppedChunkIDs: append([]string(nil), result.DroppedChunks...),
+			LastAugmentEvents:   append([]string(nil), result.AugmentEvents...),
+			LastMCPChunkIDs:     chunkIDsBySource(result.Chunks, "mcp"),
+			LastRetries:         result.RetriesUsed,
+			LastTermination:     result.Termination,
+		}, requestText, resultToMarkdown(result)); err != nil {
+			return err
+		}
+		return render(opts.Stdout, opts.Stderr, result)
 	}
 
 	planNeeded := isAuthoringRoute(decision.Route) && resumedPlan == nil
@@ -586,4 +632,14 @@ func maybeClarifyPlanInteractively(root string, opts Options, result *runResult,
 		}
 	}
 	return updatedPlan, aborted, nil
+}
+
+func normalizeAugmentEvents(events []string) []string {
+	out := make([]string, 0, len(events))
+	for _, event := range events {
+		event = strings.TrimSpace(event)
+		event = strings.ReplaceAll(event, "failed to write request: write |1: broken pipe", "transport closed")
+		out = append(out, event)
+	}
+	return out
 }
