@@ -1,0 +1,39 @@
+version: v1alpha1
+phases:
+  - name: verify
+    steps:
+      - id: verify-three-node-cluster
+        kind: CheckKubernetesCluster
+        spec:
+          timeout: 10m
+          interval: 5s
+          nodes:
+            total: 3
+            ready: 3
+            controlPlaneReady: 1
+          kubeSystem:
+            readyNames:
+              - etcd-control-plane
+              - kube-apiserver-control-plane
+              - kube-controller-manager-control-plane
+              - kube-scheduler-control-plane
+            readyPrefixMinimums:
+              - prefix: coredns-
+                minReady: 2
+              - prefix: kube-proxy-
+                minReady: 3
+            reportPath: /tmp/deck/reports/kube-system-pods.txt
+            jsonReportPath: /tmp/deck/reports/kube-system-pods.json
+          reports:
+            clusterNodesPath: /tmp/deck/reports/cluster-nodes.txt
+      - id: verify-registry-proxy
+        kind: Command
+        spec:
+          timeout: 3m
+          command:
+            - ctr
+            - images
+            - pull
+            - --hosts-dir
+            - /etc/containerd/certs.d
+            - registry.k8s.io/pause:3.9

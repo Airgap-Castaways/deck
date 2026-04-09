@@ -14,5 +14,7 @@ coverage.out
 /dist/
 /bundle/
 /reports/
+/.vagrant/
 /test/vagrant/.vagrant/
+/test/artifacts/
 /test/artifacts/cache/

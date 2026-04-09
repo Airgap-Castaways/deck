@@ -16,6 +16,31 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
+func aptNonInteractiveEnv() map[string]string {
+	return map[string]string{
+		"DEBIAN_FRONTEND":          "noninteractive",
+		"APT_LISTCHANGES_FRONTEND": "none",
+		"NEEDRESTART_MODE":         "l",
+		"NEEDRESTART_SUSPEND":      "1",
+	}
+}
+
+func dnfNonInteractiveEnv() map[string]string {
+	return map[string]string{
+		"TERM": "dumb",
+	}
+}
+
+func runAptGetInstall(ctx context.Context, args []string, timeout time.Duration) error {
+	return runTimedCommandSpecWithContext(ctx, append([]string{"apt-get"}, args...), aptNonInteractiveEnv(), false, timeout, os.Stdout, os.Stderr)
+}
+
+func runDnfInstall(ctx context.Context, args []string, timeout time.Duration) error {
+	cmdArgs := []string{"dnf", "-q", "--setopt=color=never"}
+	cmdArgs = append(cmdArgs, args...)
+	return runTimedCommandSpecWithContext(ctx, cmdArgs, dnfNonInteractiveEnv(), false, timeout, os.Stdout, os.Stderr)
+}
+
 func runInstallPackages(ctx context.Context, spec map[string]any) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
@@ -63,7 +88,7 @@ func runInstallPackages(ctx context.Context, spec map[string]any) error {
 			}
 			args := []string{"install", "-y"}
 			args = append(args, artifacts...)
-			if err := runTimedCommandWithContext(ctx, "apt-get", args, parseStepTimeout(decoded.Timeout, 10*time.Minute)); err != nil {
+			if err := runAptGetInstall(ctx, args, parseStepTimeout(decoded.Timeout, 10*time.Minute)); err != nil {
 				if errors.Is(err, ErrStepCommandTimeout) || errors.Is(err, context.DeadlineExceeded) {
 					return errcode.New(errCodeInstallPkgFailed, fmt.Errorf("package installation timed out: %w", err))
 				}
@@ -78,7 +103,7 @@ func runInstallPackages(ctx context.Context, spec map[string]any) error {
 		}
 		args := []string{"install", "-y"}
 		args = append(args, artifacts...)
-		if err := runTimedCommandWithContext(ctx, "dnf", args, parseStepTimeout(decoded.Timeout, 10*time.Minute)); err != nil {
+		if err := runDnfInstall(ctx, args, parseStepTimeout(decoded.Timeout, 10*time.Minute)); err != nil {
 			if errors.Is(err, ErrStepCommandTimeout) || errors.Is(err, context.DeadlineExceeded) {
 				return errcode.New(errCodeInstallPkgFailed, fmt.Errorf("package installation timed out: %w", err))
 			}
@@ -104,11 +129,17 @@ func runInstallPackages(ctx context.Context, spec map[string]any) error {
 	}
 	defer cleanup()
 	args = append(args, pkgs...)
-	if err := runTimedCommandWithContext(ctx, installer, args, parseStepTimeout(decoded.Timeout, 10*time.Minute)); err != nil {
-		if errors.Is(err, ErrStepCommandTimeout) || errors.Is(err, context.DeadlineExceeded) {
-			return errcode.New(errCodeInstallPkgFailed, fmt.Errorf("package installation timed out: %w", err))
+	var installErr error
+	if installer == "apt-get" {
+		installErr = runAptGetInstall(ctx, args, parseStepTimeout(decoded.Timeout, 10*time.Minute))
+	} else {
+		installErr = runDnfInstall(ctx, args, parseStepTimeout(decoded.Timeout, 10*time.Minute))
+	}
+	if installErr != nil {
+		if errors.Is(installErr, ErrStepCommandTimeout) || errors.Is(installErr, context.DeadlineExceeded) {
+			return errcode.New(errCodeInstallPkgFailed, fmt.Errorf("package installation timed out: %w", installErr))
 		}
-		return errcode.New(errCodeInstallPkgFailed, fmt.Errorf("package installation failed: %w", err))
+		return errcode.New(errCodeInstallPkgFailed, fmt.Errorf("package installation failed: %w", installErr))
 	}
 	return nil
 }

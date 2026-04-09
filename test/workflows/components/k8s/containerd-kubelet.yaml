@@ -42,6 +42,21 @@ steps:
     kind: EnsureDirectory
     spec:
       path: /etc/default
+  - id: configure-kubelet-node-ip
+    kind: Command
+    spec:
+      timeout: 30s
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          node_ip="$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -n1)"
+          if [[ -z "${node_ip}" ]]; then
+            echo "failed to detect kubelet node IP" >&2
+            exit 1
+          fi
+          printf 'KUBELET_EXTRA_ARGS=--node-ip=%s\n' "${node_ip}" > /etc/default/kubelet
   - id: setup-kubelet-systemd
     kind: WriteSystemdUnit
     spec:

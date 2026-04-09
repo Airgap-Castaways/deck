@@ -1,0 +1,31 @@
+{
+  "nodes": ["control-plane"],
+  "kubernetesVersion": "v1.30.1",
+  "verify": {
+    "defaultStage": "bootstrap",
+    "stages": {
+      "bootstrap": [
+        {
+          "id": "06-verify-bootstrap",
+          "role": "control-plane",
+          "workflow": "scenarios/control-plane-bootstrap-verify.yaml"
+        }
+      ]
+    }
+  },
+  "apply": [
+    {
+      "id": "04-bootstrap-control-plane",
+      "role": "control-plane",
+      "workflow": "scenarios/control-plane-bootstrap.yaml"
+    }
+  ],
+  "resultEvidenceFiles": {
+    "clusterNodes": "reports/cluster-nodes.txt"
+  },
+  "requiredArtifacts": [
+    {
+      "path": "reports/cluster-nodes.txt"
+    }
+  ]
+}

@@ -44,10 +44,19 @@ prepare_libvirt_environment() {
   fi
 
   if [[ -z "${DECK_VAGRANT_LIBVIRT_DRIVER}" ]]; then
+    qemu_kvm_probe_bin=""
     if command -v qemu-system-x86_64 >/dev/null 2>&1; then
+      qemu_kvm_probe_bin="$(command -v qemu-system-x86_64)"
+    elif command -v qemu-kvm >/dev/null 2>&1; then
+      qemu_kvm_probe_bin="$(command -v qemu-kvm)"
+    elif [[ -x /usr/libexec/qemu-kvm ]]; then
+      qemu_kvm_probe_bin="/usr/libexec/qemu-kvm"
+    fi
+
+    if [[ -n "${qemu_kvm_probe_bin}" ]]; then
       kvm_test_pid="$(mktemp "${TMPDIR:-/tmp}/deck-kvm-test-pid.XXXXXX")"
       set +e
-      qemu-system-x86_64 -accel kvm -machine none -display none -nodefaults -daemonize -pidfile "${kvm_test_pid}" >/dev/null 2>&1
+      "${qemu_kvm_probe_bin}" -accel kvm -machine none -display none -nodefaults -daemonize -pidfile "${kvm_test_pid}" >/dev/null 2>&1
       kvm_test_rc=$?
       set -e
       if [[ ${kvm_test_rc} -eq 0 ]]; then
@@ -167,11 +176,7 @@ EOF
 <network>
   <name>deck-vagrant</name>
   <bridge name='virbr57' stp='on' delay='0'/>
-  <ip address='192.168.57.1' netmask='255.255.255.0'>
-    <dhcp>
-      <range start='192.168.57.2' end='192.168.57.254'/>
-    </dhcp>
-  </ip>
+  <ip address='192.168.57.1' netmask='255.255.255.0'/>
 </network>
 EOF
     redefine_deck_network=0
@@ -179,7 +184,7 @@ EOF
       redefine_deck_network=1
     else
       deck_xml_current="$("${virsh_cmd[@]}" net-dumpxml deck-vagrant 2>/dev/null || true)"
-      if [[ "${deck_xml_current}" == *"<forward "* ]] || [[ "${deck_xml_current}" != *"<dhcp>"* ]]; then
+      if [[ "${deck_xml_current}" == *"<forward "* ]] || [[ "${deck_xml_current}" == *"<dhcp>"* ]]; then
         redefine_deck_network=1
       fi
       if [[ "${deck_xml_current}" != *"<bridge name='virbr57'"* ]] || [[ "${deck_xml_current}" != *"<ip address='192.168.57.1' netmask='255.255.255.0'>"* ]]; then

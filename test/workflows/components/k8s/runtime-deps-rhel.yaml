@@ -5,11 +5,29 @@ steps:
       packages: "{{ .vars.runtimeDepPackages.rhel }}"
       restrictToRepos:
         - deck-os
+  - id: stop-kubelet-rhel
+    kind: ManageService
+    spec:
+      name: kubelet
+      state: stopped
   - id: stop-containerd-rhel
     kind: ManageService
     spec:
       name: containerd
       state: stopped
+  - id: kill-containerd-shims-rhel
+    kind: Command
+    spec:
+      timeout: 30s
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          pids="$(ps -eo pid=,comm= | awk '$2 ~ /^containerd-shim/ {print $1}')"
+          if [[ -n "${pids}" ]]; then
+            kill ${pids} >/dev/null 2>&1 || true
+          fi
   - id: extract-containerd-runtime-rhel
     kind: ExtractArchive
     timeout: 20m

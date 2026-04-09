@@ -12,6 +12,27 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/errcode"
 )
 
+const fakeAptEnvScriptTemplate = "#!/usr/bin/env bash\nset -euo pipefail\necho \"$*\" > \"%s\"\nprintf 'DEBIAN_FRONTEND=%%s\nAPT_LISTCHANGES_FRONTEND=%%s\nNEEDRESTART_MODE=%%s\nNEEDRESTART_SUSPEND=%%s\n' \"${DEBIAN_FRONTEND:-}\" \"${APT_LISTCHANGES_FRONTEND:-}\" \"${NEEDRESTART_MODE:-}\" \"${NEEDRESTART_SUSPEND:-}\" > \"%s\"\nexit 0\n"
+
+func verifyAptEnv(t *testing.T, envMarker string) {
+	t.Helper()
+	envRaw, err := os.ReadFile(envMarker)
+	if err != nil {
+		t.Fatalf("read env marker: %v", err)
+	}
+	envText := string(envRaw)
+	for _, want := range []string{
+		"DEBIAN_FRONTEND=noninteractive",
+		"APT_LISTCHANGES_FRONTEND=none",
+		"NEEDRESTART_MODE=l",
+		"NEEDRESTART_SUSPEND=1",
+	} {
+		if !strings.Contains(envText, want) {
+			t.Fatalf("expected apt env %q, got %q", want, envText)
+		}
+	}
+}
+
 func TestRun_PackagesExecutesPackageManager(t *testing.T) {
 	dir := t.TempDir()
 	bundle := filepath.Join(dir, "bundle")
@@ -35,8 +56,9 @@ func TestRun_PackagesExecutesPackageManager(t *testing.T) {
 		t.Fatalf("mkdir bin: %v", err)
 	}
 	marker := filepath.Join(dir, "apt-invoked.txt")
+	envMarker := filepath.Join(dir, "apt-env.txt")
 	fakeApt := filepath.Join(binDir, "apt-get")
-	script := "#!/usr/bin/env bash\nset -euo pipefail\necho \"$*\" > \"" + marker + "\"\nexit 0\n"
+	script := fmt.Sprintf(fakeAptEnvScriptTemplate, marker, envMarker)
 	if err := os.WriteFile(fakeApt, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake apt-get: %v", err)
 	}
@@ -68,6 +90,7 @@ func TestRun_PackagesExecutesPackageManager(t *testing.T) {
 	if !strings.Contains(args, "install -y containerd kubelet") {
 		t.Fatalf("unexpected apt-get args: %q", args)
 	}
+	verifyAptEnv(t, envMarker)
 }
 
 func TestRun_PackagesSourcePathValidation(t *testing.T) {
@@ -151,8 +174,9 @@ func TestRun_InstallPackagesFromLocalRepo(t *testing.T) {
 		t.Fatalf("mkdir bin: %v", err)
 	}
 	marker := filepath.Join(dir, "apt-local-invoked.txt")
+	envMarker := filepath.Join(dir, "apt-local-env.txt")
 	fakeApt := filepath.Join(binDir, "apt-get")
-	script := "#!/usr/bin/env bash\nset -euo pipefail\necho \"$*\" > \"" + marker + "\"\nexit 0\n"
+	script := fmt.Sprintf(fakeAptEnvScriptTemplate, marker, envMarker)
 	if err := os.WriteFile(fakeApt, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake apt-get: %v", err)
 	}
@@ -190,6 +214,7 @@ func TestRun_InstallPackagesFromLocalRepo(t *testing.T) {
 	if !strings.Contains(args, debA) || !strings.Contains(args, debB) {
 		t.Fatalf("local deb artifacts were not passed to apt-get: %q", args)
 	}
+	verifyAptEnv(t, envMarker)
 }
 
 func TestRun_PackagesTimeoutUsesTimeoutClassification(t *testing.T) {

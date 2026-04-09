@@ -112,9 +112,9 @@ Vagrant.configure("2") do |config|
   qemu_use_session = qemu_use_session_env.empty? ? libvirt_use_session : qemu_use_session_env == "1"
   libvirt_default_uri = ENV.fetch("LIBVIRT_DEFAULT_URI", "").strip
   private_network_name = ENV.fetch("DECK_VAGRANT_PRIVATE_NETWORK_NAME", "deck-vagrant")
-  enable_private_network = ENV.fetch("DECK_VAGRANT_ENABLE_PRIVATE_NETWORK", "0") == "1"
-  management_network_name = ENV.fetch("DECK_VAGRANT_MANAGEMENT_NETWORK_NAME", private_network_name)
-  management_network_address = ENV.fetch("DECK_VAGRANT_MANAGEMENT_NETWORK_ADDRESS", "192.168.57.0/24")
+  enable_private_network = ENV.fetch("DECK_VAGRANT_ENABLE_PRIVATE_NETWORK", "1") == "1"
+  management_network_name = ENV.fetch("DECK_VAGRANT_MANAGEMENT_NETWORK_NAME", "default")
+  management_network_address = ENV.fetch("DECK_VAGRANT_MANAGEMENT_NETWORK_ADDRESS", "192.168.122.0/24")
   ip_timeout = ENV.fetch("DECK_VAGRANT_IP_ADDRESS_TIMEOUT", "300").to_i
   mgmt_attach = ENV.fetch("DECK_VAGRANT_MGMT_ATTACH", "1") == "1"
   machine_type = ENV.fetch("DECK_VAGRANT_MACHINE_TYPE", "")
@@ -153,10 +153,6 @@ Vagrant.configure("2") do |config|
         m.vm.synced_folder node_sync_source, "/workspace", type: "rsync"
       else
         m.vm.synced_folder node_sync_source, "/workspace", type: "nfs", nfs_version: 4, nfs_udp: false
-      end
-      if enable_private_network
-        m.ssh.host = node[:ip]
-        m.ssh.port = 22
       end
       if enable_private_network
         m.vm.network "private_network",

@@ -94,5 +94,13 @@ steps:
         - -lc
         - |
           set -euo pipefail
-          iptables -S OUTPUT | grep -F -- "-j DECK_OFFLINE_GUARD" >/dev/null
-          iptables -S DECK_OFFLINE_GUARD >/dev/null
+          server_host_port="{{ .vars.serverURL }}"
+          server_host="${server_host_port%:*}"
+          server_port="${server_host_port##*:}"
+
+          timeout 5 bash -lc "exec 3<>/dev/tcp/${server_host}/${server_port}" >/dev/null 2>&1
+
+          if timeout 5 bash -lc 'exec 3<>/dev/tcp/1.1.1.1/443' >/dev/null 2>&1; then
+            echo "unexpected outbound connectivity to 1.1.1.1:443" >&2
+            exit 1
+          fi

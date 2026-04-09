@@ -1,0 +1,23 @@
+version: v1alpha1
+vars:
+  clusterName: node-reset-destructive
+  allowDestructive: "true"
+  resetReason: node-reset-acceptance
+  resetStatePath: /tmp/deck/reports/reset-state.txt
+phases:
+  - name: host-prereqs
+    imports:
+      - path: k8s/prereq.yaml
+  - name: reset
+    imports:
+      - path: node-reset.yaml
+  - name: verify
+    steps:
+      - id: reset-summary
+        kind: WaitForFile
+        spec:
+          path: "{{ .vars.resetStatePath }}"
+          type: file
+          nonEmpty: true
+          timeout: 1m
+          interval: 2s
