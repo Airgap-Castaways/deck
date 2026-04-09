@@ -32,7 +32,7 @@
     {
       "id": "05-reset-worker",
       "role": "worker",
-      "workflow": "scenarios/node-reset.yaml"
+      "workflow": "scenarios/node-reset-destructive.yaml"
     },
     {
       "id": "05-rejoin-worker",

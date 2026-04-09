@@ -1,6 +1,7 @@
 version: v1alpha1
 vars:
-  clusterName: node-reset
+  clusterName: node-reset-destructive
+  allowDestructive: "true"
   resetReason: node-reset-acceptance
   resetStatePath: /tmp/deck/reports/reset-state.txt
 phases:
