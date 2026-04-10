@@ -111,46 +111,6 @@ func normalizeGeneratedFiles(files []askcontract.GeneratedFile) []askcontract.Ge
 	return files
 }
 
-func mergeGeneratedFiles(base []askcontract.GeneratedFile, patch []askcontract.GeneratedFile) []askcontract.GeneratedFile {
-	if len(base) == 0 {
-		return append([]askcontract.GeneratedFile(nil), patch...)
-	}
-	merged := append([]askcontract.GeneratedFile(nil), base...)
-	index := map[string]int{}
-	for i, file := range merged {
-		index[strings.TrimSpace(file.Path)] = i
-	}
-	for _, file := range patch {
-		path := strings.TrimSpace(file.Path)
-		if idx, ok := index[path]; ok {
-			merged[idx] = file
-			continue
-		}
-		merged = append(merged, file)
-	}
-	return merged
-}
-
-func dropGeneratedFiles(files []askcontract.GeneratedFile, paths []string) []askcontract.GeneratedFile {
-	if len(paths) == 0 || len(files) == 0 {
-		return append([]askcontract.GeneratedFile(nil), files...)
-	}
-	drop := map[string]bool{}
-	for _, path := range paths {
-		path = strings.TrimSpace(path)
-		if path != "" {
-			drop[path] = true
-		}
-	}
-	filtered := make([]askcontract.GeneratedFile, 0, len(files))
-	for _, file := range files {
-		if !drop[strings.TrimSpace(file.Path)] {
-			filtered = append(filtered, file)
-		}
-	}
-	return filtered
-}
-
 func normalizeGeneratedContent(path string, content string) string {
 	if strings.HasSuffix(strings.ToLower(strings.TrimSpace(path)), ".yaml") || strings.HasSuffix(strings.ToLower(strings.TrimSpace(path)), ".yml") {
 		trimmed := strings.TrimRight(content, "\n")
@@ -613,7 +573,7 @@ func semanticCritic(gen askcontract.GenerationResponse, decision askintent.Decis
 			critic.Blocking = append(critic.Blocking, err.Error())
 			critic.RequiredFixes = append(critic.RequiredFixes, "Keep generated files under allowed workflow paths only")
 		}
-		if workspacepaths.IsScenarioAuthoringPath(file.Path) {
+		if decision.Route == askintent.RouteDraft && workspacepaths.IsScenarioAuthoringPath(file.Path) {
 			for _, importPath := range localImportPaths(file.Content) {
 				resolved := filepath.ToSlash(filepath.Join(workspacepaths.CanonicalComponentsDir, importPath))
 				if _, ok := generated[resolved]; !ok {

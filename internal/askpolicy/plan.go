@@ -621,30 +621,30 @@ func dedupeSharedStateContractModel(model askcontract.ExecutionModel) askcontrac
 
 func normalizeEntryScenario(current string, req ScenarioRequirements, files []askcontract.PlanFile, brief askcontract.AuthoringBrief, decision askintent.Decision) string {
 	candidates := []string{}
-	if clean := filepath.ToSlash(strings.TrimSpace(current)); workspacepaths.IsScenarioAuthoringPath(clean) {
+	if clean := filepath.ToSlash(strings.TrimSpace(current)); askcontractPathAllowed(clean) && workspacepaths.IsScenarioAuthoringPath(clean) {
 		candidates = append(candidates, clean)
 	}
-	if clean := filepath.ToSlash(strings.TrimSpace(decision.Target.Path)); workspacepaths.IsScenarioAuthoringPath(clean) {
+	if clean := filepath.ToSlash(strings.TrimSpace(decision.Target.Path)); askcontractPathAllowed(clean) && workspacepaths.IsScenarioAuthoringPath(clean) {
 		candidates = append(candidates, clean)
 	}
-	if clean := filepath.ToSlash(strings.TrimSpace(req.EntryScenario)); workspacepaths.IsScenarioAuthoringPath(clean) {
+	if clean := filepath.ToSlash(strings.TrimSpace(req.EntryScenario)); askcontractPathAllowed(clean) && workspacepaths.IsScenarioAuthoringPath(clean) {
 		candidates = append(candidates, clean)
 	}
 	for _, path := range brief.AnchorPaths {
 		clean := filepath.ToSlash(strings.TrimSpace(path))
-		if workspacepaths.IsScenarioAuthoringPath(clean) {
+		if askcontractPathAllowed(clean) && workspacepaths.IsScenarioAuthoringPath(clean) {
 			candidates = append(candidates, clean)
 		}
 	}
 	for _, path := range brief.TargetPaths {
 		clean := filepath.ToSlash(strings.TrimSpace(path))
-		if workspacepaths.IsScenarioAuthoringPath(clean) {
+		if askcontractPathAllowed(clean) && workspacepaths.IsScenarioAuthoringPath(clean) {
 			candidates = append(candidates, clean)
 		}
 	}
 	for _, file := range files {
 		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if workspacepaths.IsScenarioAuthoringPath(clean) {
+		if askcontractPathAllowed(clean) && workspacepaths.IsScenarioAuthoringPath(clean) {
 			candidates = append(candidates, clean)
 		}
 	}
@@ -1138,7 +1138,14 @@ func normalizeAllowedPaths(paths []string, fallback []string) []string {
 		}
 	}
 	if len(allowed) == 0 {
-		return append([]string(nil), fallback...)
+		fallbackAllowed := make([]string, 0, len(fallback))
+		for _, path := range fallback {
+			path = filepath.ToSlash(strings.TrimSpace(path))
+			if askcontractPathAllowed(path) {
+				fallbackAllowed = append(fallbackAllowed, path)
+			}
+		}
+		return dedupeStrings(fallbackAllowed)
 	}
 	return dedupeStrings(allowed)
 }
@@ -1210,6 +1217,9 @@ func askcontractPathAllowed(path string) bool {
 	path = filepath.ToSlash(strings.TrimSpace(path))
 	if path == workspacepaths.CanonicalPrepareWorkflow || path == workspacepaths.CanonicalVarsWorkflow {
 		return true
+	}
+	if strings.ContainsAny(path, "*?[]{}") {
+		return false
 	}
 	if strings.HasSuffix(path, "/") || filepath.Ext(path) == "" {
 		return false

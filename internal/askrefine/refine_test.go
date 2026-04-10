@@ -137,3 +137,31 @@ func TestResolveCandidateAcceptsStepIDShorthandForSetField(t *testing.T) {
 		t.Fatalf("expected shorthand raw path to resolve, got %#v", resolved)
 	}
 }
+
+func TestResolveCandidateAcceptsStepIDDotPathShorthand(t *testing.T) {
+	doc := askcontract.GeneratedDocument{Path: "workflows/scenarios/control-plane-bootstrap.yaml", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1", Phases: []askcontract.WorkflowPhase{{Name: "verify", Steps: []askcontract.WorkflowStep{{ID: "bootstrap-report", Kind: "CheckCluster", Spec: map[string]any{"timeout": "5m", "nodes": map[string]any{"total": 1}}}}}}}}
+	resolved, err := ResolveCandidate(doc, askcontract.RefineTransformAction{Type: "set-field", Candidate: "bootstrap-report.spec.nodes.total", Value: 1})
+	if err != nil {
+		t.Fatalf("resolve dot-path shorthand: %v", err)
+	}
+	if resolved.Candidate != "set-field|workflows/scenarios/control-plane-bootstrap.yaml|phases[0].steps[0].spec.nodes.total" {
+		t.Fatalf("expected dot-path shorthand to resolve to concrete candidate id, got %#v", resolved)
+	}
+	if resolved.RawPath != "phases[0].steps[0].spec.nodes.total" {
+		t.Fatalf("expected dot-path shorthand raw path to resolve, got %#v", resolved)
+	}
+}
+
+func TestResolveCandidateAcceptsStepIDWithRawPathShorthand(t *testing.T) {
+	doc := askcontract.GeneratedDocument{Path: "workflows/scenarios/control-plane-bootstrap.yaml", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1", Phases: []askcontract.WorkflowPhase{{Name: "verify", Steps: []askcontract.WorkflowStep{{ID: "bootstrap-report", Kind: "CheckCluster", Spec: map[string]any{"timeout": "5m"}}}}}}}
+	resolved, err := ResolveCandidate(doc, askcontract.RefineTransformAction{Type: "set-field", Candidate: "bootstrap-report", RawPath: "spec.timeout", Value: "10m"})
+	if err != nil {
+		t.Fatalf("resolve raw-path shorthand: %v", err)
+	}
+	if resolved.Candidate != "set-field|workflows/scenarios/control-plane-bootstrap.yaml|phases[0].steps[0].spec.timeout" {
+		t.Fatalf("expected raw-path shorthand to resolve to concrete candidate id, got %#v", resolved)
+	}
+	if resolved.RawPath != "phases[0].steps[0].spec.timeout" {
+		t.Fatalf("expected raw-path shorthand raw path to resolve, got %#v", resolved)
+	}
+}

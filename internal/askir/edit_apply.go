@@ -163,6 +163,10 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 			if componentPath == "" {
 				return "", nil, fmt.Errorf("transform extract-component on %s requires path", path)
 			}
+			importPath := componentPath
+			if strings.HasPrefix(importPath, workspacepaths.CanonicalComponentsDir+"/") {
+				importPath = strings.TrimPrefix(importPath, workspacepaths.CanonicalComponentsDir+"/")
+			}
 			workflow := parsedDoc.Workflow
 			if workflow == nil {
 				return "", nil, fmt.Errorf("transform extract-component on %s requires workflow document", path)
@@ -186,7 +190,7 @@ func applyDocumentTransforms(root string, baseContent map[string]string, path st
 			workflowCopy := *workflow
 			workflowCopy.Phases = append([]askcontract.WorkflowPhase(nil), workflow.Phases...)
 			phaseCopy := workflowCopy.Phases[phaseIndex]
-			phaseCopy.Imports = append(append([]askcontract.PhaseImport(nil), phaseCopy.Imports...), askcontract.PhaseImport{Path: filepath.Base(componentPath)})
+			phaseCopy.Imports = append(append([]askcontract.PhaseImport(nil), phaseCopy.Imports...), askcontract.PhaseImport{Path: importPath})
 			phaseCopy.Steps = nil
 			workflowCopy.Phases[phaseIndex] = phaseCopy
 			renderedWorkflow, err := renderDocument(path, askcontract.GeneratedDocument{Path: path, Kind: "workflow", Workflow: &workflowCopy})

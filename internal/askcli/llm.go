@@ -3,7 +3,6 @@ package askcli
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -199,14 +198,4 @@ func minDuration(a time.Duration, b time.Duration) time.Duration {
 		return a
 	}
 	return b
-}
-
-func askFeatureEnabled(name string) bool {
-	value := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
-	switch value {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
 }

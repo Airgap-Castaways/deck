@@ -134,6 +134,15 @@ func resolveStepScopedCandidate(doc askcontract.GeneratedDocument, transform ask
 		return transform, false
 	}
 	relativePath := strings.TrimSpace(transform.Path)
+	if relativePath == "" {
+		relativePath = strings.TrimSpace(transform.RawPath)
+	}
+	if relativePath == "" {
+		if idx := strings.Index(stepID, "."); idx > 0 {
+			relativePath = strings.TrimSpace(stepID[idx+1:])
+			stepID = strings.TrimSpace(stepID[:idx])
+		}
+	}
 	if relativePath == "" || strings.HasPrefix(relativePath, "workflows/") {
 		return transform, false
 	}
@@ -147,9 +156,7 @@ func resolveStepScopedCandidate(doc askcontract.GeneratedDocument, transform ask
 	if strings.TrimSpace(transform.Type) == "set-field" || strings.TrimSpace(transform.Type) == "delete-field" || strings.TrimSpace(transform.Type) == "" {
 		rawPath := base + "." + strings.TrimPrefix(strings.TrimSpace(relativePath), ".")
 		transform.Candidate = candidateID(firstNonEmpty(strings.TrimSpace(transform.Type), "set-field"), doc.Path, rawPath)
-		if strings.TrimSpace(transform.RawPath) == "" {
-			transform.RawPath = rawPath
-		}
+		transform.RawPath = rawPath
 		return transform, true
 	}
 	return transform, false

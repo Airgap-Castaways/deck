@@ -87,14 +87,6 @@ func WorkspaceWithContext(ctx context.Context, root string) ([]string, error) {
 		return nil, fmt.Errorf("workflow directory is not a directory: %s", workflowRoot)
 	}
 
-	required := []string{workspacepaths.CanonicalPrepareWorkflowPath(resolvedRoot)}
-	for _, path := range required {
-		info, err := os.Stat(path)
-		if err != nil || info.IsDir() {
-			return nil, fmt.Errorf("required workflow file not found: %s", path)
-		}
-	}
-
 	scenarioRoot := filepath.Join(workflowRoot, workspacepaths.WorkflowScenariosDir)
 	if info, err := os.Stat(scenarioRoot); err != nil || !info.IsDir() {
 		return nil, fmt.Errorf("workflow scenarios directory not found: %s", scenarioRoot)

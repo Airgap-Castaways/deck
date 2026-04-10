@@ -235,6 +235,40 @@ func TestMaterializeRefineCandidateSetFieldTransform(t *testing.T) {
 	}
 }
 
+func TestMaterializeRefineExtractComponentPreservesNestedImportPath(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	content := "version: v1alpha1\nphases:\n  - name: prereqs\n    steps:\n      - id: check\n        kind: CheckHost\n        spec:\n          checks: [os]\n"
+	if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	files, err := Materialize(root, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{
+		Path:   "workflows/scenarios/apply.yaml",
+		Action: "edit",
+		Transforms: []askcontract.RefineTransformAction{{
+			Type:    "extract-component",
+			RawPath: "phases[0]",
+			Path:    "workflows/components/k8s/prereq.yaml",
+		}},
+	}}})
+	if err != nil {
+		t.Fatalf("materialize extract-component transform: %v", err)
+	}
+	byPath := map[string]string{}
+	for _, file := range files {
+		byPath[file.Path] = file.Content
+	}
+	if !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "- path: k8s/prereq.yaml") {
+		t.Fatalf("expected nested component import path, got %q", byPath["workflows/scenarios/apply.yaml"])
+	}
+	if _, ok := byPath["workflows/components/k8s/prereq.yaml"]; !ok {
+		t.Fatalf("expected nested component file, got %#v", byPath)
+	}
+}
+
 func TestMaterializeRefineCandidateExtractVarTransform(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "workflows", "scenarios", "apply.yaml")

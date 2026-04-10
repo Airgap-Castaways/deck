@@ -90,10 +90,6 @@ func PromptBlock(plan askcontract.PlanResponse, brief askcontract.AuthoringBrief
 	return strings.TrimSpace(b.String())
 }
 
-func Compile(selection askcontract.DraftSelection) ([]askcontract.GeneratedDocument, error) {
-	return CompileWithProgram(askcontract.AuthoringProgram{}, selection)
-}
-
 func CompileWithProgram(program askcontract.AuthoringProgram, selection askcontract.DraftSelection) ([]askcontract.GeneratedDocument, error) {
 	catalog := askcatalog.Current()
 	documents := make([]askcontract.GeneratedDocument, 0, len(selection.Targets)+1)

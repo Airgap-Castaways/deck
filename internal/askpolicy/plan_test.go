@@ -427,6 +427,42 @@ func TestNormalizePlanDropsDirectoryLikePlannerPaths(t *testing.T) {
 	}
 }
 
+func TestNormalizePlanDropsGlobLikePlannerPaths(t *testing.T) {
+	prompt := "refactor workflows/scenarios/control-plane-bootstrap.yaml to use workflows/vars.yaml for repeated values"
+	workspace := askretrieve.WorkspaceSummary{HasWorkflowTree: true, Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/control-plane-bootstrap.yaml"}, {Path: "workflows/vars.yaml"}, {Path: "workflows/components/bootstrap.yaml"}}}
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request: prompt,
+		Intent:  "refine",
+		AuthoringBrief: askcontract.AuthoringBrief{
+			TargetPaths:           []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/scenarios/*.yaml", "workflows/vars.yaml"},
+			AllowedCompanionPaths: []string{"workflows/components/*.yaml", "workflows/vars.yaml"},
+		},
+		Files:         []askcontract.PlanFile{{Path: "workflows/scenarios/*.yaml", Action: "update"}, {Path: "workflows/scenarios/control-plane-bootstrap.yaml", Action: "update"}, {Path: "workflows/vars.yaml", Action: "update"}},
+		EntryScenario: "workflows/scenarios/*.yaml",
+	}, prompt, askretrieve.RetrievalResult{}, workspace, askintent.Decision{Route: askintent.RouteRefine, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/control-plane-bootstrap.yaml"}})
+	for _, unwanted := range []string{"workflows/scenarios/*.yaml", "workflows/components/*.yaml"} {
+		if containsString(plan.AuthoringBrief.TargetPaths, unwanted) || containsString(plan.AuthoringBrief.AllowedCompanionPaths, unwanted) {
+			t.Fatalf("expected glob-like path %q to be dropped, got %#v", unwanted, plan.AuthoringBrief)
+		}
+	}
+	if plan.EntryScenario != "workflows/scenarios/control-plane-bootstrap.yaml" {
+		t.Fatalf("expected normalized concrete entry scenario, got %#v", plan.EntryScenario)
+	}
+	for _, file := range plan.Files {
+		if strings.Contains(file.Path, "*") {
+			t.Fatalf("expected glob-like planned files to be dropped, got %#v", plan.Files)
+		}
+	}
+}
+
+func TestAskcontractPathAllowedRejectsGlobLikePaths(t *testing.T) {
+	for _, path := range []string{"workflows/scenarios/*.yaml", "workflows/components/*.yaml", "workflows/components/**/*.yaml"} {
+		if askcontractPathAllowed(path) {
+			t.Fatalf("expected glob-like path %q to be rejected", path)
+		}
+	}
+}
+
 func TestNormalizePlanAddsVarsFileForRoleGatedDrafts(t *testing.T) {
 	prompt := "Create an offline RHEL 9 kubeadm workflow for 2 nodes"
 	plan := NormalizePlan(askcontract.PlanResponse{
