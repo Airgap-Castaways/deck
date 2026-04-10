@@ -30,9 +30,10 @@ import (
 )
 
 type stubClient struct {
-	responses []string
-	calls     int
-	prompts   []askprovider.Request
+	responses         []string
+	providerResponses []askprovider.Response
+	calls             int
+	prompts           []askprovider.Request
 }
 
 type flushBuffer struct {
@@ -48,6 +49,13 @@ func (b *flushBuffer) Flush() error {
 func (s *stubClient) Generate(_ context.Context, req askprovider.Request) (askprovider.Response, error) {
 	s.prompts = append(s.prompts, req)
 	defer func() { s.calls++ }()
+	if len(s.providerResponses) > 0 {
+		idx := s.calls
+		if idx >= len(s.providerResponses) {
+			idx = len(s.providerResponses) - 1
+		}
+		return s.providerResponses[idx], nil
+	}
 	if len(s.responses) == 0 {
 		return askprovider.Response{}, errors.New("no stub response configured")
 	}
@@ -1683,7 +1691,7 @@ func TestExecuteAuthoringMCPAugmentationIsGatedByEnv(t *testing.T) {
 			}
 			root := t.TempDir()
 			writeLatestPlanArtifact(t, root)
-			client := &stubClient{responses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: workspacepaths.CanonicalApplyWorkflow, Content: waitForHostsWorkflow("5s")})}
+			client := &stubClient{providerResponses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: workspacepaths.CanonicalApplyWorkflow, Content: waitForHostsWorkflow("5s")})}
 			if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client); err != nil {
 				t.Fatalf("execute: %v", err)
 			}
@@ -1758,7 +1766,7 @@ func TestExecutePlanResumeInteractiveClarificationCanContinue(t *testing.T) {
 	interactiveSessionProbe = func(io.Reader, io.Writer) bool { return true }
 	defer func() { interactiveSessionProbe = originalProbe }()
 	stdout := &bytes.Buffer{}
-	client := &stubClient{responses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: workspacepaths.CanonicalApplyWorkflow, Content: waitForHostsWorkflow("5s")})}
+	client := &stubClient{providerResponses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: workspacepaths.CanonicalApplyWorkflow, Content: waitForHostsWorkflow("5s")})}
 	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader("2\n"), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
 		t.Fatalf("execute: %v", err)
 	}

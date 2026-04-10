@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -19,15 +20,15 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
+	"github.com/Airgap-Castaways/deck/internal/askrepair"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/askstate"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
-	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 const (
 	agentRuntimeMinTurns             = 4
-	agentRuntimeTurnsPerVerification = 2
+	agentRuntimeTurnsPerVerification = 3
 )
 
 type authoringClarificationError struct {
@@ -52,19 +53,6 @@ type agentToolResult struct {
 	Payload any
 }
 
-type agentSearchMatch struct {
-	Path    string `json:"path"`
-	Snippet string `json:"snippet,omitempty"`
-	Source  string `json:"source,omitempty"`
-}
-
-type agentReadResult struct {
-	Path    string `json:"path"`
-	Exists  bool   `json:"exists"`
-	Source  string `json:"source,omitempty"`
-	Content string `json:"content,omitempty"`
-}
-
 type authoringAgentSession struct {
 	root                string
 	requestText         string
@@ -81,6 +69,7 @@ type authoringAgentSession struct {
 	approvedPathList    []string
 	availableTools      []string
 	candidateByPath     map[string]askcontract.GeneratedFile
+	readState           map[string]authorReadSnapshot
 	toolEvents          []askstate.AgentToolEvent
 	lastLintSummary     string
 	lastLintPassed      bool
@@ -90,6 +79,7 @@ type authoringAgentSession struct {
 	verificationFailure int
 	turnBudget          int
 	turnsUsed           int
+	postValidateIdle    int
 	scaffoldRequested   bool
 	allowMCPTool        bool
 }
@@ -133,16 +123,17 @@ func maybeExecuteAuthoringRuntime(ctx context.Context, opts Options, client askp
 	turnBudget := maxInt(agentRuntimeMinTurns, verificationBudget*agentRuntimeTurnsPerVerification+2)
 	session := newAuthoringAgentSession(workspace.Root, requestText, decision, plan, requirements, workspace, state, retrieval, effective, evidencePlan, logger, verificationBudget, turnBudget)
 	request := askprovider.Request{
-		Kind:               "generate-fast",
-		Provider:           effective.Provider,
-		Model:              effective.Model,
-		APIKey:             effective.APIKey,
-		OAuthToken:         effective.OAuthToken,
-		AccountID:          effective.AccountID,
-		Endpoint:           effective.Endpoint,
-		ResponseSchema:     askcontract.AgentTurnResponseSchema(),
-		ResponseSchemaName: "deck_agent_turn_response",
-		MaxRetries:         providerRetryCount("generate-fast"),
+		Kind:                     "generate-fast",
+		Provider:                 effective.Provider,
+		Model:                    effective.Model,
+		APIKey:                   effective.APIKey,
+		OAuthToken:               effective.OAuthToken,
+		AccountID:                effective.AccountID,
+		Endpoint:                 effective.Endpoint,
+		Tools:                    authoringToolDefinitions(session),
+		ToolChoiceRequired:       true,
+		DisableParallelToolCalls: true,
+		MaxRetries:               providerRetryCount("generate-fast"),
 	}
 	progress.status("authoring workflow files")
 	summary, files, lintSummary, critic, err := runAuthoringAgentRuntime(ctx, client, request, session)
@@ -204,13 +195,13 @@ func newAuthoringAgentSession(root string, requestText string, decision askinten
 		approvedList = append(approvedList, path)
 	}
 	sort.Strings(approvedList)
-	tools := []string{"file_search", "file_read", "file_write", "deck_lint"}
+	tools := []string{"read", "glob", "grep", "file_write", "file_edit", "validate", "schema"}
 	if decision.Route == askintent.RouteDraft && !workspace.HasWorkflowTree {
-		tools = append(tools, "deck_init")
+		tools = append(tools, "init")
 	}
 	allowMCPTool := effective.MCP.Enabled && strings.TrimSpace(evidencePlan.Decision) != "unnecessary"
 	if allowMCPTool {
-		tools = append(tools, "mcp_web_search")
+		tools = append(tools, "web_search")
 	}
 	return &authoringAgentSession{
 		root:               root,
@@ -228,6 +219,7 @@ func newAuthoringAgentSession(root string, requestText string, decision askinten
 		approvedPathList:   approvedList,
 		availableTools:     tools,
 		candidateByPath:    map[string]askcontract.GeneratedFile{},
+		readState:          map[string]authorReadSnapshot{},
 		verificationBudget: verificationBudget,
 		turnBudget:         turnBudget,
 		allowMCPTool:       allowMCPTool,
@@ -242,65 +234,133 @@ func runAuthoringAgentRuntime(ctx context.Context, client askprovider.Client, ba
 		req := base
 		req.SystemPrompt = systemPrompt
 		req.Prompt = userPrompt
+		req.Tools = authoringToolDefinitions(session)
 		req.Timeout = askRequestTimeout(req.Kind, session.turnBudget, systemPrompt, userPrompt)
 		session.logger.prompt("author-runtime", systemPrompt, userPrompt)
 		resp, err := client.Generate(ctx, req)
 		if err != nil {
 			return "", nil, session.lastLintSummary, session.lastCritic, err
 		}
-		session.logger.response("author-runtime", resp.Content)
-		turnResp, err := askcontract.ParseAgentTurn(resp.Content)
+		session.logger.response("author-runtime", renderProviderResponse(resp))
+		if len(resp.ToolCalls) == 0 {
+			return "", nil, session.lastLintSummary, session.lastCritic, fmt.Errorf("authoring response did not include a native tool call")
+		}
+		finishedSummary, finished, err := session.handleToolCalls(ctx, turn, resp.ToolCalls)
 		if err != nil {
+			var clarifyErr authoringClarificationError
+			if errors.As(err, &clarifyErr) {
+				return "", nil, session.lastLintSummary, session.lastCritic, clarifyErr
+			}
 			return "", nil, session.lastLintSummary, session.lastCritic, err
 		}
-		if turnResp.Clarification != nil {
-			return "", nil, session.lastLintSummary, session.lastCritic, authoringClarificationError{Question: turnResp.Clarification.Question, Reason: turnResp.Clarification.Reason}
-		}
-		if len(turnResp.ToolCalls) > 0 {
-			for _, call := range turnResp.ToolCalls {
-				session.executeTool(ctx, turn, call)
-			}
-			if session.verificationFailure > session.verificationBudget {
-				return "", nil, session.lastLintSummary, session.lastCritic, fmt.Errorf("authoring exceeded verification failure budget after %d lint failures", session.verificationFailure)
-			}
-			continue
-		}
-		if turnResp.Finish != nil {
-			if !session.lastLintPassed {
-				session.appendSyntheticFailure(turn, "finish", "finish rejected until deck_lint succeeds in this session")
-				continue
-			}
+		if finished {
 			files := session.candidateFiles()
-			if len(files) == 0 && session.decision.Route != askintent.RouteRefine {
-				session.appendSyntheticFailure(turn, "finish", "finish rejected because no candidate files have been written")
-				continue
-			}
-			summary := strings.TrimSpace(turnResp.Summary)
-			if summary == "" {
-				summary = "generated workflows"
-			}
-			return summary, files, session.lastLintSummary, session.lastCritic, nil
+			return finishedSummary, files, session.lastLintSummary, session.lastCritic, nil
+		}
+		if session.shouldAutoFinish() {
+			files := session.candidateFiles()
+			return "generated workflows", files, session.lastLintSummary, session.lastCritic, nil
+		}
+		if session.verificationFailure > session.verificationBudget {
+			return "", nil, session.lastLintSummary, session.lastCritic, fmt.Errorf("authoring exceeded verification failure budget after %d lint failures", session.verificationFailure)
 		}
 	}
 	return "", nil, session.lastLintSummary, session.lastCritic, fmt.Errorf("authoring tool loop exhausted after %d turns", session.turnBudget)
 }
 
-func (s *authoringAgentSession) executeTool(ctx context.Context, turn int, call askcontract.AgentToolCall) {
+func (s *authoringAgentSession) handleToolCalls(ctx context.Context, turn int, calls []askprovider.ToolCall) (string, bool, error) {
+	readOnlyTurn := len(calls) > 0
+	for _, call := range calls {
+		switch strings.TrimSpace(call.Name) {
+		case authorToolClarification:
+			if len(calls) != 1 {
+				return "", false, fmt.Errorf("clarification tool must be the only call in a turn")
+			}
+			clarify, err := parseAuthorClarificationTool(call)
+			if err != nil {
+				return "", false, err
+			}
+			return "", false, authoringClarificationError(clarify)
+		case authorToolFinish:
+			if len(calls) != 1 {
+				return "", false, fmt.Errorf("finish tool must be the only call in a turn")
+			}
+			finish, err := parseAuthorFinishTool(call)
+			if err != nil {
+				return "", false, err
+			}
+			if !s.lastLintPassed {
+				s.appendSyntheticFailure(turn, authorToolFinish, "finish rejected until deck_lint succeeds in this session")
+				return "", false, nil
+			}
+			files := s.candidateFiles()
+			if len(files) == 0 && s.decision.Route != askintent.RouteRefine {
+				s.appendSyntheticFailure(turn, authorToolFinish, "finish rejected because no candidate files have been written")
+				return "", false, nil
+			}
+			summary := strings.TrimSpace(finish.Summary)
+			if summary == "" {
+				summary = strings.TrimSpace(finish.Reason)
+			}
+			if summary == "" {
+				summary = "generated workflows"
+			}
+			return summary, true, nil
+		default:
+			toolCall, err := parseAuthorToolCall(call)
+			if err != nil {
+				s.appendSyntheticFailure(turn, strings.TrimSpace(call.Name), err.Error())
+				continue
+			}
+			if !isReadOnlyAuthorTool(toolCall.Name) {
+				readOnlyTurn = false
+			}
+			s.executeTool(ctx, turn, toolCall)
+		}
+	}
+	if s.lastLintPassed && readOnlyTurn {
+		s.postValidateIdle++
+	} else if !readOnlyTurn {
+		s.postValidateIdle = 0
+	}
+	return "", false, nil
+}
+
+func isReadOnlyAuthorTool(name string) bool {
+	switch strings.TrimSpace(name) {
+	case "read", "glob", "grep", "schema", "web_search":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *authoringAgentSession) shouldAutoFinish() bool {
+	return s.lastLintPassed && len(s.candidateByPath) > 0 && s.postValidateIdle >= 2
+}
+
+func (s *authoringAgentSession) executeTool(ctx context.Context, turn int, call authorToolCall) {
 	startedAt := time.Now().UTC()
 	var result agentToolResult
 	switch call.Name {
-	case "file_search":
-		result = s.runFileSearch(call)
-	case "file_read":
-		result = s.runFileRead(call)
+	case "read":
+		result = s.runRead(call)
+	case "glob":
+		result = s.runGlob(call)
+	case "grep":
+		result = s.runGrep(call)
 	case "file_write":
 		result = s.runFileWrite(call)
-	case "deck_init":
-		result = s.runDeckInit()
-	case "deck_lint":
-		result = s.runDeckLint(ctx, call)
-	case "mcp_web_search":
-		result = s.runMCPWebSearch(ctx, call)
+	case "file_edit":
+		result = s.runFileEdit(call)
+	case "init":
+		result = s.runInit()
+	case "validate":
+		result = s.runValidate(ctx, call)
+	case "schema":
+		result = s.runSchema(call)
+	case "web_search":
+		result = s.runWebSearch(ctx, call)
 	default:
 		result = agentToolResult{OK: false, Summary: fmt.Sprintf("unsupported tool %s", call.Name), Payload: map[string]any{"ok": false, "error": fmt.Sprintf("unsupported tool %s", call.Name)}}
 	}
@@ -310,7 +370,7 @@ func (s *authoringAgentSession) executeTool(ctx context.Context, turn int, call 
 		Path:      strings.TrimSpace(call.Path),
 		Paths:     append([]string(nil), call.Paths...),
 		Query:     strings.TrimSpace(call.Query),
-		Include:   append([]string(nil), call.Include...),
+		Include:   []string{strings.TrimSpace(call.Glob)},
 		Intent:    strings.TrimSpace(call.Intent),
 		OK:        result.OK,
 		Summary:   strings.TrimSpace(result.Summary),
@@ -320,63 +380,91 @@ func (s *authoringAgentSession) executeTool(ctx context.Context, turn int, call 
 	s.toolEvents = append(s.toolEvents, event)
 }
 
-func (s *authoringAgentSession) runFileSearch(call askcontract.AgentToolCall) agentToolResult {
-	query := strings.TrimSpace(call.Query)
-	if query == "" {
-		query = strings.TrimSpace(call.Path)
-	}
-	if query == "" && len(call.Paths) > 0 {
-		query = strings.TrimSpace(call.Paths[0])
-	}
-	matches := []agentSearchMatch{}
-	for _, item := range s.searchableFiles(call.Path, call.Include) {
-		if snippet, ok := matchSnippet(item.content, item.path, query); ok {
-			matches = append(matches, agentSearchMatch{Path: item.path, Snippet: snippet, Source: item.source})
-		}
-		if len(matches) >= 6 {
-			break
-		}
-	}
-	return agentToolResult{
-		OK:      true,
-		Summary: fmt.Sprintf("file_search found %d matches", len(matches)),
-		Payload: map[string]any{"ok": true, "query": query, "matches": matches},
-	}
-}
-
-func (s *authoringAgentSession) runFileRead(call askcontract.AgentToolCall) agentToolResult {
-	paths := callPaths(call)
-	results := make([]agentReadResult, 0, len(paths))
+func (s *authoringAgentSession) runRead(call authorToolCall) agentToolResult {
+	paths := authorToolPaths(call)
+	results := make([]authorReadResult, 0, len(paths))
 	for _, rawPath := range paths {
 		path, err := s.normalizePath(rawPath)
 		if err != nil {
-			return agentToolResult{OK: false, Summary: "file_read rejected path", Payload: map[string]any{"ok": false, "error": err.Error()}}
+			return agentToolResult{OK: false, Summary: "read rejected path", Payload: map[string]any{"ok": false, "error": err.Error()}}
 		}
 		if !s.readAllowed(path) {
-			return agentToolResult{OK: false, Summary: fmt.Sprintf("file_read denied for %s", path), Payload: map[string]any{"ok": false, "error": fmt.Sprintf("path %s is outside the approved read scope", path)}}
+			return agentToolResult{OK: false, Summary: fmt.Sprintf("read denied for %s", path), Payload: map[string]any{"ok": false, "error": fmt.Sprintf("path %s is outside the approved read scope", path)}}
 		}
-		if file, ok := s.candidateByPath[path]; ok {
-			results = append(results, agentReadResult{Path: path, Exists: true, Source: "candidate", Content: file.Content})
-			continue
-		}
-		abs, err := fsutil.ResolveUnder(s.root, strings.Split(filepath.ToSlash(path), "/")...)
+		content, exists, source, err := s.currentFileContent(path)
 		if err != nil {
-			return agentToolResult{OK: false, Summary: "file_read failed", Payload: map[string]any{"ok": false, "error": err.Error()}}
+			return agentToolResult{OK: false, Summary: "read failed", Payload: map[string]any{"ok": false, "error": err.Error()}}
 		}
-		raw, err := os.ReadFile(abs) //nolint:gosec // Path stays under the workspace root.
-		if err != nil {
-			if os.IsNotExist(err) {
-				results = append(results, agentReadResult{Path: path, Exists: false})
-				continue
+		result := authorReadResult{Path: path, Exists: exists, Source: source, WasCandidate: source == "candidate"}
+		if exists {
+			result.Content, result.StartLine, result.EndLine, result.TotalLines, result.Truncated = renderReadWindow(content, call.Offset, call.Limit)
+			if call.Offset <= 0 && call.Limit <= 0 {
+				s.readState[path] = authorReadSnapshot{Content: content, Exists: true, Candidate: source == "candidate", WasFullRead: true}
 			}
-			return agentToolResult{OK: false, Summary: "file_read failed", Payload: map[string]any{"ok": false, "error": fmt.Sprintf("read %s: %v", path, err)}}
 		}
-		results = append(results, agentReadResult{Path: path, Exists: true, Source: "workspace", Content: string(raw)})
+		results = append(results, result)
 	}
-	return agentToolResult{OK: true, Summary: fmt.Sprintf("file_read returned %d files", len(results)), Payload: map[string]any{"ok": true, "files": results}}
+	return agentToolResult{OK: true, Summary: fmt.Sprintf("read returned %d files", len(results)), Payload: map[string]any{"ok": true, "files": results}}
 }
 
-func (s *authoringAgentSession) runFileWrite(call askcontract.AgentToolCall) agentToolResult {
+func (s *authoringAgentSession) runGlob(call authorToolCall) agentToolResult {
+	pattern := strings.TrimSpace(call.Pattern)
+	if pattern == "" {
+		return agentToolResult{OK: false, Summary: "glob requires pattern", Payload: map[string]any{"ok": false, "error": "glob requires pattern"}}
+	}
+	base := strings.TrimSpace(call.Path)
+	matches := []string{}
+	seen := map[string]bool{}
+	for _, file := range s.listWorkspaceFiles(base) {
+		if seen[file.path] || !matchesGlob(file.path, pattern) {
+			continue
+		}
+		seen[file.path] = true
+		matches = append(matches, file.path)
+	}
+	sort.Strings(matches)
+	truncated := false
+	if len(matches) > 100 {
+		matches = matches[:100]
+		truncated = true
+	}
+	return agentToolResult{OK: true, Summary: fmt.Sprintf("glob found %d files", len(matches)), Payload: map[string]any{"ok": true, "pattern": pattern, "path": base, "files": matches, "truncated": truncated}}
+}
+
+func (s *authoringAgentSession) runGrep(call authorToolCall) agentToolResult {
+	pattern := strings.TrimSpace(call.Pattern)
+	if pattern == "" {
+		return agentToolResult{OK: false, Summary: "grep requires pattern", Payload: map[string]any{"ok": false, "error": "grep requires pattern"}}
+	}
+	re, err := compileAuthorRegex(pattern)
+	if err != nil {
+		return agentToolResult{OK: false, Summary: "grep failed", Payload: map[string]any{"ok": false, "error": err.Error()}}
+	}
+	limit := call.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	matches := []authorGrepMatch{}
+	for _, file := range s.listWorkspaceFiles(call.Path) {
+		if call.Glob != "" && !matchesGlob(file.path, call.Glob) {
+			continue
+		}
+		for idx, line := range strings.Split(file.content, "\n") {
+			loc := re.FindStringIndex(line)
+			if loc == nil {
+				continue
+			}
+			matches = append(matches, authorGrepMatch{Path: file.path, Line: idx + 1, Match: truncateString(strings.TrimSpace(line), 240), Snippet: truncateString(snippetAround(line, loc[0], loc[1]-loc[0]), 240), Source: file.source, Candidate: file.source == "candidate"})
+			if len(matches) >= limit {
+				return agentToolResult{OK: true, Summary: fmt.Sprintf("grep found %d matches", len(matches)), Payload: map[string]any{"ok": true, "pattern": pattern, "matches": matches, "truncated": true}}
+			}
+		}
+	}
+	return agentToolResult{OK: true, Summary: fmt.Sprintf("grep found %d matches", len(matches)), Payload: map[string]any{"ok": true, "pattern": pattern, "matches": matches}}
+}
+
+func (s *authoringAgentSession) runFileWrite(call authorToolCall) agentToolResult {
+	s.postValidateIdle = 0
 	path, err := s.normalizePath(call.Path)
 	if err != nil {
 		return agentToolResult{OK: false, Summary: "file_write rejected path", Payload: map[string]any{"ok": false, "error": err.Error()}}
@@ -385,49 +473,137 @@ func (s *authoringAgentSession) runFileWrite(call askcontract.AgentToolCall) age
 		return agentToolResult{OK: false, Summary: fmt.Sprintf("file_write denied for %s", path), Payload: map[string]any{"ok": false, "error": fmt.Sprintf("path %s is outside the approved write scope", path)}}
 	}
 	file := askcontract.GeneratedFile{Path: path, Content: normalizeGeneratedContent(path, call.Content)}
-	if err := validateGeneratedFile(s.root, file); err != nil {
-		return agentToolResult{OK: false, Summary: fmt.Sprintf("file_write rejected for %s", path), Payload: map[string]any{"ok": false, "error": err.Error()}}
-	}
 	s.candidateByPath[path] = file
+	s.readState[path] = authorReadSnapshot{Content: file.Content, Exists: true, Candidate: true, WasFullRead: true}
 	return agentToolResult{OK: true, Summary: fmt.Sprintf("staged %s in candidate state", path), Payload: map[string]any{"ok": true, "path": path, "bytes": len(file.Content), "lines": countLines(file.Content)}}
 }
 
-func (s *authoringAgentSession) runDeckInit() agentToolResult {
+func (s *authoringAgentSession) runFileEdit(call authorToolCall) agentToolResult {
+	s.postValidateIdle = 0
+	path, err := s.normalizePath(call.Path)
+	if err != nil {
+		return agentToolResult{OK: false, Summary: "file_edit rejected path", Payload: map[string]any{"ok": false, "error": err.Error()}}
+	}
+	if !s.writeAllowed(path) {
+		return agentToolResult{OK: false, Summary: fmt.Sprintf("file_edit denied for %s", path), Payload: map[string]any{"ok": false, "error": fmt.Sprintf("path %s is outside the approved write scope", path)}}
+	}
+	snapshot, ok := s.readState[path]
+	if !ok || !snapshot.WasFullRead {
+		return agentToolResult{OK: false, Summary: "file_edit requires a prior full read", Payload: map[string]any{"ok": false, "error": fmt.Sprintf("read %s fully before editing it", path)}}
+	}
+	current, exists, _, err := s.currentFileContent(path)
+	if err != nil {
+		return agentToolResult{OK: false, Summary: "file_edit failed", Payload: map[string]any{"ok": false, "error": err.Error()}}
+	}
+	if exists != snapshot.Exists || current != snapshot.Content {
+		return agentToolResult{OK: false, Summary: "file_edit detected stale content", Payload: map[string]any{"ok": false, "error": fmt.Sprintf("%s changed since the last full read; read it again before editing", path)}}
+	}
+	if !exists {
+		return agentToolResult{OK: false, Summary: "file_edit failed", Payload: map[string]any{"ok": false, "error": fmt.Sprintf("%s does not exist; use file_write to create it", path)}}
+	}
+	if call.OldString == call.NewString {
+		return agentToolResult{OK: false, Summary: "file_edit would not change the file", Payload: map[string]any{"ok": false, "error": "old_string and new_string are identical"}}
+	}
+	count := strings.Count(current, call.OldString)
+	if count == 0 {
+		return agentToolResult{OK: false, Summary: "file_edit target not found", Payload: map[string]any{"ok": false, "error": fmt.Sprintf("old_string was not found in %s", path)}}
+	}
+	if count > 1 && !call.ReplaceAll {
+		return agentToolResult{OK: false, Summary: "file_edit target is ambiguous", Payload: map[string]any{"ok": false, "error": fmt.Sprintf("old_string matched %d times in %s; use replace_all or make the target more specific", count, path)}}
+	}
+	updated := strings.Replace(current, call.OldString, call.NewString, 1)
+	if call.ReplaceAll {
+		updated = strings.ReplaceAll(current, call.OldString, call.NewString)
+	}
+	updated = normalizeGeneratedContent(path, updated)
+	s.candidateByPath[path] = askcontract.GeneratedFile{Path: path, Content: updated}
+	s.readState[path] = authorReadSnapshot{Content: updated, Exists: true, Candidate: true, WasFullRead: true}
+	return agentToolResult{OK: true, Summary: fmt.Sprintf("edited %s in candidate state", path), Payload: map[string]any{"ok": true, "path": path, "replacements": countIf(call.ReplaceAll, count, 1), "bytes": len(updated)}}
+}
+
+func (s *authoringAgentSession) runInit() agentToolResult {
+	s.postValidateIdle = 0
 	if s.workspace.HasWorkflowTree {
-		return agentToolResult{OK: false, Summary: "deck_init is disabled", Payload: map[string]any{"ok": false, "error": "deck_init is disabled because the workspace already has a workflow tree"}}
+		return agentToolResult{OK: false, Summary: "init is disabled", Payload: map[string]any{"ok": false, "error": "init is disabled because the workspace already has a workflow tree"}}
 	}
 	s.scaffoldRequested = true
 	return agentToolResult{OK: true, Summary: "prepared default workspace scaffold", Payload: map[string]any{"ok": true, "createdDirectories": []string{"workflows/scenarios", "workflows/components", "outputs/files", "outputs/images", "outputs/packages"}, "createdFiles": []string{".gitignore", ".deckignore"}}}
 }
 
-func (s *authoringAgentSession) runDeckLint(ctx context.Context, call askcontract.AgentToolCall) agentToolResult {
+func (s *authoringAgentSession) runValidate(ctx context.Context, call authorToolCall) agentToolResult {
+	s.postValidateIdle = 0
 	files := s.lintFiles()
 	if len(files) == 0 {
 		s.lastLintPassed = false
 		s.lastLintSummary = ""
 		s.lastCritic = askcontract.CriticResponse{Blocking: []string{"no candidate or approved workflow files are available to lint"}}
 		s.lastDiagnostics = []askdiagnostic.Diagnostic{{Code: "no_candidate_files", Severity: "blocking", Message: "no candidate or approved workflow files are available to lint"}}
-		return agentToolResult{OK: false, Summary: "deck_lint could not run", Payload: map[string]any{"ok": false, "summary": "no candidate or approved workflow files are available to lint", "critic": s.lastCritic, "diagnostics": s.lastDiagnostics}}
+		return agentToolResult{OK: false, Summary: "validate could not run", Payload: map[string]any{"ok": false, "summary": "no candidate or approved workflow files are available to lint", "critic": s.lastCritic, "diagnostics": s.lastDiagnostics}}
 	}
-	gen := askcontract.GenerationResponse{Summary: "agent candidate", Files: append([]askcontract.GeneratedFile(nil), files...)}
-	lintSummary, critic, err := validateGeneration(ctx, s.root, gen, files, s.decision, s.plan, normalizedAuthoringBrief(s.plan, s.plan.AuthoringBrief), s.retrieval)
+	lintSummary, critic, err := validateCandidateFiles(ctx, s.root, files, s.decision, s.plan, normalizedAuthoringBrief(s.plan, s.plan.AuthoringBrief), s.retrieval)
 	s.lastCritic = critic
 	if err != nil {
 		s.lastLintPassed = false
 		s.lastLintSummary = strings.TrimSpace(err.Error())
 		s.lastDiagnostics = askdiagnostic.FromValidationError(err, err.Error(), askcontext.CurrentBundle())
+		if repaired, notes, repairedSummary, repairedCritic, repairedErr, applied := s.tryAutoRepairAfterLintFailure(ctx, files, s.lastDiagnostics); applied {
+			critic = repairedCritic
+			if repairedErr == nil {
+				return agentToolResult{OK: true, Summary: repairedSummary, Payload: map[string]any{"ok": true, "summary": repairedSummary, "critic": critic, "selectedPaths": authorToolPaths(call), "autoRepair": notes, "repairContext": buildLintRepairContext(s.lastDiagnostics), "repairedFiles": filePaths(repaired)}}
+			}
+			s.lastLintPassed = false
+			s.lastLintSummary = strings.TrimSpace(repairedErr.Error())
+			s.lastDiagnostics = askdiagnostic.FromValidationError(repairedErr, repairedErr.Error(), askcontext.CurrentBundle())
+		}
 		s.verificationFailure++
-		return agentToolResult{OK: false, Summary: "deck_lint found blocking issues", Payload: map[string]any{"ok": false, "summary": s.lastLintSummary, "critic": critic, "diagnostics": s.lastDiagnostics, "selectedPaths": callPaths(call)}}
+		return agentToolResult{OK: false, Summary: "validate found blocking issues", Payload: map[string]any{"ok": false, "summary": s.lastLintSummary, "critic": critic, "diagnostics": s.lastDiagnostics, "selectedPaths": authorToolPaths(call), "repairContext": buildLintRepairContext(s.lastDiagnostics)}}
 	}
 	s.lastLintPassed = true
 	s.lastLintSummary = strings.TrimSpace(lintSummary)
 	s.lastDiagnostics = nil
-	return agentToolResult{OK: true, Summary: lintSummary, Payload: map[string]any{"ok": true, "summary": lintSummary, "critic": critic, "selectedPaths": callPaths(call)}}
+	return agentToolResult{OK: true, Summary: lintSummary, Payload: map[string]any{"ok": true, "summary": lintSummary, "critic": critic, "selectedPaths": authorToolPaths(call)}}
 }
 
-func (s *authoringAgentSession) runMCPWebSearch(ctx context.Context, call askcontract.AgentToolCall) agentToolResult {
+func (s *authoringAgentSession) runSchema(call authorToolCall) agentToolResult {
+	payload, err := buildSchemaReadPayload(authorSchemaReadCall{Topic: strings.TrimSpace(call.Topic), Kind: strings.TrimSpace(call.Kind)})
+	if err != nil {
+		return agentToolResult{OK: false, Summary: "schema failed", Payload: map[string]any{"ok": false, "error": err.Error()}}
+	}
+	summary := "returned workflow schema context"
+	if strings.TrimSpace(call.Kind) != "" {
+		summary = fmt.Sprintf("returned %s schema context", strings.TrimSpace(call.Kind))
+	}
+	return agentToolResult{OK: true, Summary: summary, Payload: payload}
+}
+
+func (s *authoringAgentSession) tryAutoRepairAfterLintFailure(ctx context.Context, files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic) ([]askcontract.GeneratedFile, []string, string, askcontract.CriticResponse, error, bool) {
+	repairPaths := s.approvedPathList
+	if len(repairPaths) == 0 {
+		repairPaths = filePaths(s.candidateFiles())
+	}
+	repaired, notes, applied, err := askrepair.TryAutoRepairWithProgram(s.root, files, diags, repairPaths, s.plan.AuthoringProgram)
+	if err != nil || !applied {
+		return files, nil, "", askcontract.CriticResponse{}, err, false
+	}
+	for _, file := range repaired {
+		if s.writeAllowed(file.Path) {
+			s.candidateByPath[file.Path] = file
+			s.readState[file.Path] = authorReadSnapshot{Content: file.Content, Exists: !file.Delete, Candidate: true, WasFullRead: !file.Delete}
+		}
+	}
+	summary, critic, validateErr := validateCandidateFiles(ctx, s.root, repaired, s.decision, s.plan, normalizedAuthoringBrief(s.plan, s.plan.AuthoringBrief), s.retrieval)
+	if validateErr == nil {
+		s.lastLintPassed = true
+		s.lastLintSummary = strings.TrimSpace(summary)
+		s.lastDiagnostics = nil
+		s.lastCritic = critic
+	}
+	return repaired, notes, summary, critic, validateErr, true
+}
+
+func (s *authoringAgentSession) runWebSearch(ctx context.Context, call authorToolCall) agentToolResult {
 	if !s.allowMCPTool {
-		return agentToolResult{OK: false, Summary: "mcp_web_search is unavailable", Payload: map[string]any{"ok": false, "error": "mcp_web_search is disabled by current evidence policy or config"}}
+		return agentToolResult{OK: false, Summary: "web_search is unavailable", Payload: map[string]any{"ok": false, "error": "web_search is disabled by current evidence policy or config"}}
 	}
 	chunks, events := mcpaugment.Gather(ctx, s.effective.MCP, s.decision.Route, strings.TrimSpace(call.Query))
 	typed := make([]map[string]any, 0, len(chunks))
@@ -438,7 +614,91 @@ func (s *authoringAgentSession) runMCPWebSearch(ctx context.Context, call askcon
 		}
 		typed = append(typed, item)
 	}
-	return agentToolResult{OK: true, Summary: fmt.Sprintf("mcp_web_search returned %d evidence chunks", len(typed)), Payload: map[string]any{"ok": true, "query": strings.TrimSpace(call.Query), "events": events, "chunks": typed}}
+	return agentToolResult{OK: true, Summary: fmt.Sprintf("web_search returned %d evidence chunks", len(typed)), Payload: map[string]any{"ok": true, "query": strings.TrimSpace(call.Query), "events": events, "chunks": typed}}
+}
+
+func (s *authoringAgentSession) currentFileContent(path string) (string, bool, string, error) {
+	if file, ok := s.candidateByPath[path]; ok {
+		if file.Delete {
+			return "", false, "candidate", nil
+		}
+		return file.Content, true, "candidate", nil
+	}
+	abs, err := fsutil.ResolveUnder(s.root, strings.Split(filepath.ToSlash(path), "/")...)
+	if err != nil {
+		return "", false, "", err
+	}
+	raw, err := os.ReadFile(abs) //nolint:gosec // Path stays under the workspace root.
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, "workspace", nil
+		}
+		return "", false, "", fmt.Errorf("read %s: %v", path, err)
+	}
+	return string(raw), true, "workspace", nil
+}
+
+func (s *authoringAgentSession) listWorkspaceFiles(scope string) []searchableFile {
+	seen := map[string]bool{}
+	out := make([]searchableFile, 0, len(s.workspace.Files)+len(s.candidateByPath))
+	for _, file := range s.candidateFiles() {
+		if scopeAllows(file.Path, scope) {
+			seen[file.Path] = true
+			out = append(out, searchableFile{path: file.Path, content: file.Content, source: "candidate"})
+		}
+	}
+	for _, workspaceFile := range s.workspace.Files {
+		if seen[workspaceFile.Path] || !scopeAllows(workspaceFile.Path, scope) {
+			continue
+		}
+		seen[workspaceFile.Path] = true
+		out = append(out, searchableFile{path: workspaceFile.Path, content: workspaceFile.Content, source: "workspace"})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].path < out[j].path })
+	return out
+}
+
+func renderReadWindow(content string, offset int, limit int) (string, int, int, int, bool) {
+	lines := strings.Split(content, "\n")
+	total := len(lines)
+	if total == 1 && lines[0] == "" {
+		return "", 0, 0, 0, false
+	}
+	start := 0
+	if offset > 0 {
+		start = offset - 1
+		if start < 0 {
+			start = 0
+		}
+		if start > len(lines) {
+			start = len(lines)
+		}
+	}
+	end := len(lines)
+	if limit > 0 && start+limit < end {
+		end = start + limit
+	}
+	selected := lines[start:end]
+	numbered := make([]string, 0, len(selected))
+	for i, line := range selected {
+		numbered = append(numbered, fmt.Sprintf("%d: %s", start+i+1, line))
+	}
+	return strings.Join(numbered, "\n"), start + 1, end, total, end < len(lines)
+}
+
+func compileAuthorRegex(pattern string) (*regexp.Regexp, error) {
+	re, err := regexp.Compile(pattern)
+	if err == nil {
+		return re, nil
+	}
+	return nil, fmt.Errorf("compile regex %q: %w", pattern, err)
+}
+
+func countIf(replaceAll bool, all int, one int) int {
+	if replaceAll {
+		return all
+	}
+	return one
 }
 
 func (s *authoringAgentSession) appendSyntheticFailure(turn int, name string, message string) {
@@ -476,7 +736,7 @@ func (s *authoringAgentSession) baseFilesForLint() []askcontract.GeneratedFile {
 		if err != nil {
 			continue
 		}
-		raw, err := os.ReadFile(abs) //nolint:gosec // Path stays under the workspace root.
+		raw, err := os.ReadFile(abs) //nolint:gosec // Path stays under the workspace root. //nolint:gosec // Path stays under the workspace root.
 		if err != nil {
 			continue
 		}
@@ -521,7 +781,7 @@ func (s *authoringAgentSession) lastTermination() string {
 	if last.Name == "finish" && !last.OK {
 		return "finish-rejected"
 	}
-	if last.Name == "deck_lint" && !last.OK {
+	if last.Name == "validate" && !last.OK {
 		return "lint-blocked"
 	}
 	return "incomplete"
@@ -569,66 +829,6 @@ type searchableFile struct {
 	source  string
 }
 
-func (s *authoringAgentSession) searchableFiles(scope string, include []string) []searchableFile {
-	seen := map[string]bool{}
-	out := make([]searchableFile, 0, len(s.workspace.Files)+len(s.candidateByPath))
-	for _, file := range s.candidateFiles() {
-		if scopeAllows(file.Path, scope) && matchesIncludes(file.Path, include) {
-			seen[file.Path] = true
-			out = append(out, searchableFile{path: file.Path, content: file.Content, source: "candidate"})
-		}
-	}
-	for _, workspaceFile := range s.workspace.Files {
-		if seen[workspaceFile.Path] || !scopeAllows(workspaceFile.Path, scope) || !matchesIncludes(workspaceFile.Path, include) {
-			continue
-		}
-		seen[workspaceFile.Path] = true
-		out = append(out, searchableFile{path: workspaceFile.Path, content: workspaceFile.Content, source: "workspace"})
-	}
-	for _, prefix := range []string{"workflows", "docs", "test/workflows", "internal/stepspec", "internal/stepmeta", "internal/askpolicy", "internal/askdraft", "cmd"} {
-		base := filepath.Join(s.root, filepath.FromSlash(prefix))
-		info, err := os.Stat(base)
-		if err != nil || !info.IsDir() {
-			continue
-		}
-		_ = filepath.WalkDir(base, func(path string, d os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if d == nil || d.IsDir() {
-				return nil
-			}
-			rel, relErr := filepath.Rel(s.root, path)
-			if relErr != nil {
-				return relErr
-			}
-			rel = filepath.ToSlash(rel)
-			if seen[rel] || !scopeAllows(rel, scope) || !matchesIncludes(rel, include) {
-				return nil
-			}
-			lower := strings.ToLower(rel)
-			if !strings.HasSuffix(lower, ".yaml") && !strings.HasSuffix(lower, ".yml") && !strings.HasSuffix(lower, ".md") && !strings.HasSuffix(lower, ".go") {
-				return nil
-			}
-			raw, readErr := os.ReadFile(path) //nolint:gosec // Search stays under approved workspace-relative roots.
-			if readErr != nil {
-				return readErr
-			}
-			seen[rel] = true
-			source := "workspace"
-			if strings.HasPrefix(rel, "test/workflows/") || strings.HasPrefix(rel, "docs/") {
-				source = "example"
-			} else if strings.HasPrefix(rel, "internal/") || strings.HasPrefix(rel, "cmd/") {
-				source = "code"
-			}
-			out = append(out, searchableFile{path: rel, content: string(raw), source: source})
-			return nil
-		})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].path < out[j].path })
-	return out
-}
-
 func scopeAllows(path string, scope string) bool {
 	scope = strings.TrimSpace(scope)
 	if scope == "" || scope == "." {
@@ -642,52 +842,23 @@ func scopeAllows(path string, scope string) bool {
 
 func authoringAgentSystemPrompt(session *authoringAgentSession) string {
 	b := &strings.Builder{}
-	b.WriteString("You are authoring deck workflow files through an explicit bounded tool loop.\n")
-	b.WriteString("Operate like a constrained domain agent: inspect files, write candidate files, run deck_lint, then finish.\n")
-	b.WriteString("Do not return workflow documents directly. Use tools instead.\n")
-	b.WriteString("Ask for clarification only for true blockers that cannot be resolved safely from available files and tool results.\n")
-	b.WriteString("Finish only after deck_lint succeeds in this session and the request is satisfied.\n")
-	b.WriteString("Code owns path scope and verification; any tool rejection means you must stay inside the approved boundaries.\n")
-	b.WriteString("file_write updates candidate state first. Nothing is committed to disk until finish succeeds.\n")
-	b.WriteString("The current workspace root may be an empty temp directory. Internal repo paths mentioned in retrieved local facts may not exist under this workspace root; use the provided facts instead of searching for those paths.\n")
-	b.WriteString("For create or edit requests, finish is invalid until at least one file_write happened and deck_lint succeeded in this session.\n")
-	b.WriteString("Workflow YAML must use the real deck schema: top-level `version`, then either `steps` or `phases`; each step needs exact case-sensitive `id`, `kind`, and `spec` fields.\n")
-	b.WriteString("Use exact step kinds such as `InstallPackage`, `ManageService`, `InitKubeadm`, `CheckKubernetesCluster`, and `Command` when they fit.\n")
-	b.WriteString("Use only flat tool-call objects inside toolCalls. Do not use nested args/arguments. Do not use a tool key.\n")
-	b.WriteString("Available tools in this run:\n")
-	for _, tool := range session.availableTools {
-		b.WriteString("- ")
-		b.WriteString(tool)
-		b.WriteString("\n")
-	}
-	b.WriteString("Approved write paths:\n")
-	for _, path := range session.approvedPathList {
-		b.WriteString("- ")
-		b.WriteString(path)
-		b.WriteString("\n")
-	}
-	if len(session.plan.ValidationChecklist) > 0 {
-		b.WriteString("Validation checklist:\n")
-		for _, item := range session.plan.ValidationChecklist {
-			b.WriteString("- ")
-			b.WriteString(strings.TrimSpace(item))
-			b.WriteString("\n")
-		}
-	}
-	b.WriteString("Respond with JSON using exactly one mode per turn:\n")
-	b.WriteString("- toolCalls: {\"summary\":\"inspect vars\",\"review\":[\"read before editing\"],\"toolCalls\":[{\"name\":\"file_read\",\"path\":\"" + workspacepaths.CanonicalVarsWorkflow + "\"}]}\n")
-	b.WriteString("- write and lint: {\"summary\":\"update workflow\",\"review\":[\"verify after editing\"],\"toolCalls\":[{\"name\":\"file_write\",\"path\":\"" + workspacepaths.CanonicalApplyWorkflow + "\",\"content\":\"version: v1alpha1\\n...\"},{\"name\":\"deck_lint\"}]}\n")
-	b.WriteString("- finish: {\"summary\":\"workflow ready\",\"review\":[\"deck_lint passed\"],\"finish\":{\"reason\":\"deck_lint passed and requested files are ready\"}}\n")
-	b.WriteString("- refine no-op: {\"summary\":\"no justified extraction needed\",\"review\":[\"anchor remains stable\",\"deck_lint passed on current files\"],\"toolCalls\":[{\"name\":\"deck_lint\"}]} then next turn finish with no file_write if no changes are justified.\n")
-	b.WriteString("- clarification: {\"summary\":\"need one answer\",\"review\":[\"blocked on missing topology detail\"],\"clarification\":{\"question\":\"Which node acts as control plane?\",\"reason\":\"required to complete the workflow\"}}\n")
-	b.WriteString("After any file_write, call deck_lint before finish.\n")
-	b.WriteString("Prefer short review bullets that explain why the next action is enough.\n")
+	b.WriteString("You are authoring deck workflow files as a constrained CLI agent.\n")
+	b.WriteString("Use the provided native tools to inspect workspace state, write candidate files, validate with the validate tool, and converge on the requested result.\n")
+	b.WriteString("Treat tool results as the source of truth for scope, validation, and current candidate state.\n")
+	b.WriteString("Use ")
+	b.WriteString(authorToolFinish)
+	b.WriteString(" only when the current candidate state satisfies the request and verifier state is acceptable.\n")
+	b.WriteString("Use ")
+	b.WriteString(authorToolClarification)
+	b.WriteString(" only for true blockers that cannot be safely inferred from available files and tool results.\n")
+	b.WriteString("The workspace may be empty. Retrieval excerpts can mention repo paths that are not present under the current workspace root.\n")
+	b.WriteString("Prefer tool-driven inspection over assumptions. Keep edits inside the approved paths and let validate drive repairs.\n")
 	return strings.TrimSpace(b.String())
 }
 
 func authoringAgentUserPrompt(session *authoringAgentSession, turn int) string {
 	b := &strings.Builder{}
-	b.WriteString("User request:\n")
+	b.WriteString("Request:\n")
 	b.WriteString(session.requestText)
 	b.WriteString("\n\n")
 	b.WriteString("Route: ")
@@ -697,36 +868,37 @@ func authoringAgentUserPrompt(session *authoringAgentSession, turn int) string {
 	_, _ = fmt.Fprintf(b, "%d\n", maxInt(session.turnBudget-turn+1, 0))
 	b.WriteString("Verification failures: ")
 	_, _ = fmt.Fprintf(b, "%d/%d\n", session.verificationFailure, session.verificationBudget)
-	if session.workspace.HasWorkflowTree {
-		b.WriteString("Workspace workflow files:\n")
-		for _, file := range session.workspace.Files {
+	b.WriteString("Available tools: ")
+	b.WriteString(authoringToolCatalogSummary(session))
+	b.WriteString("\n")
+	b.WriteString("Approved write paths: ")
+	b.WriteString(approvedPathsSummary(session.approvedPathList))
+	b.WriteString("\n")
+	b.WriteString("Workspace workflow files: ")
+	b.WriteString(workspaceSummaryForPrompt(session))
+	b.WriteString("\n")
+	if len(session.plan.ValidationChecklist) > 0 {
+		b.WriteString("Validation checklist:\n")
+		for _, item := range session.plan.ValidationChecklist {
 			b.WriteString("- ")
-			b.WriteString(file.Path)
+			b.WriteString(strings.TrimSpace(item))
 			b.WriteString("\n")
 		}
-	} else {
-		b.WriteString("Workspace workflow files: none yet\n")
 	}
 	if len(session.retrieval.Chunks) > 0 {
-		b.WriteString("\nRetrieved local context (most relevant excerpts only):\n")
+		b.WriteString("\nRetrieved context:\n")
 		for _, rendered := range renderAuthoringChunks(session.retrieval.Chunks) {
 			b.WriteString(rendered)
 			b.WriteString("\n\n")
 		}
 	}
 	if session.state.LastLint != "" {
-		b.WriteString("Last saved lint summary from prior run: ")
+		b.WriteString("Last saved lint summary: ")
 		b.WriteString(session.state.LastLint)
 		b.WriteString("\n")
 	}
-	if session.decision.Route == askintent.RouteDraft && !session.workspace.HasWorkflowTree && len(session.candidateByPath) == 0 {
-		b.WriteString("Draft hint: this workspace is empty. For straightforward requests, stop searching and write the approved target file directly, then run deck_lint.\n")
-	}
-	if session.decision.Route == askintent.RouteRefine && len(session.candidateByPath) == 0 {
-		b.WriteString("Refine hint: if no extraction is clearly justified, you may run deck_lint on the current approved files and then finish with no-op.\n")
-	}
 	if len(session.toolEvents) > 0 {
-		b.WriteString("\nTool transcript so far:\n")
+		b.WriteString("\nTool transcript:\n")
 		for _, event := range session.toolEvents {
 			_, _ = fmt.Fprintf(b, "Turn %d %s ok=%t\n", event.Turn, event.Name, event.OK)
 			if strings.TrimSpace(event.Summary) != "" {
@@ -738,9 +910,6 @@ func authoringAgentUserPrompt(session *authoringAgentSession, turn int) string {
 				b.WriteString(truncateString(event.Result, 1200))
 				b.WriteString("\n")
 			}
-		}
-		if last := session.toolEvents[len(session.toolEvents)-1]; last.Name == "finish" && !last.OK {
-			b.WriteString("Next turn hint: do not finish yet. Use toolCalls, usually file_read/file_write/deck_lint.\n")
 		}
 	}
 	if len(session.candidateByPath) > 0 {
@@ -765,12 +934,7 @@ func authoringAgentUserPrompt(session *authoringAgentSession, turn int) string {
 		b.WriteString(truncateString(renderAgentPayload(session.lastDiagnostics), 1600))
 		b.WriteString("\n")
 	}
-	b.WriteString("\nImportant response rules:\n")
-	b.WriteString("- Use toolCalls with flat fields like name/path/query/content.\n")
-	b.WriteString("- Do not use tool, args, or arguments keys.\n")
-	b.WriteString("- After any file_write, call deck_lint before finish.\n")
-	b.WriteString("- If blocked on missing information, ask one clarification question.\n")
-	b.WriteString("\nRespond with the next best tool action, a single clarification question, or finish if the current candidate state is ready.\n")
+	b.WriteString("\nUse tools to inspect, search, read, edit, write, validate, consult schema, finish, or request clarification.\n")
 	return strings.TrimSpace(b.String())
 }
 
@@ -806,7 +970,7 @@ func renderAuthoringChunks(chunks []askretrieve.Chunk) []string {
 		out = append(out, strings.TrimSpace(b.String()))
 	}
 	if len(chunks) > len(selected) {
-		out = append(out, fmt.Sprintf("[additional-context]\n%d more retrieval chunks were omitted from the prompt for brevity; use file_read or file_search only when the current workspace actually contains the target path.", len(chunks)-len(selected)))
+		out = append(out, fmt.Sprintf("[additional-context]\n%d more retrieval chunks were omitted from the prompt for brevity; use read, glob, or grep only when the current workspace actually contains the target path.", len(chunks)-len(selected)))
 	}
 	return out
 }
@@ -828,20 +992,6 @@ func authoringChunkPriority(chunk askretrieve.Chunk) int {
 	}
 }
 
-func callPaths(call askcontract.AgentToolCall) []string {
-	paths := []string{}
-	if strings.TrimSpace(call.Path) != "" {
-		paths = append(paths, strings.TrimSpace(call.Path))
-	}
-	for _, path := range call.Paths {
-		clean := strings.TrimSpace(path)
-		if clean != "" {
-			paths = append(paths, clean)
-		}
-	}
-	return dedupe(paths)
-}
-
 func renderAgentPayload(payload any) string {
 	if payload == nil {
 		return "{}"
@@ -851,43 +1001,6 @@ func renderAgentPayload(payload any) string {
 		return fmt.Sprintf("{\n  \"error\": %q\n}", err.Error())
 	}
 	return string(raw)
-}
-
-func matchSnippet(content string, path string, query string) (string, bool) {
-	lowerQuery := strings.ToLower(strings.TrimSpace(query))
-	lowerPath := strings.ToLower(path)
-	lowerContent := strings.ToLower(content)
-	if lowerQuery == "" {
-		return "", false
-	}
-	if strings.Contains(lowerPath, lowerQuery) {
-		return firstMeaningfulLine(content), true
-	}
-	if idx := strings.Index(lowerContent, lowerQuery); idx >= 0 {
-		return snippetAround(content, idx, len(lowerQuery)), true
-	}
-	for _, token := range strings.Fields(lowerQuery) {
-		if len(token) < 3 {
-			continue
-		}
-		if strings.Contains(lowerPath, token) {
-			return firstMeaningfulLine(content), true
-		}
-		if idx := strings.Index(lowerContent, token); idx >= 0 {
-			return snippetAround(content, idx, len(token)), true
-		}
-	}
-	return "", false
-}
-
-func firstMeaningfulLine(content string) string {
-	for _, line := range strings.Split(content, "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			return truncateString(line, 240)
-		}
-	}
-	return ""
 }
 
 func snippetAround(content string, idx int, matchLen int) string {
@@ -912,26 +1025,6 @@ func countLines(content string) int {
 		return 0
 	}
 	return strings.Count(content, "\n") + 1
-}
-
-func matchesIncludes(path string, includes []string) bool {
-	if len(includes) == 0 {
-		return true
-	}
-	for _, include := range includes {
-		include = strings.TrimSpace(include)
-		if include == "" {
-			continue
-		}
-		matched, err := filepath.Match(include, path)
-		if err == nil && matched {
-			return true
-		}
-		if strings.Contains(path, include) {
-			return true
-		}
-	}
-	return false
 }
 
 func maxInt(a int, b int) int {

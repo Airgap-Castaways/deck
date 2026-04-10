@@ -88,7 +88,7 @@ func TestExecuteAuthoringDefersExternalEvidenceToToolLoop(t *testing.T) {
 		t.Fatalf("save stored config: %v", err)
 	}
 	root := t.TempDir()
-	client := &stubClient{responses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: "workflows/scenarios/apply.yaml", Content: kubernetesWaitWorkflow()})}
+	client := &stubClient{providerResponses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: "workflows/scenarios/apply.yaml", Content: kubernetesWaitWorkflow()})}
 	if err := Execute(context.Background(), Options{Root: root, Prompt: "Create a Kubernetes 1.35.1 workflow", Create: true, Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client); err != nil {
 		t.Fatalf("execute: %v", err)
 	}

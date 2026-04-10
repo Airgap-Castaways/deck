@@ -15,6 +15,11 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
+func validateCandidateFiles(ctx context.Context, root string, files []askcontract.GeneratedFile, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult) (string, askcontract.CriticResponse, error) {
+	gen := askcontract.GenerationResponse{Summary: "agent candidate", Files: append([]askcontract.GeneratedFile(nil), files...)}
+	return validateGeneration(ctx, root, gen, files, decision, plan, brief, retrieval)
+}
+
 func validateGeneration(ctx context.Context, root string, gen askcontract.GenerationResponse, files []askcontract.GeneratedFile, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult) (string, askcontract.CriticResponse, error) {
 	if len(files) == 0 {
 		if decision.Route == askintent.RouteRefine && preserveOnlyDocuments(gen.Documents) {

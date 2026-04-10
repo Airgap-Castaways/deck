@@ -14,14 +14,14 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
-	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 )
 
 type mockAskClient struct {
-	responses []string
-	index     int
-	calls     int
+	responses         []string
+	providerResponses []askprovider.Response
+	index             int
+	calls             int
 }
 
 type mcpHelperRequest struct {
@@ -113,6 +113,14 @@ func (m *mockAskClient) Generate(_ context.Context, req askprovider.Request) (as
 			return askprovider.Response{Content: resp}, nil
 		}
 		return askprovider.Response{Content: synthesizeClassification(req.Prompt)}, nil
+	}
+	if len(m.providerResponses) > 0 {
+		if m.index >= len(m.providerResponses) {
+			return m.providerResponses[len(m.providerResponses)-1], nil
+		}
+		resp := m.providerResponses[m.index]
+		m.index++
+		return resp, nil
 	}
 	if m.index >= len(m.responses) {
 		return askprovider.Response{Content: m.responses[len(m.responses)-1]}, nil
@@ -294,7 +302,7 @@ func TestAskAuthoringWritesFiles(t *testing.T) {
 
 	originalFactory := newAskBackend
 	newAskBackend = func() askprovider.Client {
-		return &mockAskClient{responses: validAskResponses()}
+		return &mockAskClient{providerResponses: validAskResponses()}
 	}
 	defer func() { newAskBackend = originalFactory }()
 
@@ -359,7 +367,7 @@ func TestAskRepairLoop(t *testing.T) {
 
 	originalFactory := newAskBackend
 	newAskBackend = func() askprovider.Client {
-		return &mockAskClient{responses: repairAskResponses()}
+		return &mockAskClient{providerResponses: repairAskResponses()}
 	}
 	defer func() { newAskBackend = originalFactory }()
 
@@ -496,7 +504,7 @@ func TestAskFromPlanPrefersJSONArtifact(t *testing.T) {
 
 	originalFactory := newAskBackend
 	newAskBackend = func() askprovider.Client {
-		return &mockAskClient{responses: validAskResponses()}
+		return &mockAskClient{providerResponses: validAskResponses()}
 	}
 	defer func() { newAskBackend = originalFactory }()
 
@@ -588,44 +596,107 @@ phases:
 `, "\n")
 }
 
-func validAskResponses() []string {
-	return []string{validAskJSON(), validAskFinishJSON()}
+func validAskResponses() []askprovider.Response {
+	return []askprovider.Response{validAskToolResponse(), validAskFinishResponse()}
 }
 
-func repairAskResponses() []string {
-	return []string{repairAskInitialJSON(), repairAskFixJSON(), validAskFinishJSON()}
+func repairAskResponses() []askprovider.Response {
+	return []askprovider.Response{repairAskInitialResponse(), repairAskFixResponse(), validAskFinishResponse()}
 }
 
-func validAskJSON() string {
-	raw, err := json.Marshal(askcontract.AgentTurnResponse{Summary: "generated starter workflows", Review: []string{"Prefer typed steps where possible."}, ToolCalls: []askcontract.AgentToolCall{{Name: "file_write", Path: "workflows/scenarios/apply.yaml", Content: validAskWorkflow()}, {Name: "deck_lint"}}})
+type mockToolCall struct {
+	Name       string
+	Path       string
+	Paths      []string
+	Query      string
+	Content    string
+	Include    []string
+	Intent     string
+	Pattern    string
+	Glob       string
+	Offset     int
+	Limit      int
+	OldString  string
+	NewString  string
+	ReplaceAll bool
+	Topic      string
+	Kind       string
+}
+
+func toolResponse(calls ...mockToolCall) askprovider.Response {
+	toolCalls := make([]askprovider.ToolCall, 0, len(calls))
+	for i, call := range calls {
+		args := map[string]any{}
+		if strings.TrimSpace(call.Path) != "" {
+			args["path"] = call.Path
+		}
+		if strings.TrimSpace(call.Query) != "" {
+			args["query"] = call.Query
+		}
+		if strings.TrimSpace(call.Pattern) != "" {
+			args["pattern"] = call.Pattern
+		}
+		if strings.TrimSpace(call.Glob) != "" {
+			args["glob"] = call.Glob
+		}
+		if strings.TrimSpace(call.Content) != "" {
+			args["content"] = call.Content
+		}
+		if len(call.Paths) > 0 {
+			args["paths"] = append([]string(nil), call.Paths...)
+		}
+		if len(call.Include) > 0 {
+			args["include"] = append([]string(nil), call.Include...)
+		}
+		if strings.TrimSpace(call.Intent) != "" {
+			args["intent"] = call.Intent
+		}
+		if strings.TrimSpace(call.Topic) != "" {
+			args["topic"] = call.Topic
+		}
+		if strings.TrimSpace(call.Kind) != "" {
+			args["kind"] = call.Kind
+		}
+		raw, err := json.Marshal(args)
+		if err != nil {
+			panic(err)
+		}
+		toolCalls = append(toolCalls, askprovider.ToolCall{ID: fmt.Sprintf("call-%d", i+1), Name: call.Name, Arguments: raw})
+	}
+	return askprovider.Response{ToolCalls: toolCalls}
+}
+
+func finishResponse(summary string) askprovider.Response {
+	raw, err := json.Marshal(map[string]any{"summary": summary, "reason": "deck_lint passed"})
 	if err != nil {
 		panic(err)
 	}
-	return string(raw)
+	return askprovider.Response{ToolCalls: []askprovider.ToolCall{{ID: "finish-1", Name: "author_finish", Arguments: raw}}}
 }
 
-func validAskFinishJSON() string {
-	raw, err := json.Marshal(askcontract.AgentTurnResponse{Summary: "generated starter workflows", Review: nil, Finish: &askcontract.AgentFinish{Reason: "deck_lint passed"}})
-	if err != nil {
-		panic(err)
-	}
-	return string(raw)
+func validAskToolResponse() askprovider.Response {
+	return toolResponse(
+		mockToolCall{Name: "file_write", Path: "workflows/scenarios/apply.yaml", Content: validAskWorkflow()},
+		mockToolCall{Name: "validate"},
+	)
 }
 
-func repairAskInitialJSON() string {
-	raw, err := json.Marshal(askcontract.AgentTurnResponse{Summary: "write apply only", Review: nil, ToolCalls: []askcontract.AgentToolCall{{Name: "file_write", Path: "workflows/scenarios/apply.yaml", Content: validAskWorkflow()}, {Name: "deck_lint"}}})
-	if err != nil {
-		panic(err)
-	}
-	return string(raw)
+func validAskFinishResponse() askprovider.Response {
+	return finishResponse("generated starter workflows")
 }
 
-func repairAskFixJSON() string {
-	raw, err := json.Marshal(askcontract.AgentTurnResponse{Summary: "add vars", Review: nil, ToolCalls: []askcontract.AgentToolCall{{Name: "file_write", Path: "workflows/vars.yaml", Content: "waitPath: /etc/hosts\n"}, {Name: "deck_lint"}}})
-	if err != nil {
-		panic(err)
-	}
-	return string(raw)
+func repairAskInitialResponse() askprovider.Response {
+	return toolResponse(
+		mockToolCall{Name: "file_write", Path: "workflows/scenarios/apply.yaml", Content: validAskWorkflow()},
+		mockToolCall{Name: "validate"},
+	)
+}
+
+func repairAskFixResponse() askprovider.Response {
+	return toolResponse(
+		mockToolCall{Name: "file_write", Path: "workflows/vars.yaml", Content: "waitPath: /etc/hosts\n"},
+		mockToolCall{Name: "validate"},
+	)
 }
 
 func testAPIKey() string {

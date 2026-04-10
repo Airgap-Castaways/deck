@@ -10,6 +10,8 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
 	"github.com/Airgap-Castaways/deck/internal/askir"
+	"github.com/Airgap-Castaways/deck/internal/stepmeta"
+	"github.com/Airgap-Castaways/deck/internal/validate"
 )
 
 func TryAutoRepair(root string, files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic, repairPaths []string) ([]askcontract.GeneratedFile, []string, bool, error) {
@@ -67,6 +69,11 @@ func TryAutoRepairWithProgram(root string, files []askcontract.GeneratedFile, di
 			if rawPath == "" {
 				continue
 			}
+			if edits, extraNotes, handled := repairLiteralMigration(diag, files); handled {
+				editDocs[path] = append(editDocs[path], edits...)
+				notes = append(notes, extraNotes...)
+				continue
+			}
 			value := ""
 			if len(diag.Allowed) > 0 {
 				value = strings.TrimSpace(diag.Allowed[0])
@@ -83,6 +90,11 @@ func TryAutoRepairWithProgram(root string, files []askcontract.GeneratedFile, di
 			}
 			editDocs[path] = append(editDocs[path], askcontract.StructuredEditAction{Op: "set", RawPath: rawPath, Value: value})
 			notes = append(notes, fmt.Sprintf("set constrained literal %s in %s", rawPath, path))
+		case "review-diagnostic":
+			if edits, extraNotes, handled := repairReviewDiagnostic(diag); handled {
+				editDocs[path] = append(editDocs[path], edits...)
+				notes = append(notes, extraNotes...)
+			}
 		}
 	}
 	if len(editDocs) == 0 && len(replaceDocs) == 0 {
@@ -147,6 +159,7 @@ func repairRawPath(diag askdiagnostic.Diagnostic) string {
 
 func normalizeRepairPath(diag askdiagnostic.Diagnostic) string {
 	path := strings.TrimSpace(diag.Path)
+	path = strings.TrimPrefix(path, "(root).")
 	if strings.HasPrefix(path, strings.TrimSpace(diag.StepKind)+".") {
 		path = strings.TrimPrefix(path, strings.TrimSpace(diag.StepKind)+".")
 	}
@@ -156,6 +169,14 @@ func normalizeRepairPath(diag askdiagnostic.Diagnostic) string {
 
 func defaultFillValue(diag askdiagnostic.Diagnostic, files []askcontract.GeneratedFile, program askcontract.AuthoringProgram) (any, bool) {
 	path := normalizeRepairPath(diag)
+	switch {
+	case path == "version":
+		return validate.SupportedWorkflowVersion(), true
+	case strings.HasSuffix(path, ".id"):
+		return defaultStepID(diag), true
+	case strings.HasSuffix(path, ".spec"):
+		return map[string]any{}, true
+	}
 	if value, ok := bindingDefaultValue(strings.TrimSpace(diag.StepKind), path, program); ok {
 		return value, true
 	}
@@ -274,6 +295,31 @@ func deriveRepairValue(name string, program askcontract.AuthoringProgram) (any, 
 	return nil, false
 }
 
+func defaultStepID(diag askdiagnostic.Diagnostic) string {
+	kind := strings.ToLower(strings.TrimSpace(diag.StepKind))
+	if kind == "" {
+		kind = "step"
+	}
+	kind = strings.ReplaceAll(kind, " ", "-")
+	kind = strings.ReplaceAll(kind, "_", "-")
+	return kind + "-step"
+}
+
+func repairReviewDiagnostic(diag askdiagnostic.Diagnostic) ([]askcontract.StructuredEditAction, []string, bool) {
+	rawPath := repairRawPath(diag)
+	if rawPath == "" {
+		return nil, nil, false
+	}
+	if strings.TrimSpace(diag.StepKind) == "Command" && rawPath == "spec.command" && strings.Contains(strings.ToLower(strings.TrimSpace(diag.Message)), "invalid type") {
+		value := strings.TrimSpace(diag.Actual)
+		if value == "" {
+			value = "true"
+		}
+		return []askcontract.StructuredEditAction{{Op: "set", RawPath: rawPath, Value: []string{value}}}, []string{fmt.Sprintf("normalized %s to a command array in %s", rawPath, diagnosticFile(diag))}, true
+	}
+	return nil, nil, false
+}
+
 func parseFieldDefault(field askcatalog.Field) (any, bool) {
 	value := strings.TrimSpace(field.Default)
 	if value == "" {
@@ -304,6 +350,32 @@ func parseConst(value string) any {
 	return value
 }
 
+func repairLiteralMigration(diag askdiagnostic.Diagnostic, files []askcontract.GeneratedFile) ([]askcontract.StructuredEditAction, []string, bool) {
+	path := repairRawPath(diag)
+	if !strings.HasSuffix(path, ".kind") {
+		return nil, nil, false
+	}
+	actual := strings.TrimSpace(diag.Actual)
+	switch strings.ToLower(actual) {
+	case "apt", "yum", "dnf", "apk", "package", "packages":
+		pkgValue, ok := invalidFieldAny(files, diag, "package")
+		if !ok {
+			pkgValue, ok = invalidFieldAny(files, diag, "name")
+		}
+		if !ok {
+			return []askcontract.StructuredEditAction{{Op: "set", RawPath: path, Value: "InstallPackage"}}, []string{fmt.Sprintf("normalized %s step kind to InstallPackage in %s", actual, diagnosticFile(diag))}, true
+		}
+		packages := normalizePackageValue(pkgValue)
+		stepRoot := strings.TrimSuffix(path, ".kind")
+		edits := []askcontract.StructuredEditAction{{Op: "set", RawPath: path, Value: "InstallPackage"}, {Op: "set", RawPath: stepRoot + ".spec.packages", Value: packages}, {Op: "delete", RawPath: stepRoot + ".spec.package"}, {Op: "delete", RawPath: stepRoot + ".spec.name"}}
+		if _, hasState := invalidFieldAny(files, diag, "state"); hasState {
+			edits = append(edits, askcontract.StructuredEditAction{Op: "delete", RawPath: stepRoot + ".spec.state"})
+		}
+		return edits, []string{fmt.Sprintf("migrated %s package step to InstallPackage in %s", actual, diagnosticFile(diag))}, true
+	}
+	return nil, nil, false
+}
+
 func repairInvalidFieldMigration(diag askdiagnostic.Diagnostic, files []askcontract.GeneratedFile) ([]askcontract.StructuredEditAction, []string, bool) {
 	path := repairRawPath(diag)
 	if strings.TrimSpace(diag.StepKind) == "InstallPackage" && path == "steps."+strings.TrimSpace(diag.StepID)+".spec.sourcePath" {
@@ -313,7 +385,102 @@ func repairInvalidFieldMigration(diag askdiagnostic.Diagnostic, files []askcontr
 		}
 		return []askcontract.StructuredEditAction{{Op: "set", RawPath: "steps." + strings.TrimSpace(diag.StepID) + ".spec.source.type", Value: "local-repo"}, {Op: "set", RawPath: "steps." + strings.TrimSpace(diag.StepID) + ".spec.source.path", Value: value}, {Op: "delete", RawPath: path}}, []string{fmt.Sprintf("moved InstallPackage sourcePath into source.path in %s", diagnosticFile(diag))}, true
 	}
+	if strings.TrimSpace(diag.StepKind) == "Command" && strings.HasSuffix(path, ".command") {
+		value, ok := invalidFieldAny(files, diag, "command")
+		if !ok {
+			value = strings.TrimSpace(diag.Actual)
+		}
+		commandValue := normalizeCommandValue(value)
+		stepRoot := strings.TrimSuffix(path, ".command")
+		return []askcontract.StructuredEditAction{{Op: "set", RawPath: stepRoot + ".spec.command", Value: commandValue}, {Op: "delete", RawPath: path}}, []string{fmt.Sprintf("moved Command.command into spec.command in %s", diagnosticFile(diag))}, true
+	}
+	if strings.HasSuffix(path, ".kind") {
+		actual := strings.TrimSpace(diag.Actual)
+		for _, candidate := range stepmeta.RegisteredKinds() {
+			if strings.EqualFold(candidate, actual) {
+				return []askcontract.StructuredEditAction{{Op: "set", RawPath: path, Value: candidate}}, []string{fmt.Sprintf("normalized step kind casing in %s", diagnosticFile(diag))}, true
+			}
+		}
+	}
 	return nil, nil, false
+}
+
+func invalidFieldAny(files []askcontract.GeneratedFile, diag askdiagnostic.Diagnostic, key string) (any, bool) {
+	file := diagnosticFile(diag)
+	stepID := strings.TrimSpace(diag.StepID)
+	for _, candidate := range files {
+		if filepath.ToSlash(strings.TrimSpace(candidate.Path)) != file || candidate.Delete {
+			continue
+		}
+		doc, err := askir.ParseDocument(candidate.Path, []byte(candidate.Content))
+		if err != nil || doc.Workflow == nil {
+			continue
+		}
+		steps := workflowSteps(*doc.Workflow)
+		for i, step := range steps {
+			if stepID != "" && strings.TrimSpace(step.ID) != stepID {
+				continue
+			}
+			if stepID == "" && i > 0 {
+				continue
+			}
+			value, ok := step.Spec[key]
+			if ok {
+				return value, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func normalizePackageValue(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, strings.TrimSpace(fmt.Sprint(item)))
+		}
+		if len(out) > 0 {
+			return out
+		}
+	case string:
+		if strings.TrimSpace(typed) != "" {
+			return []string{strings.TrimSpace(typed)}
+		}
+	default:
+		if text := strings.TrimSpace(fmt.Sprint(typed)); text != "" && text != "<nil>" {
+			return []string{text}
+		}
+	}
+	return []string{"package"}
+}
+
+func normalizeCommandValue(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return typed
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, strings.TrimSpace(fmt.Sprint(item)))
+		}
+		if len(out) > 0 {
+			return out
+		}
+	case string:
+		if strings.TrimSpace(typed) != "" {
+			return []string{strings.TrimSpace(typed)}
+		}
+	case bool:
+		return []string{fmt.Sprint(typed)}
+	default:
+		if text := strings.TrimSpace(fmt.Sprint(typed)); text != "" && text != "<nil>" {
+			return []string{text}
+		}
+	}
+	return []string{"true"}
 }
 
 func invalidFieldValue(files []askcontract.GeneratedFile, diag askdiagnostic.Diagnostic, key string) (string, bool) {
