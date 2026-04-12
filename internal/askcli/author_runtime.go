@@ -1085,6 +1085,9 @@ func buildStepKindReference(session *authoringAgentSession) string {
 	}
 	b := &strings.Builder{}
 	b.WriteString("Step kind reference (use these typed steps instead of Command where applicable):\n")
+	b.WriteString("\nWhen expression syntax: CEL with `vars.` prefix for input variables, `runtime.` for host facts.\n")
+	b.WriteString("Examples: `vars.role == \"control-plane\"`, `runtime.host.os.family == \"debian\"`, `vars.skipStep != \"true\"`\n")
+	b.WriteString("Template syntax: Go templates with `{{ .vars.name }}` for variables, `{{ .runtime.host.os.family }}` for runtime facts.\n")
 	for _, kind := range needed {
 		entry, ok, err := stepmeta.Lookup(kind)
 		if err != nil || !ok {
