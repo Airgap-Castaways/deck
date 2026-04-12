@@ -86,15 +86,21 @@ type authorReadSnapshot struct {
 
 func authoringToolDefinitions(session *authoringAgentSession) []askprovider.ToolDefinition {
 	defs := make([]askprovider.ToolDefinition, 0, len(session.availableTools)+2)
+	seen := map[string]bool{}
 	for _, name := range activeAuthoringTools(session) {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
 		defs = append(defs, askprovider.ToolDefinition{
 			Name:        name,
 			Description: authorToolDescription(name),
 			Parameters:  authorToolParameters(name),
 		})
 	}
-	defs = append(defs,
-		askprovider.ToolDefinition{
+	for _, def := range []askprovider.ToolDefinition{
+		{
 			Name:        authorToolFinish,
 			Description: "Finish the current authoring session when candidate files and verifier state satisfy the request.",
 			Parameters: mustJSON(map[string]any{
@@ -107,7 +113,7 @@ func authoringToolDefinitions(session *authoringAgentSession) []askprovider.Tool
 				"additionalProperties": false,
 			}),
 		},
-		askprovider.ToolDefinition{
+		{
 			Name:        authorToolClarification,
 			Description: "Ask one targeted clarification question only when the request is blocked on missing information that cannot be safely inferred.",
 			Parameters: mustJSON(map[string]any{
@@ -120,7 +126,13 @@ func authoringToolDefinitions(session *authoringAgentSession) []askprovider.Tool
 				"additionalProperties": false,
 			}),
 		},
-	)
+	} {
+		if seen[def.Name] {
+			continue
+		}
+		seen[def.Name] = true
+		defs = append(defs, def)
+	}
 	return defs
 }
 

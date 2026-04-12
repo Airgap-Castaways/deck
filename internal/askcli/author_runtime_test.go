@@ -14,6 +14,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
@@ -408,6 +409,48 @@ func TestAuthoringAgentPersistsTranscriptFile(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(session.ApprovedPaths, ","), workspacepaths.CanonicalApplyWorkflow) {
 		t.Fatalf("expected approved apply path in session, got %#v", session.ApprovedPaths)
+	}
+}
+
+func TestAuthoringToolDefinitionsAvoidDuplicateFinishAndClarificationTools(t *testing.T) {
+	root := t.TempDir()
+	session := newTestAgentSession(t, root, "create a simple apply workflow", askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "workspace"}})
+	session.candidateByPath[workspacepaths.CanonicalApplyWorkflow] = askcontract.GeneratedFile{Path: workspacepaths.CanonicalApplyWorkflow, Content: waitForHostsWorkflow("5s")}
+	for i := 0; i < 3; i++ {
+		session.toolEvents = append(session.toolEvents, askstate.AgentToolEvent{Name: "read", OK: true, Summary: "read only"})
+	}
+
+	defs := authoringToolDefinitions(session)
+	counts := map[string]int{}
+	for _, def := range defs {
+		counts[def.Name]++
+	}
+	if counts[authorToolFinish] != 1 {
+		t.Fatalf("expected exactly one %s tool, got %d", authorToolFinish, counts[authorToolFinish])
+	}
+	if counts[authorToolClarification] != 1 {
+		t.Fatalf("expected exactly one %s tool, got %d", authorToolClarification, counts[authorToolClarification])
+	}
+}
+
+func TestRemoveInvalidPrepareCandidateKeepsPrepareWhenOtherFilesAlsoFail(t *testing.T) {
+	root := t.TempDir()
+	session := newTestAgentSession(t, root, "create a prepare and apply workflow", askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "workspace"}})
+	files := []askcontract.GeneratedFile{
+		{Path: workspacepaths.CanonicalPrepareWorkflow, Content: "version: v1alpha1\nsteps: []\n"},
+		{Path: workspacepaths.CanonicalApplyWorkflow, Content: invalidCommandWorkflow()},
+	}
+	diags := []askdiagnostic.Diagnostic{
+		{Code: "E_KIND_ROLE_MISMATCH", Message: "E_KIND_ROLE_MISMATCH: workflows/prepare.yaml step install-package kind InstallPackage does not allow role prepare"},
+		{Code: "E_SCHEMA_INVALID", Message: "E_SCHEMA_INVALID: workflows/scenarios/apply.yaml step run (Command): spec: command is required"},
+	}
+
+	filtered, filteredDiags := session.removeInvalidPrepareCandidate(files, diags)
+	if len(filtered) != len(files) {
+		t.Fatalf("expected mixed diagnostics to keep prepare candidate, got %#v", filtered)
+	}
+	if len(filteredDiags) != len(diags) {
+		t.Fatalf("expected mixed diagnostics to stay intact, got %#v", filteredDiags)
 	}
 }
 

@@ -81,7 +81,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		HasPrepare:      workspace.HasPrepare,
 		HasApply:        workspace.HasApply,
 	})
-	if resumedPlan != nil && !opts.PlanOnly {
+	if resumedPlan != nil {
 		heuristic = resumedPlanDecision(*resumedPlan)
 	}
 	effective, err := askconfig.ResolveEffective(askconfig.Settings{Provider: opts.Provider, Model: opts.Model, Endpoint: opts.Endpoint})
@@ -385,14 +385,15 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		result.LocalFindings = askreview.Workspace(resolvedRoot)
 		result.ReviewLines = append(result.ReviewLines, findingsToLines(result.LocalFindings)...)
 	}
-	if decision.Route == askintent.RouteClarify {
+	switch {
+	case decision.Route == askintent.RouteClarify:
 		applyLocalFallback(&result, resolvedRoot, workspace, requestText)
-	} else if canUseLLM(effective) {
+	case canUseLLM(effective):
 		systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, workspace, requestText)
 		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
 		progress.status("answering %s request", phaseLabel(string(decision.Route)))
 		logger.info("phase_started", "phase", "answer", "route", decision.Route)
-		info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)
+		info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, workspace, requestText, logger)
 		if infoErr == nil {
 			result.LLMUsed = true
 			result.Summary = info.Summary
@@ -408,7 +409,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 				applyLocalFallback(&result, resolvedRoot, workspace, requestText)
 			}
 		}
-	} else if decision.Route != askintent.RouteReview {
+	case decision.Route != askintent.RouteReview:
 		applyLocalFallback(&result, resolvedRoot, workspace, requestText)
 	}
 	if result.Termination == "" {

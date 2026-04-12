@@ -151,7 +151,7 @@ func TestAnswerWithLLMUsesHealthyExternalEvidence(t *testing.T) {
 	}
 	retrieval := askretrieve.Retrieve(askintent.RouteExplain, "Explain how to install kubeadm", askintent.Target{}, askretrieve.WorkspaceSummary{}, askstate.Context{}, mcpChunks)
 	client := &stubClient{responses: []string{`{"summary":"explained kubeadm","answer":"Use the official kubeadm install guide.","suggestions":["Pin the exact version."]}`}}
-	resp, err := answerWithLLM(context.Background(), client, effective, askintent.Decision{Route: askintent.RouteExplain, Target: askintent.Target{Kind: "workspace"}}, retrieval, "Explain how to install kubeadm", newAskLogger(io.Discard, "trace"))
+	resp, err := answerWithLLM(context.Background(), client, effective, askintent.Decision{Route: askintent.RouteExplain, Target: askintent.Target{Kind: "workspace"}}, retrieval, askretrieve.WorkspaceSummary{}, "Explain how to install kubeadm", newAskLogger(io.Discard, "trace"))
 	if err != nil {
 		t.Fatalf("answer with llm: %v", err)
 	}
@@ -160,6 +160,25 @@ func TestAnswerWithLLMUsesHealthyExternalEvidence(t *testing.T) {
 	}
 	if len(client.prompts) != 1 || !strings.Contains(client.prompts[0].SystemPrompt, "external source: Installing kubeadm [domain=kubernetes.io, category=official-docs, freshness=external-docs, official=true, trust=high]") {
 		t.Fatalf("expected answer prompt to include normalized external evidence, got %#v", client.prompts)
+	}
+}
+
+func TestAnswerWithLLMIncludesWorkspaceValidationContextForReview(t *testing.T) {
+	effective := askconfig.EffectiveSettings{Settings: askconfig.Settings{Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}}
+	workspace := askretrieve.WorkspaceSummary{Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      sourceDir: /tmp/packages\n"}}}
+	client := &stubClient{responses: []string{`{"summary":"reviewed","answer":"sourceDir is invalid","findings":["invalid field"],"suggestedChanges":["replace sourceDir"]}`}}
+
+	_, err := answerWithLLM(context.Background(), client, effective, askintent.Decision{Route: askintent.RouteReview, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}}, askretrieve.RetrievalResult{}, workspace, "review apply", newAskLogger(io.Discard, "trace"))
+	if err != nil {
+		t.Fatalf("answer with llm: %v", err)
+	}
+	if len(client.prompts) != 1 {
+		t.Fatalf("expected one prompt, got %d", len(client.prompts))
+	}
+	for _, want := range []string{"Structured validation issues:", "sourceDir", "Additional property sourceDir is not allowed"} {
+		if !strings.Contains(client.prompts[0].SystemPrompt, want) {
+			t.Fatalf("expected %q in review prompt, got %q", want, client.prompts[0].SystemPrompt)
+		}
 	}
 }
 

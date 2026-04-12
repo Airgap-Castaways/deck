@@ -159,6 +159,9 @@ func normalizeClarifications(items []askcontract.PlanClarification, req Scenario
 			continue
 		}
 		base := byID[id]
+		if strings.TrimSpace(base.ID) == "" {
+			base.ID = id
+		}
 		if !clarificationUsesCodeOwnedShape(id, defaults) {
 			if strings.TrimSpace(item.Question) != "" {
 				base.Question = strings.TrimSpace(item.Question)
@@ -1285,6 +1288,20 @@ func planRequiresVarsFile(plan askcontract.PlanResponse) bool {
 // Recoverable execution-detail weaknesses are carried forward into generation,
 // judge, repair, and post-processing instead of stopping planning.
 func ValidatePlanStructure(plan askcontract.PlanResponse) error {
+	seenClarifications := map[string]bool{}
+	for _, item := range plan.Clarifications {
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			return fmt.Errorf("plan response has clarification with empty id")
+		}
+		if strings.TrimSpace(item.Question) == "" {
+			return fmt.Errorf("plan response clarification %q is missing question", id)
+		}
+		if seenClarifications[id] {
+			return fmt.Errorf("plan response has duplicate clarification id %q", id)
+		}
+		seenClarifications[id] = true
+	}
 	if plan.NeedsPrepare && !containsPlannedPath(plan.Files, workspacepaths.CanonicalPrepareWorkflow) {
 		return fmt.Errorf("plan response requires prepare but does not include %s", workspacepaths.CanonicalPrepareWorkflow)
 	}

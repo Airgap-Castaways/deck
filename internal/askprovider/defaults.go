@@ -1,9 +1,10 @@
 package askprovider
 
-import "github.com/Airgap-Castaways/deck/internal/askcontract"
+import (
+	"github.com/Airgap-Castaways/deck/internal/askcontract"
+)
 
 // Re-export provider defaults from askcontract for backward compatibility.
-
 const (
 	DefaultProvider = askcontract.DefaultProvider
 	DefaultModel    = askcontract.DefaultModel
@@ -14,7 +15,7 @@ const (
 )
 
 var (
-	NormalizeProvider      = askcontract.NormalizeProvider
-	ProviderDefaultModel   = askcontract.ProviderDefaultModel
+	NormalizeProvider       = askcontract.NormalizeProvider
+	ProviderDefaultModel    = askcontract.ProviderDefaultModel
 	ProviderDefaultEndpoint = askcontract.ProviderDefaultEndpoint
 )

@@ -545,6 +545,18 @@ func TestValidatePlanStructureRejectsMissingViableEntryScenario(t *testing.T) {
 	}
 }
 
+func TestValidatePlanStructureRejectsClarificationWithEmptyID(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Topology: "multi-node", NodeCount: 3},
+		EntryScenario:  "workflows/scenarios/apply.yaml",
+		Files:          []askcontract.PlanFile{{Path: "workflows/prepare.yaml"}, {Path: "workflows/scenarios/apply.yaml"}},
+		Clarifications: []askcontract.PlanClarification{{Question: "pick topology", BlocksGeneration: true}},
+	}
+	if err := ValidatePlanStructure(plan); err == nil || !strings.Contains(err.Error(), "empty id") {
+		t.Fatalf("expected empty-id clarification to fail viability check, got %v", err)
+	}
+}
+
 func TestValidatePlanStructureRejectsPackageStagingWithoutPackages(t *testing.T) {
 	plan := askcontract.PlanResponse{
 		NeedsPrepare:        true,

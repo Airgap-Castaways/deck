@@ -606,7 +606,7 @@ func (s *authoringAgentSession) runValidate(ctx context.Context, call authorTool
 func (s *authoringAgentSession) runSchema(call authorToolCall) agentToolResult {
 	cacheKey := strings.TrimSpace(call.Topic) + "::" + strings.TrimSpace(call.Kind)
 	if cached, ok := s.schemaCache[cacheKey]; ok {
-		cached.Summary = cached.Summary + " (cached — schema already retrieved, use file_write or file_edit to proceed)"
+		cached.Summary += " (cached — schema already retrieved, use file_write or file_edit to proceed)"
 		return cached
 	}
 	payload, err := buildSchemaReadPayload(authorSchemaReadCall{Topic: strings.TrimSpace(call.Topic), Kind: strings.TrimSpace(call.Kind)})
@@ -656,6 +656,7 @@ func (s *authoringAgentSession) tryAutoRepairAfterLintFailure(ctx context.Contex
 
 func (s *authoringAgentSession) removeInvalidPrepareCandidate(files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic) ([]askcontract.GeneratedFile, []askdiagnostic.Diagnostic) {
 	preparePath := ""
+	prepareIssueCount := 0
 	for _, diag := range diags {
 		msg := strings.TrimSpace(diag.Message)
 		isPrepareIssue := false
@@ -665,17 +666,24 @@ func (s *authoringAgentSession) removeInvalidPrepareCandidate(files []askcontrac
 		if strings.Contains(msg, "E_KIND_ROLE_MISMATCH") && strings.Contains(msg, "role prepare") {
 			isPrepareIssue = true
 		}
-		if isPrepareIssue {
-			for _, file := range files {
-				if strings.HasSuffix(filepath.ToSlash(strings.TrimSpace(file.Path)), "prepare.yaml") && strings.Contains(msg, file.Path) {
-					preparePath = file.Path
-					break
-				}
+		if !isPrepareIssue {
+			continue
+		}
+		for _, file := range files {
+			if strings.HasSuffix(filepath.ToSlash(strings.TrimSpace(file.Path)), "prepare.yaml") && strings.Contains(msg, file.Path) {
+				preparePath = file.Path
+				prepareIssueCount++
+				break
 			}
 		}
 	}
-	if preparePath == "" {
+	if preparePath == "" || prepareIssueCount == 0 {
 		return files, diags
+	}
+	for _, diag := range diags {
+		if !strings.Contains(strings.TrimSpace(diag.Message), preparePath) {
+			return files, diags
+		}
 	}
 	hasOtherFiles := false
 	for _, file := range files {

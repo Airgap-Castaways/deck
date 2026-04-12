@@ -751,7 +751,7 @@ func TestLoadRequestTextPrefersPlanJSON(t *testing.T) {
 	if err := os.WriteFile(mdPath, []byte("freeform markdown"), 0o600); err != nil {
 		t.Fatalf("write md: %v", err)
 	}
-	json := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	json := `{"version":1,"request":"create a 3-node offline kubeadm workflow with prepare and apply phases","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
 	if err := os.WriteFile(jsonPath, []byte(json), 0o600); err != nil {
 		t.Fatalf("write json: %v", err)
 	}
@@ -839,6 +839,100 @@ func TestApplyPlanAnswersNormalizesClarificationState(t *testing.T) {
 	}
 	if updated.AuthoringBrief.NodeCount != 3 || updated.ExecutionModel.RoleExecution.RoleSelector != "vars.role" {
 		t.Fatalf("expected normalized role-aware plan, got %#v %#v", updated.AuthoringBrief, updated.ExecutionModel)
+	}
+}
+
+func TestApplyPlanAnswersPreservesNonCodeOwnedClarificationIDs(t *testing.T) {
+	root := t.TempDir()
+	plan := askcontract.PlanResponse{
+		Version:       1,
+		Request:       "create 3-node kubeadm workflow",
+		Intent:        "draft",
+		Complexity:    "complex",
+		TargetOutcome: "generate files",
+		Files: []askcontract.PlanFile{
+			{Path: "workflows/prepare.yaml", Kind: "workflow", Action: "create", Purpose: "prepare"},
+			{Path: "workflows/scenarios/apply.yaml", Kind: "scenario", Action: "create", Purpose: "apply"},
+		},
+		Clarifications: []askcontract.PlanClarification{
+			{ID: "artifact-publish-model", Question: "How should prepared offline artifacts be made available during apply?", Kind: "choice", Options: []string{"local-http-server", "portable-bundle"}, RecommendedDefault: "local-http-server"},
+			{ID: "topology.roleModel", Question: "pick role model", Kind: "enum", Options: []string{"1cp-2workers", "3cp-ha"}, BlocksGeneration: true},
+			{ID: "kubernetes-version", Question: "Which Kubernetes version should be installed?", Kind: "string", RecommendedDefault: "v1.30.0"},
+		},
+	}
+
+	updated, err := applyPlanAnswers(plan, []string{"topology.roleModel=1cp-2workers"})
+	if err != nil {
+		t.Fatalf("apply plan answers: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, item := range updated.Clarifications {
+		if item.ID == "" {
+			t.Fatalf("expected clarification ids to be preserved, got %#v", updated.Clarifications)
+		}
+		ids[item.ID] = true
+	}
+	for _, want := range []string{"artifact-publish-model", "topology.roleModel", "kubernetes-version"} {
+		if !ids[want] {
+			t.Fatalf("expected clarification %q after normalization, got %#v", want, updated.Clarifications)
+		}
+	}
+	planMD := renderPlanMarkdown(updated, ".deck/plan/latest.md")
+	if _, _, err := savePlanArtifact(root, Options{PlanDir: ".deck/plan"}, updated, planMD); err != nil {
+		t.Fatalf("save plan artifact: %v", err)
+	}
+	loaded, _, err := loadPlanArtifact(root, ".deck/plan/latest.json")
+	if err != nil {
+		t.Fatalf("load plan artifact: %v", err)
+	}
+	loadedIDs := map[string]bool{}
+	for _, item := range loaded.Clarifications {
+		loadedIDs[item.ID] = true
+	}
+	for _, want := range []string{"artifact-publish-model", "topology.roleModel", "kubernetes-version"} {
+		if !loadedIDs[want] {
+			t.Fatalf("expected saved clarification %q, got %#v", want, loaded.Clarifications)
+		}
+	}
+}
+
+func TestExecutePlanResumeWithAnswersUsesSavedPlanRoute(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "test-key")
+	root := t.TempDir()
+	planDir := filepath.Join(root, ".deck", "plan")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatalf("mkdir plan dir: %v", err)
+	}
+	json := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"clarifications":[{"id":"topology.roleModel","question":"The request implies multiple nodes, but the role model is unclear. Which node role layout should the plan use?","kind":"enum","options":["1cp-2workers","3cp-ha"],"blocksGeneration":true}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"create","purpose":"prepare"},{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	if err := os.WriteFile(filepath.Join(planDir, "latest.json"), []byte(json), 0o600); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "latest.md"), []byte("md"), 0o600); err != nil {
+		t.Fatalf("write md: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	if err := Execute(context.Background(), Options{Root: root, FromPath: ".deck/plan/latest.json", Answers: []string{"topology.roleModel=1cp-2workers"}, PlanOnly: true, Stdout: stdout, Stderr: io.Discard}, &stubClient{}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "updated plan artifact") {
+		t.Fatalf("expected updated plan artifact output, got %q", stdout.String())
+	}
+	stored, _, err := loadPlanArtifact(root, ".deck/plan/latest.json")
+	if err != nil {
+		t.Fatalf("load plan artifact: %v", err)
+	}
+	answered := false
+	for _, item := range stored.Clarifications {
+		if strings.TrimSpace(item.Answer) == "1cp-2workers" {
+			answered = true
+			break
+		}
+	}
+	if !answered {
+		t.Fatalf("expected saved plan to retain answered clarification, got %#v", stored.Clarifications)
+	}
+	if stored.Intent != "draft" {
+		t.Fatalf("expected saved plan route to stay draft, got %#v", stored)
 	}
 }
 
