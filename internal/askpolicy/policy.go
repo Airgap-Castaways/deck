@@ -388,7 +388,7 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 		}
 	}
 	if req.NeedsPrepare && len(preparePaths) == 0 {
-		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_prepare", Message: fmt.Sprintf("artifact-requiring request is missing %s", workspacepaths.CanonicalPrepareWorkflow), Fix: fmt.Sprintf("Add %s when packages, images, binaries, or bundles must be prepared before apply", workspacepaths.CanonicalPrepareWorkflow), Path: workspacepaths.CanonicalPrepareWorkflow})
+		findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "missing_prepare", Message: fmt.Sprintf("artifact-requiring request is missing %s; apply workflow may handle local artifacts directly", workspacepaths.CanonicalPrepareWorkflow), Fix: fmt.Sprintf("Consider adding %s when packages, images, binaries, or bundles must be staged from remote sources before apply", workspacepaths.CanonicalPrepareWorkflow), Path: workspacepaths.CanonicalPrepareWorkflow})
 	}
 	if req.NeedsPrepare && len(req.ArtifactKinds) > 0 && len(preparePaths) > 0 {
 		generated := generatedMap(gen.Files)

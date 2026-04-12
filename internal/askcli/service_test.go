@@ -1106,8 +1106,8 @@ func TestSemanticCriticRequiresPrepareForArtifactPlan(t *testing.T) {
 	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n"}})
 	plan := askcontract.PlanResponse{Request: "create an air-gapped package workflow", OfflineAssumption: "offline", NeedsPrepare: true, ArtifactKinds: []string{"package"}}
 	critic := semanticCritic(gen, askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{})
-	if len(critic.Blocking) == 0 || !strings.Contains(strings.Join(critic.Blocking, "\n"), "prepare") {
-		t.Fatalf("expected prepare blocking finding, got %#v", critic)
+	if len(critic.Advisory) == 0 || !strings.Contains(strings.Join(critic.Advisory, "\n"), "prepare") {
+		t.Fatalf("expected prepare advisory finding, got %#v", critic)
 	}
 }
 

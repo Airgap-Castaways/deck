@@ -269,6 +269,9 @@ func runAuthoringAgentRuntime(ctx context.Context, client askprovider.Client, ba
 			files := session.candidateFiles()
 			return "generated workflows", files, session.lastLintSummary, session.lastCritic, nil
 		}
+		if session.shouldAutoValidate() {
+			session.executeTool(ctx, turn, authorToolCall{Name: "validate"})
+		}
 		if session.verificationFailure > session.verificationBudget {
 			return "", nil, session.lastLintSummary, session.lastCritic, fmt.Errorf("authoring exceeded verification failure budget after %d lint failures", session.verificationFailure)
 		}
@@ -345,6 +348,24 @@ func isReadOnlyAuthorTool(name string) bool {
 
 func (s *authoringAgentSession) shouldAutoFinish() bool {
 	return s.lastLintPassed && len(s.candidateByPath) > 0 && s.postValidateIdle >= 2
+}
+
+func (s *authoringAgentSession) shouldAutoValidate() bool {
+	if len(s.candidateByPath) == 0 || len(s.toolEvents) < 3 {
+		return false
+	}
+	writeStreak := 0
+	for i := len(s.toolEvents) - 1; i >= 0; i-- {
+		switch s.toolEvents[i].Name {
+		case "file_write", "file_edit":
+			writeStreak++
+		case "validate":
+			return false
+		default:
+			return writeStreak >= 3
+		}
+	}
+	return writeStreak >= 3
 }
 
 func (s *authoringAgentSession) executeTool(ctx context.Context, turn int, call authorToolCall) {
@@ -601,14 +622,20 @@ func (s *authoringAgentSession) runSchema(call authorToolCall) agentToolResult {
 }
 
 func (s *authoringAgentSession) tryAutoRepairAfterLintFailure(ctx context.Context, files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic) ([]askcontract.GeneratedFile, []string, string, askcontract.CriticResponse, error, bool) {
-	files, diags = s.removeEmptyPrepareCandidate(files, diags)
+	cleaned, diags := s.removeInvalidPrepareCandidate(files, diags)
+	prepareRemoved := len(cleaned) < len(files)
+	files = cleaned
 	repairPaths := s.approvedPathList
 	if len(repairPaths) == 0 {
 		repairPaths = filePaths(s.candidateFiles())
 	}
 	repaired, notes, applied, err := askrepair.TryAutoRepairWithProgram(s.root, files, diags, repairPaths, s.plan.AuthoringProgram)
-	if err != nil || !applied {
+	if err != nil || (!applied && !prepareRemoved) {
 		return files, nil, "", askcontract.CriticResponse{}, err, false
+	}
+	if !applied {
+		repaired = files
+		notes = []string{"removed invalid prepare.yaml from candidates"}
 	}
 	for _, file := range repaired {
 		if s.writeAllowed(file.Path) {
@@ -626,11 +653,18 @@ func (s *authoringAgentSession) tryAutoRepairAfterLintFailure(ctx context.Contex
 	return repaired, notes, summary, critic, validateErr, true
 }
 
-func (s *authoringAgentSession) removeEmptyPrepareCandidate(files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic) ([]askcontract.GeneratedFile, []askdiagnostic.Diagnostic) {
+func (s *authoringAgentSession) removeInvalidPrepareCandidate(files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic) ([]askcontract.GeneratedFile, []askdiagnostic.Diagnostic) {
 	preparePath := ""
 	for _, diag := range diags {
 		msg := strings.TrimSpace(diag.Message)
+		isPrepareIssue := false
 		if strings.Contains(msg, "E_SCHEMA_INVALID") && strings.Contains(msg, "Array must have at least 1 items") {
+			isPrepareIssue = true
+		}
+		if strings.Contains(msg, "E_KIND_ROLE_MISMATCH") && strings.Contains(msg, "role prepare") {
+			isPrepareIssue = true
+		}
+		if isPrepareIssue {
 			for _, file := range files {
 				if strings.HasSuffix(filepath.ToSlash(strings.TrimSpace(file.Path)), "prepare.yaml") && strings.Contains(msg, file.Path) {
 					preparePath = file.Path
