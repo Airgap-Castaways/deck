@@ -601,6 +601,7 @@ func (s *authoringAgentSession) runSchema(call authorToolCall) agentToolResult {
 }
 
 func (s *authoringAgentSession) tryAutoRepairAfterLintFailure(ctx context.Context, files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic) ([]askcontract.GeneratedFile, []string, string, askcontract.CriticResponse, error, bool) {
+	files, diags = s.removeEmptyPrepareCandidate(files, diags)
 	repairPaths := s.approvedPathList
 	if len(repairPaths) == 0 {
 		repairPaths = filePaths(s.candidateFiles())
@@ -623,6 +624,49 @@ func (s *authoringAgentSession) tryAutoRepairAfterLintFailure(ctx context.Contex
 		s.lastCritic = critic
 	}
 	return repaired, notes, summary, critic, validateErr, true
+}
+
+func (s *authoringAgentSession) removeEmptyPrepareCandidate(files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic) ([]askcontract.GeneratedFile, []askdiagnostic.Diagnostic) {
+	preparePath := ""
+	for _, diag := range diags {
+		msg := strings.TrimSpace(diag.Message)
+		if strings.Contains(msg, "E_SCHEMA_INVALID") && strings.Contains(msg, "Array must have at least 1 items") {
+			for _, file := range files {
+				if strings.HasSuffix(filepath.ToSlash(strings.TrimSpace(file.Path)), "prepare.yaml") && strings.Contains(msg, file.Path) {
+					preparePath = file.Path
+					break
+				}
+			}
+		}
+	}
+	if preparePath == "" {
+		return files, diags
+	}
+	hasOtherFiles := false
+	for _, file := range files {
+		if filepath.ToSlash(strings.TrimSpace(file.Path)) != filepath.ToSlash(preparePath) && !file.Delete {
+			hasOtherFiles = true
+			break
+		}
+	}
+	if !hasOtherFiles {
+		return files, diags
+	}
+	filtered := make([]askcontract.GeneratedFile, 0, len(files))
+	for _, file := range files {
+		if filepath.ToSlash(strings.TrimSpace(file.Path)) == filepath.ToSlash(preparePath) {
+			continue
+		}
+		filtered = append(filtered, file)
+	}
+	delete(s.candidateByPath, preparePath)
+	filteredDiags := make([]askdiagnostic.Diagnostic, 0, len(diags))
+	for _, diag := range diags {
+		if !strings.Contains(diag.Message, preparePath) {
+			filteredDiags = append(filteredDiags, diag)
+		}
+	}
+	return filtered, filteredDiags
 }
 
 func (s *authoringAgentSession) runWebSearch(ctx context.Context, call authorToolCall) agentToolResult {
@@ -878,6 +922,12 @@ func authoringAgentSystemPrompt(session *authoringAgentSession) string {
 	b.WriteString("The workspace may be empty. Retrieval excerpts can mention repo paths that are not present under the current workspace root.\n")
 	b.WriteString("Prefer tool-driven inspection over assumptions. Keep edits inside the approved paths and let validate drive repairs.\n")
 	b.WriteString("Budget discipline: call schema at most once per topic; prefer file_write early over repeated schema lookups. Write candidate files first, then validate and repair.\n")
+	if session.verificationFailure > 0 && strings.TrimSpace(session.lastLintSummary) != "" {
+		b.WriteString("\nREPAIR DIRECTIVE: The validator found blocking issues. Fix them NOW with file_edit or file_write.\n")
+		b.WriteString("Do NOT query schema for step kinds already listed in the error message — the error already tells you the allowed kinds.\n")
+		b.WriteString("If a file has no valid steps for its role, either rewrite it with allowed typed steps or remove the file entirely.\n")
+		b.WriteString("Act immediately — do not spend turns on read or schema before editing.\n")
+	}
 	return strings.TrimSpace(b.String())
 }
 

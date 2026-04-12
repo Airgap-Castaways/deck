@@ -11,6 +11,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askstate"
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
 	"github.com/Airgap-Castaways/deck/internal/validate"
+	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 	deckschemas "github.com/Airgap-Castaways/deck/schemas"
 )
@@ -434,29 +435,24 @@ func activeAuthoringTools(session *authoringAgentSession) []string {
 		return nil
 	}
 	tools := append([]string(nil), session.availableTools...)
-	looping := schemaLoopCount(session.toolEvents) >= 2
+	schemaLoop := schemaLoopCount(session.toolEvents) >= 2
+	readOnlyStreak := readOnlyStreakCount(session.toolEvents) >= 3
 	if session.decision.Route == "draft" && !session.workspace.HasWorkflowTree {
 		if session.verificationFailure > 0 {
-			if looping {
-				return []string{"read", "file_edit", "file_write", "validate"}
+			if schemaLoop || readOnlyStreak {
+				return []string{"file_edit", "file_write", "validate"}
 			}
 			return []string{"read", "file_edit", "file_write", "validate", "schema"}
 		}
 		if len(session.candidateByPath) == 0 {
-			if looping {
+			if schemaLoop {
 				return []string{"file_write", "init", "validate"}
 			}
 			return []string{"read", "file_write", "init", "validate", "schema", "web_search"}
 		}
 	}
-	if looping && len(session.candidateByPath) > 0 {
-		filtered := make([]string, 0, len(tools))
-		for _, tool := range tools {
-			if tool != "schema" {
-				filtered = append(filtered, tool)
-			}
-		}
-		return filtered
+	if len(session.candidateByPath) > 0 && (schemaLoop || readOnlyStreak) {
+		return []string{"file_write", "file_edit", "validate", authorToolFinish, authorToolClarification}
 	}
 	return tools
 }
@@ -466,6 +462,14 @@ func buildSchemaReadPayload(call authorSchemaReadCall) (map[string]any, error) {
 	kind := strings.TrimSpace(call.Kind)
 	if topic == "step" && kind == "" {
 		kind = strings.TrimSpace(call.Topic)
+	}
+	if topic == "step" && (kind == "step" || kind == "steps" || kind == "builder" || kind == "kind") {
+		kind = strings.TrimSpace(call.Topic)
+	}
+	if topic == "workflow" && kind != "" {
+		if _, ok, _ := stepmeta.Lookup(kind); ok {
+			topic = "step"
+		}
 	}
 	workflowPayload := map[string]any{
 		"ok":               true,
@@ -550,6 +554,19 @@ func schemaLoopCount(events []askstate.AgentToolEvent) int {
 	return count
 }
 
+func readOnlyStreakCount(events []askstate.AgentToolEvent) int {
+	count := 0
+	for i := len(events) - 1; i >= 0; i-- {
+		switch events[i].Name {
+		case "read", "grep", "glob", "schema":
+			count++
+		default:
+			return count
+		}
+	}
+	return count
+}
+
 func normalizeSchemaTopic(topic string) string {
 	lower := strings.ToLower(strings.TrimSpace(topic))
 	switch lower {
@@ -600,6 +617,27 @@ func buildLintRepairContext(diags []askdiagnostic.Diagnostic) map[string]any {
 		},
 	}
 	stepKinds := dedupeStepKinds(diags)
+	for _, diag := range diags {
+		if strings.Contains(diag.Message, "E_KIND_ROLE_MISMATCH") {
+			for _, role := range []string{"prepare", "apply"} {
+				if strings.Contains(diag.Message, "role "+role) {
+					for _, allowed := range workflowexec.StepKindsForRole(role) {
+						found := false
+						for _, k := range stepKinds {
+							if k == allowed {
+								found = true
+								break
+							}
+						}
+						if !found {
+							stepKinds = append(stepKinds, allowed)
+						}
+					}
+					break
+				}
+			}
+		}
+	}
 	if len(stepKinds) == 0 {
 		return context
 	}
