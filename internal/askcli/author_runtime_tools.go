@@ -434,16 +434,29 @@ func activeAuthoringTools(session *authoringAgentSession) []string {
 		return nil
 	}
 	tools := append([]string(nil), session.availableTools...)
+	looping := schemaLoopCount(session.toolEvents) >= 2
 	if session.decision.Route == "draft" && !session.workspace.HasWorkflowTree {
 		if session.verificationFailure > 0 {
+			if looping {
+				return []string{"read", "file_edit", "file_write", "validate"}
+			}
 			return []string{"read", "file_edit", "file_write", "validate", "schema"}
 		}
 		if len(session.candidateByPath) == 0 {
-			if schemaLoopCount(session.toolEvents) >= 2 {
+			if looping {
 				return []string{"file_write", "init", "validate"}
 			}
 			return []string{"read", "file_write", "init", "validate", "schema", "web_search"}
 		}
+	}
+	if looping && len(session.candidateByPath) > 0 {
+		filtered := make([]string, 0, len(tools))
+		for _, tool := range tools {
+			if tool != "schema" {
+				filtered = append(filtered, tool)
+			}
+		}
+		return filtered
 	}
 	return tools
 }
@@ -451,6 +464,9 @@ func activeAuthoringTools(session *authoringAgentSession) []string {
 func buildSchemaReadPayload(call authorSchemaReadCall) (map[string]any, error) {
 	topic := normalizeSchemaTopic(call.Topic)
 	kind := strings.TrimSpace(call.Kind)
+	if topic == "step" && kind == "" {
+		kind = strings.TrimSpace(call.Topic)
+	}
 	workflowPayload := map[string]any{
 		"ok":               true,
 		"topic":            "workflow",
@@ -535,12 +551,16 @@ func schemaLoopCount(events []askstate.AgentToolEvent) int {
 }
 
 func normalizeSchemaTopic(topic string) string {
-	switch strings.ToLower(strings.TrimSpace(topic)) {
+	lower := strings.ToLower(strings.TrimSpace(topic))
+	switch lower {
 	case "", "workflow", "workflows", "scenario", "scenarios", "draft", "authoring":
 		return "workflow"
 	case "step", "steps", "builder", "builders", "kind":
 		return "step"
 	default:
+		if _, ok, _ := stepmeta.Lookup(strings.TrimSpace(topic)); ok {
+			return "step"
+		}
 		return "workflow"
 	}
 }

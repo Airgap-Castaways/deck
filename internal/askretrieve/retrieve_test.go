@@ -104,8 +104,8 @@ func TestRetrieveRepoBehaviorExplainPrefersLocalFactsOverWorkspace(t *testing.T)
 	if firstWorkspace != -1 && firstLocal > firstWorkspace {
 		t.Fatalf("expected local facts before workspace chunks for repo-behavior explain, got %#v", result.Chunks)
 	}
-	if chunk := findChunk(result, "local-facts-askdraft"); chunk == nil || !strings.Contains(chunk.Content, "CompileWithProgram") {
-		t.Fatalf("expected askdraft compiler facts with function detail, got %#v", result.Chunks)
+	if chunk := findChunk(result, "local-facts-askpolicy"); chunk == nil || !strings.Contains(chunk.Content, "askpolicy") {
+		t.Fatalf("expected askpolicy local facts for repo-behavior explain, got %#v", result.Chunks)
 	}
 }
 

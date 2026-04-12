@@ -552,42 +552,6 @@ func TestNormalizeArtifactKindsDropsPlannerNoise(t *testing.T) {
 	}
 }
 
-func TestCurrentWorkspaceDocumentSummariesParsesWorkflowAndVars(t *testing.T) {
-	workspace := askretrieve.WorkspaceSummary{Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [true]\n"}, {Path: "workflows/vars.yaml", Content: "role: control-plane\n"}}}
-	summaries := currentWorkspaceDocumentSummaries(workspace)
-	joined := strings.Join(summaries, "\n")
-	for _, want := range []string{"workflows/scenarios/apply.yaml [workflow]", "workflows/vars.yaml [vars]"} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("expected %q in document summaries, got %q", want, joined)
-		}
-	}
-}
-
-func TestStructuralWorkflowSummaryIncludesWhenConditions(t *testing.T) {
-	doc := askcontract.WorkflowDocument{
-		Steps: []askcontract.WorkflowStep{{ID: "verify", Kind: "CheckKubernetesCluster", When: "vars.role == \"control-plane\"", Spec: map[string]any{"nodes": map[string]any{"total": 1}}}},
-	}
-	summary := structuralWorkflowSummary(doc)
-	for _, want := range []string{"CheckKubernetesCluster", "vars.role == \"control-plane\""} {
-		if !strings.Contains(summary, want) {
-			t.Fatalf("expected %q in summary, got %q", want, summary)
-		}
-	}
-}
-
-func TestEnrichPostProcessFindingsPreservesRenderedFilesWithoutCleanupHints(t *testing.T) {
-	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: fetch\n    kind: DownloadPackage\n    spec:\n      outputDir: /srv/offline/kubernetes\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      source:\n        type: local-repo\n        path: /srv/offline/kubernetes\n"}})
-	findings := enrichPostProcessFindings(askcontract.PostProcessResponse{}, gen.Files)
-	if len(findings.Advisory) != 0 || len(findings.UpgradeCandidates) != 0 {
-		t.Fatalf("expected no structural cleanup hints, got %#v", findings)
-	}
-	for _, path := range []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml"} {
-		if !containsTrimmed(findings.PreserveFiles, path) {
-			t.Fatalf("expected %s to remain preserved, got %#v", path, findings)
-		}
-	}
-}
-
 func TestSummarizeValidationErrorHighlightsWorkflowSkeletonFixes(t *testing.T) {
 	summary := summarizeValidationError("E_SCHEMA_INVALID: (root): version is required; steps.0: id is required; steps.1: id is required")
 	for _, want := range []string{"Schema validation failure", "version: v1alpha1", "id` field"} {
@@ -690,7 +654,7 @@ func TestAskRequestTimeoutScalesGenerationByIterationsAndPromptSize(t *testing.T
 
 func TestExplainAndReviewSystemPromptsIncludeParsedWorkflowSummaries(t *testing.T) {
 	retrieval := askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{Label: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: run\n        kind: Command\n        spec:\n          command: [true]\n"}}}
-	for _, prompt := range []string{explainSystemPrompt(askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}, retrieval), reviewSystemPrompt(askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}, retrieval, askretrieve.WorkspaceSummary{})} {
+	for _, prompt := range []string{buildInfoSystemPrompt(askintent.RouteExplain, askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}, retrieval, askretrieve.WorkspaceSummary{}), buildInfoSystemPrompt(askintent.RouteReview, askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}, retrieval, askretrieve.WorkspaceSummary{})} {
 		for _, want := range []string{"Parsed workflow summaries:", "workflows/scenarios/apply.yaml [workflow] phases=1 top-level-steps=0"} {
 			if !strings.Contains(prompt, want) {
 				t.Fatalf("expected %q in info prompt, got %q", want, prompt)
@@ -701,8 +665,8 @@ func TestExplainAndReviewSystemPromptsIncludeParsedWorkflowSummaries(t *testing.
 
 func TestExplainSystemPromptUsesCodePathModeForRepoBehavior(t *testing.T) {
 	retrieval := askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "local-facts-stepmeta", Source: "local-facts", Label: "source-of-truth-stepmeta", Content: "Local facts:\n- path: internal/stepmeta/registry.go"}, {ID: "local-facts-askdraft", Source: "local-facts", Label: "askdraft-compiler", Content: "Local facts:\n- file: internal/askdraft/draft.go\n- function: CompileWithProgram"}, {ID: "workspace-apply", Source: "workspace", Label: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps: []\n"}}}
-	prompt := explainSystemPrompt(askintent.Target{Kind: "workspace"}, retrieval)
-	for _, want := range []string{"explaining how this repository assembles workflow behavior", "internal/stepmeta", "internal/stepspec", "internal/askdraft", "registry/metadata -> builder selection -> binding resolution -> workflow document compilation"} {
+	prompt := buildInfoSystemPrompt(askintent.RouteExplain, askintent.Target{Kind: "workspace"}, retrieval, askretrieve.WorkspaceSummary{})
+	for _, want := range []string{"explaining how this repository assembles workflow behavior", "internal/stepmeta", "internal/stepspec", "registry/metadata -> builder selection -> binding resolution -> workflow document compilation"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in repo-behavior explain prompt, got %q", want, prompt)
 		}
@@ -714,7 +678,7 @@ func TestExplainSystemPromptUsesCodePathModeForRepoBehavior(t *testing.T) {
 
 func TestReviewSystemPromptIncludesStructuredValidationIssues(t *testing.T) {
 	workspace := askretrieve.WorkspaceSummary{Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      sourceDir: /tmp/packages\n"}}}
-	prompt := reviewSystemPrompt(askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}, askretrieve.RetrievalResult{}, workspace)
+	prompt := buildInfoSystemPrompt(askintent.RouteReview, askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}, askretrieve.RetrievalResult{}, workspace)
 	for _, want := range []string{"Structured validation issues:", "sourceDir", "Additional property sourceDir is not allowed"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in review prompt, got %q", want, prompt)
@@ -1078,14 +1042,6 @@ func TestValidateGenerationRefineAllowsUntouchedExistingComponentImports(t *test
 	}
 	if summary == "" || len(critic.Blocking) != 0 {
 		t.Fatalf("expected successful refine validation, got summary=%q critic=%#v", summary, critic)
-	}
-}
-
-func TestRestrictRepairTargetsToPlanFiltersUnplannedPaths(t *testing.T) {
-	plan := askcontract.PlanResponse{AuthoringBrief: askcontract.AuthoringBrief{TargetPaths: []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml"}}}
-	paths := restrictRepairTargetsToPlan([]string{"workflows/prepare.yaml", "workflows/components/helper.yaml"}, plan)
-	if len(paths) != 1 || paths[0] != "workflows/prepare.yaml" {
-		t.Fatalf("expected only planned repair target, got %#v", paths)
 	}
 }
 

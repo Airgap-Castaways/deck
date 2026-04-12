@@ -11,7 +11,11 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
 	"github.com/Airgap-Castaways/deck/internal/askir"
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
+	"github.com/Airgap-Castaways/deck/internal/stepspec"
+	"github.com/Airgap-Castaways/deck/internal/structurededit"
 	"github.com/Airgap-Castaways/deck/internal/validate"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TryAutoRepair(root string, files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic, repairPaths []string) ([]askcontract.GeneratedFile, []string, bool, error) {
@@ -100,19 +104,43 @@ func TryAutoRepairWithProgram(root string, files []askcontract.GeneratedFile, di
 	if len(editDocs) == 0 && len(replaceDocs) == 0 {
 		return files, nil, false, nil
 	}
-	documents := make([]askcontract.GeneratedDocument, 0, len(replaceDocs)+len(editDocs))
-	for _, doc := range replaceDocs {
-		documents = append(documents, doc)
+	repaired := append([]askcontract.GeneratedFile(nil), files...)
+	index := map[string]int{}
+	for i, file := range repaired {
+		index[filepath.ToSlash(strings.TrimSpace(file.Path))] = i
+	}
+	for path, doc := range replaceDocs {
+		content, err := renderRepairDocument(doc)
+		if err != nil {
+			return files, nil, false, err
+		}
+		if idx, ok := index[path]; ok {
+			repaired[idx] = askcontract.GeneratedFile{Path: path, Content: content}
+		} else {
+			index[path] = len(repaired)
+			repaired = append(repaired, askcontract.GeneratedFile{Path: path, Content: content})
+		}
 	}
 	for path, edits := range editDocs {
 		if _, replaced := replaceDocs[path]; replaced || len(edits) == 0 {
 			continue
 		}
-		documents = append(documents, askcontract.GeneratedDocument{Path: path, Action: "edit", Edits: edits})
-	}
-	repaired, err := askir.MaterializeWithBase(root, files, askcontract.GenerationResponse{Documents: documents})
-	if err != nil {
-		return files, nil, false, err
+		idx, ok := index[path]
+		if !ok {
+			continue
+		}
+		raw := []byte(repaired[idx].Content)
+		doc, _ := askir.ParseDocument(path, raw)
+		structEdits := make([]stepspec.StructuredEdit, 0, len(edits))
+		for _, edit := range edits {
+			resolvedPath := askir.ResolveStructuredEditPath(edit.RawPath, doc)
+			structEdits = append(structEdits, stepspec.StructuredEdit{Op: edit.Op, RawPath: resolvedPath, Value: edit.Value})
+		}
+		applied, err := structurededit.Apply(structurededit.FormatYAML, raw, structEdits)
+		if err != nil {
+			return files, nil, false, fmt.Errorf("apply repair edits to %s: %w", path, err)
+		}
+		repaired[idx] = askcontract.GeneratedFile{Path: path, Content: normalizeRenderedContent(applied)}
 	}
 	return repaired, dedupeStrings(notes), true, nil
 }
@@ -595,4 +623,23 @@ func dedupeStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func renderRepairDocument(doc askcontract.GeneratedDocument) (string, error) {
+	if doc.Workflow == nil {
+		return "", fmt.Errorf("renderRepairDocument: document %s has no workflow content", doc.Path)
+	}
+	raw, err := yaml.Marshal(doc.Workflow)
+	if err != nil {
+		return "", fmt.Errorf("render repair document %s: %w", doc.Path, err)
+	}
+	return normalizeRenderedContent(raw), nil
+}
+
+func normalizeRenderedContent(raw []byte) string {
+	trimmed := strings.TrimRight(string(raw), "\n")
+	if trimmed == "" {
+		return ""
+	}
+	return trimmed + "\n"
 }

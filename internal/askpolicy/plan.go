@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Airgap-Castaways/deck/internal/askauthoring"
 	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
@@ -146,7 +145,7 @@ func planHasFilePath(files []askcontract.PlanFile, want string) bool {
 }
 
 func normalizeClarifications(items []askcontract.PlanClarification, req ScenarioRequirements, prompt string, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) []askcontract.PlanClarification {
-	facts := askauthoring.InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
+	facts := InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
 	defaults := planClarificationsFromRequirements(prompt, req, decision, workspace)
 	byID := map[string]askcontract.PlanClarification{}
 	defaultIDs := map[string]bool{}

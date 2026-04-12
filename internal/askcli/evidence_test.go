@@ -103,7 +103,7 @@ func TestExecuteAuthoringDefersExternalEvidenceToToolLoop(t *testing.T) {
 }
 
 func TestQuestionPromptIncludesExternalEvidenceFailureGuidance(t *testing.T) {
-	prompt := questionSystemPrompt(askintent.Target{}, askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "ext-status", Source: "external-evidence", Label: "required-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: "External evidence status:\n- required upstream evidence could not be fetched", Score: 90}, {ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Topic: "mcp:web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}", Score: 80, Evidence: &askretrieve.EvidenceSummary{Title: "Installing kubeadm", Domain: "kubernetes.io", DomainCategory: "official-docs", Freshness: "external-docs", Official: true, TrustLevel: "high", VersionSupport: "direct"}}}})
+	prompt := buildInfoSystemPrompt(askintent.RouteQuestion, askintent.Target{}, askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "ext-status", Source: "external-evidence", Label: "required-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: "External evidence status:\n- required upstream evidence could not be fetched", Score: 90}, {ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Topic: "mcp:web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}", Score: 80, Evidence: &askretrieve.EvidenceSummary{Title: "Installing kubeadm", Domain: "kubernetes.io", DomainCategory: "official-docs", Freshness: "external-docs", Official: true, TrustLevel: "high", VersionSupport: "direct"}}}}, askretrieve.WorkspaceSummary{})
 	for _, want := range []string{"Evidence boundaries:", "external source: Installing kubeadm [domain=kubernetes.io, category=official-docs, freshness=external-docs, official=true, trust=high, versionSupport=direct]", "External evidence status:", "required upstream evidence could not be fetched"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in question prompt, got %q", want, prompt)
@@ -112,7 +112,7 @@ func TestQuestionPromptIncludesExternalEvidenceFailureGuidance(t *testing.T) {
 }
 
 func TestQuestionPromptIncludesWeakExternalEvidenceBoundaries(t *testing.T) {
-	prompt := questionSystemPrompt(askintent.Target{}, askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "weak-status", Source: "external-evidence", Label: "weak-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: "External evidence status:\n- official source retrieval was incomplete for this install/setup question", Score: 90}}})
+	prompt := buildInfoSystemPrompt(askintent.RouteQuestion, askintent.Target{}, askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "weak-status", Source: "external-evidence", Label: "weak-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: "External evidence status:\n- official source retrieval was incomplete for this install/setup question", Score: 90}}}, askretrieve.WorkspaceSummary{})
 	for _, want := range []string{"official source retrieval was incomplete", "general guidance only", "Do not present distro-specific or version-specific install steps as verified"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in weak-evidence prompt, got %q", want, prompt)

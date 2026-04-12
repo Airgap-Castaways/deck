@@ -154,6 +154,8 @@ func routeFactGroups(route askintent.Route, lowerPrompt string, target askintent
 	switch route {
 	case askintent.RouteDraft, askintent.RouteRefine:
 		groups = appendFactGroup(groups, workspaceGroup, localFacts, examples, externalGroup)
+	case askintent.RouteReview:
+		groups = appendFactGroup(groups, workspaceGroup, info, externalGroup, localFacts, stateGroup)
 	case askintent.RouteExplain:
 		if promptTargetsRepoBehavior(lowerPrompt, target) {
 			groups = appendFactGroup(groups, info, localFacts, externalGroup, workspaceGroup, stateGroup)
@@ -266,7 +268,10 @@ func shouldIncludeLocalFacts(route askintent.Route, lowerPrompt string, target a
 }
 
 func shouldIncludeWorkspaceFacts(route askintent.Route, lowerPrompt string, target askintent.Target) bool {
-	if route == askintent.RouteDraft || route == askintent.RouteRefine {
+	if route == askintent.RouteDraft || route == askintent.RouteRefine || route == askintent.RouteReview {
+		return true
+	}
+	if route == askintent.RouteExplain && strings.TrimSpace(target.Path) != "" {
 		return true
 	}
 	if route == askintent.RouteExplain && promptTargetsRepoBehavior(lowerPrompt, target) && !strings.HasPrefix(filepath.ToSlash(strings.TrimSpace(target.Path)), "workflows/") {
@@ -484,7 +489,9 @@ func routeBudget(route askintent.Route, prompt string) (maxBytes int, maxChunks 
 			return 20000, 14
 		}
 		return 12000, 10
-	case askintent.RouteReview, askintent.RouteExplain:
+	case askintent.RouteReview:
+		return 12000, 12
+	case askintent.RouteExplain:
 		return 8000, 8
 	default:
 		return 4000, 6

@@ -11,7 +11,6 @@ import (
 	mcpaugment "github.com/Airgap-Castaways/deck/internal/askaugment/mcp"
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
-	"github.com/Airgap-Castaways/deck/internal/askhooks"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
@@ -33,7 +32,6 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	if opts.Stdin == nil {
 		opts.Stdin = os.Stdin
 	}
-	hooks := askhooks.Default()
 	progress := newAskProgress(opts.Stdout)
 	resolvedRoot, err := filepath.Abs(strings.TrimSpace(opts.Root))
 	if err != nil {
@@ -62,7 +60,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	if len(opts.Answers) > 0 && resumedPlan == nil {
 		return fmt.Errorf("--answer requires --from pointing to a saved plan artifact")
 	}
-	requestText = strings.TrimSpace(hooks.PreClassify(requestText))
+	requestText = strings.TrimSpace(requestText)
 	if requestText == "" && !opts.Review {
 		return fmt.Errorf("ask request is required")
 	}
@@ -74,7 +72,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	if err != nil {
 		return err
 	}
-	heuristic := hooks.PostClassify(askintent.Classify(askintent.Input{
+	heuristic := askintent.Classify(askintent.Input{
 		Prompt:          requestText,
 		CreateFlag:      opts.Create,
 		EditFlag:        opts.Edit,
@@ -82,7 +80,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		HasWorkflowTree: workspace.HasWorkflowTree,
 		HasPrepare:      workspace.HasPrepare,
 		HasApply:        workspace.HasApply,
-	}))
+	})
 	if resumedPlan != nil && !opts.PlanOnly {
 		heuristic = resumedPlanDecision(*resumedPlan)
 	}
@@ -381,90 +379,37 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		result.Chunks = retrieval.Chunks
 		result.DroppedChunks = retrieval.Dropped
 		logger.debug("retrieve_summary", "phase", "retrieve-second-pass", "chunks", len(result.Chunks), "dropped", len(result.DroppedChunks))
-	} else if resumedPlan != nil {
-		progress.status("resuming saved plan")
-		plan = *resumedPlan
-		result.Plan = &plan
-		result.PlanJSON = resumedPlanJSON
-		result.PlanMarkdown = strings.TrimSuffix(resumedPlanJSON, ".json") + ".md"
-		if askpolicy.PlanNeedsClarification(plan) {
-			progress.status("waiting for clarification")
-		}
-		updatedPlan, aborted, clarifyErr := maybeClarifyPlanInteractively(resolvedRoot, opts, &result, requestText, plan, askcontract.PlanCriticResponse{})
-		if clarifyErr != nil {
-			return clarifyErr
-		}
-		plan = updatedPlan
-		if aborted {
-			return render(opts.Stdout, opts.Stderr, result)
-		}
-		if hasFatalPlanReviewIssues(plan, askcontract.PlanCriticResponse{}) {
-			result.Summary = "saved plan still requires clarification"
-			result.Termination = "plan-awaiting-clarification"
-			result.FallbackNote = "apply --answer to the saved plan artifact before generation"
-			result.ReviewLines = append(result.ReviewLines, renderPlanNotes(plan)...)
-			if err := askstate.Save(resolvedRoot, askstate.Context{LastMode: "plan", LastRoute: string(result.Route), LastPrompt: strings.TrimSpace(requestText), LastFiles: filePathsFromPlan(plan), LastLLMUsed: false, LastClassifierLLM: result.ClassifierLLM, LastTermination: result.Termination}, requestText, resultToMarkdown(result)); err != nil {
-				return err
-			}
-			return render(opts.Stdout, opts.Stderr, result)
-		}
-		secondPassExternal := append([]askretrieve.Chunk{}, externalChunks...)
-		secondPassExternal = append(secondPassExternal, repoMapChunk(workspace), planChunk(plan))
-		secondPassExternal = append(secondPassExternal, planWorkspaceChunks(plan, workspace)...)
-		decision.Target = planTarget(plan, decision.Target)
-		retrieval = askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, secondPassExternal)
-		result.Chunks = retrieval.Chunks
-		result.DroppedChunks = retrieval.Dropped
 	}
 
-	switch decision.Route {
-	case askintent.RouteReview:
+	if decision.Route == askintent.RouteReview {
 		result.LocalFindings = askreview.Workspace(resolvedRoot)
 		result.ReviewLines = append(result.ReviewLines, findingsToLines(result.LocalFindings)...)
-		if canUseLLM(effective) {
-			systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, workspace, requestText)
-			result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
-			progress.status("answering %s request", phaseLabel(string(decision.Route)))
-			logger.info("phase_started", "phase", "answer", "route", decision.Route)
-			info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)
-			if infoErr == nil {
-				result.LLMUsed = true
-				result.Summary = info.Summary
-				result.Answer = info.Answer
-				result.ReviewLines = append(result.ReviewLines, info.Suggestions...)
-				result.ReviewLines = append(result.ReviewLines, info.Findings...)
-				result.ReviewLines = append(result.ReviewLines, info.SuggestedChange...)
-				logger.info("phase_succeeded", "phase", "answer", "route", decision.Route)
-			} else {
-				result.ReviewLines = append(result.ReviewLines, "LLM response failed; using local fallback: "+infoErr.Error())
-				logger.debug("phase_fallback", "phase", "answer", "error", infoErr)
-			}
-		}
-	case askintent.RouteClarify:
+	}
+	if decision.Route == askintent.RouteClarify {
 		applyLocalFallback(&result, resolvedRoot, workspace, requestText)
-	default:
-		if canUseLLM(effective) {
-			systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, workspace, requestText)
-			result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
-			progress.status("answering %s request", phaseLabel(string(decision.Route)))
-			logger.info("phase_started", "phase", "answer", "route", decision.Route)
-			info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)
-			if infoErr == nil {
-				result.LLMUsed = true
-				result.Summary = info.Summary
-				result.Answer = info.Answer
-				result.ReviewLines = append(result.ReviewLines, info.Suggestions...)
-				result.ReviewLines = append(result.ReviewLines, info.Findings...)
-				result.ReviewLines = append(result.ReviewLines, info.SuggestedChange...)
-				logger.info("phase_succeeded", "phase", "answer", "route", decision.Route)
-			} else {
-				result.ReviewLines = append(result.ReviewLines, "LLM response failed; using local fallback: "+infoErr.Error())
-				logger.debug("phase_fallback", "phase", "answer", "error", infoErr)
+	} else if canUseLLM(effective) {
+		systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, workspace, requestText)
+		result.PromptTraces = append(result.PromptTraces, promptTrace{Label: string(decision.Route), SystemPrompt: systemPrompt, UserPrompt: userPrompt})
+		progress.status("answering %s request", phaseLabel(string(decision.Route)))
+		logger.info("phase_started", "phase", "answer", "route", decision.Route)
+		info, infoErr := answerWithLLM(ctx, client, effective, decision, retrieval, requestText, logger)
+		if infoErr == nil {
+			result.LLMUsed = true
+			result.Summary = info.Summary
+			result.Answer = info.Answer
+			result.ReviewLines = append(result.ReviewLines, info.Suggestions...)
+			result.ReviewLines = append(result.ReviewLines, info.Findings...)
+			result.ReviewLines = append(result.ReviewLines, info.SuggestedChange...)
+			logger.info("phase_succeeded", "phase", "answer", "route", decision.Route)
+		} else {
+			result.ReviewLines = append(result.ReviewLines, "LLM response failed; using local fallback: "+infoErr.Error())
+			logger.debug("phase_fallback", "phase", "answer", "error", infoErr)
+			if decision.Route != askintent.RouteReview {
 				applyLocalFallback(&result, resolvedRoot, workspace, requestText)
 			}
-		} else {
-			applyLocalFallback(&result, resolvedRoot, workspace, requestText)
 		}
+	} else if decision.Route != askintent.RouteReview {
+		applyLocalFallback(&result, resolvedRoot, workspace, requestText)
 	}
 	if result.Termination == "" {
 		result.Termination = "answered"

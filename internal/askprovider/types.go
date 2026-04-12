@@ -1,47 +1,11 @@
 package askprovider
 
-import (
-	"context"
-	"encoding/json"
-	"time"
-)
+import "github.com/Airgap-Castaways/deck/internal/askcontract"
 
-type Request struct {
-	Kind                     string
-	Provider                 string
-	Model                    string
-	APIKey                   string
-	OAuthToken               string
-	AccountID                string
-	Endpoint                 string
-	SystemPrompt             string
-	Prompt                   string
-	ResponseSchema           json.RawMessage
-	ResponseSchemaName       string
-	Tools                    []ToolDefinition
-	ToolChoiceRequired       bool
-	DisableParallelToolCalls bool
-	MaxRetries               int
-	Timeout                  time.Duration
-}
+// Re-export provider types from askcontract for backward compatibility.
 
-type ToolDefinition struct {
-	Name        string
-	Description string
-	Parameters  json.RawMessage
-}
-
-type ToolCall struct {
-	ID        string
-	Name      string
-	Arguments json.RawMessage
-}
-
-type Response struct {
-	Content   string
-	ToolCalls []ToolCall
-}
-
-type Client interface {
-	Generate(ctx context.Context, req Request) (Response, error)
-}
+type Request = askcontract.ProviderRequest
+type ToolDefinition = askcontract.ProviderToolDefinition
+type ToolCall = askcontract.ProviderToolCall
+type Response = askcontract.ProviderResponse
+type Client = askcontract.ProviderClient

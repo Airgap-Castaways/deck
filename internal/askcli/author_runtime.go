@@ -28,6 +28,7 @@ import (
 
 const (
 	agentRuntimeMinTurns             = 4
+	agentRuntimeMaxTurns             = 30
 	agentRuntimeTurnsPerVerification = 3
 )
 
@@ -70,6 +71,8 @@ type authoringAgentSession struct {
 	availableTools      []string
 	candidateByPath     map[string]askcontract.GeneratedFile
 	readState           map[string]authorReadSnapshot
+	readCount           map[string]int
+	schemaCache         map[string]agentToolResult
 	toolEvents          []askstate.AgentToolEvent
 	lastLintSummary     string
 	lastLintPassed      bool
@@ -121,6 +124,9 @@ func maybeExecuteAuthoringRuntime(ctx context.Context, opts Options, client askp
 	}
 	verificationBudget := generationAttempts(opts.MaxIterations, decision, requestText)
 	turnBudget := maxInt(agentRuntimeMinTurns, verificationBudget*agentRuntimeTurnsPerVerification+2)
+	if turnBudget < agentRuntimeMaxTurns {
+		turnBudget = agentRuntimeMaxTurns
+	}
 	session := newAuthoringAgentSession(workspace.Root, requestText, decision, plan, requirements, workspace, state, retrieval, effective, evidencePlan, logger, verificationBudget, turnBudget)
 	request := askprovider.Request{
 		Kind:                     "generate-fast",
@@ -220,6 +226,8 @@ func newAuthoringAgentSession(root string, requestText string, decision askinten
 		availableTools:     tools,
 		candidateByPath:    map[string]askcontract.GeneratedFile{},
 		readState:          map[string]authorReadSnapshot{},
+		readCount:          map[string]int{},
+		schemaCache:        map[string]agentToolResult{},
 		verificationBudget: verificationBudget,
 		turnBudget:         turnBudget,
 		allowMCPTool:       allowMCPTool,
@@ -383,6 +391,7 @@ func (s *authoringAgentSession) executeTool(ctx context.Context, turn int, call 
 func (s *authoringAgentSession) runRead(call authorToolCall) agentToolResult {
 	paths := authorToolPaths(call)
 	results := make([]authorReadResult, 0, len(paths))
+	hints := []string{}
 	for _, rawPath := range paths {
 		path, err := s.normalizePath(rawPath)
 		if err != nil {
@@ -390,6 +399,10 @@ func (s *authoringAgentSession) runRead(call authorToolCall) agentToolResult {
 		}
 		if !s.readAllowed(path) {
 			return agentToolResult{OK: false, Summary: fmt.Sprintf("read denied for %s", path), Payload: map[string]any{"ok": false, "error": fmt.Sprintf("path %s is outside the approved read scope", path)}}
+		}
+		s.readCount[path]++
+		if s.readCount[path] >= 3 {
+			hints = append(hints, fmt.Sprintf("hint: %s already read %d times — use file_edit to modify", path, s.readCount[path]))
 		}
 		content, exists, source, err := s.currentFileContent(path)
 		if err != nil {
@@ -404,7 +417,11 @@ func (s *authoringAgentSession) runRead(call authorToolCall) agentToolResult {
 		}
 		results = append(results, result)
 	}
-	return agentToolResult{OK: true, Summary: fmt.Sprintf("read returned %d files", len(results)), Payload: map[string]any{"ok": true, "files": results}}
+	payload := map[string]any{"ok": true, "files": results}
+	if len(hints) > 0 {
+		payload["hints"] = hints
+	}
+	return agentToolResult{OK: true, Summary: fmt.Sprintf("read returned %d files", len(results)), Payload: payload}
 }
 
 func (s *authoringAgentSession) runGlob(call authorToolCall) agentToolResult {
@@ -565,6 +582,11 @@ func (s *authoringAgentSession) runValidate(ctx context.Context, call authorTool
 }
 
 func (s *authoringAgentSession) runSchema(call authorToolCall) agentToolResult {
+	cacheKey := strings.TrimSpace(call.Topic) + "::" + strings.TrimSpace(call.Kind)
+	if cached, ok := s.schemaCache[cacheKey]; ok {
+		cached.Summary = cached.Summary + " (cached — schema already retrieved, use file_write or file_edit to proceed)"
+		return cached
+	}
 	payload, err := buildSchemaReadPayload(authorSchemaReadCall{Topic: strings.TrimSpace(call.Topic), Kind: strings.TrimSpace(call.Kind)})
 	if err != nil {
 		return agentToolResult{OK: false, Summary: "schema failed", Payload: map[string]any{"ok": false, "error": err.Error()}}
@@ -573,7 +595,9 @@ func (s *authoringAgentSession) runSchema(call authorToolCall) agentToolResult {
 	if strings.TrimSpace(call.Kind) != "" {
 		summary = fmt.Sprintf("returned %s schema context", strings.TrimSpace(call.Kind))
 	}
-	return agentToolResult{OK: true, Summary: summary, Payload: payload}
+	result := agentToolResult{OK: true, Summary: summary, Payload: payload}
+	s.schemaCache[cacheKey] = result
+	return result
 }
 
 func (s *authoringAgentSession) tryAutoRepairAfterLintFailure(ctx context.Context, files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic) ([]askcontract.GeneratedFile, []string, string, askcontract.CriticResponse, error, bool) {
@@ -853,6 +877,7 @@ func authoringAgentSystemPrompt(session *authoringAgentSession) string {
 	b.WriteString(" only for true blockers that cannot be safely inferred from available files and tool results.\n")
 	b.WriteString("The workspace may be empty. Retrieval excerpts can mention repo paths that are not present under the current workspace root.\n")
 	b.WriteString("Prefer tool-driven inspection over assumptions. Keep edits inside the approved paths and let validate drive repairs.\n")
+	b.WriteString("Budget discipline: call schema at most once per topic; prefer file_write early over repeated schema lookups. Write candidate files first, then validate and repair.\n")
 	return strings.TrimSpace(b.String())
 }
 
@@ -898,16 +923,42 @@ func authoringAgentUserPrompt(session *authoringAgentSession, turn int) string {
 		b.WriteString("\n")
 	}
 	if len(session.toolEvents) > 0 {
-		b.WriteString("\nTool transcript:\n")
-		for _, event := range session.toolEvents {
+		events := session.toolEvents
+		recentStart := 0
+		if len(events) > 0 {
+			lastTurn := events[len(events)-1].Turn
+			cutoff := lastTurn - 4
+			for i, event := range events {
+				if event.Turn >= cutoff {
+					recentStart = i
+					break
+				}
+			}
+		}
+		if recentStart > 0 {
+			_, _ = fmt.Fprintf(b, "\nTool transcript (showing last %d of %d events):\n", len(events)-recentStart, len(events))
+		} else {
+			b.WriteString("\nTool transcript:\n")
+		}
+		for i, event := range events {
 			_, _ = fmt.Fprintf(b, "Turn %d %s ok=%t\n", event.Turn, event.Name, event.OK)
 			if strings.TrimSpace(event.Summary) != "" {
 				b.WriteString("Summary: ")
 				b.WriteString(strings.TrimSpace(event.Summary))
 				b.WriteString("\n")
 			}
+			if i < recentStart {
+				continue
+			}
 			if strings.TrimSpace(event.Result) != "" {
-				b.WriteString(truncateString(event.Result, 1200))
+				if event.Name == "read" && strings.TrimSpace(event.Path) != "" {
+					if _, inCandidate := session.candidateByPath[strings.TrimSpace(event.Path)]; inCandidate {
+						lines := strings.Count(strings.TrimSpace(event.Result), "\n") + 1
+						_, _ = fmt.Fprintf(b, "read %s: %d lines, content in candidate state\n", strings.TrimSpace(event.Path), lines)
+						continue
+					}
+				}
+				b.WriteString(truncateString(event.Result, 4000))
 				b.WriteString("\n")
 			}
 		}
@@ -918,7 +969,7 @@ func authoringAgentUserPrompt(session *authoringAgentSession, turn int) string {
 			b.WriteString("--- ")
 			b.WriteString(file.Path)
 			b.WriteString("\n")
-			b.WriteString(truncateString(file.Content, 1600))
+			b.WriteString(truncateString(file.Content, 4000))
 			if !strings.HasSuffix(file.Content, "\n") {
 				b.WriteString("\n")
 			}

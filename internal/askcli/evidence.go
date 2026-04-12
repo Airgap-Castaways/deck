@@ -9,16 +9,15 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
-	"github.com/Airgap-Castaways/deck/internal/askevidenceplan"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
 
 func buildEvidencePlan(ctx context.Context, client askprovider.Client, cfg askconfig.EffectiveSettings, prompt string, decision askintent.Decision, workspace askretrieve.WorkspaceSummary, logger askLogger) (askcontract.EvidencePlan, []string, error) {
-	plan := askevidenceplan.BuildEvidencePlan(prompt, workspace, decision)
+	plan := buildHeuristicEvidencePlan(prompt, workspace, decision)
 	events := []string{renderEvidencePlanEvent(plan, "heuristic")}
-	if askevidenceplan.ShouldUseLLMEvidencePlanner(plan, prompt, workspace, decision) && canUseLLM(cfg) {
+	if shouldUseLLMEvidencePlanner(plan, prompt, workspace, decision) && canUseLLM(cfg) {
 		llmPlan, err := planEvidenceWithLLM(ctx, client, cfg, prompt, decision, workspace, logger)
 		if err == nil {
 			plan = mergeEvidencePlans(plan, llmPlan)

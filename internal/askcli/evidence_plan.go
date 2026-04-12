@@ -1,4 +1,4 @@
-package askevidenceplan
+package askcli
 
 import (
 	"regexp"
@@ -10,20 +10,20 @@ import (
 )
 
 var (
-	versionPattern               = regexp.MustCompile(`(?i)\bv?\d+\.\d+(?:\.\d+)?\b`)
-	repoEntityPattern            = regexp.MustCompile(`(?i)\b(?:github\.com|gitlab\.com|golang\.org)/[^\s)]+`)
-	tokenPattern                 = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+._/-]*`)
-	versionAttachedEntityPattern = regexp.MustCompile(`(?i)\b([A-Za-z][A-Za-z0-9+._/-]*)\s+v?\d+\.\d+(?:\.\d+)?\b`)
-	pathLikePattern              = regexp.MustCompile(`(?i)(?:\b[a-z0-9_.-]+/)+[a-z0-9_.-]+\b|\b[a-z0-9_.-]+\.ya?ml\b`)
-	installCuePattern            = regexp.MustCompile(`(?i)\b(?:install|setup|set up|bootstrap|upgrade|deploy)\b`)
-	compatibilityCuePattern      = regexp.MustCompile(`(?i)\b(?:compatible|compatibility|requirement|requirements|prerequisite|prerequisites)\b|supported on|support matrix`)
-	troubleshootingCuePattern    = regexp.MustCompile(`(?i)\b(?:troubleshoot|debug|failing|fails|error|issue|problem|crash)\b|not working|cannot|can't|unable`)
+	evidenceVersionPattern               = regexp.MustCompile(`(?i)\bv?\d+\.\d+(?:\.\d+)?\b`)
+	evidenceRepoEntityPattern            = regexp.MustCompile(`(?i)\b(?:github\.com|gitlab\.com|golang\.org)/[^\s)]+`)
+	evidenceTokenPattern                 = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+._/-]*`)
+	evidenceVersionAttachedEntityPattern = regexp.MustCompile(`(?i)\b([A-Za-z][A-Za-z0-9+._/-]*)\s+v?\d+\.\d+(?:\.\d+)?\b`)
+	evidencePathLikePattern              = regexp.MustCompile(`(?i)(?:\b[a-z0-9_.-]+/)+[a-z0-9_.-]+\b|\b[a-z0-9_.-]+\.ya?ml\b`)
+	evidenceInstallCuePattern            = regexp.MustCompile(`(?i)\b(?:install|setup|set up|bootstrap|upgrade|deploy)\b`)
+	evidenceCompatibilityCuePattern      = regexp.MustCompile(`(?i)\b(?:compatible|compatibility|requirement|requirements|prerequisite|prerequisites)\b|supported on|support matrix`)
+	evidenceTroubleshootingCuePattern    = regexp.MustCompile(`(?i)\b(?:troubleshoot|debug|failing|fails|error|issue|problem|crash)\b|not working|cannot|can't|unable`)
 )
 
-func BuildEvidencePlan(prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) askcontract.EvidencePlan {
+func buildHeuristicEvidencePlan(prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) askcontract.EvidencePlan {
 	trimmed := strings.TrimSpace(prompt)
 	lower := strings.ToLower(trimmed)
-	cuePrompt := cueRelevantPrompt(lower)
+	cuePrompt := evidenceCueRelevantPrompt(lower)
 	plan := askcontract.EvidencePlan{Decision: "unnecessary", Reason: "request does not require external documentation evidence"}
 	if trimmed == "" {
 		return plan
@@ -32,14 +32,14 @@ func BuildEvidencePlan(prompt string, workspace askretrieve.WorkspaceSummary, de
 		plan.Reason = "refine requests should stay grounded in the local deck workspace"
 		return plan
 	}
-	if looksLikeLocalDeckPrompt(lower, decision, workspace) && !mentionsExternalEvidenceNeed(cuePrompt) {
+	if looksLikeLocalDeckPrompt(lower, decision, workspace) && !evidenceMentionsExternalNeed(cuePrompt) {
 		plan.Reason = "request is grounded in the local deck workspace"
 		return plan
 	}
-	plan.FreshnessSensitive = promptNeedsFreshnessEvidence(cuePrompt)
-	plan.InstallEvidence = promptNeedsInstallEvidence(cuePrompt)
-	plan.CompatibilityEvidence = promptNeedsCompatibilityEvidence(cuePrompt)
-	plan.TroubleshootingEvidence = promptNeedsTroubleshootingEvidence(cuePrompt)
+	plan.FreshnessSensitive = evidenceNeedsFreshness(cuePrompt)
+	plan.InstallEvidence = evidenceNeedsInstall(cuePrompt)
+	plan.CompatibilityEvidence = evidenceNeedsCompatibility(cuePrompt)
+	plan.TroubleshootingEvidence = evidenceNeedsTroubleshooting(cuePrompt)
 	plan.Entities = extractEvidenceEntities(trimmed)
 	if !plan.FreshnessSensitive && !plan.InstallEvidence && !plan.CompatibilityEvidence && !plan.TroubleshootingEvidence {
 		if len(plan.Entities) > 0 && !looksLikeLocalDeckPrompt(lower, decision, workspace) {
@@ -66,7 +66,7 @@ func BuildEvidencePlan(prompt string, workspace askretrieve.WorkspaceSummary, de
 	return plan
 }
 
-func ShouldUseLLMEvidencePlanner(plan askcontract.EvidencePlan, prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) bool {
+func shouldUseLLMEvidencePlanner(plan askcontract.EvidencePlan, prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) bool {
 	if strings.TrimSpace(plan.Decision) == "unnecessary" {
 		return false
 	}
@@ -79,8 +79,8 @@ func ShouldUseLLMEvidencePlanner(plan askcontract.EvidencePlan, prompt string, w
 	return plan.FreshnessSensitive || plan.InstallEvidence || plan.CompatibilityEvidence || plan.TroubleshootingEvidence
 }
 
-func promptNeedsFreshnessEvidence(lower string) bool {
-	if versionPattern.MatchString(lower) {
+func evidenceNeedsFreshness(lower string) bool {
+	if evidenceVersionPattern.MatchString(lower) {
 		return true
 	}
 	for _, token := range []string{" latest ", " current ", " newest ", " recent ", " release ", " upgrade ", " version "} {
@@ -91,20 +91,20 @@ func promptNeedsFreshnessEvidence(lower string) bool {
 	return false
 }
 
-func promptNeedsInstallEvidence(lower string) bool {
-	return installCuePattern.MatchString(lower)
+func evidenceNeedsInstall(lower string) bool {
+	return evidenceInstallCuePattern.MatchString(lower)
 }
 
-func promptNeedsCompatibilityEvidence(lower string) bool {
-	return compatibilityCuePattern.MatchString(lower)
+func evidenceNeedsCompatibility(lower string) bool {
+	return evidenceCompatibilityCuePattern.MatchString(lower)
 }
 
-func promptNeedsTroubleshootingEvidence(lower string) bool {
-	return troubleshootingCuePattern.MatchString(lower)
+func evidenceNeedsTroubleshooting(lower string) bool {
+	return evidenceTroubleshootingCuePattern.MatchString(lower)
 }
 
-func mentionsExternalEvidenceNeed(lower string) bool {
-	return promptNeedsFreshnessEvidence(lower) || promptNeedsInstallEvidence(lower) || promptNeedsCompatibilityEvidence(lower) || promptNeedsTroubleshootingEvidence(lower)
+func evidenceMentionsExternalNeed(lower string) bool {
+	return evidenceNeedsFreshness(lower) || evidenceNeedsInstall(lower) || evidenceNeedsCompatibility(lower) || evidenceNeedsTroubleshooting(lower)
 }
 
 func looksLikeLocalDeckPrompt(lower string, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) bool {
@@ -118,17 +118,17 @@ func looksLikeLocalDeckPrompt(lower string, decision askintent.Decision, workspa
 	if decision.Route == askintent.RouteRefine {
 		return true
 	}
-	if decision.Route == askintent.RouteReview && !mentionsExternalEvidenceNeed(lower) {
+	if decision.Route == askintent.RouteReview && !evidenceMentionsExternalNeed(lower) {
 		return true
 	}
-	if workspace.HasWorkflowTree && strings.Contains(lower, "scenario") && !mentionsExternalEvidenceNeed(lower) {
+	if workspace.HasWorkflowTree && strings.Contains(lower, "scenario") && !evidenceMentionsExternalNeed(lower) {
 		return true
 	}
 	return false
 }
 
-func cueRelevantPrompt(lower string) string {
-	cleaned := pathLikePattern.ReplaceAllString(lower, " ")
+func evidenceCueRelevantPrompt(lower string) string {
+	cleaned := evidencePathLikePattern.ReplaceAllString(lower, " ")
 	cleaned = strings.ReplaceAll(cleaned, "_", " ")
 	cleaned = strings.ReplaceAll(cleaned, "-", " ")
 	return cleaned
@@ -140,13 +140,13 @@ func extractEvidenceEntities(prompt string) []askcontract.EvidenceEntity {
 	add := func(name string, kind string) {
 		name = strings.TrimSpace(strings.Trim(name, `"'.,:;()[]{} `))
 		name = strings.TrimSpace(strings.TrimSuffix(name, "?"))
-		if name == "" || looksGenericEntityName(name) {
+		if name == "" || evidenceLooksGenericName(name) {
 			return
 		}
-		if digitsOnly(name) {
+		if evidenceDigitsOnly(name) {
 			return
 		}
-		if versionPattern.MatchString(name) {
+		if evidenceVersionPattern.MatchString(name) {
 			return
 		}
 		key := strings.ToLower(name) + "::" + strings.ToLower(strings.TrimSpace(kind))
@@ -156,20 +156,20 @@ func extractEvidenceEntities(prompt string) []askcontract.EvidenceEntity {
 		seen[key] = true
 		entities = append(entities, askcontract.EvidenceEntity{Name: name, Kind: kind})
 	}
-	for _, match := range repoEntityPattern.FindAllString(prompt, -1) {
+	for _, match := range evidenceRepoEntityPattern.FindAllString(prompt, -1) {
 		add(match, "library")
 	}
-	for _, match := range versionAttachedEntities(prompt) {
+	for _, match := range evidenceVersionAttachedEntities(prompt) {
 		add(match, "technology")
 	}
-	for _, match := range cueDrivenEntities(prompt) {
+	for _, match := range evidenceCueDrivenEntities(prompt) {
 		add(match, "technology")
 	}
 	return entities
 }
 
-func versionAttachedEntities(prompt string) []string {
-	matches := versionAttachedEntityPattern.FindAllStringSubmatch(prompt, -1)
+func evidenceVersionAttachedEntities(prompt string) []string {
+	matches := evidenceVersionAttachedEntityPattern.FindAllStringSubmatch(prompt, -1)
 	results := make([]string, 0, len(matches))
 	for _, match := range matches {
 		if len(match) > 1 {
@@ -179,7 +179,7 @@ func versionAttachedEntities(prompt string) []string {
 	return results
 }
 
-func cueDrivenEntities(prompt string) []string {
+func evidenceCueDrivenEntities(prompt string) []string {
 	lower := strings.ToLower(prompt)
 	results := make([]string, 0)
 	for _, cue := range []string{"install", "setup", "set up", "upgrade", "configure", "troubleshoot", "debug", "compatibility", "requirements", "prerequisites", "latest", "current"} {
@@ -196,16 +196,16 @@ func cueDrivenEntities(prompt string) []string {
 		for _, part := range parts {
 			clean := strings.TrimSpace(strings.Trim(part, `"'.,:;()[]{} `))
 			lowerClean := strings.ToLower(clean)
-			if clean == "" || versionPattern.MatchString(lowerClean) {
+			if clean == "" || evidenceVersionPattern.MatchString(lowerClean) {
 				break
 			}
-			if cueStopword(lowerClean) {
+			if evidenceCueStopword(lowerClean) {
 				continue
 			}
 			if strings.EqualFold(lowerClean, "and") || strings.EqualFold(lowerClean, "or") {
 				break
 			}
-			if looksGenericEntityName(clean) {
+			if evidenceLooksGenericName(clean) {
 				continue
 			}
 			candidate = append(candidate, clean)
@@ -217,15 +217,15 @@ func cueDrivenEntities(prompt string) []string {
 			results = append(results, strings.Join(candidate, " "))
 		}
 	}
-	for _, token := range tokenPattern.FindAllString(prompt, -1) {
-		if token != strings.ToLower(token) && !looksGenericEntityName(token) {
+	for _, token := range evidenceTokenPattern.FindAllString(prompt, -1) {
+		if token != strings.ToLower(token) && !evidenceLooksGenericName(token) {
 			results = append(results, token)
 		}
 	}
 	return results
 }
 
-func cueStopword(value string) bool {
+func evidenceCueStopword(value string) bool {
 	switch value {
 	case "for", "on", "with", "using", "into", "from", "in", "to", "the", "a", "an", "and", "or", "version", "release", "linux", "ubuntu", "debian", "rhel", "rocky", "almalinux", "fedora", "macos", "windows":
 		return true
@@ -234,7 +234,7 @@ func cueStopword(value string) bool {
 	}
 }
 
-func looksGenericEntityName(value string) bool {
+func evidenceLooksGenericName(value string) bool {
 	lower := strings.ToLower(strings.TrimSpace(value))
 	if lower == "" {
 		return true
@@ -247,7 +247,7 @@ func looksGenericEntityName(value string) bool {
 	}
 }
 
-func digitsOnly(value string) bool {
+func evidenceDigitsOnly(value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return false

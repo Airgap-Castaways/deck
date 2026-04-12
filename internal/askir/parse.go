@@ -11,6 +11,53 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
+type workflowRender struct {
+	Version string         `yaml:"version"`
+	Vars    map[string]any `yaml:"vars,omitempty"`
+	Phases  []phaseRender  `yaml:"phases,omitempty"`
+	Steps   []stepRender   `yaml:"steps,omitempty"`
+}
+
+type phaseRender struct {
+	Name           string         `yaml:"name"`
+	MaxParallelism int            `yaml:"maxParallelism,omitempty"`
+	Imports        []importRender `yaml:"imports,omitempty"`
+	Steps          []stepRender   `yaml:"steps,omitempty"`
+}
+
+type importRender struct {
+	Path string `yaml:"path"`
+	When string `yaml:"when,omitempty"`
+}
+
+type stepRender struct {
+	ID            string            `yaml:"id"`
+	APIVersion    string            `yaml:"apiVersion,omitempty"`
+	Kind          string            `yaml:"kind"`
+	Metadata      map[string]any    `yaml:"metadata,omitempty"`
+	When          string            `yaml:"when,omitempty"`
+	ParallelGroup string            `yaml:"parallelGroup,omitempty"`
+	Register      map[string]string `yaml:"register,omitempty"`
+	Retry         int               `yaml:"retry,omitempty"`
+	Timeout       string            `yaml:"timeout,omitempty"`
+	Spec          map[string]any    `yaml:"spec"`
+}
+
+type componentRender struct {
+	Steps []stepRender `yaml:"steps"`
+}
+
+func unwrapVarsDocument(values map[string]any) map[string]any {
+	if len(values) != 1 {
+		return values
+	}
+	nested, ok := values["vars"].(map[string]any)
+	if !ok {
+		return values
+	}
+	return nested
+}
+
 func ParseDocument(path string, raw []byte) (askcontract.GeneratedDocument, error) {
 	clean := filepath.ToSlash(strings.TrimSpace(path))
 	if clean == "" {
