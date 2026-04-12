@@ -24,6 +24,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/askstate"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
+	"github.com/Airgap-Castaways/deck/internal/stepmeta"
 )
 
 const (
@@ -1001,6 +1002,10 @@ func authoringAgentUserPrompt(session *authoringAgentSession, turn int) string {
 			b.WriteString("\n\n")
 		}
 	}
+	if ref := buildStepKindReference(session); ref != "" {
+		b.WriteString(ref)
+		b.WriteString("\n")
+	}
 	if session.state.LastLint != "" {
 		b.WriteString("Last saved lint summary: ")
 		b.WriteString(session.state.LastLint)
@@ -1071,6 +1076,98 @@ func authoringAgentUserPrompt(session *authoringAgentSession, turn int) string {
 	}
 	b.WriteString("\nUse tools to inspect, search, read, edit, write, validate, consult schema, finish, or request clarification.\n")
 	return strings.TrimSpace(b.String())
+}
+
+func buildStepKindReference(session *authoringAgentSession) string {
+	needed := inferNeededStepKinds(session.requirements, session.plan)
+	if len(needed) == 0 {
+		return ""
+	}
+	b := &strings.Builder{}
+	b.WriteString("Step kind reference (use these typed steps instead of Command where applicable):\n")
+	for _, kind := range needed {
+		entry, ok, err := stepmeta.Lookup(kind)
+		if err != nil || !ok {
+			continue
+		}
+		_, _ = fmt.Fprintf(b, "\n[%s] %s\n", entry.Definition.Kind, strings.TrimSpace(entry.Docs.Summary))
+		if strings.TrimSpace(entry.Docs.WhenToUse) != "" {
+			b.WriteString("When to use: ")
+			b.WriteString(strings.TrimSpace(entry.Docs.WhenToUse))
+			b.WriteString("\n")
+		}
+		b.WriteString("Roles: ")
+		b.WriteString(strings.Join(entry.Definition.Roles, ", "))
+		b.WriteString("\n")
+		if len(entry.Definition.Ask.KeyFields) > 0 {
+			b.WriteString("Key spec fields: ")
+			b.WriteString(strings.Join(entry.Definition.Ask.KeyFields, ", "))
+			b.WriteString("\n")
+		}
+		if strings.TrimSpace(entry.Docs.Example) != "" {
+			b.WriteString("Example:\n")
+			b.WriteString(strings.TrimSpace(entry.Docs.Example))
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+func inferNeededStepKinds(req askpolicy.ScenarioRequirements, plan askcontract.PlanResponse) []string {
+	seen := map[string]bool{}
+	add := func(kind string) {
+		if kind != "" && !seen[kind] {
+			seen[kind] = true
+		}
+	}
+	for _, intent := range req.ScenarioIntent {
+		switch strings.TrimSpace(intent) {
+		case "kubeadm":
+			add("InitKubeadm")
+			add("JoinKubeadm")
+		case "cluster-verification":
+			add("CheckKubernetesCluster")
+		}
+	}
+	for _, kind := range req.ArtifactKinds {
+		switch strings.ToLower(strings.TrimSpace(kind)) {
+		case "package":
+			add("DownloadPackage")
+			add("InstallPackage")
+		case "image":
+			add("DownloadImage")
+		}
+	}
+	if req.NeedsPrepare {
+		add("DownloadFile")
+		add("DownloadPackage")
+		add("DownloadImage")
+	}
+	for _, cap := range plan.AuthoringBrief.RequiredCapabilities {
+		switch strings.TrimSpace(cap) {
+		case "kubeadm-bootstrap":
+			add("InitKubeadm")
+		case "kubeadm-join":
+			add("JoinKubeadm")
+		case "cluster-verification":
+			add("CheckKubernetesCluster")
+		case "package-staging":
+			add("DownloadPackage")
+			add("InstallPackage")
+		case "image-staging":
+			add("DownloadImage")
+		case "prepare-artifacts":
+			add("DownloadFile")
+		}
+	}
+	add("CheckKubernetesCluster")
+	add("CheckHost")
+	out := make([]string, 0, len(seen))
+	for kind := range seen {
+		out = append(out, kind)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func renderAuthoringChunks(chunks []askretrieve.Chunk) []string {
