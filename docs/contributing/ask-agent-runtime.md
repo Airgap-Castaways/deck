@@ -73,13 +73,26 @@ If an ask change requires hardcoding workflow truth in prompts or contracts that
 
 ## Main packages
 
-- `internal/askcli`: route orchestration, runtime loop, model calls, and final write behavior
-- `internal/askcontract`: author/runtime response contracts and parsing
-- `internal/askpolicy`: preflight, scope rules, clarification policy, and authoring decisions
-- `internal/askevidenceplan`: external evidence planning
+- `internal/askcli`: route orchestration, runtime loop, model calls, evidence planning, prompt construction, and final write behavior
+- `internal/askcontract`: author/runtime response contracts, parsing, and provider type definitions
+- `internal/askpolicy`: preflight, scope rules, clarification policy, authoring decisions, and authoring fact inference
+- `internal/askcli/evidence_plan.go`: heuristic external evidence planning (moved from former `askevidenceplan` package)
 - `internal/askcontext` and `internal/askretrieve`: prompt-facing workspace and retrieved context assembly
 - `internal/askaugment/mcp`: built-in external evidence providers and adapters
 - `internal/askstate`: persisted ask state and agent session transcripts
+- `internal/askir`: workflow document parsing (ParseDocument, Summaries)
+- `internal/askrepair`: auto-repair for schema and role violations after validation
+- `internal/askprovider`: LLM provider abstraction (re-exports types from `askcontract/provider.go`)
+
+## Runtime tuning
+
+- **Turn budget**: max 30 turns per authoring session (`agentRuntimeMaxTurns`)
+- **Verification budget**: 5 validation failures before the session stops (`generationAttempts`)
+- **Schema caching**: repeated schema tool calls for the same topic return cached results with a hint to proceed
+- **Read-only loop breaker**: after 3 consecutive read-only turns (read/grep/glob/schema), the runtime restricts tools to action-only (file_write, file_edit, validate, finish)
+- **Auto-validate**: after 3 consecutive write turns without a validate call, the runtime auto-triggers validation
+- **Step kind reference**: the runtime pre-loads typed step schemas (summary, key fields, examples, when/template syntax) into the prompt based on plan requirements, eliminating the need for the model to discover schemas via the schema tool
+- **Prepare auto-remove**: if prepare.yaml only contains disallowed step kinds for the prepare role, it is automatically removed from candidates during repair
 
 ## Verification
 
