@@ -212,14 +212,14 @@ Some documentation metadata is layered on top so examples and field descriptions
 
 `deck ask` follows the same source-of-truth direction. It is not meant to be a parallel workflow-definition system.
 
-For authoring routes, the intended shape is route classification first, clarify when blocking ambiguity remains, then model-selects and code-builds. In practice, that means:
+For authoring routes, the intended shape is route classification first, clarify when blocking ambiguity remains, then bounded tool loop. In practice, that means:
 
 - code classifies whether the request is question, explain, review, draft, refine, or clarify
-- code builds an execution plan from workspace context and schema-derived authoring facts
-- code normalizes stable execution details into an authoring program
-- the model selects among constrained builder or transform candidates
-- code compiles or transforms workflow documents
-- code validates and repairs before writing files
+- code runs preflight for scope, target inference, and blocking clarifications
+- the model operates on real workspace files through a bounded tool loop (read, write, edit, validate, schema)
+- code enforces write scope, validation gates, and candidate state management
+- code auto-repairs schema and role violations after each validation
+- code writes accepted candidate files to disk only after successful finish
 
 The important architectural boundary is that ask may project canonical facts for prompting and assembly, but it should not own a second copy of step validity, field enums, or workspace path rules.
 

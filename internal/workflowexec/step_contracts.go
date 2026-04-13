@@ -51,6 +51,20 @@ func StepHasOutputForKey(key StepTypeKey, output string) (bool, error) {
 	return containsString(def.Step.Outputs, output), nil
 }
 
+func StepKindsForRole(role string) []string {
+	defs, err := StepDefinitions()
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0)
+	for _, def := range defs {
+		if containsString(def.Roles, role) {
+			out = append(out, def.Kind)
+		}
+	}
+	return out
+}
+
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

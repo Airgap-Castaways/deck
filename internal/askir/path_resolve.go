@@ -7,7 +7,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/structuredpath"
 )
 
-func resolveStructuredEditPath(rawPath string, doc askcontract.GeneratedDocument) string {
+func ResolveStructuredEditPath(rawPath string, doc askcontract.GeneratedDocument) string {
 	rawPath = normalizeVarsDocumentEditPath(rawPath, doc)
 	segments, err := structuredpath.Parse(rawPath)
 	if err != nil {

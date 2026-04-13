@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Airgap-Castaways/deck/internal/askauthoring"
 	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
@@ -61,8 +60,8 @@ func BriefFromRequirements(req ScenarioRequirements, decision askintent.Decision
 }
 
 func ExecutionModelFromRequirements(req ScenarioRequirements) askcontract.ExecutionModel {
-	facts := askauthoring.InferFacts(strings.Join(req.ScenarioIntent, " ")+" "+strings.Join(req.ArtifactKinds, " "), req.ArtifactKinds, req.Connectivity)
-	graph := askauthoring.BuildContractGraph(facts, askauthoring.RequirementLike{
+	facts := InferFacts(strings.Join(req.ScenarioIntent, " ")+" "+strings.Join(req.ArtifactKinds, " "), req.ArtifactKinds, req.Connectivity)
+	graph := BuildContractGraph(facts, RequirementLike{
 		Connectivity:   req.Connectivity,
 		NeedsPrepare:   req.NeedsPrepare,
 		ArtifactKinds:  req.ArtifactKinds,
@@ -110,7 +109,7 @@ type EvaluationResult struct {
 func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) ScenarioRequirements {
 	requestedMode := requestedWorkflowMode(prompt)
 	artifactKinds := mergedArtifactKinds(prompt, retrieval)
-	facts := askauthoring.InferFacts(prompt, artifactKinds, InferOfflineAssumption(prompt))
+	facts := InferFacts(prompt, artifactKinds, InferOfflineAssumption(prompt))
 	needsPrepare := facts.NeedsPrepare
 	req := ScenarioRequirements{
 		AcceptanceLevel:     inferAcceptanceLevel(prompt, workspace, decision),
@@ -124,10 +123,11 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 		ComponentAdvisories: inferComponentRecommendation(prompt),
 		ScenarioIntent:      append([]string(nil), facts.Intents...),
 	}
+	explicitPaths := askintent.ExtractWorkflowPaths(prompt)
 	if req.AcceptanceLevel == "starter" {
 		req.ComponentAdvisories = nil
 	}
-	if requestedMode != "prepare-only" {
+	if requestedMode != "prepare-only" && (decision.Route != askintent.RouteRefine || len(explicitPaths) == 0) {
 		req.RequiredFiles = append(req.RequiredFiles, workspacepaths.CanonicalApplyWorkflow)
 		req.EntryScenario = workspacepaths.CanonicalApplyWorkflow
 	}
@@ -137,7 +137,7 @@ func BuildScenarioRequirements(prompt string, retrieval askretrieve.RetrievalRes
 	if strings.Contains(strings.ToLower(prompt), "vars") || len(req.VarsAdvisories) > 0 {
 		req.RequiredFiles = append(req.RequiredFiles, workspacepaths.CanonicalVarsWorkflow)
 	}
-	for _, path := range askintent.ExtractWorkflowPaths(prompt) {
+	for _, path := range explicitPaths {
 		req.RequiredFiles = append(req.RequiredFiles, path)
 		if workspacepaths.IsScenarioAuthoringPath(path) || path == workspacepaths.CanonicalPrepareWorkflow {
 			req.EntryScenario = path
@@ -388,7 +388,7 @@ func EvaluateGeneration(req ScenarioRequirements, plan askcontract.PlanResponse,
 		}
 	}
 	if req.NeedsPrepare && len(preparePaths) == 0 {
-		findings = append(findings, EvaluationFinding{Severity: "blocking", Code: "missing_prepare", Message: fmt.Sprintf("artifact-requiring request is missing %s", workspacepaths.CanonicalPrepareWorkflow), Fix: fmt.Sprintf("Add %s when packages, images, binaries, or bundles must be prepared before apply", workspacepaths.CanonicalPrepareWorkflow), Path: workspacepaths.CanonicalPrepareWorkflow})
+		findings = append(findings, EvaluationFinding{Severity: "advisory", Code: "missing_prepare", Message: fmt.Sprintf("artifact-requiring request is missing %s; apply workflow may handle local artifacts directly", workspacepaths.CanonicalPrepareWorkflow), Fix: fmt.Sprintf("Consider adding %s when packages, images, binaries, or bundles must be staged from remote sources before apply", workspacepaths.CanonicalPrepareWorkflow), Path: workspacepaths.CanonicalPrepareWorkflow})
 	}
 	if req.NeedsPrepare && len(req.ArtifactKinds) > 0 && len(preparePaths) > 0 {
 		generated := generatedMap(gen.Files)
@@ -659,7 +659,7 @@ func inferComponentRecommendation(prompt string) []string {
 }
 
 func inferAcceptanceLevel(prompt string, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) string {
-	facts := askauthoring.InferFacts(prompt, InferArtifactKinds(prompt, nil), InferOfflineAssumption(prompt))
+	facts := InferFacts(prompt, InferArtifactKinds(prompt, nil), InferOfflineAssumption(prompt))
 	if facts.Topology == "multi-node" || facts.Topology == "ha" || facts.NodeCount > 1 {
 		if decision.Route == askintent.RouteRefine && workspace.HasWorkflowTree {
 			return "refine"
@@ -698,7 +698,7 @@ func inferAcceptanceLevel(prompt string, workspace askretrieve.WorkspaceSummary,
 }
 
 func inferRequestComplexity(prompt string, req ScenarioRequirements) string {
-	facts := askauthoring.InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
+	facts := InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
 	score := 0
 	if req.NeedsPrepare {
 		score++
@@ -801,7 +801,7 @@ func inferNodeCount(req ScenarioRequirements) int {
 }
 
 func inferRequiredCapabilities(req ScenarioRequirements) []string {
-	facts := askauthoring.InferFacts(strings.Join(req.ScenarioIntent, " "), req.ArtifactKinds, req.Connectivity)
+	facts := InferFacts(strings.Join(req.ScenarioIntent, " "), req.ArtifactKinds, req.Connectivity)
 	capabilities := append([]string(nil), facts.Capabilities...)
 	if req.NeedsPrepare && strings.EqualFold(strings.TrimSpace(req.Connectivity), "offline") {
 		capabilities = append(capabilities, "prepare-artifacts")

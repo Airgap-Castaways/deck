@@ -3,7 +3,6 @@ package askcli
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -120,8 +119,8 @@ func routeDefaults(route askintent.Route) askintent.Decision {
 	}
 }
 
-func answerWithLLM(ctx context.Context, client askprovider.Client, cfg askconfig.EffectiveSettings, decision askintent.Decision, retrieval askretrieve.RetrievalResult, prompt string, logger askLogger) (askcontract.InfoResponse, error) {
-	systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, askretrieve.WorkspaceSummary{}, prompt)
+func answerWithLLM(ctx context.Context, client askprovider.Client, cfg askconfig.EffectiveSettings, decision askintent.Decision, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, prompt string, logger askLogger) (askcontract.InfoResponse, error) {
+	systemPrompt, userPrompt := infoPrompts(decision.Route, decision.Target, retrieval, workspace, prompt)
 	logger.prompt(string(decision.Route), systemPrompt, userPrompt)
 	resp, err := client.Generate(ctx, askprovider.Request{
 		Kind:         string(decision.Route),
@@ -153,7 +152,7 @@ func generationAttempts(requested int, decision askintent.Decision, prompt strin
 	if requested > 0 {
 		return requested
 	}
-	return 3
+	return 5
 }
 
 func askRequestTimeout(kind string, maxIterations int, systemPrompt string, prompt string) time.Duration {
@@ -199,14 +198,4 @@ func minDuration(a time.Duration, b time.Duration) time.Duration {
 		return a
 	}
 	return b
-}
-
-func askFeatureEnabled(name string) bool {
-	value := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
-	switch value {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
 }

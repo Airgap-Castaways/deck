@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Airgap-Castaways/deck/internal/askauthoring"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
@@ -53,7 +52,7 @@ func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askinte
 }
 
 func planClarificationsFromRequirements(prompt string, req ScenarioRequirements, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) []askcontract.PlanClarification {
-	facts := askauthoring.InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
+	facts := InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
 	items := clarificationCandidatesFromRequirements(prompt, req, decision, workspace, facts)
 	for i := range items {
 		applyClarificationHints(&items[i], facts)
@@ -102,7 +101,7 @@ func targetClarificationsFromRequirements(prompt string, req ScenarioRequirement
 	}}
 }
 
-func applyClarificationHints(item *askcontract.PlanClarification, facts askauthoring.Facts) {
+func applyClarificationHints(item *askcontract.PlanClarification, facts Facts) {
 	if item == nil || strings.TrimSpace(item.Answer) != "" {
 		return
 	}

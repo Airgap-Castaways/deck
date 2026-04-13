@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Airgap-Castaways/deck/internal/askauthoring"
 	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
@@ -15,7 +14,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
-func clarificationCandidatesFromRequirements(prompt string, req ScenarioRequirements, decision askintent.Decision, workspace askretrieve.WorkspaceSummary, facts askauthoring.Facts) []askcontract.PlanClarification {
+func clarificationCandidatesFromRequirements(prompt string, req ScenarioRequirements, decision askintent.Decision, workspace askretrieve.WorkspaceSummary, facts Facts) []askcontract.PlanClarification {
 	items := append([]askcontract.PlanClarification(nil), facts.Clarifications...)
 	items = append(items, targetClarificationsFromRequirements(prompt, req, decision, workspace)...)
 	items = append(items, refineCompanionClarifications(prompt, decision, workspace)...)

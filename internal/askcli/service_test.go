@@ -3,7 +3,6 @@ package askcli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -12,26 +11,21 @@ import (
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
-	"github.com/Airgap-Castaways/deck/internal/askcontext"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
-	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
-	"github.com/Airgap-Castaways/deck/internal/askir"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
-	"github.com/Airgap-Castaways/deck/internal/askscaffold"
 	"github.com/Airgap-Castaways/deck/internal/askstate"
-	"github.com/Airgap-Castaways/deck/internal/schemadoc"
-	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
 	"github.com/Airgap-Castaways/deck/internal/workflowissues"
-	"github.com/Airgap-Castaways/deck/schemas"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type stubClient struct {
-	responses []string
-	calls     int
-	prompts   []askprovider.Request
+	responses         []string
+	providerResponses []askprovider.Response
+	calls             int
+	prompts           []askprovider.Request
 }
 
 type flushBuffer struct {
@@ -47,6 +41,13 @@ func (b *flushBuffer) Flush() error {
 func (s *stubClient) Generate(_ context.Context, req askprovider.Request) (askprovider.Response, error) {
 	s.prompts = append(s.prompts, req)
 	defer func() { s.calls++ }()
+	if len(s.providerResponses) > 0 {
+		idx := s.calls
+		if idx >= len(s.providerResponses) {
+			idx = len(s.providerResponses) - 1
+		}
+		return s.providerResponses[idx], nil
+	}
 	if len(s.responses) == 0 {
 		return askprovider.Response{}, errors.New("no stub response configured")
 	}
@@ -59,32 +60,6 @@ func (s *stubClient) Generate(_ context.Context, req askprovider.Request) (askpr
 
 func testMaterialized(summary string, files []askcontract.GeneratedFile) askcontract.GenerationResponse {
 	return askcontract.GenerationResponse{Summary: summary, Files: files}
-}
-
-func generationSelectionResponse(t *testing.T, summary string, selection askcontract.DraftSelection) string {
-	t.Helper()
-	raw, err := json.Marshal(askcontract.GenerationResponse{Summary: summary, Selection: &selection})
-	if err != nil {
-		t.Fatalf("marshal generation selection response: %v", err)
-	}
-	return string(raw)
-}
-
-func generationDocumentsResponse(t *testing.T, summary string, review []string, files ...askcontract.GeneratedFile) string {
-	t.Helper()
-	docs := make([]askcontract.GeneratedDocument, 0, len(files))
-	for _, file := range files {
-		doc, err := askir.ParseDocument(file.Path, []byte(file.Content))
-		if err != nil {
-			t.Fatalf("parse generated file %s: %v", file.Path, err)
-		}
-		docs = append(docs, doc)
-	}
-	raw, err := json.Marshal(askcontract.GenerationResponse{Summary: summary, Review: review, Documents: docs})
-	if err != nil {
-		t.Fatalf("marshal generation document response: %v", err)
-	}
-	return string(raw)
 }
 
 func TestClassifyWithLLMRetriesMalformedJSON(t *testing.T) {
@@ -108,23 +83,6 @@ func TestClassifyWithLLMRetriesMalformedJSON(t *testing.T) {
 	}
 	if decision.Route != askintent.RouteExplain || decision.Target.Path != "workflows/scenarios/apply.yaml" {
 		t.Fatalf("unexpected decision: %#v", decision)
-	}
-}
-
-func TestGenerateWithValidationStopsOnRouteMismatch(t *testing.T) {
-	client := &stubClient{responses: []string{
-		`{"summary":"wrong route","review":[],"files":[]}`,
-		`{"summary":"should not retry","review":[],"files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\n"}]}`,
-	}}
-	_, _, _, _, _, _, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
-	if err == nil {
-		t.Fatalf("expected generation failure")
-	}
-	if !strings.Contains(err.Error(), "without repair") {
-		t.Fatalf("expected non-repairable termination, got %v", err)
-	}
-	if client.calls != 1 {
-		t.Fatalf("expected non-repairable failure to stop after one call, got %d", client.calls)
 	}
 }
 
@@ -594,360 +552,6 @@ func TestNormalizeArtifactKindsDropsPlannerNoise(t *testing.T) {
 	}
 }
 
-func TestGenerateWithValidationRetriesParseFailure(t *testing.T) {
-	client := &stubClient{responses: []string{
-		`not-json`,
-		generationSelectionResponse(t, "ok", askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{
-			Path: "workflows/scenarios/apply.yaml",
-			Builders: []askcontract.DraftBuilderSelection{{
-				ID:        "apply.check-kubernetes-cluster",
-				Overrides: map[string]any{"nodeCount": 1, "readyCount": 1, "controlPlaneReady": 1},
-			}},
-		}}}),
-	}}
-	_, files, _, _, _, retries, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: "generate"}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
-	if err != nil {
-		t.Fatalf("expected parse retry success: %v", err)
-	}
-	if retries != 1 || len(files) != 1 {
-		t.Fatalf("unexpected result: retries=%d files=%d", retries, len(files))
-	}
-}
-
-func TestGenerateWithValidationDraftRetryPromptStaysSelectionBased(t *testing.T) {
-	client := &stubClient{responses: []string{
-		generationSelectionResponse(t, "bad builder", askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{
-			Path:     "workflows/scenarios/apply.yaml",
-			Builders: []askcontract.DraftBuilderSelection{{ID: "apply.missing-builder"}},
-		}}}),
-		generationSelectionResponse(t, "fixed", askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{
-			Path: "workflows/scenarios/apply.yaml",
-			Builders: []askcontract.DraftBuilderSelection{
-				{ID: "apply.init-kubeadm", Overrides: map[string]any{"outputJoinFile": "/tmp/deck/join.txt"}},
-				{ID: "apply.check-kubernetes-cluster", Overrides: map[string]any{"nodeCount": 1, "readyCount": 1, "controlPlaneReady": 1}},
-			},
-		}}}),
-	}}
-	plan := askcontract.PlanResponse{Request: "generate", Files: []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}}}
-	_, files, _, _, _, retries, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: plan.Request}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
-	if err != nil {
-		t.Fatalf("expected selection retry success: %v", err)
-	}
-	if retries != 1 || len(files) != 1 {
-		t.Fatalf("unexpected result: retries=%d files=%d", retries, len(files))
-	}
-	if len(client.prompts) != 2 {
-		t.Fatalf("expected two generate calls, got %d", len(client.prompts))
-	}
-	retryPrompt := client.prompts[1].Prompt
-	for _, want := range []string{"Return draft selection only", "Do not return documents", "missing-builder"} {
-		if !strings.Contains(retryPrompt, want) {
-			t.Fatalf("expected %q in retry prompt, got %q", want, retryPrompt)
-		}
-	}
-	for _, avoid := range []string{"Repair these generated documents", "Structured validator findings:"} {
-		if strings.Contains(retryPrompt, avoid) {
-			t.Fatalf("expected draft retry prompt to avoid document-repair mode %q, got %q", avoid, retryPrompt)
-		}
-	}
-}
-
-func TestGenerateWithValidationUsesCurrentDraftCompilationBeforeRetry(t *testing.T) {
-	client := &stubClient{responses: []string{generationSelectionResponse(t, "invalid init draft", askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{Path: "workflows/scenarios/apply.yaml", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.init-kubeadm"}}}}})}}
-	plan := askcontract.PlanResponse{Request: "create kubeadm workflow", Files: []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}}, AuthoringBrief: askcontract.AuthoringBrief{RouteIntent: "draft", TargetScope: "scenario", TargetPaths: []string{"workflows/scenarios/apply.yaml"}, ModeIntent: "apply-only"}}
-	_, files, _, _, _, retries, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate-fast", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: plan.Request}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
-	if err != nil {
-		t.Fatalf("expected current draft compilation to succeed: %v", err)
-	}
-	if retries != 0 || client.calls != 1 {
-		t.Fatalf("expected first-attempt success without extra model retries, got retries=%d calls=%d", retries, client.calls)
-	}
-	if len(files) != 1 || !strings.Contains(files[0].Content, "outputJoinFile: /tmp/deck/join.txt") {
-		t.Fatalf("expected compiled init output join file, got %#v", files)
-	}
-}
-
-func TestGenerateWithValidationRejectsLegacyFilesOnlyYamlRepairPayload(t *testing.T) {
-	client := &stubClient{responses: []string{
-		`{"summary":"broken yaml","review":[],"files":[{"path":"workflows/scenarios/apply.yaml","content":"version: v1alpha1\nphases:\n  - name: broken\n    steps:\n      - id: run\n        kind: Command\n        spec:\n          command: [\"true\"\n"},{"path":"workflows/vars.yaml","content":"role: control-plane\n"}]}`,
-	}}
-	plan := askcontract.PlanResponse{Request: "repair yaml structure", Files: []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "create"}, {Path: "workflows/vars.yaml", Action: "create"}}}
-	_, _, _, _, _, _, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: plan.Request}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
-	if err == nil || !strings.Contains(err.Error(), "documents") {
-		t.Fatalf("expected legacy files-only payload to fail, got %v", err)
-	}
-	if len(client.prompts) != 1 {
-		t.Fatalf("expected files-only payload to stop without repair, got %d prompts", len(client.prompts))
-	}
-}
-
-func TestCurrentWorkspaceDocumentSummariesParsesWorkflowAndVars(t *testing.T) {
-	workspace := askretrieve.WorkspaceSummary{Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [true]\n"}, {Path: "workflows/vars.yaml", Content: "role: control-plane\n"}}}
-	summaries := currentWorkspaceDocumentSummaries(workspace)
-	joined := strings.Join(summaries, "\n")
-	for _, want := range []string{"workflows/scenarios/apply.yaml [workflow]", "workflows/vars.yaml [vars]"} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("expected %q in document summaries, got %q", want, joined)
-		}
-	}
-}
-
-func TestGenerateWithValidationRepairsOnJudgeBlocking(t *testing.T) {
-	client := &stubClient{responses: []string{
-		generationSelectionResponse(t, "draft one", askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{
-			Path: "workflows/scenarios/apply.yaml",
-			Builders: []askcontract.DraftBuilderSelection{
-				{ID: "apply.init-kubeadm", Overrides: map[string]any{"outputJoinFile": "/tmp/join.sh"}},
-				{ID: "apply.check-kubernetes-cluster", Overrides: map[string]any{"nodeCount": 3, "readyCount": 3, "controlPlaneReady": 1}},
-			},
-		}}}),
-		`{"summary":"join behavior is still missing","blocking":["requested worker join behavior is still missing"],"advisory":[],"missingCapabilities":["kubeadm-join"],"suggestedFixes":["Add worker join steps"]}`,
-		generationSelectionResponse(t, "draft two", askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{
-			Path: "workflows/scenarios/apply.yaml",
-			Builders: []askcontract.DraftBuilderSelection{
-				{ID: "apply.init-kubeadm", Overrides: map[string]any{"outputJoinFile": "/tmp/join.sh"}},
-				{ID: "apply.join-kubeadm", Overrides: map[string]any{"joinFile": "/tmp/join.sh"}},
-				{ID: "apply.check-kubernetes-cluster", Overrides: map[string]any{"nodeCount": 3, "readyCount": 3, "controlPlaneReady": 1}},
-			},
-		}}, Vars: map[string]any{"role": "control-plane"}}),
-		`{"summary":"looks good","blocking":[],"advisory":["worker join capability is now present"],"missingCapabilities":[],"suggestedFixes":[]}`,
-	}}
-	plan := askcontract.PlanResponse{Request: "create an air-gapped 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{RouteIntent: "draft", TargetScope: "workspace", ModeIntent: "apply-only", Topology: "multi-node", NodeCount: 3, RequiredCapabilities: []string{"kubeadm-bootstrap", "kubeadm-join"}}}
-	brief := plan.AuthoringBrief
-	_, files, _, critic, _, retries, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: plan.Request}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, brief, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
-	if err != nil {
-		t.Fatalf("expected judge-driven repair success: %v", err)
-	}
-	if retries != 1 {
-		t.Fatalf("expected one retry, got %d", retries)
-	}
-	if len(files) != 2 || client.calls != 4 {
-		t.Fatalf("unexpected result files=%d calls=%d", len(files), client.calls)
-	}
-	joined := strings.Join(critic.Advisory, "\n")
-	if !strings.Contains(joined, "worker join capability is now present") {
-		t.Fatalf("expected judge advisory to be preserved, got %#v", critic)
-	}
-	if len(client.prompts) < 3 || !strings.Contains(client.prompts[2].Prompt, "semantic judge requested revision") {
-		t.Fatalf("expected retry prompt to include judge revision request, got %#v", client.prompts)
-	}
-}
-
-func TestGenerateWithValidationKeepsFinalJudgeBlockingAsAdvisory(t *testing.T) {
-	client := &stubClient{responses: []string{
-		generationSelectionResponse(t, "draft", askcontract.DraftSelection{Targets: []askcontract.DraftTargetSelection{{
-			Path: "workflows/scenarios/apply.yaml",
-			Builders: []askcontract.DraftBuilderSelection{
-				{ID: "apply.init-kubeadm", Overrides: map[string]any{"outputJoinFile": "/tmp/join.sh"}},
-				{ID: "apply.check-kubernetes-cluster", Overrides: map[string]any{"nodeCount": 3, "readyCount": 1, "controlPlaneReady": 1}},
-			},
-		}}}),
-		`{"summary":"still thin","blocking":["requested worker join behavior is still missing"],"advisory":[],"missingCapabilities":["kubeadm-join"],"suggestedFixes":["Add worker join steps"]}`,
-	}}
-	plan := askcontract.PlanResponse{Request: "create an air-gapped 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{RouteIntent: "draft", TargetScope: "workspace", ModeIntent: "apply-only", Topology: "multi-node", NodeCount: 3, RequiredCapabilities: []string{"kubeadm-bootstrap", "kubeadm-join"}}}
-	_, _, _, critic, _, retries, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: plan.Request}, t.TempDir(), 1, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
-	if err != nil {
-		t.Fatalf("expected final judge blocking to stay advisory, got %v", err)
-	}
-	if retries != 0 {
-		t.Fatalf("expected no retries, got %d", retries)
-	}
-	joined := strings.Join(critic.Advisory, "\n")
-	for _, want := range []string{"requested worker join behavior is still missing", "kubeadm-join"} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("expected %q in final advisory, got %#v", want, critic)
-		}
-	}
-}
-
-func TestGenerateWithValidationSucceedsForSpecificOfflineTwoNodePrompt(t *testing.T) {
-	prompt := "Create an offline RHEL 9 kubeadm workflow for exactly 2 nodes: 1 control-plane and 1 worker. Generate both workflows/prepare.yaml and workflows/scenarios/apply.yaml. In prepare, stage kubeadm kubelet kubectl cri-tools containerd packages and Kubernetes control-plane images using typed steps only. In apply, use vars.role with allowed values control-plane and worker, bootstrap the control-plane with InitKubeadm writing /tmp/deck/join.txt, join the worker with JoinKubeadm using that same file, and run final CheckKubernetesCluster only on the control-plane expecting total 2 nodes and controlPlaneReady 1. Do not use remote downloads during apply. Use workflows/vars.yaml if values repeat, and use workflows/components/ only if needed."
-	client := &stubClient{responses: []string{generationSelectionResponse(t, "specific two-node draft", askcontract.DraftSelection{
-		Targets: []askcontract.DraftTargetSelection{
-			{Path: "workflows/prepare.yaml", Builders: []askcontract.DraftBuilderSelection{{ID: "prepare.download-package"}, {ID: "prepare.download-image"}}},
-			{Path: "workflows/scenarios/apply.yaml", Builders: []askcontract.DraftBuilderSelection{{ID: "apply.install-package"}, {ID: "apply.init-kubeadm", Overrides: map[string]any{"whenRole": "control-plane", "outputJoinFile": "/tmp/deck/join.txt"}}, {ID: "apply.join-kubeadm", Overrides: map[string]any{"whenRole": "worker", "joinFile": "/tmp/deck/join.txt"}}, {ID: "apply.check-kubernetes-cluster", Overrides: map[string]any{"whenRole": "control-plane", "nodeCount": 2, "readyCount": 2, "controlPlaneReady": 1}}}},
-		},
-		Vars: map[string]any{"clusterName": "two-node-offline", "role": "control-plane", "joinFile": "/tmp/deck/join.txt", "podCIDR": "10.244.0.0/16"},
-	})}}
-	plan := askcontract.PlanResponse{
-		Request:       prompt,
-		NeedsPrepare:  true,
-		ArtifactKinds: []string{"package", "image"},
-		AuthoringBrief: askcontract.AuthoringBrief{
-			RouteIntent:          "draft offline two-node kubeadm prepare+apply workflows",
-			TargetScope:          "workspace",
-			ModeIntent:           "prepare+apply",
-			Connectivity:         "offline",
-			CompletenessTarget:   "complete",
-			Topology:             "multi-node",
-			NodeCount:            2,
-			RequiredCapabilities: []string{"prepare-artifacts", "package-staging", "image-staging", "kubeadm-bootstrap", "kubeadm-join", "cluster-verification"},
-		},
-		AuthoringProgram: askcontract.AuthoringProgram{
-			Platform:     askcontract.ProgramPlatform{Family: "rhel", Release: "9", RepoType: "rpm", BackendImage: "rockylinux:9"},
-			Artifacts:    askcontract.ProgramArtifacts{Packages: []string{"kubeadm", "kubelet", "kubectl", "cri-tools", "containerd"}, Images: []string{"registry.k8s.io/kube-apiserver:v1.30.0", "registry.k8s.io/kube-controller-manager:v1.30.0", "registry.k8s.io/kube-scheduler:v1.30.0", "registry.k8s.io/etcd:3.5.12-0", "registry.k8s.io/pause:3.9"}, PackageOutputDir: "packages/rpm/rhel9", ImageOutputDir: "images/control-plane"},
-			Cluster:      askcontract.ProgramCluster{JoinFile: "/tmp/deck/join.txt", PodCIDR: "10.244.0.0/16", RoleSelector: "vars.role", ControlPlaneCount: 1, WorkerCount: 1},
-			Verification: askcontract.ProgramVerification{ExpectedNodeCount: 2, ExpectedReadyCount: 2, ExpectedControlPlaneReady: 1, FinalVerificationRole: "control-plane", Interval: "5s", Timeout: "10m"},
-		},
-		ExecutionModel: askcontract.ExecutionModel{
-			ArtifactContracts:    []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}, {Kind: "image", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}},
-			SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "local-only"}},
-			RoleExecution:        askcontract.RoleExecutionModel{RoleSelector: "vars.role", PerNodeInvocation: true, ControlPlaneFlow: "install -> bootstrap -> verify", WorkerFlow: "install -> join"},
-			Verification:         askcontract.VerificationStrategy{FinalVerificationRole: "control-plane", ExpectedNodeCount: 2, ExpectedControlPlaneReady: 1},
-			ApplyAssumptions:     []string{"apply consumes local artifacts and avoids remote downloads"},
-		},
-	}
-	_, files, _, critic, _, retries, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: prompt}, t.TempDir(), 2, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
-	if err != nil {
-		t.Fatalf("generateWithValidation: %v", err)
-	}
-	if retries != 0 {
-		t.Fatalf("expected first-pass success for specific prompt, got %d retries", retries)
-	}
-	if len(critic.Blocking) != 0 {
-		t.Fatalf("expected no blocking critic issues, got %#v", critic)
-	}
-	if len(files) != 3 {
-		t.Fatalf("expected prepare/apply/vars files, got %#v", files)
-	}
-	byPath := map[string]string{}
-	for _, file := range files {
-		byPath[file.Path] = file.Content
-	}
-	for _, want := range []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml", "workflows/vars.yaml"} {
-		if _, ok := byPath[want]; !ok {
-			t.Fatalf("expected generated file %q, got %#v", want, byPath)
-		}
-	}
-	if !strings.Contains(byPath["workflows/prepare.yaml"], "kind: DownloadPackage") || !strings.Contains(byPath["workflows/prepare.yaml"], "kind: DownloadImage") {
-		t.Fatalf("expected typed prepare staging steps, got %q", byPath["workflows/prepare.yaml"])
-	}
-	if !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "kind: CheckKubernetesCluster") || !strings.Contains(byPath["workflows/scenarios/apply.yaml"], "total: 2") {
-		t.Fatalf("expected explicit final verification contract, got %q", byPath["workflows/scenarios/apply.yaml"])
-	}
-}
-
-func TestSemanticCriticUsesExecutionModelForRoleAndJoinContracts(t *testing.T) {
-	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/join.sh\n"}})
-	plan := askcontract.PlanResponse{
-		Request:        "create 3-node kubeadm workflow",
-		AuthoringBrief: askcontract.AuthoringBrief{RouteIntent: "draft", TargetScope: "workspace", ModeIntent: "prepare+apply", Topology: "multi-node", NodeCount: 3},
-		ExecutionModel: askcontract.ExecutionModel{
-			ArtifactContracts:    []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}},
-			SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "published-for-worker-consumption"}},
-			RoleExecution:        askcontract.RoleExecutionModel{RoleSelector: "vars.role", PerNodeInvocation: true},
-			Verification:         askcontract.VerificationStrategy{ExpectedNodeCount: 3, ExpectedControlPlaneReady: 1},
-		},
-	}
-	critic := semanticCritic(gen, askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{})
-	joinedBlocking := strings.Join(critic.Blocking, "\n")
-	if !strings.Contains(joinedBlocking, "artifact producer required by execution model") {
-		t.Fatalf("expected artifact producer failure to stay blocking, got %#v", critic)
-	}
-	joinedAdvisory := strings.Join(critic.Advisory, "\n")
-	for _, want := range []string{"role-aware per-node invocation via vars.role"} {
-		if !strings.Contains(joinedAdvisory, want) {
-			t.Fatalf("expected %q in execution-model critic output, got %#v", want, critic)
-		}
-	}
-}
-
-func TestSemanticCriticBlocksWorkerOnlyFinalVerificationAndMissingJoinPublish(t *testing.T) {
-	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      distro:\n        family: rhel\n        release: \"9\"\n      repo:\n        type: rpm\n      outputDir: /tmp/packages\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        when: .vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/deck/join.txt\n  - name: join\n    steps:\n      - id: worker-join\n        when: .vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: /tmp/deck/join.txt\n  - name: verify\n    steps:\n      - id: verify-final\n        when: .vars.role == \"worker\"\n        kind: CheckKubernetesCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 3\n            ready: 3\n            controlPlaneReady: 3\n"}})
-	plan := askcontract.PlanResponse{Request: "create 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{RouteIntent: "draft", TargetScope: "workspace", ModeIntent: "prepare+apply", Topology: "multi-node", NodeCount: 3}, ExecutionModel: askcontract.ExecutionModel{ArtifactContracts: []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}}, SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "/tmp/deck/server-root/files/cluster/join.txt", ConsumerPaths: []string{"/tmp/deck/server-root/files/cluster/join.txt"}, AvailabilityModel: "published-for-worker-consumption"}}, RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role", PerNodeInvocation: true}, Verification: askcontract.VerificationStrategy{FinalVerificationRole: "control-plane", ExpectedNodeCount: 3, ExpectedControlPlaneReady: 1}}}
-	critic := semanticCritic(gen, askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{})
-	if len(critic.Blocking) != 0 {
-		t.Fatalf("expected recoverable design issues to stay advisory, got %#v", critic)
-	}
-	joined := strings.Join(critic.Advisory, "\n")
-	for _, want := range []string{"published shared-state availability", "expected control-plane role", "expected nodes=3 controlPlaneReady=1"} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("expected %q in execution-model critic output, got %#v", want, critic)
-		}
-	}
-}
-
-func TestMaybePostProcessGenerationAppliesOperationalRepairOnly(t *testing.T) {
-	client := &stubClient{responses: []string{
-		`{"summary":"final verification should be gated to control-plane and inline structure is acceptable","blocking":["final cluster verification should run only on the control-plane role for this draft"],"advisory":["preserve inline structure for now"],"upgradeCandidates":["preserve-inline"],"reviseFiles":["workflows/scenarios/apply.yaml"],"preserveFiles":["workflows/prepare.yaml","workflows/vars.yaml"],"suggestedFixes":["Gate the final CheckKubernetesCluster step with .vars.role == \"control-plane\""]}`,
-		generationDocumentsResponse(t, "post-processed draft", nil,
-			askcontract.GeneratedFile{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: packages\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: \"9\"\n          repo:\n            type: rpm\n          outputDir: packages/kubernetes\n"},
-			askcontract.GeneratedFile{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        when: .vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/deck/join.txt\n      - id: join\n        when: .vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: /tmp/deck/join.txt\n      - id: verify\n        when: .vars.role == \"control-plane\"\n        kind: CheckKubernetesCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 3\n            ready: 3\n            controlPlaneReady: 1\n"},
-			askcontract.GeneratedFile{Path: "workflows/vars.yaml", Content: "role: control-plane\n"},
-		),
-		`{"summary":"post-processed workflow now has control-plane scoped final verification","blocking":[],"advisory":["inline structure is fine for now"],"missingCapabilities":[],"suggestedFixes":[]}`,
-	}}
-	plan := askcontract.PlanResponse{Request: "create 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", CompletenessTarget: "complete", Topology: "multi-node"}, ExecutionModel: askcontract.ExecutionModel{ArtifactContracts: []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml"}}, SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "local-only"}}, RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role", PerNodeInvocation: true}, Verification: askcontract.VerificationStrategy{ExpectedNodeCount: 3, ExpectedControlPlaneReady: 1}}}
-	brief := plan.AuthoringBrief
-	gen := testMaterialized("draft", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nphases:\n  - name: collect\n    steps:\n      - id: packages\n        kind: DownloadPackage\n        spec:\n          packages: [kubeadm]\n          distro:\n            family: rhel\n            release: \"9\"\n          repo:\n            type: rpm\n          outputDir: packages/kubernetes\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: init\n        when: .vars.role == \"control-plane\"\n        kind: InitKubeadm\n        spec:\n          outputJoinFile: /tmp/deck/join.txt\n      - id: join\n        when: .vars.role == \"worker\"\n        kind: JoinKubeadm\n        spec:\n          joinFile: /tmp/deck/join.txt\n      - id: verify\n        kind: CheckKubernetesCluster\n        spec:\n          interval: 5s\n          nodes:\n            total: 3\n            ready: 3\n            controlPlaneReady: 1\n"}, {Path: "workflows/vars.yaml", Content: "role: control-plane\n"}})
-	judge := askcontract.JudgeResponse{Summary: "usable but final verification should not run on workers", Advisory: []string{"final verification placement should be control-plane only"}}
-	summary, err := maybePostProcessGeneration(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}, t.TempDir(), newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, brief, askretrieve.RetrievalResult{}, gen, gen.Files, "lint ok (1 workflows)", askcontract.CriticResponse{}, judge, askcontract.PlanCriticResponse{Advisory: []string{"shared-state publish path should stay explicit"}})
-	if err != nil {
-		t.Fatalf("maybePostProcessGeneration: %v", err)
-	}
-	if !summary.Applied {
-		t.Fatalf("expected post-processing edit to apply")
-	}
-	if !strings.Contains(strings.Join(summary.Notes, "\n"), "preserve-inline") {
-		t.Fatalf("expected preserve-inline advisory in notes, got %#v", summary.Notes)
-	}
-	if !strings.Contains(summary.Files[1].Content, "when: .vars.role == \"control-plane\"") {
-		t.Fatalf("expected final verification to be gated after post-process, got %q", summary.Files[1].Content)
-	}
-}
-
-func TestMaybePostProcessGenerationSkipsStructuralCleanupOnlyAdvice(t *testing.T) {
-	client := &stubClient{responses: []string{
-		`{"summary":"draft is operationally sound; only optional cleanup remains","blocking":[],"advisory":["extract-vars"],"upgradeCandidates":["extract-vars","preserve-inline"],"reviseFiles":[],"preserveFiles":["workflows/prepare.yaml","workflows/scenarios/apply.yaml","workflows/vars.yaml"],"suggestedFixes":[]}`,
-	}}
-	plan := askcontract.PlanResponse{Request: "create 3-node kubeadm workflow", AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", CompletenessTarget: "complete", Topology: "multi-node"}}
-	gen := testMaterialized("draft", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: collect\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      distro:\n        family: rhel\n        release: \"9\"\n      repo:\n        type: rpm\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: verify\n    when: .vars.role == \"control-plane\"\n    kind: CheckKubernetesCluster\n    spec:\n      interval: 5s\n      nodes:\n        total: 3\n        ready: 3\n        controlPlaneReady: 1\n"}})
-	judge := askcontract.JudgeResponse{Summary: "mostly good", Advisory: []string{"worker join and verification are acceptable"}}
-	summary, err := maybePostProcessGeneration(context.Background(), client, askprovider.Request{Kind: "generate", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}, t.TempDir(), newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{}, gen, gen.Files, "lint ok (1 workflows)", askcontract.CriticResponse{}, judge, askcontract.PlanCriticResponse{})
-	if err != nil {
-		t.Fatalf("maybePostProcessGeneration skip structural: %v", err)
-	}
-	if summary.Applied {
-		t.Fatalf("expected no post-process edit for structural-only advice")
-	}
-	if !strings.Contains(strings.Join(summary.Notes, "\n"), "extract-vars") {
-		t.Fatalf("expected advisory note without cleanup edit, got %#v", summary.Notes)
-	}
-}
-
-func TestShouldAutoPostProcessStillRunsForPrepareApplyOperationalReview(t *testing.T) {
-	plan := askcontract.PlanResponse{AuthoringBrief: askcontract.AuthoringBrief{ModeIntent: "prepare+apply", CompletenessTarget: "complete"}}
-	files := []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps: []\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps: []\n"}}
-	if !shouldAutoPostProcess(plan, plan.AuthoringBrief, askcontract.CriticResponse{}, askcontract.JudgeResponse{}, files) {
-		t.Fatalf("expected prepare+apply drafts to keep the operational post-process review")
-	}
-}
-
-func TestStructuralWorkflowSummaryIncludesWhenConditions(t *testing.T) {
-	doc := askcontract.WorkflowDocument{
-		Steps: []askcontract.WorkflowStep{{ID: "verify", Kind: "CheckKubernetesCluster", When: "vars.role == \"control-plane\"", Spec: map[string]any{"nodes": map[string]any{"total": 1}}}},
-	}
-	summary := structuralWorkflowSummary(doc)
-	for _, want := range []string{"CheckKubernetesCluster", "vars.role == \"control-plane\""} {
-		if !strings.Contains(summary, want) {
-			t.Fatalf("expected %q in summary, got %q", want, summary)
-		}
-	}
-}
-
-func TestEnrichPostProcessFindingsPreservesRenderedFilesWithoutCleanupHints(t *testing.T) {
-	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: fetch\n    kind: DownloadPackage\n    spec:\n      outputDir: /srv/offline/kubernetes\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      source:\n        type: local-repo\n        path: /srv/offline/kubernetes\n"}})
-	findings := enrichPostProcessFindings(askcontract.PostProcessResponse{}, gen.Files)
-	if len(findings.Advisory) != 0 || len(findings.UpgradeCandidates) != 0 {
-		t.Fatalf("expected no structural cleanup hints, got %#v", findings)
-	}
-	for _, path := range []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml"} {
-		if !containsTrimmed(findings.PreserveFiles, path) {
-			t.Fatalf("expected %s to remain preserved, got %#v", path, findings)
-		}
-	}
-}
-
 func TestSummarizeValidationErrorHighlightsWorkflowSkeletonFixes(t *testing.T) {
 	summary := summarizeValidationError("E_SCHEMA_INVALID: (root): version is required; steps.0: id is required; steps.1: id is required")
 	for _, want := range []string{"Schema validation failure", "version: v1alpha1", "id` field"} {
@@ -1037,34 +641,6 @@ func TestAskLoggerDebugAndTrace(t *testing.T) {
 	}
 }
 
-func TestGenerationSystemPromptIncludesAskContextBlocks(t *testing.T) {
-	req := askpolicy.ScenarioRequirements{Connectivity: "offline", RequiredFiles: []string{"workflows/scenarios/apply.yaml"}}
-	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askcontext.CurrentBundle())
-	retrieval := askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "facts-1", Source: "local-facts", Label: "source-of-truth-stepmeta", Topic: "local-facts:stepmeta", Content: "Local facts:\n- path: internal/stepmeta/registry.go", Score: 91}, {ID: "example-1", Source: "example", Label: "test/workflows/scenarios/kubeadm.yaml", Content: "Reference example:\n- path: test/workflows/scenarios/kubeadm.yaml\nversion: v1alpha1\nsteps:\n  - id: init\n    kind: InitKubeadm\n", Score: 90}, {ID: "workspace-apply", Source: "workspace", Label: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: join\n    kind: JoinKubeadm\n", Score: 80}, {ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Topic: "mcp:web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}", Score: 75, Evidence: &askretrieve.EvidenceSummary{Title: "Installing kubeadm", Domain: "kubernetes.io", DomainCategory: "official-docs", Freshness: "external-docs", Official: true, TrustLevel: "high"}}, {ID: "typed-steps-draft", Source: "askcontext", Topic: askcontext.TopicTypedSteps, Label: "typed-steps", Content: "typed guidance", Score: 70}}}
-	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "workspace"}, "create an air-gapped 3-node kubeadm workflow", retrieval, req, askcontract.PlanResponse{}, askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Connectivity: "offline", CompletenessTarget: "starter", Topology: "multi-node", RequiredCapabilities: []string{"kubeadm-join", "cluster-verification"}}, askcontract.ExecutionModel{ArtifactContracts: []askcontract.ArtifactContract{{Kind: "package", ProducerPath: "workflows/prepare.yaml", ConsumerPath: "workflows/scenarios/apply.yaml", Description: "offline package flow"}}, SharedStateContracts: []askcontract.SharedStateContract{{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "published-for-worker-consumption"}}, RoleExecution: askcontract.RoleExecutionModel{RoleSelector: "vars.role", ControlPlaneFlow: "bootstrap", WorkerFlow: "join", PerNodeInvocation: true}, Verification: askcontract.VerificationStrategy{FinalVerificationRole: "control-plane", ExpectedNodeCount: 3, ExpectedControlPlaneReady: 1}, ApplyAssumptions: []string{"apply consumes local artifacts"}}, scaffold)
-	for _, want := range []string{"Workflow source-of-truth:", "Authoring policy from deck metadata:", "Validated scaffold:", "Return structured workflow documents, not final YAML text.", "JSON shape: {\"summary\":string,\"review\":[]string,\"selection\":", "Evidence boundaries:", "Local facts are authoritative for deck workflow validity", "External evidence is only for upstream product behavior", "Do not let external docs override local deck workflow truth", "external source: Installing kubeadm [domain=kubernetes.io, category=official-docs, freshness=external-docs, official=true, trust=high]"} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
-		}
-	}
-	if !strings.Contains(prompt, "Primary repository context follows.") || !strings.Contains(prompt, "Reference example:") || !strings.Contains(prompt, "JoinKubeadm") {
-		t.Fatalf("expected repository context to appear in generation prompt, got %q", prompt)
-	}
-	if strings.Index(prompt, "Primary repository context follows.") > strings.Index(prompt, "Workflow source-of-truth:") {
-		t.Fatalf("expected repository context before abstract policy blocks, got %q", prompt)
-	}
-	for _, want := range []string{"Normalized authoring brief:", "mode intent: prepare+apply", "connectivity: offline", "completeness target: starter", "Normalized execution model:", "artifact package: workflows/prepare.yaml -> workflows/scenarios/apply.yaml", "shared state join-file:", "role selector: vars.role", "verification expected nodes: 3", "verification final role: control-plane", "Keep document structure schema-focused:"} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
-		}
-	}
-	for _, avoid := range []string{"Workspace topology:", "Prepare/apply guidance:", "Components and imports:", "Variables guidance:", "Relevant CLI usage:", "typed guidance", "Candidate typed steps you may choose from:", "Step composition guidance:"} {
-		if strings.Contains(prompt, avoid) {
-			t.Fatalf("expected generation prompt to avoid duplicated context block %q, got %q", avoid, prompt)
-		}
-	}
-}
-
 func TestAskRequestTimeoutScalesGenerationByIterationsAndPromptSize(t *testing.T) {
 	small := askRequestTimeout("generate", 1, "sys", "user")
 	large := askRequestTimeout("generate", 5, strings.Repeat("s", 12000), strings.Repeat("u", 12000))
@@ -1076,274 +652,9 @@ func TestAskRequestTimeoutScalesGenerationByIterationsAndPromptSize(t *testing.T
 	}
 }
 
-func TestGenerationRetrievalPromptBlockSkipsProjectContextAndCapsExamples(t *testing.T) {
-	retrieval := askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{
-		{ID: "example-1", Source: "example", Label: "a", Content: "Reference example:\n- path: a\n", Score: 100},
-		{ID: "example-2", Source: "example", Label: "b", Content: "Reference example:\n- path: b\n", Score: 99},
-		{ID: "example-3", Source: "example", Label: "c", Content: "Reference example:\n- path: c\n", Score: 98},
-		{ID: "project", Source: "project", Label: "project-context", Content: "Project context:\nvery long", Score: 97},
-	}}
-	block := generationRetrievalPromptBlock(retrieval)
-	if strings.Contains(block, "Project context:") {
-		t.Fatalf("expected project context to be skipped, got %q", block)
-	}
-	if strings.Count(block, "Reference example:") != 2 {
-		t.Fatalf("expected exactly two examples in generation retrieval block, got %q", block)
-	}
-}
-
-func TestGenerationRetrievalPromptBlockSeparatesLocalFactsAndExternalEvidence(t *testing.T) {
-	block := generationRetrievalPromptBlock(askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "facts-1", Source: "local-facts", Label: "source-of-truth-stepmeta", Topic: "local-facts:stepmeta", Content: "Local facts:\n- path: internal/stepmeta/registry.go", Score: 80}, {ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Topic: "mcp:web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}", Score: 70}, {ID: "workspace-1", Source: "workspace", Label: "workflows/scenarios/apply.yaml", Topic: "workspace:workflows/scenarios/apply.yaml", Content: "version: v1alpha1", Score: 60}}})
-	for _, want := range []string{"Local facts:", "External evidence:", "Retrieved context:"} {
-		if !strings.Contains(block, want) {
-			t.Fatalf("expected %q in retrieval prompt block, got %q", want, block)
-		}
-	}
-	if strings.Index(block, "Local facts:") > strings.Index(block, "External evidence:") {
-		t.Fatalf("expected local facts before external evidence, got %q", block)
-	}
-}
-
-func TestGenerationSystemPromptUsesStructuredDocumentResponseShape(t *testing.T) {
-	req := askpolicy.ScenarioRequirements{Connectivity: "unspecified", RequiredFiles: []string{"workflows/prepare.yaml"}, NeedsPrepare: true}
-	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}}, askcontract.PlanResponse{}, askcontext.CurrentBundle())
-	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}, "create a prepare workflow using DownloadFile and default output location", askretrieve.RetrievalResult{}, req, askcontract.PlanResponse{}, askcontract.AuthoringBrief{ModeIntent: "prepare-only", CompletenessTarget: "complete"}, askcontract.ExecutionModel{}, scaffold)
-	for _, want := range []string{"JSON shape: {\"summary\":string,\"review\":[]string,\"selection\":", "Return structured workflow documents, not final YAML text.", "Keep document structure schema-focused:"} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
-		}
-	}
-}
-
-func TestGenerationSystemPromptOmitsTypedStepCandidateBlocks(t *testing.T) {
-	req := askpolicy.ScenarioRequirements{Connectivity: "offline", RequiredFiles: []string{"workflows/scenarios/apply.yaml"}}
-	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askcontext.CurrentBundle())
-	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "workspace"}, "create an air-gapped rhel9 single-node kubeadm workflow", askretrieve.RetrievalResult{}, req, askcontract.PlanResponse{}, askcontract.AuthoringBrief{ModeIntent: "apply-only", Connectivity: "offline", CompletenessTarget: "starter", Topology: "single-node", RequiredCapabilities: []string{"kubeadm-bootstrap", "cluster-verification"}}, askcontract.ExecutionModel{}, scaffold)
-	for _, avoid := range []string{"Candidate typed steps you may choose from:", "These are hints, not required selections."} {
-		if strings.Contains(prompt, avoid) {
-			t.Fatalf("expected %q to be omitted from generation prompt, got %q", avoid, prompt)
-		}
-	}
-	for _, want := range []string{"Relevant typed-step schemas:", "spec.checks [required]:", "constrained: spec.runtime"} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
-		}
-	}
-}
-
-func TestGenerationSystemPromptCarriesWorkflowStepIDUniquenessRule(t *testing.T) {
-	req := askpolicy.ScenarioRequirements{Connectivity: "offline", RequiredFiles: []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml"}, NeedsPrepare: true}
-	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askcontext.CurrentBundle())
-	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "workspace"}, "create a 3-node workflow", askretrieve.RetrievalResult{}, req, askcontract.PlanResponse{}, askcontract.AuthoringBrief{ModeIntent: "prepare+apply", CompletenessTarget: "complete"}, askcontract.ExecutionModel{}, scaffold)
-	for _, want := range []string{"Every step id must be unique across top-level steps and steps nested under phases.", "Rename duplicate step ids with role- or phase-specific prefixes instead of reusing the same id."} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
-		}
-	}
-}
-
-func TestGenerationSystemPromptPrefersInlineFirstForComplexWorkspaceDrafts(t *testing.T) {
-	req := askpolicy.ScenarioRequirements{Connectivity: "offline", RequiredFiles: []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml"}, NeedsPrepare: true}
-	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askcontext.CurrentBundle())
-	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "workspace"}, "create an air-gapped 3-node kubeadm workflow", askretrieve.RetrievalResult{}, req, askcontract.PlanResponse{}, askcontract.AuthoringBrief{ModeIntent: "prepare+apply", Connectivity: "offline", CompletenessTarget: "complete", Topology: "multi-node"}, askcontract.ExecutionModel{}, scaffold)
-	for _, want := range []string{"prefer a first schema-valid inline result", "extract `workflows/components/` only when reuse is explicit"} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
-		}
-	}
-}
-
-func TestGenerationSystemPromptPrefersSelectionForDrafts(t *testing.T) {
-	req := askpolicy.ScenarioRequirements{Connectivity: "offline", RequiredFiles: []string{"workflows/scenarios/apply.yaml"}}
-	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askcontext.CurrentBundle())
-	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "workspace"}, "create a simple apply workflow", askretrieve.RetrievalResult{}, req, askcontract.PlanResponse{}, askcontract.AuthoringBrief{ModeIntent: "apply-only", CompletenessTarget: "starter"}, askcontract.ExecutionModel{}, scaffold)
-	for _, want := range []string{"selection.targets[].builders", "Do not author arbitrary typed step specs on the primary draft path", "selection.targets"} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("expected %q in draft selection prompt, got %q", want, prompt)
-		}
-	}
-}
-
-func TestGenerationSystemPromptUsesRefineDocumentActions(t *testing.T) {
-	req := askpolicy.ScenarioRequirements{Connectivity: "offline", AcceptanceLevel: "refine", RequiredFiles: []string{"workflows/scenarios/apply.yaml"}}
-	workspace := askretrieve.WorkspaceSummary{HasWorkflowTree: true, Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: run\n    kind: Command\n    spec:\n      command: [true]\n"}}}
-	scaffold := askscaffold.Build(req, workspace, askintent.Decision{Route: askintent.RouteRefine}, askcontract.PlanResponse{}, askcontext.CurrentBundle())
-	plan := askcontract.PlanResponse{AuthoringBrief: askcontract.AuthoringBrief{TargetPaths: []string{"workflows/scenarios/apply.yaml"}, TargetScope: "scenario"}}
-	systemPrompt := generationSystemPrompt(askintent.RouteRefine, askintent.Target{Kind: "workspace"}, "refine the apply workflow to add a timeout", askretrieve.RetrievalResult{}, req, plan, askcontract.AuthoringBrief{ModeIntent: "apply-only", CompletenessTarget: "refine", TargetPaths: []string{"workflows/scenarios/apply.yaml"}, TargetScope: "scenario"}, askcontract.ExecutionModel{}, scaffold)
-	userPrompt := generationUserPrompt(workspace, askstate.Context{}, "refine the apply workflow to add a timeout", "", askintent.RouteRefine, plan)
-	for _, want := range []string{"actions preserve|delete|edit", "Return structured workflow documents, not final YAML text.", "Refine transform contract:", "Approved target paths: workflows/scenarios/apply.yaml"} {
-		if !strings.Contains(systemPrompt, want) {
-			t.Fatalf("expected %q in refine system prompt, got %q", want, systemPrompt)
-		}
-	}
-	for _, want := range []string{"Current parsed workspace documents:", "workflows/scenarios/apply.yaml [workflow]", "Clarified refine target paths:"} {
-		if !strings.Contains(userPrompt, want) {
-			t.Fatalf("expected %q in refine user prompt, got %q", want, userPrompt)
-		}
-	}
-}
-
-func TestGenerationSystemPromptAddsVarsTransformHintsForRefine(t *testing.T) {
-	req := askpolicy.ScenarioRequirements{AcceptanceLevel: "refine", RequiredFiles: []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/vars.yaml"}}
-	workspace := askretrieve.WorkspaceSummary{HasWorkflowTree: true}
-	plan := askcontract.PlanResponse{
-		VarsRecommendation: []string{"Use workflows/vars.yaml for repeated values."},
-		AuthoringBrief:     askcontract.AuthoringBrief{TargetScope: "workspace", TargetPaths: []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/vars.yaml"}, ModeIntent: "apply-only", CompletenessTarget: "refine"},
-	}
-	scaffold := askscaffold.Build(req, workspace, askintent.Decision{Route: askintent.RouteRefine}, plan, askcontext.CurrentBundle())
-	prompt := generationSystemPrompt(askintent.RouteRefine, askintent.Target{Kind: "scenario", Path: "workflows/scenarios/control-plane-bootstrap.yaml"}, "refactor workflows/scenarios/control-plane-bootstrap.yaml to use workflows/vars.yaml for repeated values", askretrieve.RetrievalResult{}, req, plan, plan.AuthoringBrief, askcontract.ExecutionModel{}, scaffold)
-	for _, want := range []string{"Refine transform contract:", "Approved target paths: workflows/scenarios/control-plane-bootstrap.yaml, workflows/vars.yaml", "update the scenario file and vars file together as one transform", "For `extract-var`, put the variable key in `varName`.", "Only extract values into workflows/vars.yaml when they are explicitly recommended or genuinely repeated.", "vars advisory:"} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("expected %q in refine transform prompt, got %q", want, prompt)
-		}
-	}
-}
-
-func TestParseGenerationAllowsRefineTransforms(t *testing.T) {
-	resp, err := askcontract.ParseGeneration(`{"summary":"vars transform","review":[],"documents":[{"path":"workflows/scenarios/apply.yaml","action":"edit","transforms":[{"type":"extract-var","rawPath":"steps[0].spec.podNetworkCIDR","varName":"podCIDR","varsPath":"workflows/vars.yaml","value":"10.244.0.0/16"}]}]}`)
-	if err != nil {
-		t.Fatalf("parse generation: %v", err)
-	}
-	if len(resp.Documents) != 1 || len(resp.Documents[0].Transforms) != 1 {
-		t.Fatalf("expected parsed transform, got %#v", resp.Documents)
-	}
-	if resp.Documents[0].Transforms[0].Type != "extract-var" {
-		t.Fatalf("expected normalized transform type, got %#v", resp.Documents[0].Transforms[0])
-	}
-}
-
-func TestParseGenerationNormalizesFieldTransforms(t *testing.T) {
-	resp, err := askcontract.ParseGeneration(`{"summary":"field transforms","review":[],"documents":[{"path":"workflows/scenarios/apply.yaml","action":"edit","transforms":[{"type":"update-field","rawPath":"steps[0].timeout","value":"10m"},{"type":"remove-field","rawPath":"steps[0].spec.ignorePreflightErrors"}]}]}`)
-	if err != nil {
-		t.Fatalf("parse generation: %v", err)
-	}
-	if len(resp.Documents) != 1 || len(resp.Documents[0].Transforms) != 2 {
-		t.Fatalf("expected parsed transforms, got %#v", resp.Documents)
-	}
-	if resp.Documents[0].Transforms[0].Type != "set-field" || resp.Documents[0].Transforms[1].Type != "delete-field" {
-		t.Fatalf("expected normalized field transforms, got %#v", resp.Documents[0].Transforms)
-	}
-}
-
-func TestParseGenerationNormalizesComponentTransform(t *testing.T) {
-	resp, err := askcontract.ParseGeneration(`{"summary":"component transform","review":[],"documents":[{"path":"workflows/scenarios/apply.yaml","action":"edit","transforms":[{"type":"extract_component","rawPath":"phases.bootstrap","path":"workflows/components/bootstrap.yaml"}]}]}`)
-	if err != nil {
-		t.Fatalf("parse generation: %v", err)
-	}
-	if len(resp.Documents) != 1 || len(resp.Documents[0].Transforms) != 1 {
-		t.Fatalf("expected parsed component transform, got %#v", resp.Documents)
-	}
-	if resp.Documents[0].Transforms[0].Type != "extract-component" {
-		t.Fatalf("expected normalized component transform, got %#v", resp.Documents[0].Transforms[0])
-	}
-}
-
-func TestParseGenerationCompilesDraftSelection(t *testing.T) {
-	resp, err := askcontract.ParseGeneration(`{"summary":"selection draft","review":[],"selection":{"patterns":["apply-only"],"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","steps":[{"id":"run","kind":"Command","spec":{"command":["true"]}}]},{"path":"workflows/vars.yaml","kind":"vars","vars":{"role":"control-plane"}}]}}`)
-	if err != nil {
-		t.Fatalf("parse generation: %v", err)
-	}
-	if len(resp.Documents) != 2 {
-		t.Fatalf("expected compiled documents from selection, got %#v", resp.Documents)
-	}
-	if resp.Documents[0].Workflow == nil || resp.Documents[1].Vars == nil {
-		t.Fatalf("expected compiled workflow and vars docs, got %#v", resp.Documents)
-	}
-}
-
-func TestParseGenerationKeepsBuilderSelectionsDeferred(t *testing.T) {
-	resp, err := askcontract.ParseGeneration(`{"summary":"builder draft","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.init-kubeadm","overrides":{"joinFile":"/tmp/deck/join.txt"}}]}]}}`)
-	if err != nil {
-		t.Fatalf("parse generation builder selection: %v", err)
-	}
-	if len(resp.Documents) != 0 || resp.Selection == nil || len(resp.Selection.Targets) != 1 || len(resp.Selection.Targets[0].Builders) != 1 {
-		t.Fatalf("expected builder selection to remain deferred for materialization, got %#v", resp)
-	}
-}
-
-func TestGenerateWithValidationRejectsLegacyDraftDocumentsByDefault(t *testing.T) {
-	client := &stubClient{responses: []string{`{"summary":"legacy draft","review":[],"documents":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","workflow":{"version":"v1alpha1","steps":[{"id":"run","kind":"Command","spec":{"command":["true"]}}]}}]}`}}
-	_, _, _, _, _, _, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate-fast", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: "create workflow"}, t.TempDir(), 1, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
-	if err == nil || !strings.Contains(err.Error(), "builder selection") {
-		t.Fatalf("expected legacy draft documents to be rejected, got %v", err)
-	}
-}
-
-func TestGenerateWithValidationRejectsLegacyRefineReplaceByDefault(t *testing.T) {
-	client := &stubClient{responses: []string{`{"summary":"legacy refine","review":[],"documents":[{"path":"workflows/scenarios/apply.yaml","action":"replace","workflow":{"version":"v1alpha1","steps":[{"id":"run","kind":"Command","spec":{"command":["true"]}}]}}]}`}}
-	_, _, _, _, _, _, err := generateWithValidation(context.Background(), client, askprovider.Request{Kind: "generate-fast", Provider: "openai", Model: "gpt-5.4", APIKey: "test-key", Prompt: "refine workflow"}, t.TempDir(), 1, newAskLogger(io.Discard, "trace"), askintent.Decision{Route: askintent.RouteRefine}, askcontract.PlanResponse{}, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{}, askcontract.PlanCriticResponse{})
-	if err == nil || !strings.Contains(err.Error(), "refine primary path") {
-		t.Fatalf("expected legacy refine replace output to be rejected, got %v", err)
-	}
-}
-
-func TestValidatePrimaryAuthoringContractRejectsDraftDocumentsOnRetry(t *testing.T) {
-	err := validatePrimaryAuthoringContract(askintent.RouteDraft, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Kind: "workflow", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1"}}}})
-	if err == nil || !strings.Contains(err.Error(), "builder selection") {
-		t.Fatalf("expected draft primary contract to reject direct documents on retry, got %v", err)
-	}
-}
-
-func TestValidatePrimaryAuthoringContractRejectsLegacyRefineReplaceOnRetry(t *testing.T) {
-	err := validatePrimaryAuthoringContract(askintent.RouteRefine, askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "replace", Workflow: &askcontract.WorkflowDocument{Version: "v1alpha1"}}}})
-	if err == nil || !strings.Contains(err.Error(), "use edit, preserve, or delete only") {
-		t.Fatalf("expected refine primary contract to reject replace actions on retry, got %v", err)
-	}
-}
-
-func TestDraftSelectionRetryPromptAvoidsDocumentRepairMode(t *testing.T) {
-	prompt := draftSelectionRetryPrompt("create offline workflow", "schema invalid", []askdiagnostic.Diagnostic{{Message: "spec.runtime must be one of auto, ctr, docker, podman"}})
-	for _, want := range []string{"Return draft selection only", "Do not return documents", "spec.runtime must be one of"} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("expected %q in draft retry prompt, got %q", want, prompt)
-		}
-	}
-}
-
-func TestValidatePrimaryRefineContractAllowsRawVarsCompanionTransform(t *testing.T) {
-	err := validatePrimaryRefineContract(askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "set-field", Candidate: "set-field|workflows/scenarios/apply.yaml|steps[0].spec.outputJoinFile", Value: "{{ .vars.joinFilePath }}"}}}, {Path: "workflows/vars.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "set-field", Path: "vars.joinFilePath", Value: "/tmp/deck/join.txt"}}}}})
-	if err != nil {
-		t.Fatalf("expected raw vars companion transform to be allowed, got %v", err)
-	}
-}
-
-func TestValidatePrimaryRefineContractAllowsRawScenarioTransform(t *testing.T) {
-	err := validatePrimaryRefineContract(askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "set-field", RawPath: "steps[0].timeout", Value: "10m"}}}}})
-	if err != nil {
-		t.Fatalf("expected raw scenario transform to be allowed, got %v", err)
-	}
-}
-
-func TestValidatePrimaryRefineContractRejectsRawTransformWithoutTargetPath(t *testing.T) {
-	err := validatePrimaryRefineContract(askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "set-field", Value: "10m"}}}}})
-	if err == nil || !strings.Contains(err.Error(), "explicit target path") {
-		t.Fatalf("expected raw transform without target path to be rejected, got %v", err)
-	}
-}
-
-func TestValidatePrimaryRefineContractRejectsExtractComponentWithoutSourceRawPath(t *testing.T) {
-	err := validatePrimaryRefineContract(askcontract.GenerationResponse{Documents: []askcontract.GeneratedDocument{{Path: "workflows/scenarios/apply.yaml", Action: "edit", Transforms: []askcontract.RefineTransformAction{{Type: "extract-component", Path: "workflows/components/bootstrap.yaml"}}}}})
-	if err == nil || !strings.Contains(err.Error(), "explicit target path") {
-		t.Fatalf("expected extract-component without raw path to be rejected, got %v", err)
-	}
-}
-
-func TestGenerationSystemPromptAddsComponentTransformHintsForRefine(t *testing.T) {
-	req := askpolicy.ScenarioRequirements{AcceptanceLevel: "refine", RequiredFiles: []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/components/bootstrap.yaml"}}
-	workspace := askretrieve.WorkspaceSummary{HasWorkflowTree: true}
-	plan := askcontract.PlanResponse{ComponentRecommendation: []string{"Consider workflows/components/ for reusable repeated logic across phases or scenarios."}, AuthoringBrief: askcontract.AuthoringBrief{TargetScope: "workspace", TargetPaths: []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/components/bootstrap.yaml"}, ModeIntent: "apply-only", CompletenessTarget: "refine"}}
-	scaffold := askscaffold.Build(req, workspace, askintent.Decision{Route: askintent.RouteRefine}, plan, askcontext.CurrentBundle())
-	prompt := generationSystemPrompt(askintent.RouteRefine, askintent.Target{Kind: "scenario", Path: "workflows/scenarios/control-plane-bootstrap.yaml"}, "extract reusable bootstrap logic into workflows/components/", askretrieve.RetrievalResult{}, req, plan, plan.AuthoringBrief, askcontract.ExecutionModel{}, scaffold)
-	for _, want := range []string{"extract-component", "component advisory:", "moving inline phase steps into workflows/components/ while preserving the scenario phase layout"} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("expected %q in component transform prompt, got %q", want, prompt)
-		}
-	}
-}
-
 func TestExplainAndReviewSystemPromptsIncludeParsedWorkflowSummaries(t *testing.T) {
 	retrieval := askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{Label: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nphases:\n  - name: bootstrap\n    steps:\n      - id: run\n        kind: Command\n        spec:\n          command: [true]\n"}}}
-	for _, prompt := range []string{explainSystemPrompt(askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}, retrieval), reviewSystemPrompt(askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}, retrieval, askretrieve.WorkspaceSummary{})} {
+	for _, prompt := range []string{buildInfoSystemPrompt(askintent.RouteExplain, askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}, retrieval, askretrieve.WorkspaceSummary{}), buildInfoSystemPrompt(askintent.RouteReview, askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}, retrieval, askretrieve.WorkspaceSummary{})} {
 		for _, want := range []string{"Parsed workflow summaries:", "workflows/scenarios/apply.yaml [workflow] phases=1 top-level-steps=0"} {
 			if !strings.Contains(prompt, want) {
 				t.Fatalf("expected %q in info prompt, got %q", want, prompt)
@@ -1354,8 +665,8 @@ func TestExplainAndReviewSystemPromptsIncludeParsedWorkflowSummaries(t *testing.
 
 func TestExplainSystemPromptUsesCodePathModeForRepoBehavior(t *testing.T) {
 	retrieval := askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "local-facts-stepmeta", Source: "local-facts", Label: "source-of-truth-stepmeta", Content: "Local facts:\n- path: internal/stepmeta/registry.go"}, {ID: "local-facts-askdraft", Source: "local-facts", Label: "askdraft-compiler", Content: "Local facts:\n- file: internal/askdraft/draft.go\n- function: CompileWithProgram"}, {ID: "workspace-apply", Source: "workspace", Label: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps: []\n"}}}
-	prompt := explainSystemPrompt(askintent.Target{Kind: "workspace"}, retrieval)
-	for _, want := range []string{"explaining how this repository assembles workflow behavior", "internal/stepmeta", "internal/stepspec", "internal/askdraft", "registry/metadata -> builder selection -> binding resolution -> workflow document compilation"} {
+	prompt := buildInfoSystemPrompt(askintent.RouteExplain, askintent.Target{Kind: "workspace"}, retrieval, askretrieve.WorkspaceSummary{})
+	for _, want := range []string{"explaining how this repository assembles workflow behavior", "internal/stepmeta", "internal/stepspec", "registry/metadata -> builder selection -> binding resolution -> workflow document compilation"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in repo-behavior explain prompt, got %q", want, prompt)
 		}
@@ -1367,81 +678,11 @@ func TestExplainSystemPromptUsesCodePathModeForRepoBehavior(t *testing.T) {
 
 func TestReviewSystemPromptIncludesStructuredValidationIssues(t *testing.T) {
 	workspace := askretrieve.WorkspaceSummary{Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      sourceDir: /tmp/packages\n"}}}
-	prompt := reviewSystemPrompt(askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}, askretrieve.RetrievalResult{}, workspace)
+	prompt := buildInfoSystemPrompt(askintent.RouteReview, askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}, askretrieve.RetrievalResult{}, workspace)
 	for _, want := range []string{"Structured validation issues:", "sourceDir", "Additional property sourceDir is not allowed"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in review prompt, got %q", want, prompt)
 		}
-	}
-}
-
-func TestPromptAndDocsShareSchemaRuleSummaryForDownloadFile(t *testing.T) {
-	page := testSchemaDocGroupPageInput(t, "artifact-staging")
-	rendered := string(schemadoc.RenderGroupPage(page))
-	req := askpolicy.ScenarioRequirements{Connectivity: "unspecified", RequiredFiles: []string{"workflows/prepare.yaml"}, NeedsPrepare: true}
-	scaffold := askscaffold.Build(req, askretrieve.WorkspaceSummary{}, askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}}, askcontract.PlanResponse{}, askcontext.CurrentBundle())
-	prompt := generationSystemPrompt(askintent.RouteDraft, askintent.Target{Kind: "scenario", Path: "workflows/prepare.yaml"}, "create a prepare workflow using DownloadFile", askretrieve.RetrievalResult{}, req, askcontract.PlanResponse{}, askcontract.AuthoringBrief{ModeIntent: "prepare-only", CompletenessTarget: "complete"}, askcontract.ExecutionModel{}, scaffold)
-	rule := "At least one of `spec.source` or `spec.items` must be set."
-	if !strings.Contains(rendered, rule) {
-		t.Fatalf("expected docs to include %q, got %q", rule, rendered)
-	}
-	if !strings.Contains(prompt, rule) {
-		t.Fatalf("expected prompt to include schema-derived %q, got %q", rule, prompt)
-	}
-}
-
-func testSchemaDocGroupPageInput(t *testing.T, group string) schemadoc.PageInput {
-	t.Helper()
-	meta := schemadoc.MustGroupMeta(group)
-	defs, err := workflowcontract.StepDefinitions()
-	if err != nil {
-		t.Fatalf("StepDefinitions: %v", err)
-	}
-	page := schemadoc.PageInput{Group: group, PageSlug: meta.Key, Title: meta.Title, Summary: meta.Summary, Description: meta.Summary, WhenToUse: meta.WhenToUse, TypicalFlows: meta.TypicalFlows, SeeAlso: meta.SeeAlso}
-	for _, def := range defs {
-		if def.Group != group || def.Visibility != "public" {
-			continue
-		}
-		raw, err := schemas.ToolSchema(def.SchemaFile)
-		if err != nil {
-			t.Fatalf("ToolSchema(%q): %v", def.SchemaFile, err)
-		}
-		var schema map[string]any
-		if err := json.Unmarshal(raw, &schema); err != nil {
-			t.Fatalf("unmarshal tool schema %q: %v", def.SchemaFile, err)
-		}
-		properties, _ := schema["properties"].(map[string]any)
-		spec, _ := properties["spec"].(map[string]any)
-		page.Variants = append(page.Variants, schemadoc.VariantInput{
-			Kind:        def.Kind,
-			Title:       def.FamilyTitle,
-			Description: def.Summary,
-			Schema:      schema,
-			Meta:        schemadoc.ToolMetaForDefinition(def),
-			Spec:        spec,
-			Outputs:     append([]string(nil), def.Outputs...),
-			GroupOrder:  def.GroupOrder,
-			DocsOrder:   def.DocsOrder,
-		})
-	}
-	if len(page.Variants) == 0 {
-		t.Fatalf("missing test page for group %s", group)
-	}
-	return page
-}
-
-func TestAppendPlanAdvisoryPromptCarriesRecoverableReviewIntoGeneration(t *testing.T) {
-	base := generationUserPrompt(askretrieve.WorkspaceSummary{}, askstate.Context{}, "create a 3-node kubeadm workflow", "", askintent.RouteDraft, askcontract.PlanResponse{})
-	plan := askcontract.PlanResponse{Blockers: []string{"join publication path is still underspecified"}, OpenQuestions: []string{"artifact checksum naming can be refined later"}}
-	critic := askcontract.PlanCriticResponse{Advisory: []string{"final verification should stay on control-plane"}, MissingContracts: []string{"role cardinality contract"}, SuggestedFixes: []string{"publish join state explicitly before worker JoinKubeadm"}}
-	prompt := appendPlanAdvisoryPrompt(base, plan, critic)
-	for _, want := range []string{"Plan review carry-forward:", "generate the best viable draft", "artifact checksum naming can be refined later", "recoverable missing contract: role cardinality contract", "plan suggested fix: publish join state explicitly before worker JoinKubeadm"} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("expected %q in generation prompt, got %q", want, prompt)
-		}
-	}
-	if strings.Contains(prompt, "join publication path is still underspecified") {
-		t.Fatalf("expected fatal blockers to stay out of generation carry-forward, got %q", prompt)
 	}
 }
 
@@ -1510,7 +751,7 @@ func TestLoadRequestTextPrefersPlanJSON(t *testing.T) {
 	if err := os.WriteFile(mdPath, []byte("freeform markdown"), 0o600); err != nil {
 		t.Fatalf("write md: %v", err)
 	}
-	json := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	json := `{"version":1,"request":"create a 3-node offline kubeadm workflow with prepare and apply phases","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
 	if err := os.WriteFile(jsonPath, []byte(json), 0o600); err != nil {
 		t.Fatalf("write json: %v", err)
 	}
@@ -1601,6 +842,100 @@ func TestApplyPlanAnswersNormalizesClarificationState(t *testing.T) {
 	}
 }
 
+func TestApplyPlanAnswersPreservesNonCodeOwnedClarificationIDs(t *testing.T) {
+	root := t.TempDir()
+	plan := askcontract.PlanResponse{
+		Version:       1,
+		Request:       "create 3-node kubeadm workflow",
+		Intent:        "draft",
+		Complexity:    "complex",
+		TargetOutcome: "generate files",
+		Files: []askcontract.PlanFile{
+			{Path: "workflows/prepare.yaml", Kind: "workflow", Action: "create", Purpose: "prepare"},
+			{Path: "workflows/scenarios/apply.yaml", Kind: "scenario", Action: "create", Purpose: "apply"},
+		},
+		Clarifications: []askcontract.PlanClarification{
+			{ID: "artifact-publish-model", Question: "How should prepared offline artifacts be made available during apply?", Kind: "choice", Options: []string{"local-http-server", "portable-bundle"}, RecommendedDefault: "local-http-server"},
+			{ID: "topology.roleModel", Question: "pick role model", Kind: "enum", Options: []string{"1cp-2workers", "3cp-ha"}, BlocksGeneration: true},
+			{ID: "kubernetes-version", Question: "Which Kubernetes version should be installed?", Kind: "string", RecommendedDefault: "v1.30.0"},
+		},
+	}
+
+	updated, err := applyPlanAnswers(plan, []string{"topology.roleModel=1cp-2workers"})
+	if err != nil {
+		t.Fatalf("apply plan answers: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, item := range updated.Clarifications {
+		if item.ID == "" {
+			t.Fatalf("expected clarification ids to be preserved, got %#v", updated.Clarifications)
+		}
+		ids[item.ID] = true
+	}
+	for _, want := range []string{"artifact-publish-model", "topology.roleModel", "kubernetes-version"} {
+		if !ids[want] {
+			t.Fatalf("expected clarification %q after normalization, got %#v", want, updated.Clarifications)
+		}
+	}
+	planMD := renderPlanMarkdown(updated, ".deck/plan/latest.md")
+	if _, _, err := savePlanArtifact(root, Options{PlanDir: ".deck/plan"}, updated, planMD); err != nil {
+		t.Fatalf("save plan artifact: %v", err)
+	}
+	loaded, _, err := loadPlanArtifact(root, ".deck/plan/latest.json")
+	if err != nil {
+		t.Fatalf("load plan artifact: %v", err)
+	}
+	loadedIDs := map[string]bool{}
+	for _, item := range loaded.Clarifications {
+		loadedIDs[item.ID] = true
+	}
+	for _, want := range []string{"artifact-publish-model", "topology.roleModel", "kubernetes-version"} {
+		if !loadedIDs[want] {
+			t.Fatalf("expected saved clarification %q, got %#v", want, loaded.Clarifications)
+		}
+	}
+}
+
+func TestExecutePlanResumeWithAnswersUsesSavedPlanRoute(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "test-key")
+	root := t.TempDir()
+	planDir := filepath.Join(root, ".deck", "plan")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatalf("mkdir plan dir: %v", err)
+	}
+	json := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"clarifications":[{"id":"topology.roleModel","question":"The request implies multiple nodes, but the role model is unclear. Which node role layout should the plan use?","kind":"enum","options":["1cp-2workers","3cp-ha"],"blocksGeneration":true}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"create","purpose":"prepare"},{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`
+	if err := os.WriteFile(filepath.Join(planDir, "latest.json"), []byte(json), 0o600); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "latest.md"), []byte("md"), 0o600); err != nil {
+		t.Fatalf("write md: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	if err := Execute(context.Background(), Options{Root: root, FromPath: ".deck/plan/latest.json", Answers: []string{"topology.roleModel=1cp-2workers"}, PlanOnly: true, Stdout: stdout, Stderr: io.Discard}, &stubClient{}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "updated plan artifact") {
+		t.Fatalf("expected updated plan artifact output, got %q", stdout.String())
+	}
+	stored, _, err := loadPlanArtifact(root, ".deck/plan/latest.json")
+	if err != nil {
+		t.Fatalf("load plan artifact: %v", err)
+	}
+	answered := false
+	for _, item := range stored.Clarifications {
+		if strings.TrimSpace(item.Answer) == "1cp-2workers" {
+			answered = true
+			break
+		}
+	}
+	if !answered {
+		t.Fatalf("expected saved plan to retain answered clarification, got %#v", stored.Clarifications)
+	}
+	if stored.Intent != "draft" {
+		t.Fatalf("expected saved plan route to stay draft, got %#v", stored)
+	}
+}
+
 func TestExecutePlanResumeStopsWhenClarificationsRemain(t *testing.T) {
 	t.Setenv("DECK_ASK_API_KEY", "test-key")
 	root := t.TempDir()
@@ -1620,7 +955,7 @@ func TestExecutePlanResumeStopsWhenClarificationsRemain(t *testing.T) {
 	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader(""), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "saved plan still requires clarification") {
+	if !strings.Contains(stdout.String(), "authoring needs clarification") {
 		t.Fatalf("expected clarification stop, got %q", stdout.String())
 	}
 }
@@ -1641,7 +976,7 @@ func TestExecuteAuthoringMCPAugmentationIsGatedByEnv(t *testing.T) {
 			name:    "disabled-by-default",
 			enabled: false,
 			want: []string{
-				"mcp: disabled for default local pipeline",
+				"mcp: skipped until requested in authoring tool loop",
 			},
 			avoid: []string{"mcp:web-search initialize failed:"},
 		},
@@ -1649,10 +984,9 @@ func TestExecuteAuthoringMCPAugmentationIsGatedByEnv(t *testing.T) {
 			name:    "enabled-via-env",
 			enabled: true,
 			want: []string{
-				"mcp:web-search initialize failed:",
-				"transport closed",
+				"mcp: skipped until requested in authoring tool loop",
 			},
-			avoid: []string{"mcp: disabled for default local pipeline"},
+			avoid: []string{"mcp:web-search initialize failed:"},
 		},
 	}
 	for _, tc := range tests {
@@ -1662,7 +996,7 @@ func TestExecuteAuthoringMCPAugmentationIsGatedByEnv(t *testing.T) {
 			}
 			root := t.TempDir()
 			writeLatestPlanArtifact(t, root)
-			client := &stubClient{responses: []string{`{"summary":"generated starter workflows","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-kubernetes-cluster","overrides":{"nodeCount":1}}]}]}}`}}
+			client := &stubClient{providerResponses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: workspacepaths.CanonicalApplyWorkflow, Content: waitForHostsWorkflow("5s")})}
 			if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client); err != nil {
 				t.Fatalf("execute: %v", err)
 			}
@@ -1707,7 +1041,7 @@ func TestExecutePlanResumeInteractiveClarificationCanQuit(t *testing.T) {
 	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader("q\n"), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "saved plan after interactive clarification exit") {
+	if !strings.Contains(stdout.String(), "authoring clarification stopped") {
 		t.Fatalf("expected interactive quit output, got %q", stdout.String())
 	}
 	stored, _, err := loadPlanArtifact(root, ".deck/plan/latest.json")
@@ -1737,7 +1071,7 @@ func TestExecutePlanResumeInteractiveClarificationCanContinue(t *testing.T) {
 	interactiveSessionProbe = func(io.Reader, io.Writer) bool { return true }
 	defer func() { interactiveSessionProbe = originalProbe }()
 	stdout := &bytes.Buffer{}
-	client := &stubClient{responses: []string{`{"summary":"generated starter workflows","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-kubernetes-cluster","overrides":{"nodeCount":1}}]}]}}`}}
+	client := &stubClient{providerResponses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: workspacepaths.CanonicalApplyWorkflow, Content: waitForHostsWorkflow("5s")})}
 	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader("2\n"), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -1777,11 +1111,31 @@ func TestValidateGenerationAllowsPreserveOnlyRefineNoop(t *testing.T) {
 	}
 }
 
-func TestRestrictRepairTargetsToPlanFiltersUnplannedPaths(t *testing.T) {
-	plan := askcontract.PlanResponse{AuthoringBrief: askcontract.AuthoringBrief{TargetPaths: []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml"}}}
-	paths := restrictRepairTargetsToPlan([]string{"workflows/prepare.yaml", "workflows/components/helper.yaml"}, plan)
-	if len(paths) != 1 || paths[0] != "workflows/prepare.yaml" {
-		t.Fatalf("expected only planned repair target, got %#v", paths)
+func TestValidateGenerationRefineAllowsUntouchedExistingComponentImports(t *testing.T) {
+	root := t.TempDir()
+	componentDir := filepath.Join(root, "workflows", "components", "k8s")
+	scenarioDir := filepath.Join(root, "workflows", "scenarios")
+	if err := os.MkdirAll(componentDir, 0o755); err != nil {
+		t.Fatalf("mkdir components: %v", err)
+	}
+	if err := os.MkdirAll(scenarioDir, 0o755); err != nil {
+		t.Fatalf("mkdir scenarios: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(componentDir, "prereq.yaml"), []byte("steps:\n  - id: prereq\n    kind: CheckHost\n    spec:\n      checks: [os]\n"), 0o644); err != nil {
+		t.Fatalf("write component: %v", err)
+	}
+	files := []askcontract.GeneratedFile{
+		{Path: "workflows/scenarios/control-plane-bootstrap.yaml", Content: "version: v1alpha1\nphases:\n  - name: host-prereqs\n    imports:\n      - path: k8s/prereq.yaml\n  - name: verify\n    steps:\n      - id: bootstrap-report\n        kind: CheckKubernetesCluster\n        spec:\n          interval: 5s\n          timeout: 10m\n          nodes:\n            total: 1\n            ready: 1\n            controlPlaneReady: 1\n"},
+		{Path: "workflows/vars.yaml", Content: "clusterName: bootstrap-root\n"},
+	}
+	gen := testMaterialized("refine", files)
+	plan := askcontract.PlanResponse{Intent: "refine", Files: []askcontract.PlanFile{{Path: "workflows/scenarios/control-plane-bootstrap.yaml", Action: "update"}, {Path: "workflows/vars.yaml", Action: "update"}}, AuthoringBrief: askcontract.AuthoringBrief{TargetPaths: []string{"workflows/scenarios/control-plane-bootstrap.yaml", "workflows/vars.yaml"}}}
+	summary, critic, err := validateGeneration(context.Background(), root, gen, files, askintent.Decision{Route: askintent.RouteRefine}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{})
+	if err != nil {
+		t.Fatalf("expected refine validation with existing imports to pass, got err=%v critic=%#v", err, critic)
+	}
+	if summary == "" || len(critic.Blocking) != 0 {
+		t.Fatalf("expected successful refine validation, got summary=%q critic=%#v", summary, critic)
 	}
 }
 
@@ -1825,6 +1179,14 @@ func TestSemanticCriticWarnsWhenTypedStepsRequestedButOnlyCommandUsed(t *testing
 	}
 }
 
+func TestSemanticCriticRefineDoesNotRequireUntouchedImportedComponentsToBeRegenerated(t *testing.T) {
+	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/scenarios/control-plane-bootstrap.yaml", Content: "version: v1alpha1\nphases:\n  - name: host-prereqs\n    imports:\n      - path: k8s/prereq.yaml\n  - name: verify\n    steps:\n      - id: bootstrap-report\n        kind: CheckKubernetesCluster\n        spec:\n          interval: 5s\n          timeout: 10m\n          nodes:\n            total: 1\n            ready: 1\n            controlPlaneReady: 1\n"}, {Path: "workflows/vars.yaml", Content: "clusterName: bootstrap-root\n"}})
+	critic := semanticCritic(gen, askintent.Decision{Route: askintent.RouteRefine}, askcontract.PlanResponse{}, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{})
+	if strings.Contains(strings.Join(critic.Blocking, "\n"), "scenario imports missing component") {
+		t.Fatalf("expected refine semantic critic not to require untouched imported components, got %#v", critic)
+	}
+}
+
 func TestSemanticCriticBlocksOfflineApplyWithDownloads(t *testing.T) {
 	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: fetch\n    kind: Command\n    spec:\n      command: [\"curl\",\"-L\",\"https://example.invalid/pkg.rpm\"]\n"}})
 	plan := askcontract.PlanResponse{Request: "create a package installation workflow", OfflineAssumption: "offline"}
@@ -1838,8 +1200,8 @@ func TestSemanticCriticRequiresPrepareForArtifactPlan(t *testing.T) {
 	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n"}})
 	plan := askcontract.PlanResponse{Request: "create an air-gapped package workflow", OfflineAssumption: "offline", NeedsPrepare: true, ArtifactKinds: []string{"package"}}
 	critic := semanticCritic(gen, askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{})
-	if len(critic.Blocking) == 0 || !strings.Contains(strings.Join(critic.Blocking, "\n"), "prepare") {
-		t.Fatalf("expected prepare blocking finding, got %#v", critic)
+	if len(critic.Advisory) == 0 || !strings.Contains(strings.Join(critic.Advisory, "\n"), "prepare") {
+		t.Fatalf("expected prepare advisory finding, got %#v", critic)
 	}
 }
 

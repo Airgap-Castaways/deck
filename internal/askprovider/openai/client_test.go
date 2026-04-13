@@ -116,6 +116,66 @@ func TestParseCodexSSEFallsBackToCompletedEnvelope(t *testing.T) {
 	}
 }
 
+func TestParseCodexSSEPrefersCompletedEnvelopeOverPartialDelta(t *testing.T) {
+	raw := []byte(`event: response.output_text.delta
+data: {"delta":"{\"summary\":\"partial\""}
+
+event: response.completed
+data: {"response":{"output_text":"{\"summary\":\"complete\",\"finish\":true}"}}
+`)
+	if got := parseCodexSSE(raw); got != `{"summary":"complete","finish":true}` {
+		t.Fatalf("expected completed envelope to win over partial delta, got %q", got)
+	}
+}
+
+func TestBuildChatRequestUsesNativeTools(t *testing.T) {
+	request := buildChatRequest("openai", askprovider.Request{
+		Model:                    "gpt-5.4",
+		SystemPrompt:             "system",
+		Prompt:                   "user",
+		Tools:                    []askprovider.ToolDefinition{{Name: "file_read", Description: "Read file", Parameters: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`)}},
+		ToolChoiceRequired:       true,
+		DisableParallelToolCalls: true,
+	})
+	if len(request.Tools) != 1 || request.Tools[0].Function == nil || request.Tools[0].Function.Name != "file_read" {
+		t.Fatalf("expected native tool definition, got %#v", request.Tools)
+	}
+	if request.ToolChoice != "required" {
+		t.Fatalf("expected required tool choice, got %#v", request.ToolChoice)
+	}
+	if request.ParallelToolCalls != false {
+		t.Fatalf("expected parallel tool calls disabled, got %#v", request.ParallelToolCalls)
+	}
+	if request.ResponseFormat == nil || string(request.ResponseFormat.Type) != "text" {
+		t.Fatalf("expected text response format for native tools, got %#v", request.ResponseFormat)
+	}
+}
+
+func TestParseCodexProviderResponseExtractsToolCalls(t *testing.T) {
+	raw := []byte(`event: response.output_item.done
+` +
+		`data: {"item":{"id":"fc_1","type":"function_call","status":"completed","arguments":"{\"path\":\"workflows/scenarios/apply.yaml\"}","call_id":"call_1","name":"file_read"}}
+
+` +
+		`event: response.completed
+` +
+		`data: {"response":{"id":"resp_1","output_text":"ignored"}}
+`)
+	resp, err := parseCodexProviderResponse(raw, "text/event-stream")
+	if err != nil {
+		t.Fatalf("parseCodexProviderResponse: %v", err)
+	}
+	if len(resp.ToolCalls) != 1 {
+		t.Fatalf("expected one tool call, got %#v", resp)
+	}
+	if resp.ToolCalls[0].Name != "file_read" || string(resp.ToolCalls[0].Arguments) != `{"path":"workflows/scenarios/apply.yaml"}` {
+		t.Fatalf("unexpected tool call payload: %#v", resp.ToolCalls[0])
+	}
+	if resp.Content != "" {
+		t.Fatalf("expected tool response to suppress text content, got %q", resp.Content)
+	}
+}
+
 func TestGenerateCodexHonorsPerRequestTimeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)

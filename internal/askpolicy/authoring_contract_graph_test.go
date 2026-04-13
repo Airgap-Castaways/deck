@@ -1,4 +1,4 @@
-package askauthoring
+package askpolicy
 
 import (
 	"testing"

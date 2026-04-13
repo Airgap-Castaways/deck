@@ -27,9 +27,6 @@ func localFactChunks(route askintent.Route, lowerPrompt string) []Chunk {
 	if chunk := localFactChunk(root, "local-facts-stepspec", "stepspec-facts", filepath.Join("internal", "stepspec"), buildStepspecSummary(root, lowerPrompt)); chunk != nil {
 		chunks = append(chunks, *chunk)
 	}
-	if chunk := localFactChunk(root, "local-facts-askdraft", "askdraft-compiler", filepath.Join("internal", "askdraft", "draft.go"), buildAskdraftSummary()); chunk != nil {
-		chunks = append(chunks, *chunk)
-	}
 	if chunk := localFactChunk(root, "local-facts-askpolicy", "askpolicy-requirements", filepath.Join("internal", "askpolicy"), buildPackageProvenanceSummary("internal/askpolicy", []string{
 		"Local source-of-truth for authoring requirements, defaults, and plan shaping.",
 		"Use policy-derived requirements to infer prepare/apply structure, topology, and validation expectations.",
@@ -43,18 +40,6 @@ func localFactChunks(route askintent.Route, lowerPrompt string) []Chunk {
 		chunks = append(chunks, *chunk)
 	}
 	return chunks
-}
-
-func buildAskdraftSummary() string {
-	lines := []string{
-		"- file: internal/askdraft/draft.go",
-		"- role: draft builder selection compiler and workflow assembly path",
-		"- function: CompileWithProgram - entrypoint that turns builder selection plus authoring program into generated documents",
-		"- function: buildWorkflowTarget - assembles each workflow target from selected builders",
-		"- function: buildStep - materializes a typed workflow step from builder metadata and bindings",
-		"- function: resolveBindings - maps authoring program fields into builder binding values before step assembly",
-	}
-	return strings.Join(lines, "\n")
 }
 
 func localFactChunk(root string, id string, label string, path string, body string) *Chunk {

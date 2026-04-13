@@ -38,13 +38,24 @@ type codexText struct {
 }
 
 type codexRequest struct {
-	Model        string              `json:"model"`
-	Store        bool                `json:"store"`
-	Stream       bool                `json:"stream"`
-	Input        []codexInputMessage `json:"input"`
-	Reasoning    codexReasoning      `json:"reasoning"`
-	Text         codexText           `json:"text"`
-	Instructions string              `json:"instructions,omitempty"`
+	Model             string              `json:"model"`
+	Store             bool                `json:"store"`
+	Stream            bool                `json:"stream"`
+	Input             []codexInputMessage `json:"input"`
+	Reasoning         codexReasoning      `json:"reasoning"`
+	Text              codexText           `json:"text"`
+	Instructions      string              `json:"instructions,omitempty"`
+	Tools             []codexTool         `json:"tools,omitempty"`
+	ToolChoice        any                 `json:"tool_choice,omitempty"`
+	ParallelToolCalls any                 `json:"parallel_tool_calls,omitempty"`
+}
+
+type codexTool struct {
+	Type        string          `json:"type"`
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Parameters  json.RawMessage `json:"parameters,omitempty"`
+	Strict      bool            `json:"strict,omitempty"`
 }
 
 type codexOutputPart struct {
@@ -140,7 +151,15 @@ func (c *Client) generateChat(ctx context.Context, provider string, req askprovi
 	if len(resp.Choices) == 0 {
 		return askprovider.Response{}, fmt.Errorf("ask provider returned no choices")
 	}
-	return askprovider.Response{Content: strings.TrimSpace(resp.Choices[0].Message.Content)}, nil
+	message := resp.Choices[0].Message
+	out := askprovider.Response{Content: strings.TrimSpace(message.Content)}
+	if len(message.ToolCalls) > 0 {
+		out.ToolCalls = make([]askprovider.ToolCall, 0, len(message.ToolCalls))
+		for _, call := range message.ToolCalls {
+			out.ToolCalls = append(out.ToolCalls, askprovider.ToolCall{ID: strings.TrimSpace(call.ID), Name: strings.TrimSpace(call.Function.Name), Arguments: json.RawMessage(strings.TrimSpace(call.Function.Arguments))})
+		}
+	}
+	return out, nil
 }
 
 func buildChatRequest(provider string, req askprovider.Request) openai.ChatCompletionRequest {
@@ -150,7 +169,20 @@ func buildChatRequest(provider string, req askprovider.Request) openai.ChatCompl
 			{Role: openai.ChatMessageRoleSystem, Content: strings.TrimSpace(req.SystemPrompt)},
 			{Role: openai.ChatMessageRoleUser, Content: strings.TrimSpace(req.Prompt)},
 		},
-		ResponseFormat: &openai.ChatCompletionResponseFormat{Type: openai.ChatCompletionResponseFormatTypeJSONObject},
+	}
+	if len(req.Tools) > 0 {
+		request.Tools = buildChatTools(req.Tools)
+		if req.ToolChoiceRequired {
+			request.ToolChoice = "required"
+		} else {
+			request.ToolChoice = "auto"
+		}
+		if req.DisableParallelToolCalls {
+			request.ParallelToolCalls = false
+		}
+		request.ResponseFormat = &openai.ChatCompletionResponseFormat{Type: openai.ChatCompletionResponseFormatTypeText}
+	} else {
+		request.ResponseFormat = &openai.ChatCompletionResponseFormat{Type: openai.ChatCompletionResponseFormatTypeJSONObject}
 	}
 	if len(req.ResponseSchema) > 0 {
 		name := strings.TrimSpace(req.ResponseSchemaName)
@@ -171,6 +203,14 @@ func buildChatRequest(provider string, req askprovider.Request) openai.ChatCompl
 		request.Model = askprovider.ProviderDefaultModel(provider)
 	}
 	return request
+}
+
+func buildChatTools(defs []askprovider.ToolDefinition) []openai.Tool {
+	tools := make([]openai.Tool, 0, len(defs))
+	for _, def := range defs {
+		tools = append(tools, openai.Tool{Type: openai.ToolTypeFunction, Function: &openai.FunctionDefinition{Name: strings.TrimSpace(def.Name), Description: strings.TrimSpace(def.Description), Strict: true, Parameters: json.RawMessage(def.Parameters)}})
+	}
+	return tools
 }
 
 func maxAttempts(retries int) int {
@@ -280,14 +320,14 @@ func (c *Client) generateCodex(ctx context.Context, req askprovider.Request) (as
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return askprovider.Response{}, &codexResponseError{StatusCode: resp.StatusCode, Body: append([]byte(nil), raw...)}
 	}
-	content, err := parseCodexResponse(raw, resp.Header.Get("Content-Type"))
+	parsed, err := parseCodexProviderResponse(raw, resp.Header.Get("Content-Type"))
 	if err != nil {
 		return askprovider.Response{}, fmt.Errorf("decode codex response: %w", err)
 	}
-	if strings.TrimSpace(content) == "" {
-		return askprovider.Response{}, fmt.Errorf("ask provider returned no text output")
+	if len(parsed.ToolCalls) == 0 && strings.TrimSpace(parsed.Content) == "" {
+		return askprovider.Response{}, fmt.Errorf("ask provider returned no text or tool output")
 	}
-	return askprovider.Response{Content: strings.TrimSpace(content)}, nil
+	return parsed, nil
 }
 
 func shouldUseCodexOAuth(provider string, req askprovider.Request) bool {
@@ -310,10 +350,78 @@ func buildCodexRequest(req askprovider.Request) codexRequest {
 		Reasoning: codexReasoning{Effort: "medium"},
 		Text:      codexText{Verbosity: codexVerbosity(model)},
 	}
+	if len(req.Tools) > 0 {
+		request.Tools = buildCodexTools(req.Tools)
+		if req.ToolChoiceRequired {
+			request.ToolChoice = "required"
+		} else {
+			request.ToolChoice = "auto"
+		}
+		request.ParallelToolCalls = !req.DisableParallelToolCalls
+	}
 	if instructions := strings.TrimSpace(req.SystemPrompt); instructions != "" {
 		request.Instructions = instructions
 	}
 	return request
+}
+
+func buildCodexTools(defs []askprovider.ToolDefinition) []codexTool {
+	tools := make([]codexTool, 0, len(defs))
+	for _, def := range defs {
+		tools = append(tools, codexTool{Type: "function", Name: strings.TrimSpace(def.Name), Description: strings.TrimSpace(def.Description), Parameters: append(json.RawMessage(nil), def.Parameters...), Strict: true})
+	}
+	return tools
+}
+
+func parseCodexProviderResponse(raw []byte, contentType string) (askprovider.Response, error) {
+	toolCalls := parseCodexToolCalls(raw, contentType)
+	if len(toolCalls) > 0 {
+		return askprovider.Response{ToolCalls: toolCalls}, nil
+	}
+	content, err := parseCodexResponse(raw, contentType)
+	if err != nil {
+		return askprovider.Response{}, err
+	}
+	return askprovider.Response{Content: strings.TrimSpace(content)}, nil
+}
+
+func parseCodexToolCalls(raw []byte, contentType string) []askprovider.ToolCall {
+	trimmed := strings.TrimSpace(string(raw))
+	if !strings.Contains(strings.ToLower(contentType), "text/event-stream") && !strings.HasPrefix(trimmed, "event:") && !strings.HasPrefix(trimmed, "data:") {
+		return nil
+	}
+	calls := []askprovider.ToolCall{}
+	seen := map[string]bool{}
+	for _, event := range parseSSEEvents(raw) {
+		if strings.TrimSpace(event.Name) != "response.output_item.done" {
+			continue
+		}
+		var payload struct {
+			Item struct {
+				ID        string `json:"id"`
+				Type      string `json:"type"`
+				Arguments string `json:"arguments"`
+				CallID    string `json:"call_id"`
+				Name      string `json:"name"`
+			} `json:"item"`
+		}
+		if err := json.Unmarshal([]byte(event.Data), &payload); err != nil {
+			continue
+		}
+		if strings.TrimSpace(payload.Item.Type) != "function_call" {
+			continue
+		}
+		id := strings.TrimSpace(payload.Item.CallID)
+		if id == "" {
+			id = strings.TrimSpace(payload.Item.ID)
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		calls = append(calls, askprovider.ToolCall{ID: id, Name: strings.TrimSpace(payload.Item.Name), Arguments: json.RawMessage(strings.TrimSpace(payload.Item.Arguments))})
+	}
+	return calls
 }
 
 func parseCodexResponse(raw []byte, contentType string) (string, error) {
@@ -357,17 +465,41 @@ func parseCodexResponse(raw []byte, contentType string) (string, error) {
 
 func parseCodexSSE(raw []byte) string {
 	b := &strings.Builder{}
+	completed := ""
 	for _, event := range parseSSEEvents(raw) {
 		text := parseCodexSSEEvent(event)
 		if strings.TrimSpace(text) == "" {
 			continue
 		}
-		if b.Len() > 0 && strings.HasSuffix(event.Name, ".completed") {
+		if isCodexCompletedEvent(event.Name) {
+			completed = text
 			continue
 		}
 		b.WriteString(text)
 	}
-	return b.String()
+	current := b.String()
+	if strings.TrimSpace(completed) == "" {
+		return current
+	}
+	if strings.TrimSpace(current) == "" {
+		return completed
+	}
+	if json.Valid([]byte(current)) {
+		return current
+	}
+	if json.Valid([]byte(completed)) {
+		return completed
+	}
+	return current
+}
+
+func isCodexCompletedEvent(name string) bool {
+	switch strings.TrimSpace(name) {
+	case "", "response.completed", "response.output_item.done", "response.refusal.done":
+		return true
+	default:
+		return false
+	}
 }
 
 func parseSSEEvents(raw []byte) []codexSSEEvent {

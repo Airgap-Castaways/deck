@@ -18,9 +18,10 @@ import (
 )
 
 type mockAskClient struct {
-	responses []string
-	index     int
-	calls     int
+	responses         []string
+	providerResponses []askprovider.Response
+	index             int
+	calls             int
 }
 
 type mcpHelperRequest struct {
@@ -112,6 +113,14 @@ func (m *mockAskClient) Generate(_ context.Context, req askprovider.Request) (as
 			return askprovider.Response{Content: resp}, nil
 		}
 		return askprovider.Response{Content: synthesizeClassification(req.Prompt)}, nil
+	}
+	if len(m.providerResponses) > 0 {
+		if m.index >= len(m.providerResponses) {
+			return m.providerResponses[len(m.providerResponses)-1], nil
+		}
+		resp := m.providerResponses[m.index]
+		m.index++
+		return resp, nil
 	}
 	if m.index >= len(m.responses) {
 		return askprovider.Response{Content: m.responses[len(m.responses)-1]}, nil
@@ -293,7 +302,7 @@ func TestAskAuthoringWritesFiles(t *testing.T) {
 
 	originalFactory := newAskBackend
 	newAskBackend = func() askprovider.Client {
-		return &mockAskClient{responses: []string{validSpecificCreatePlanJSON(), validPlanCriticReadyJSON(), validAskJSON(), validSpecificCreatePlanJSON(), validPlanCriticReadyJSON(), validAskJSON()}}
+		return &mockAskClient{providerResponses: validAskResponses()}
 	}
 	defer func() { newAskBackend = originalFactory }()
 
@@ -358,11 +367,11 @@ func TestAskRepairLoop(t *testing.T) {
 
 	originalFactory := newAskBackend
 	newAskBackend = func() askprovider.Client {
-		return &mockAskClient{responses: []string{`not-json`, validAskJSON()}}
+		return &mockAskClient{providerResponses: repairAskResponses()}
 	}
 	defer func() { newAskBackend = originalFactory }()
 
-	out, err := runWithCapturedStdout([]string{"ask", "--create", "--max-iterations", "2", "repair test scenario"})
+	out, err := runWithCapturedStdout([]string{"ask", "--create", "--max-iterations", "2", "create apply workflow with vars"})
 	if err != nil {
 		t.Fatalf("ask authoring with repair: %v", err)
 	}
@@ -495,7 +504,7 @@ func TestAskFromPlanPrefersJSONArtifact(t *testing.T) {
 
 	originalFactory := newAskBackend
 	newAskBackend = func() askprovider.Client {
-		return &mockAskClient{responses: []string{validAskJSON()}}
+		return &mockAskClient{providerResponses: validAskResponses()}
 	}
 	defer func() { newAskBackend = originalFactory }()
 
@@ -553,24 +562,141 @@ func TestAskComplexPromptShowsJudgeFindingsAndRepairsLoosePlanJSON(t *testing.T)
 	newAskBackend = func() askprovider.Client {
 		return &mockAskClient{responses: []string{
 			`{"version":1,"request":"create an air-gapped rhel9 3-node kubeadm workflow","intent":"draft","complexity":"complex","authoringBrief":{"routeIntent":"draft","targetScope":"workspace","targetPaths":["workflows/prepare.yaml","workflows/scenarios/apply.yaml",],"modeIntent":"prepare+apply","connectivity":"offline","completenessTarget":"complete","topology":"multi-node","nodeCount":3,"requiredCapabilities":["prepare-artifacts","package-staging","image-staging","kubeadm-bootstrap","kubeadm-join",]},"authoringProgram":{"platform":{"family":"rhel","release":"9","repoType":"rpm"},"artifacts":{"packages":["kubeadm","kubelet","kubectl"],"images":["registry.k8s.io/kube-apiserver:v1.30.0"],"packageOutputDir":"packages/rpm/9","imageOutputDir":"images/control-plane"},"cluster":{"joinFile":"/tmp/deck/join.txt","roleSelector":"vars.role","controlPlaneCount":1,"workerCount":2},"verification":{"expectedNodeCount":3,"expectedReadyCount":3,"expectedControlPlaneReady":1}},"executionModel":{"artifactContracts":[{"kind":"package","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"offline package flow"},{"kind":"image","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"offline image flow"}],"sharedStateContracts":[{"name":"join-file","producerPath":"/tmp/deck/join.txt","consumerPaths":["/tmp/deck/join.txt"],"availabilityModel":"published-for-worker-consumption","description":"publish join file for workers"}],"roleExecution":{"roleSelector":"vars.role","controlPlaneFlow":"bootstrap","workerFlow":"join","perNodeInvocation":true},"verification":{"expectedNodeCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane"}},"artifactKinds":["package","image"],"blockers":[],"targetOutcome":"Generate workflows","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"create","purpose":"prepare"},{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"apply"},],"validationChecklist":["lint",]}`,
-			validAskJSON(),
+			`{"summary":"plan review found unresolved role layout","blocking":["topology role layout still needs clarification"],"advisory":[],"missingContracts":[],"suggestedFixes":["choose a concrete role model before generation"],"findings":[{"code":"role_cardinality_gap","severity":"blocking","message":"topology role layout still needs clarification","path":"executionModel.roleExecution","recoverable":false}]}`,
 		}}
 	}
 	defer func() { newAskBackend = originalFactory }()
 
-	out, err := runWithCapturedStdout([]string{"ask", "create an air-gapped rhel9 3-node kubeadm cluster workflow with prepare and apply workflows for offline package and image staging"})
+	out, err := runWithCapturedStdout([]string{"ask", "plan", "create an air-gapped rhel9 3-node kubeadm cluster workflow with prepare and apply workflows for offline package and image staging"})
 	if err != nil {
 		t.Fatalf("ask complex prompt: %v", err)
 	}
-	for _, want := range []string{"plan generated with review blockers", "plan:", "plan-json:", "topology.roleModel", "deck ask plan --from", "deck ask --from"} {
+	for _, want := range []string{"generated plan artifact", "plan:", "plan-json:", "topology.roleModel", "plan-review: plan review found unresolved role layout", "deck ask plan --from", "deck ask --from"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in output, got %q", want, out)
 		}
 	}
 }
 
-func validAskJSON() string {
-	return `{"summary":"generated starter workflows","review":["Prefer typed steps where possible."],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-kubernetes-cluster","overrides":{"nodeCount":1}}]}]}}`
+func validAskWorkflow() string {
+	return strings.TrimLeft(`
+version: v1alpha1
+phases:
+  - name: verify
+    steps:
+      - id: verify-cluster
+        kind: CheckKubernetesCluster
+        spec:
+          interval: 5s
+          timeout: 5m
+          nodes:
+            total: 1
+            ready: 1
+            controlPlaneReady: 1
+`, "\n")
+}
+
+func validAskResponses() []askprovider.Response {
+	return []askprovider.Response{validAskToolResponse(), validAskFinishResponse()}
+}
+
+func repairAskResponses() []askprovider.Response {
+	return []askprovider.Response{repairAskInitialResponse(), repairAskFixResponse(), validAskFinishResponse()}
+}
+
+type mockToolCall struct {
+	Name       string
+	Path       string
+	Paths      []string
+	Query      string
+	Content    string
+	Include    []string
+	Intent     string
+	Pattern    string
+	Glob       string
+	Offset     int
+	Limit      int
+	OldString  string
+	NewString  string
+	ReplaceAll bool
+	Topic      string
+	Kind       string
+}
+
+func toolResponse(calls ...mockToolCall) askprovider.Response {
+	toolCalls := make([]askprovider.ToolCall, 0, len(calls))
+	for i, call := range calls {
+		args := map[string]any{}
+		if strings.TrimSpace(call.Path) != "" {
+			args["path"] = call.Path
+		}
+		if strings.TrimSpace(call.Query) != "" {
+			args["query"] = call.Query
+		}
+		if strings.TrimSpace(call.Pattern) != "" {
+			args["pattern"] = call.Pattern
+		}
+		if strings.TrimSpace(call.Glob) != "" {
+			args["glob"] = call.Glob
+		}
+		if strings.TrimSpace(call.Content) != "" {
+			args["content"] = call.Content
+		}
+		if len(call.Paths) > 0 {
+			args["paths"] = append([]string(nil), call.Paths...)
+		}
+		if len(call.Include) > 0 {
+			args["include"] = append([]string(nil), call.Include...)
+		}
+		if strings.TrimSpace(call.Intent) != "" {
+			args["intent"] = call.Intent
+		}
+		if strings.TrimSpace(call.Topic) != "" {
+			args["topic"] = call.Topic
+		}
+		if strings.TrimSpace(call.Kind) != "" {
+			args["kind"] = call.Kind
+		}
+		raw, err := json.Marshal(args)
+		if err != nil {
+			panic(err)
+		}
+		toolCalls = append(toolCalls, askprovider.ToolCall{ID: fmt.Sprintf("call-%d", i+1), Name: call.Name, Arguments: raw})
+	}
+	return askprovider.Response{ToolCalls: toolCalls}
+}
+
+func finishResponse(summary string) askprovider.Response {
+	raw, err := json.Marshal(map[string]any{"summary": summary, "reason": "deck_lint passed"})
+	if err != nil {
+		panic(err)
+	}
+	return askprovider.Response{ToolCalls: []askprovider.ToolCall{{ID: "finish-1", Name: "author_finish", Arguments: raw}}}
+}
+
+func validAskToolResponse() askprovider.Response {
+	return toolResponse(
+		mockToolCall{Name: "file_write", Path: "workflows/scenarios/apply.yaml", Content: validAskWorkflow()},
+		mockToolCall{Name: "validate"},
+	)
+}
+
+func validAskFinishResponse() askprovider.Response {
+	return finishResponse("generated starter workflows")
+}
+
+func repairAskInitialResponse() askprovider.Response {
+	return toolResponse(
+		mockToolCall{Name: "file_write", Path: "workflows/scenarios/apply.yaml", Content: validAskWorkflow()},
+		mockToolCall{Name: "validate"},
+	)
+}
+
+func repairAskFixResponse() askprovider.Response {
+	return toolResponse(
+		mockToolCall{Name: "file_write", Path: "workflows/vars.yaml", Content: "waitPath: /etc/hosts\n"},
+		mockToolCall{Name: "validate"},
+	)
 }
 
 func testAPIKey() string {
@@ -583,12 +709,4 @@ func testOAuthToken() string {
 
 func validPlanJSON() string {
 	return `{"version":1,"request":"create single-node cluster workflow","intent":"draft","complexity":"medium","authoringBrief":{"routeIntent":"draft","targetScope":"workspace","targetPaths":["workflows/scenarios/apply.yaml"],"modeIntent":"apply-only","connectivity":"offline","completenessTarget":"complete","topology":"single-node","nodeCount":1,"requiredCapabilities":["kubeadm-bootstrap","cluster-verification"]},"authoringProgram":{"cluster":{"joinFile":"/tmp/deck/join.txt","controlPlaneCount":1},"verification":{"expectedNodeCount":1,"expectedReadyCount":1,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane","interval":"5s","timeout":"5m"}},"executionModel":{"verification":{"expectedNodeCount":1,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane"}},"blockers":[],"targetOutcome":"Generate workflows","assumptions":["Use v1alpha1"],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry scenario"}],"validationChecklist":["lint"]}`
-}
-
-func validPlanCriticReadyJSON() string {
-	return `{"summary":"plan ready","blocking":[],"advisory":[],"missingContracts":[],"suggestedFixes":[]}`
-}
-
-func validSpecificCreatePlanJSON() string {
-	return `{"version":1,"request":"create a specific single-node apply workflow","intent":"draft","complexity":"simple","authoringBrief":{"routeIntent":"draft","targetScope":"workspace","targetPaths":["workflows/scenarios/apply.yaml"],"modeIntent":"apply-only","connectivity":"offline","completenessTarget":"starter","topology":"single-node","nodeCount":1,"requiredCapabilities":["cluster-verification"]},"executionModel":{"verification":{"expectedNodeCount":1,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane"}},"blockers":[],"targetOutcome":"Generate workflows","assumptions":["Use v1alpha1"],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry scenario"}],"validationChecklist":["lint"]}`
 }

@@ -39,34 +39,38 @@ type Options struct {
 }
 
 type runResult struct {
-	Route         askintent.Route
-	Target        askintent.Target
-	Confidence    float64
-	Reason        string
-	Summary       string
-	Answer        string
-	ReviewLines   []string
-	LintSummary   string
-	LocalFindings []askreview.Finding
-	Files         []askcontract.GeneratedFile
-	WroteFiles    bool
-	RetriesUsed   int
-	LLMUsed       bool
-	ClassifierLLM bool
-	Termination   string
-	Chunks        []askretrieve.Chunk
-	DroppedChunks []string
-	AugmentEvents []string
-	UserCommand   string
-	PromptTraces  []promptTrace
-	ConfigSource  askconfig.EffectiveSettings
-	Plan          *askcontract.PlanResponse
-	PlanMarkdown  string
-	PlanJSON      string
-	FallbackNote  string
-	Critic        *askcontract.CriticResponse
-	Judge         *askcontract.JudgeResponse
-	PlanCritic    *askcontract.PlanCriticResponse
+	Route              askintent.Route
+	Target             askintent.Target
+	Confidence         float64
+	Reason             string
+	Summary            string
+	Answer             string
+	ReviewLines        []string
+	LintSummary        string
+	LocalFindings      []askreview.Finding
+	Files              []askcontract.GeneratedFile
+	WroteFiles         bool
+	RetriesUsed        int
+	LLMUsed            bool
+	ClassifierLLM      bool
+	Termination        string
+	Chunks             []askretrieve.Chunk
+	DroppedChunks      []string
+	AugmentEvents      []string
+	UserCommand        string
+	PromptTraces       []promptTrace
+	ConfigSource       askconfig.EffectiveSettings
+	Plan               *askcontract.PlanResponse
+	PlanMarkdown       string
+	PlanJSON           string
+	FallbackNote       string
+	Critic             *askcontract.CriticResponse
+	Judge              *askcontract.JudgeResponse
+	PlanCritic         *askcontract.PlanCriticResponse
+	ApprovedPaths      []string
+	ToolCalls          []string
+	ToolTranscriptPath string
+	CandidateFiles     []string
 }
 
 type promptTrace struct {

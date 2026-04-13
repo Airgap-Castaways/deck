@@ -15,6 +15,11 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
+func validateCandidateFiles(ctx context.Context, root string, files []askcontract.GeneratedFile, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult) (string, askcontract.CriticResponse, error) {
+	gen := askcontract.GenerationResponse{Summary: "agent candidate", Files: append([]askcontract.GeneratedFile(nil), files...)}
+	return validateGeneration(ctx, root, gen, files, decision, plan, brief, retrieval)
+}
+
 func validateGeneration(ctx context.Context, root string, gen askcontract.GenerationResponse, files []askcontract.GeneratedFile, decision askintent.Decision, plan askcontract.PlanResponse, brief askcontract.AuthoringBrief, retrieval askretrieve.RetrievalResult) (string, askcontract.CriticResponse, error) {
 	if len(files) == 0 {
 		if decision.Route == askintent.RouteRefine && preserveOnlyDocuments(gen.Documents) {
@@ -93,7 +98,7 @@ func validatePlanContract(files []askcontract.GeneratedFile, plan askcontract.Pl
 	if decision.Route == askintent.RouteDraft {
 		for _, path := range requiredDraftPaths(plan) {
 			if !generated[path] {
-				critic.Blocking = append(critic.Blocking, fmt.Sprintf("planned file %s was not generated", path))
+				critic.Advisory = append(critic.Advisory, fmt.Sprintf("planned file %s was not generated; write it or adjust the plan", path))
 				critic.MissingFiles = append(critic.MissingFiles, path)
 			}
 		}
@@ -107,11 +112,11 @@ func validatePlanContract(files []askcontract.GeneratedFile, plan askcontract.Pl
 		producer := filepath.ToSlash(strings.TrimSpace(contract.ProducerPath))
 		consumer := filepath.ToSlash(strings.TrimSpace(contract.ConsumerPath))
 		if producer != "" && !generated[producer] && allowed[producer] {
-			critic.Blocking = append(critic.Blocking, fmt.Sprintf("artifact producer %s for %s contract was not generated", producer, contract.Kind))
+			critic.Advisory = append(critic.Advisory, fmt.Sprintf("artifact producer %s for %s contract was not generated; write it or remove the contract dependency", producer, contract.Kind))
 			critic.MissingFiles = append(critic.MissingFiles, producer)
 		}
 		if consumer != "" && !generated[consumer] && allowed[consumer] {
-			critic.Blocking = append(critic.Blocking, fmt.Sprintf("artifact consumer %s for %s contract was not generated", consumer, contract.Kind))
+			critic.Advisory = append(critic.Advisory, fmt.Sprintf("artifact consumer %s for %s contract was not generated; write it or remove the contract dependency", consumer, contract.Kind))
 			critic.MissingFiles = append(critic.MissingFiles, consumer)
 		}
 	}

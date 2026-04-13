@@ -36,7 +36,8 @@ func validateRoleKinds(name string, wf *config.Workflow) error {
 		if allowed {
 			continue
 		}
-		return fmt.Errorf("E_KIND_ROLE_MISMATCH: step %s (%s) is not supported for role %s", step.ID, step.Kind, role)
+		allowedKinds := workflowexec.StepKindsForRole(role)
+		return fmt.Errorf("E_KIND_ROLE_MISMATCH: step %s (%s) is not supported for role %s; allowed kinds for %s: %s", step.ID, step.Kind, role, role, strings.Join(allowedKinds, ", "))
 	}
 	return nil
 }

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Airgap-Castaways/deck/internal/askauthoring"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askpolicy"
@@ -198,8 +197,8 @@ func fatalPlanProgramReasons(plan askcontract.PlanResponse) []string {
 }
 
 func fatalPlanGraphReasons(plan askcontract.PlanResponse) []string {
-	facts := askauthoring.InferFacts(plan.Request, plan.ArtifactKinds, plan.OfflineAssumption)
-	graph := askauthoring.BuildContractGraph(facts, askauthoring.RequirementLike{
+	facts := askpolicy.InferFacts(plan.Request, plan.ArtifactKinds, plan.OfflineAssumption)
+	graph := askpolicy.BuildContractGraph(facts, askpolicy.RequirementLike{
 		Connectivity:   plan.OfflineAssumption,
 		NeedsPrepare:   plan.NeedsPrepare,
 		ArtifactKinds:  plan.ArtifactKinds,

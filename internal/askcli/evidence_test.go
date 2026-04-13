@@ -81,33 +81,29 @@ func TestExecuteSkipsMCPWhenEvidencePlanIsUnnecessary(t *testing.T) {
 	}
 }
 
-func TestExecuteAuthoringBlocksWhenRequiredExternalEvidenceFails(t *testing.T) {
+func TestExecuteAuthoringDefersExternalEvidenceToToolLoop(t *testing.T) {
 	t.Setenv("DECK_ASK_API_KEY", "test-key")
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
 	if err := askconfig.SaveStored(askconfig.Settings{MCP: askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{{Name: "web-search", RunCommand: "/bin/sh", Args: []string{"-c", "exit 0"}}}}}); err != nil {
 		t.Fatalf("save stored config: %v", err)
 	}
-	client := &stubClient{responses: []string{
-		`{"version":1,"request":"create Kubernetes 1.35.1 workflow","intent":"draft","complexity":"complex","authoringProgram":{"verification":{"expectedNodeCount":1,"expectedReadyCount":1,"expectedControlPlaneReady":1}},"blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry"}],"validationChecklist":["lint"]}`,
-		`{"summary":"ok","blocking":[],"advisory":[],"missingContracts":[],"suggestedFixes":[],"findings":[]}`,
-		`{"summary":"generated","review":[],"selection":{"targets":[{"path":"workflows/scenarios/apply.yaml","kind":"workflow","builders":[{"id":"apply.check-kubernetes-cluster","overrides":{"nodeCount":1}}]}]}}`,
-	}}
 	root := t.TempDir()
-	err := Execute(context.Background(), Options{Root: root, Prompt: "Create a Kubernetes 1.35.1 workflow", Create: true, Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client)
-	if err == nil || !strings.Contains(err.Error(), "required external evidence could not be fetched") {
-		t.Fatalf("expected required evidence failure, got %v", err)
+	client := &stubClient{providerResponses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: "workflows/scenarios/apply.yaml", Content: kubernetesWaitWorkflow()})}
+	if err := Execute(context.Background(), Options{Root: root, Prompt: "Create a Kubernetes 1.35.1 workflow", Create: true, Stdin: strings.NewReader(""), Stdout: &bytes.Buffer{}, Stderr: io.Discard}, client); err != nil {
+		t.Fatalf("execute: %v", err)
 	}
 	state, err := askstate.Load(root)
 	if err != nil {
 		t.Fatalf("load ask state: %v", err)
 	}
-	if len(state.LastAugmentEvents) != 0 {
-		t.Fatalf("expected failed authoring request not to persist ask state, got %#v", state.LastAugmentEvents)
+	joined := strings.Join(state.LastAugmentEvents, "\n")
+	if !strings.Contains(joined, "mcp: available as in-loop authoring tool") {
+		t.Fatalf("expected authoring mcp tool-loop event, got %#v", state.LastAugmentEvents)
 	}
 }
 
 func TestQuestionPromptIncludesExternalEvidenceFailureGuidance(t *testing.T) {
-	prompt := questionSystemPrompt(askintent.Target{}, askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "ext-status", Source: "external-evidence", Label: "required-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: "External evidence status:\n- required upstream evidence could not be fetched", Score: 90}, {ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Topic: "mcp:web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}", Score: 80, Evidence: &askretrieve.EvidenceSummary{Title: "Installing kubeadm", Domain: "kubernetes.io", DomainCategory: "official-docs", Freshness: "external-docs", Official: true, TrustLevel: "high", VersionSupport: "direct"}}}})
+	prompt := buildInfoSystemPrompt(askintent.RouteQuestion, askintent.Target{}, askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "ext-status", Source: "external-evidence", Label: "required-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: "External evidence status:\n- required upstream evidence could not be fetched", Score: 90}, {ID: "mcp-1", Source: "mcp", Label: "web-search:kubernetes.io", Topic: "mcp:web-search:kubernetes.io", Content: "Typed MCP evidence JSON:\n{}", Score: 80, Evidence: &askretrieve.EvidenceSummary{Title: "Installing kubeadm", Domain: "kubernetes.io", DomainCategory: "official-docs", Freshness: "external-docs", Official: true, TrustLevel: "high", VersionSupport: "direct"}}}}, askretrieve.WorkspaceSummary{})
 	for _, want := range []string{"Evidence boundaries:", "external source: Installing kubeadm [domain=kubernetes.io, category=official-docs, freshness=external-docs, official=true, trust=high, versionSupport=direct]", "External evidence status:", "required upstream evidence could not be fetched"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in question prompt, got %q", want, prompt)
@@ -116,7 +112,7 @@ func TestQuestionPromptIncludesExternalEvidenceFailureGuidance(t *testing.T) {
 }
 
 func TestQuestionPromptIncludesWeakExternalEvidenceBoundaries(t *testing.T) {
-	prompt := questionSystemPrompt(askintent.Target{}, askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "weak-status", Source: "external-evidence", Label: "weak-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: "External evidence status:\n- official source retrieval was incomplete for this install/setup question", Score: 90}}})
+	prompt := buildInfoSystemPrompt(askintent.RouteQuestion, askintent.Target{}, askretrieve.RetrievalResult{Chunks: []askretrieve.Chunk{{ID: "weak-status", Source: "external-evidence", Label: "weak-evidence-status", Topic: askcontext.TopicExternalEvidence, Content: "External evidence status:\n- official source retrieval was incomplete for this install/setup question", Score: 90}}}, askretrieve.WorkspaceSummary{})
 	for _, want := range []string{"official source retrieval was incomplete", "general guidance only", "Do not present distro-specific or version-specific install steps as verified"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("expected %q in weak-evidence prompt, got %q", want, prompt)
@@ -155,7 +151,7 @@ func TestAnswerWithLLMUsesHealthyExternalEvidence(t *testing.T) {
 	}
 	retrieval := askretrieve.Retrieve(askintent.RouteExplain, "Explain how to install kubeadm", askintent.Target{}, askretrieve.WorkspaceSummary{}, askstate.Context{}, mcpChunks)
 	client := &stubClient{responses: []string{`{"summary":"explained kubeadm","answer":"Use the official kubeadm install guide.","suggestions":["Pin the exact version."]}`}}
-	resp, err := answerWithLLM(context.Background(), client, effective, askintent.Decision{Route: askintent.RouteExplain, Target: askintent.Target{Kind: "workspace"}}, retrieval, "Explain how to install kubeadm", newAskLogger(io.Discard, "trace"))
+	resp, err := answerWithLLM(context.Background(), client, effective, askintent.Decision{Route: askintent.RouteExplain, Target: askintent.Target{Kind: "workspace"}}, retrieval, askretrieve.WorkspaceSummary{}, "Explain how to install kubeadm", newAskLogger(io.Discard, "trace"))
 	if err != nil {
 		t.Fatalf("answer with llm: %v", err)
 	}
@@ -164,6 +160,25 @@ func TestAnswerWithLLMUsesHealthyExternalEvidence(t *testing.T) {
 	}
 	if len(client.prompts) != 1 || !strings.Contains(client.prompts[0].SystemPrompt, "external source: Installing kubeadm [domain=kubernetes.io, category=official-docs, freshness=external-docs, official=true, trust=high]") {
 		t.Fatalf("expected answer prompt to include normalized external evidence, got %#v", client.prompts)
+	}
+}
+
+func TestAnswerWithLLMIncludesWorkspaceValidationContextForReview(t *testing.T) {
+	effective := askconfig.EffectiveSettings{Settings: askconfig.Settings{Provider: "openai", Model: "gpt-5.4", APIKey: "test-key"}}
+	workspace := askretrieve.WorkspaceSummary{Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      sourceDir: /tmp/packages\n"}}}
+	client := &stubClient{responses: []string{`{"summary":"reviewed","answer":"sourceDir is invalid","findings":["invalid field"],"suggestedChanges":["replace sourceDir"]}`}}
+
+	_, err := answerWithLLM(context.Background(), client, effective, askintent.Decision{Route: askintent.RouteReview, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}}, askretrieve.RetrievalResult{}, workspace, "review apply", newAskLogger(io.Discard, "trace"))
+	if err != nil {
+		t.Fatalf("answer with llm: %v", err)
+	}
+	if len(client.prompts) != 1 {
+		t.Fatalf("expected one prompt, got %d", len(client.prompts))
+	}
+	for _, want := range []string{"Structured validation issues:", "sourceDir", "Additional property sourceDir is not allowed"} {
+		if !strings.Contains(client.prompts[0].SystemPrompt, want) {
+			t.Fatalf("expected %q in review prompt, got %q", want, client.prompts[0].SystemPrompt)
+		}
 	}
 }
 

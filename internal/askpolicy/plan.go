@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Airgap-Castaways/deck/internal/askauthoring"
 	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
@@ -146,7 +145,7 @@ func planHasFilePath(files []askcontract.PlanFile, want string) bool {
 }
 
 func normalizeClarifications(items []askcontract.PlanClarification, req ScenarioRequirements, prompt string, decision askintent.Decision, workspace askretrieve.WorkspaceSummary) []askcontract.PlanClarification {
-	facts := askauthoring.InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
+	facts := InferFacts(prompt, req.ArtifactKinds, req.Connectivity)
 	defaults := planClarificationsFromRequirements(prompt, req, decision, workspace)
 	byID := map[string]askcontract.PlanClarification{}
 	defaultIDs := map[string]bool{}
@@ -160,6 +159,9 @@ func normalizeClarifications(items []askcontract.PlanClarification, req Scenario
 			continue
 		}
 		base := byID[id]
+		if strings.TrimSpace(base.ID) == "" {
+			base.ID = id
+		}
 		if !clarificationUsesCodeOwnedShape(id, defaults) {
 			if strings.TrimSpace(item.Question) != "" {
 				base.Question = strings.TrimSpace(item.Question)
@@ -621,30 +623,30 @@ func dedupeSharedStateContractModel(model askcontract.ExecutionModel) askcontrac
 
 func normalizeEntryScenario(current string, req ScenarioRequirements, files []askcontract.PlanFile, brief askcontract.AuthoringBrief, decision askintent.Decision) string {
 	candidates := []string{}
-	if clean := filepath.ToSlash(strings.TrimSpace(current)); workspacepaths.IsScenarioAuthoringPath(clean) {
+	if clean := filepath.ToSlash(strings.TrimSpace(current)); askcontractPathAllowed(clean) && workspacepaths.IsScenarioAuthoringPath(clean) {
 		candidates = append(candidates, clean)
 	}
-	if clean := filepath.ToSlash(strings.TrimSpace(decision.Target.Path)); workspacepaths.IsScenarioAuthoringPath(clean) {
+	if clean := filepath.ToSlash(strings.TrimSpace(decision.Target.Path)); askcontractPathAllowed(clean) && workspacepaths.IsScenarioAuthoringPath(clean) {
 		candidates = append(candidates, clean)
 	}
-	if clean := filepath.ToSlash(strings.TrimSpace(req.EntryScenario)); workspacepaths.IsScenarioAuthoringPath(clean) {
+	if clean := filepath.ToSlash(strings.TrimSpace(req.EntryScenario)); askcontractPathAllowed(clean) && workspacepaths.IsScenarioAuthoringPath(clean) {
 		candidates = append(candidates, clean)
 	}
 	for _, path := range brief.AnchorPaths {
 		clean := filepath.ToSlash(strings.TrimSpace(path))
-		if workspacepaths.IsScenarioAuthoringPath(clean) {
+		if askcontractPathAllowed(clean) && workspacepaths.IsScenarioAuthoringPath(clean) {
 			candidates = append(candidates, clean)
 		}
 	}
 	for _, path := range brief.TargetPaths {
 		clean := filepath.ToSlash(strings.TrimSpace(path))
-		if workspacepaths.IsScenarioAuthoringPath(clean) {
+		if askcontractPathAllowed(clean) && workspacepaths.IsScenarioAuthoringPath(clean) {
 			candidates = append(candidates, clean)
 		}
 	}
 	for _, file := range files {
 		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if workspacepaths.IsScenarioAuthoringPath(clean) {
+		if askcontractPathAllowed(clean) && workspacepaths.IsScenarioAuthoringPath(clean) {
 			candidates = append(candidates, clean)
 		}
 	}
@@ -1138,7 +1140,14 @@ func normalizeAllowedPaths(paths []string, fallback []string) []string {
 		}
 	}
 	if len(allowed) == 0 {
-		return append([]string(nil), fallback...)
+		fallbackAllowed := make([]string, 0, len(fallback))
+		for _, path := range fallback {
+			path = filepath.ToSlash(strings.TrimSpace(path))
+			if askcontractPathAllowed(path) {
+				fallbackAllowed = append(fallbackAllowed, path)
+			}
+		}
+		return dedupeStrings(fallbackAllowed)
 	}
 	return dedupeStrings(allowed)
 }
@@ -1211,6 +1220,9 @@ func askcontractPathAllowed(path string) bool {
 	if path == workspacepaths.CanonicalPrepareWorkflow || path == workspacepaths.CanonicalVarsWorkflow {
 		return true
 	}
+	if strings.ContainsAny(path, "*?[]{}") {
+		return false
+	}
 	if strings.HasSuffix(path, "/") || filepath.Ext(path) == "" {
 		return false
 	}
@@ -1276,6 +1288,20 @@ func planRequiresVarsFile(plan askcontract.PlanResponse) bool {
 // Recoverable execution-detail weaknesses are carried forward into generation,
 // judge, repair, and post-processing instead of stopping planning.
 func ValidatePlanStructure(plan askcontract.PlanResponse) error {
+	seenClarifications := map[string]bool{}
+	for _, item := range plan.Clarifications {
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			return fmt.Errorf("plan response has clarification with empty id")
+		}
+		if strings.TrimSpace(item.Question) == "" {
+			return fmt.Errorf("plan response clarification %q is missing question", id)
+		}
+		if seenClarifications[id] {
+			return fmt.Errorf("plan response has duplicate clarification id %q", id)
+		}
+		seenClarifications[id] = true
+	}
 	if plan.NeedsPrepare && !containsPlannedPath(plan.Files, workspacepaths.CanonicalPrepareWorkflow) {
 		return fmt.Errorf("plan response requires prepare but does not include %s", workspacepaths.CanonicalPrepareWorkflow)
 	}

@@ -76,17 +76,17 @@ func validatePrepareOutputRoot(step config.Step, output string) error {
 		if workspacepaths.IsPreparedPathUnderRoot(trimmed, workspacepaths.PreparedFilesRoot) {
 			return nil
 		}
-		return fmt.Errorf("E_PREPARE_OUTPUT_ROOT_INVALID: step %s (%s) outputPath must stay under %s/", step.ID, step.Kind, workspacepaths.PreparedFilesRoot)
+		return fmt.Errorf("E_PREPARE_OUTPUT_ROOT_INVALID: step %s (%s) outputPath must stay under %s/ (e.g. %s/flannel.yaml); omit outputPath to use the default", step.ID, step.Kind, workspacepaths.PreparedFilesRoot, workspacepaths.PreparedFilesRoot)
 	case "DownloadImage":
 		if workspacepaths.IsPreparedPathUnderRoot(trimmed, workspacepaths.PreparedImagesRoot) {
 			return nil
 		}
-		return fmt.Errorf("E_PREPARE_OUTPUT_ROOT_INVALID: step %s (%s) outputDir must stay under %s/", step.ID, step.Kind, workspacepaths.PreparedImagesRoot)
+		return fmt.Errorf("E_PREPARE_OUTPUT_ROOT_INVALID: step %s (%s) outputDir must stay under %s/ (e.g. %s/control-plane); omit outputDir to use the default", step.ID, step.Kind, workspacepaths.PreparedImagesRoot, workspacepaths.PreparedImagesRoot)
 	case "DownloadPackage":
 		if workspacepaths.IsPreparedPathUnderRoot(trimmed, workspacepaths.PreparedPackagesRoot) {
 			return nil
 		}
-		return fmt.Errorf("E_PREPARE_OUTPUT_ROOT_INVALID: step %s (%s) outputDir must stay under %s/", step.ID, step.Kind, workspacepaths.PreparedPackagesRoot)
+		return fmt.Errorf("E_PREPARE_OUTPUT_ROOT_INVALID: step %s (%s) outputDir must stay under %s/ (e.g. %s/kubernetes); omit outputDir to use the default", step.ID, step.Kind, workspacepaths.PreparedPackagesRoot, workspacepaths.PreparedPackagesRoot)
 	default:
 		return nil
 	}
