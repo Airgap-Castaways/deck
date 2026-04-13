@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
+	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askprovider"
 	"github.com/Airgap-Castaways/deck/internal/askstate"
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
@@ -449,7 +450,7 @@ func activeAuthoringTools(session *authoringAgentSession) []string {
 	tools := append([]string(nil), session.availableTools...)
 	schemaLoop := schemaLoopCount(session.toolEvents) >= 2
 	readOnlyStreak := readOnlyStreakCount(session.toolEvents) >= 3
-	if session.decision.Route == "draft" && !session.workspace.HasWorkflowTree {
+	if session.decision.Route == askintent.RouteDraft && !session.workspace.HasWorkflowTree {
 		if session.verificationFailure > 0 {
 			if schemaLoop || readOnlyStreak {
 				return []string{"file_edit", "file_write", "validate"}

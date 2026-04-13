@@ -433,7 +433,7 @@ func (s *authoringAgentSession) runRead(call authorToolCall) agentToolResult {
 		result := authorReadResult{Path: path, Exists: exists, Source: source, WasCandidate: source == "candidate"}
 		if exists {
 			result.Content, result.StartLine, result.EndLine, result.TotalLines, result.Truncated = renderReadWindow(content, call.Offset, call.Limit)
-			if call.Offset <= 0 && call.Limit <= 0 {
+			if !result.Truncated && result.StartLine == 1 {
 				s.readState[path] = authorReadSnapshot{Content: content, Exists: true, Candidate: source == "candidate", WasFullRead: true}
 			}
 		}
@@ -565,8 +565,11 @@ func (s *authoringAgentSession) runInit() agentToolResult {
 	if s.workspace.HasWorkflowTree {
 		return agentToolResult{OK: false, Summary: "init is disabled", Payload: map[string]any{"ok": false, "error": "init is disabled because the workspace already has a workflow tree"}}
 	}
+	if err := ensureScaffold(s.root); err != nil {
+		return agentToolResult{OK: false, Summary: "init failed", Payload: map[string]any{"ok": false, "error": err.Error()}}
+	}
 	s.scaffoldRequested = true
-	return agentToolResult{OK: true, Summary: "prepared default workspace scaffold", Payload: map[string]any{"ok": true, "createdDirectories": []string{"workflows/scenarios", "workflows/components", "outputs/files", "outputs/images", "outputs/packages"}, "createdFiles": []string{".gitignore", ".deckignore"}}}
+	return agentToolResult{OK: true, Summary: "prepared default workspace scaffold", Payload: map[string]any{"ok": true, "createdDirectories": []string{"workflows/scenarios", "workflows/components", "outputs/files", "outputs/images", "outputs/packages"}, "createdFiles": []string{".gitignore", ".deckignore", "outputs/files/.keep", "outputs/images/.keep", "outputs/packages/.keep"}}}
 }
 
 func (s *authoringAgentSession) runValidate(ctx context.Context, call authorToolCall) agentToolResult {

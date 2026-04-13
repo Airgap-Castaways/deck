@@ -258,6 +258,45 @@ func TestAuthoringAgentGlobAndReadSupportCandidateState(t *testing.T) {
 	}
 }
 
+func TestAuthoringAgentInitCreatesScaffoldInEmptyWorkspace(t *testing.T) {
+	root := t.TempDir()
+	session := newTestAgentSession(t, root, "create a simple apply workflow", askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "workspace"}})
+	result := session.runInit()
+	if !result.OK {
+		t.Fatalf("expected init to succeed, got %s", renderAgentPayload(result.Payload))
+	}
+	for _, rel := range []string{
+		".gitignore",
+		".deckignore",
+		filepath.Join("outputs", "files", ".keep"),
+		filepath.Join("outputs", "images", ".keep"),
+		filepath.Join("outputs", "packages", ".keep"),
+	} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+			t.Fatalf("expected scaffold path %s to exist: %v", rel, err)
+		}
+	}
+}
+
+func TestAuthoringAgentFileEditAcceptsOffsetOneFullRead(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflow dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte(waitForHostsWorkflow("5s")), 0o600); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+	session := newTestAgentSession(t, root, "refine apply workflow", askintent.Decision{Route: askintent.RouteRefine, Target: askintent.Target{Kind: "scenario", Path: workspacepaths.CanonicalApplyWorkflow}})
+	read := session.runRead(authorToolCall{Name: "read", Path: workspacepaths.CanonicalApplyWorkflow, Offset: 1})
+	if !read.OK {
+		t.Fatalf("expected offset=1 full read to succeed, got %s", renderAgentPayload(read.Payload))
+	}
+	edit := session.runFileEdit(authorToolCall{Name: "file_edit", Path: workspacepaths.CanonicalApplyWorkflow, OldString: "timeout: 5s", NewString: "timeout: 10s"})
+	if !edit.OK {
+		t.Fatalf("expected file_edit to succeed after offset=1 full read, got %s", renderAgentPayload(edit.Payload))
+	}
+}
+
 func TestAuthoringAgentFileEditUsesReadSnapshot(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
