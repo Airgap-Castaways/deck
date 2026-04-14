@@ -127,6 +127,10 @@ func ParsePlanCritic(raw string) (PlanCriticResponse, error) {
 		switch resp.Findings[i].Severity {
 		case workflowissues.SeverityBlocking, workflowissues.SeverityAdvisory, workflowissues.SeverityMissingContract:
 			// ok
+		case "error":
+			resp.Findings[i].Severity = workflowissues.SeverityBlocking
+		case "warning":
+			resp.Findings[i].Severity = workflowissues.SeverityAdvisory
 		case "":
 			resp.Findings[i].Severity = workflowissues.SeverityAdvisory
 		default:

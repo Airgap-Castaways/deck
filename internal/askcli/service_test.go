@@ -24,6 +24,8 @@ import (
 type stubClient struct {
 	responses         []string
 	providerResponses []askprovider.Response
+	responseIndex     int
+	providerIndex     int
 	calls             int
 	prompts           []askprovider.Request
 }
@@ -41,19 +43,23 @@ func (b *flushBuffer) Flush() error {
 func (s *stubClient) Generate(_ context.Context, req askprovider.Request) (askprovider.Response, error) {
 	s.prompts = append(s.prompts, req)
 	defer func() { s.calls++ }()
-	if len(s.providerResponses) > 0 {
-		idx := s.calls
+	if len(s.providerResponses) > 0 && strings.HasPrefix(strings.TrimSpace(req.Kind), "generate") {
+		idx := s.providerIndex
 		if idx >= len(s.providerResponses) {
 			idx = len(s.providerResponses) - 1
+		} else {
+			s.providerIndex++
 		}
 		return s.providerResponses[idx], nil
 	}
 	if len(s.responses) == 0 {
 		return askprovider.Response{}, errors.New("no stub response configured")
 	}
-	idx := s.calls
+	idx := s.responseIndex
 	if idx >= len(s.responses) {
 		idx = len(s.responses) - 1
+	} else {
+		s.responseIndex++
 	}
 	return askprovider.Response{Content: s.responses[idx]}, nil
 }
@@ -441,6 +447,26 @@ func TestHasFatalPlanReviewIssuesAllowsSimpleSingleNodeVerificationPlan(t *testi
 	critic := askcontract.PlanCriticResponse{Findings: []askcontract.PlanCriticFinding{{Code: workflowissues.CodeRoleCardinalityGap, Severity: workflowissues.SeverityMissingContract, Message: "single-node role cardinality is not explicit"}, {Code: workflowissues.CodeWeakVerificationStaging, Severity: workflowissues.SeverityAdvisory, Message: "single CheckKubernetesCluster-only flow is weakly staged"}}}
 	if hasFatalPlanReviewIssues(plan, critic) {
 		t.Fatalf("expected simple single-node verification plan to continue past recoverable critic findings")
+	}
+}
+
+func TestExecuteDoesNotAutoDefaultBlockingClarifications(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "test-key")
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflow dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte(waitForHostsWorkflow("5s")), 0o600); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	client := &stubClient{responses: []string{terseBlockingPlanJSON(), terseBlockingPlanCriticJSON()}}
+	if err := Execute(context.Background(), Options{Root: root, Prompt: "switch this apply workflow to local repo packages", Edit: true, Stdin: strings.NewReader(""), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "authoring needs clarification") || strings.Contains(out, "ask write: ok") {
+		t.Fatalf("expected non-interactive review stop without writes, got %q", out)
 	}
 }
 
@@ -936,6 +962,30 @@ func TestExecutePlanResumeWithAnswersUsesSavedPlanRoute(t *testing.T) {
 	}
 }
 
+func TestExecuteResumeAuthoringAdaptsAliasedSavedPlan(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "test-key")
+	root := t.TempDir()
+	planDir := filepath.Join(root, ".deck", "plan")
+	if err := os.MkdirAll(planDir, 0o755); err != nil {
+		t.Fatalf("mkdir plan dir: %v", err)
+	}
+	json := `{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","authoringProgram":{"verification":{"expectedNodeCount":1,"expectedReadyCount":1,"expectedControlPlaneReady":1}},"blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"clarifications":[{"id":"platform-family","question":"Which platform family should the plan target?","kind":"enum","options":["rhel","debian"],"answer":"rhel","blocksGeneration":true}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create-or-update","purpose":"entry"}],"validationChecklist":["lint"]}`
+	if err := os.WriteFile(filepath.Join(planDir, "latest.json"), []byte(json), 0o600); err != nil {
+		t.Fatalf("write json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(planDir, "latest.md"), []byte("md"), 0o600); err != nil {
+		t.Fatalf("write md: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	client := &stubClient{providerResponses: agentWriteLintFinishResponses(t, askcontract.GeneratedFile{Path: workspacepaths.CanonicalApplyWorkflow, Content: waitForHostsWorkflow("5s")})}
+	if err := Execute(context.Background(), Options{Root: root, Prompt: "implement this plan", FromPath: ".deck/plan/latest.md", Stdin: strings.NewReader(""), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "ask write: ok") {
+		t.Fatalf("expected resumed authoring success, got %q", stdout.String())
+	}
+}
+
 func TestExecutePlanResumeStopsWhenClarificationsRemain(t *testing.T) {
 	t.Setenv("DECK_ASK_API_KEY", "test-key")
 	root := t.TempDir()
@@ -1338,6 +1388,14 @@ func TestPlanWorkspaceChunksIncludeImportedComponents(t *testing.T) {
 	if len(chunks) < 2 {
 		t.Fatalf("expected planned scenario and imported component chunks, got %d", len(chunks))
 	}
+}
+
+func terseBlockingPlanJSON() string {
+	return `{"version":1,"request":"switch this apply workflow to local repo packages","intent":"refine","complexity":"medium","authoringBrief":{"routeIntent":"refine","targetScope":"workspace","targetPaths":["workflows/prepare.yaml","workflows/scenarios/apply.yaml"],"anchorPaths":["workflows/scenarios/apply.yaml"],"allowedCompanionPaths":["workflows/vars.yaml"],"modeIntent":"prepare+apply","connectivity":"offline","completenessTarget":"refine","topology":"multi-node","nodeCount":3,"platformFamily":"rhel","requiredCapabilities":["package-staging","prepare-artifacts","kubeadm-bootstrap","kubeadm-join","cluster-verification"]},"authoringProgram":{"platform":{"family":"rhel","release":"9","repoType":"local-repo"},"artifacts":{"packages":["kubeadm","kubelet","kubectl","containerd"]},"cluster":{"joinFile":"/tmp/deck/join.txt","roleSelector":"vars.role","controlPlaneCount":1,"workerCount":2},"verification":{"expectedNodeCount":3,"expectedReadyCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane","interval":"5s","timeout":"15m"}},"executionModel":{"artifactContracts":[{"kind":"package","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"offline package flow"},{"kind":"repository-setup","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"repo metadata flow"}],"sharedStateContracts":[{"name":"join-file","producerPath":"/tmp/deck/join.txt","consumerPaths":["/tmp/deck/join.txt"],"availabilityModel":"published-for-worker-consumption","description":"publish join file for workers"}],"roleExecution":{"roleSelector":"vars.role","controlPlaneFlow":"bootstrap","workerFlow":"join","perNodeInvocation":true},"verification":{"expectedNodeCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane"}},"artifactKinds":["package"],"blockers":["Exact package set/version pinning for Kubernetes and container runtime is not specified, so prepare package staging cannot be made deterministic."],"targetOutcome":"Refine reviewed workflows","assumptions":[],"openQuestions":[],"clarifications":[{"id":"runtime.platformFamily","question":"This request depends on distro-specific package or repository behavior, but the target platform family is not explicit. Which platform family should the plan target?","kind":"enum","decision":"runtime","options":["rhel","debian","custom"],"recommendedDefault":"rhel","answer":"","blocksGeneration":true,"affects":["authoringBrief.platformFamily","validationChecklist"]},{"id":"repo-delivery","question":"How will apply hosts access the local repository content?","kind":"choice","decision":"scope","options":["file-based-local-repo","lan-hosted-local-repo","prebaked-node-repo"],"recommendedDefault":"lan-hosted-local-repo","answer":"","blocksGeneration":true,"affects":["executionModel.artifactContracts"]},{"id":"kubernetes-version","question":"What Kubernetes version should package staging and install target?","kind":"string","decision":"version","recommendedDefault":"v1.30.0","answer":"","blocksGeneration":true,"affects":["authoringProgram.cluster.kubernetesVersion"]}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"create","purpose":"prepare workflow"},{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"update","purpose":"refined apply workflow"}],"validationChecklist":["lint"]}`
+}
+
+func terseBlockingPlanCriticJSON() string {
+	return `{"summary":"plan review approved local repo refine contract","blocking":[],"advisory":["worker join publication should remain explicit"],"missingContracts":[],"suggestedFixes":["preserve join publication semantics during refine"],"findings":[{"code":"worker_join_fanout_gap","severity":"warning","message":"worker join publication should remain explicit","path":"workflows/scenarios/apply.yaml","recoverable":true}]}`
 }
 
 func writeLatestPlanArtifact(t *testing.T, root string) {

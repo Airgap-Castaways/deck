@@ -9,15 +9,6 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 )
 
-func TestNormalizePlannedActionHandlesAddAlias(t *testing.T) {
-	if got := normalizePlannedAction("add", "workflows/vars.yaml"); got != "create" {
-		t.Fatalf("expected add to normalize to create, got %q", got)
-	}
-	if got := normalizePlannedAction("create_or_modify", "workflows/scenarios/apply.yaml"); got != "update" {
-		t.Fatalf("expected create_or_modify to normalize to update, got %q", got)
-	}
-}
-
 func TestMergeRequirementsWithPlanPromotesPrepareAndPlannedFiles(t *testing.T) {
 	req := ScenarioRequirements{RequiredFiles: []string{"workflows/scenarios/apply.yaml"}, Connectivity: "offline"}
 	merged := MergeRequirementsWithPlan(req, askcontract.PlanResponse{
@@ -106,6 +97,23 @@ func TestBuildScenarioRequirementsIgnoresExternalEvidenceArtifactKinds(t *testin
 	}
 	if len(req.ArtifactKinds) != 0 {
 		t.Fatalf("expected external evidence artifact kinds not to enter requirements, got %#v", req.ArtifactKinds)
+	}
+}
+
+func TestBuildPlanDefaultsUsesRefineTargetAsEntryScenarioFallback(t *testing.T) {
+	req := ScenarioRequirements{NeedsPrepare: true, ArtifactKinds: []string{"package"}, Connectivity: "offline", RequiredFiles: []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml"}}
+	decision := askintent.Decision{Route: askintent.RouteRefine, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}}
+	plan := BuildPlanDefaults(req, "switch this apply workflow to local repo packages", decision, askretrieve.WorkspaceSummary{HasWorkflowTree: true, HasApply: true})
+	if plan.EntryScenario != "workflows/scenarios/apply.yaml" {
+		t.Fatalf("expected refine target path as fallback entry scenario, got %#v", plan.EntryScenario)
+	}
+}
+
+func TestBuildPlanDefaultsUsesRequiredScenarioAsEntryScenarioFallback(t *testing.T) {
+	req := ScenarioRequirements{NeedsPrepare: true, ArtifactKinds: []string{"package"}, Connectivity: "offline", RequiredFiles: []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml"}}
+	plan := BuildPlanDefaults(req, "switch this apply workflow to local repo packages", askintent.Decision{Route: askintent.RouteRefine}, askretrieve.WorkspaceSummary{HasWorkflowTree: true, HasApply: true})
+	if plan.EntryScenario != "workflows/scenarios/apply.yaml" {
+		t.Fatalf("expected required scenario path as fallback entry scenario, got %#v", plan.EntryScenario)
 	}
 }
 
@@ -302,6 +310,42 @@ func TestNormalizePlanAddsRefineVarsCompanionClarificationWhenVarsPathIsImplicit
 	}
 	if plan.AuthoringBrief.AnchorPaths[0] != "workflows/scenarios/control-plane-bootstrap.yaml" {
 		t.Fatalf("expected scenario anchor path, got %#v", plan.AuthoringBrief)
+	}
+}
+
+func TestNormalizePlanAppliesClarificationAliasAnswers(t *testing.T) {
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request:          "switch this apply workflow to local repo packages",
+		Intent:           "refine",
+		Files:            []askcontract.PlanFile{{Path: "workflows/prepare.yaml", Action: "create"}, {Path: "workflows/scenarios/apply.yaml", Action: "update"}},
+		AuthoringBrief:   askcontract.AuthoringBrief{TargetPaths: []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml"}, AnchorPaths: []string{"workflows/scenarios/apply.yaml"}, ModeIntent: "prepare+apply"},
+		AuthoringProgram: askcontract.AuthoringProgram{Platform: askcontract.ProgramPlatform{RepoType: "local-repo"}},
+		Clarifications:   []askcontract.PlanClarification{{ID: "runtime.platformFamily", Answer: "rhel"}, {ID: "repo-delivery", Answer: "filesystem-path"}, {ID: "kubernetes-version", Answer: "v1.30.0"}},
+	}, "switch this apply workflow to local repo packages", askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{HasWorkflowTree: true, HasApply: true, Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/apply.yaml"}}}, askintent.Decision{Route: askintent.RouteRefine, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}})
+	if plan.AuthoringBrief.PlatformFamily != "rhel" || plan.AuthoringProgram.Platform.Family != "rhel" {
+		t.Fatalf("expected platform alias answers to materialize, got %#v %#v", plan.AuthoringBrief, plan.AuthoringProgram.Platform)
+	}
+	if plan.AuthoringProgram.Platform.RepoType != "local-repo" {
+		t.Fatalf("expected repo type to remain semantic, got %#v", plan.AuthoringProgram.Platform)
+	}
+	if plan.AuthoringProgram.Cluster.KubernetesVersion != "v1.30.0" {
+		t.Fatalf("expected version alias answer to materialize, got %#v", plan.AuthoringProgram.Cluster)
+	}
+	if !containsString(plan.ExecutionModel.ApplyAssumptions, "filesystem-path") {
+		t.Fatalf("expected repo answer to enter apply assumptions, got %#v", plan.ExecutionModel.ApplyAssumptions)
+	}
+}
+
+func TestNormalizePlanSkipsProseVersionAnswers(t *testing.T) {
+	plan := NormalizePlan(askcontract.PlanResponse{
+		Request:          "switch this apply workflow to local repo packages",
+		Intent:           "refine",
+		Files:            []askcontract.PlanFile{{Path: "workflows/scenarios/apply.yaml", Action: "update"}},
+		AuthoringProgram: askcontract.AuthoringProgram{Cluster: askcontract.ProgramCluster{KubernetesVersion: "stable"}},
+		Clarifications:   []askcontract.PlanClarification{{ID: "kubernetes-version", Answer: "use workspace standard version 1.30"}},
+	}, "switch this apply workflow to local repo packages", askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{HasWorkflowTree: true, HasApply: true, Files: []askretrieve.WorkspaceFile{{Path: "workflows/scenarios/apply.yaml"}}}, askintent.Decision{Route: askintent.RouteRefine, Target: askintent.Target{Kind: "scenario", Path: "workflows/scenarios/apply.yaml"}})
+	if plan.AuthoringProgram.Cluster.KubernetesVersion != "stable" {
+		t.Fatalf("expected prose version answer not to materialize, got %#v", plan.AuthoringProgram.Cluster)
 	}
 }
 

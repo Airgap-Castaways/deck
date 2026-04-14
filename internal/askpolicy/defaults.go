@@ -29,6 +29,21 @@ func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askinte
 	}
 	brief := BriefFromRequirements(req, decision)
 	execution := ExecutionModelFromRequirements(req)
+	entryScenario := strings.TrimSpace(req.EntryScenario)
+	if entryScenario == "" {
+		for _, path := range req.RequiredFiles {
+			clean := filepath.ToSlash(strings.TrimSpace(path))
+			if workspacepaths.IsScenarioAuthoringPath(clean) {
+				entryScenario = clean
+				break
+			}
+		}
+	}
+	if entryScenario == "" {
+		if clean := filepath.ToSlash(strings.TrimSpace(decision.Target.Path)); workspacepaths.IsScenarioAuthoringPath(clean) || clean == workspacepaths.CanonicalPrepareWorkflow {
+			entryScenario = clean
+		}
+	}
 	return askcontract.PlanResponse{
 		Version:                 1,
 		Request:                 strings.TrimSpace(prompt),
@@ -45,7 +60,7 @@ func BuildPlanDefaults(req ScenarioRequirements, prompt string, decision askinte
 		TargetOutcome:           "Generate valid workflow files for the request.",
 		Assumptions:             []string{"Use v1alpha1 workflow schema", "Prefer typed steps where possible"},
 		Clarifications:          planClarificationsFromRequirements(prompt, req, decision, workspace),
-		EntryScenario:           req.EntryScenario,
+		EntryScenario:           entryScenario,
 		Files:                   files,
 		ValidationChecklist:     defaultValidationChecklist(req),
 	}

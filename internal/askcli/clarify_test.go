@@ -87,3 +87,41 @@ func hasAnsweredClarification(items []askcontract.PlanClarification, want string
 	}
 	return false
 }
+
+func TestApplyPlanAnswersAcceptsCanonicalIDsAgainstAliasedPlannerFields(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		Request: "switch package flow",
+		Intent:  "refine",
+		Clarifications: []askcontract.PlanClarification{
+			{ID: "platform-family", Question: "Which platform family should the plan target?", Kind: "enum", Options: []string{"rhel", "debian"}, BlocksGeneration: true},
+			{Question: "Which role layout should the plan use for control-plane and worker nodes?", Kind: "enum", Options: []string{"1 control-plane + 2 workers", "3 control-plane"}, BlocksGeneration: true},
+		},
+	}
+	updated, err := applyPlanAnswers(plan, []string{"runtime.platformFamily=rhel", "topology.roleModel=1cp-2workers"})
+	if err != nil {
+		t.Fatalf("apply plan answers: %v", err)
+	}
+	if !hasAnsweredClarification(updated.Clarifications, "runtime.platformFamily", "rhel") {
+		t.Fatalf("expected canonical platform answer, got %#v", updated.Clarifications)
+	}
+	if !hasAnsweredClarification(updated.Clarifications, "topology.roleModel", "1cp-2workers") {
+		t.Fatalf("expected canonical role-model answer, got %#v", updated.Clarifications)
+	}
+}
+
+func TestApplyPlanAnswersAcceptsCanonicalRepoDeliveryAgainstAliasedOptions(t *testing.T) {
+	plan := askcontract.PlanResponse{
+		Request: "switch package flow",
+		Intent:  "refine",
+		Clarifications: []askcontract.PlanClarification{
+			{ID: "repo-access-mode", Question: "How should nodes access the local repository during apply?", Kind: "choice", Options: []string{"file-based-local-repo", "lan-hosted-local-repo", "prebaked-node-repo"}, BlocksGeneration: true},
+		},
+	}
+	updated, err := applyPlanAnswers(plan, []string{"repo-delivery=filesystem-path"})
+	if err != nil {
+		t.Fatalf("apply plan answers: %v", err)
+	}
+	if !hasAnsweredClarification(updated.Clarifications, "repo-delivery", "filesystem-path") {
+		t.Fatalf("expected canonical repo-delivery answer, got %#v", updated.Clarifications)
+	}
+}

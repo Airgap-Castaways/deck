@@ -20,7 +20,8 @@ import (
 type mockAskClient struct {
 	responses         []string
 	providerResponses []askprovider.Response
-	index             int
+	responseIndex     int
+	providerIndex     int
 	calls             int
 }
 
@@ -107,26 +108,26 @@ func handleWebSearchHelperRequest(req mcpHelperRequest) *mcpHelperResponse {
 func (m *mockAskClient) Generate(_ context.Context, req askprovider.Request) (askprovider.Response, error) {
 	m.calls++
 	if req.Kind == "classify" {
-		if m.index < len(m.responses) && strings.Contains(strings.TrimSpace(m.responses[m.index]), `"route"`) {
-			resp := m.responses[m.index]
-			m.index++
+		if m.responseIndex < len(m.responses) && strings.Contains(strings.TrimSpace(m.responses[m.responseIndex]), `"route"`) {
+			resp := m.responses[m.responseIndex]
+			m.responseIndex++
 			return askprovider.Response{Content: resp}, nil
 		}
 		return askprovider.Response{Content: synthesizeClassification(req.Prompt)}, nil
 	}
-	if len(m.providerResponses) > 0 {
-		if m.index >= len(m.providerResponses) {
+	if len(m.providerResponses) > 0 && strings.HasPrefix(strings.TrimSpace(req.Kind), "generate") {
+		if m.providerIndex >= len(m.providerResponses) {
 			return m.providerResponses[len(m.providerResponses)-1], nil
 		}
-		resp := m.providerResponses[m.index]
-		m.index++
+		resp := m.providerResponses[m.providerIndex]
+		m.providerIndex++
 		return resp, nil
 	}
-	if m.index >= len(m.responses) {
+	if m.responseIndex >= len(m.responses) {
 		return askprovider.Response{Content: m.responses[len(m.responses)-1]}, nil
 	}
-	resp := m.responses[m.index]
-	m.index++
+	resp := m.responses[m.responseIndex]
+	m.responseIndex++
 	return askprovider.Response{Content: resp}, nil
 }
 
@@ -517,6 +518,187 @@ func TestAskFromPlanPrefersJSONArtifact(t *testing.T) {
 	}
 }
 
+func TestAskComplexDirectAuthoringUsesReviewedPlan(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "env-key")
+	root := t.TempDir()
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWD) }()
+
+	originalFactory := newAskBackend
+	newAskBackend = func() askprovider.Client {
+		return &mockAskClient{responses: []string{complexDirectPlanJSON(), complexDirectPlanCriticJSON()}, providerResponses: complexDirectAskResponses()}
+	}
+	defer func() { newAskBackend = originalFactory }()
+
+	out, err := runWithCapturedStdout([]string{"ask", "--create", "create a 3-node kubeadm cluster apply workflow with one control-plane and two workers"})
+	if err != nil {
+		t.Fatalf("ask complex direct authoring: %v", err)
+	}
+	for _, want := range []string{"plan:", "plan-json:", "plan-review: plan review highlighted worker join sequencing", "ask write: ok", "wrote:"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in output, got %q", want, out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".deck", "plan", "latest.json")); err != nil {
+		t.Fatalf("expected latest json plan artifact: %v", err)
+	}
+}
+
+func TestAskComplexDirectEditUsesReviewedPlan(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "env-key")
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflow dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte(waitForHostsAskWorkflow("5s")), 0o644); err != nil {
+		t.Fatalf("write apply: %v", err)
+	}
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWD) }()
+
+	originalFactory := newAskBackend
+	newAskBackend = func() askprovider.Client {
+		return &mockAskClient{responses: []string{complexDirectEditPlanJSON(), complexDirectEditPlanCriticJSON()}, providerResponses: complexDirectEditAskResponses()}
+	}
+	defer func() { newAskBackend = originalFactory }()
+
+	out, err := runWithCapturedStdout([]string{"ask", "--edit", "refactor this 3-node kubeadm apply workflow for rhel 9 with kubernetes v1.30.0, tar archive image loading, one control-plane and two workers; add a prepare workflow for offline package and image staging while preserving role-aware control-plane and worker behavior"})
+	if err != nil {
+		t.Fatalf("ask complex direct edit: %v", err)
+	}
+	for _, want := range []string{"plan:", "plan-json:", "plan-review: plan review approved explicit refine contract", "ask write: ok", "wrote:"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in output, got %q", want, out)
+		}
+	}
+	applyContent, err := os.ReadFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"))
+	if err != nil {
+		t.Fatalf("read refined apply: %v", err)
+	}
+	if !strings.Contains(string(applyContent), "kind: InitKubeadm") || !strings.Contains(string(applyContent), "kind: JoinKubeadm") || strings.Contains(string(applyContent), "timeout: 5s") {
+		t.Fatalf("expected refined apply content, got %q", string(applyContent))
+	}
+	if _, err := os.Stat(filepath.Join(root, "workflows", "prepare.yaml")); err != nil {
+		t.Fatalf("expected prepare workflow: %v", err)
+	}
+}
+
+func TestAskTerseComplexEditUsesReviewedPlan(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "env-key")
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflow dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte(strings.TrimLeft(`
+version: v1alpha1
+phases:
+  - name: cluster
+    steps:
+      - id: init-control-plane
+        kind: InitKubeadm
+        when: vars.role == "control-plane"
+        spec:
+          outputJoinFile: /tmp/deck/join.txt
+          podNetworkCIDR: 10.244.0.0/16
+      - id: join-worker
+        kind: JoinKubeadm
+        when: vars.role == "worker"
+        spec:
+          joinFile: /tmp/deck/join.txt
+  - name: verify
+    steps:
+      - id: verify-cluster
+        kind: CheckKubernetesCluster
+        when: vars.role == "control-plane"
+        spec:
+          interval: 5s
+          timeout: 15m
+          nodes:
+            total: 3
+            ready: 3
+            controlPlaneReady: 1
+`, "\n")), 0o644); err != nil {
+		t.Fatalf("write apply: %v", err)
+	}
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWD) }()
+
+	originalFactory := newAskBackend
+	newAskBackend = func() askprovider.Client {
+		return &mockAskClient{responses: []string{terseLocalRepoEditPlanJSON(), terseLocalRepoEditPlanCriticJSON()}, providerResponses: complexDirectEditAskResponses()}
+	}
+	defer func() { newAskBackend = originalFactory }()
+
+	out, err := runWithCapturedStdout([]string{"ask", "--edit", "switch this apply workflow to local repo packages"})
+	if err != nil {
+		t.Fatalf("ask terse complex edit: %v", err)
+	}
+	for _, want := range []string{"plan:", "plan-json:", "plan-review: plan review approved local repo refine contract", "ask: plan generated with review blockers"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in output, got %q", want, out)
+		}
+	}
+}
+
+func TestAskComplexDirectEditStopsOnReviewedPlanBlockers(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "env-key")
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflow dir: %v", err)
+	}
+	original := waitForHostsAskWorkflow("5s")
+	if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte(original), 0o644); err != nil {
+		t.Fatalf("write apply: %v", err)
+	}
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWD) }()
+
+	originalFactory := newAskBackend
+	newAskBackend = func() askprovider.Client {
+		return &mockAskClient{responses: []string{complexDirectEditPlanJSON(), complexDirectEditBlockingCriticJSON(), complexDirectEditPlanJSON(), complexDirectEditBlockingCriticJSON()}}
+	}
+	defer func() { newAskBackend = originalFactory }()
+
+	out, err := runWithCapturedStdout([]string{"ask", "--edit", "refactor this 3-node kubeadm apply workflow but leave topology details ambiguous"})
+	if err != nil {
+		t.Fatalf("ask complex direct blocker edit: %v", err)
+	}
+	if !strings.Contains(out, "plan-review: plan review found blocking review issues") || strings.Contains(out, "ask write: ok") {
+		t.Fatalf("expected blocker stop output, got %q", out)
+	}
+	applyContent, err := os.ReadFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"))
+	if err != nil {
+		t.Fatalf("read blocked apply: %v", err)
+	}
+	if string(applyContent) != original {
+		t.Fatalf("expected blocker path to leave apply unchanged")
+	}
+}
+
 func TestAskPlanShowsBlockers(t *testing.T) {
 	t.Setenv("DECK_ASK_API_KEY", "env-key")
 	root := t.TempDir()
@@ -576,6 +758,21 @@ func TestAskComplexPromptShowsJudgeFindingsAndRepairsLoosePlanJSON(t *testing.T)
 			t.Fatalf("expected %q in output, got %q", want, out)
 		}
 	}
+}
+
+func waitForHostsAskWorkflow(timeout string) string {
+	return strings.TrimLeft(`
+version: v1alpha1
+phases:
+  - name: apply
+    steps:
+      - id: wait-hosts
+        kind: WaitForFile
+        spec:
+          path: /etc/hosts
+          interval: 1s
+          timeout: `+timeout+`
+`, "\n")
 }
 
 func validAskWorkflow() string {
@@ -705,6 +902,138 @@ func testAPIKey() string {
 
 func testOAuthToken() string {
 	return "test-" + "oauth-token"
+}
+
+func complexDirectPlanJSON() string {
+	return `{"version":1,"request":"create a 3-node kubeadm cluster apply workflow","intent":"draft","complexity":"complex","authoringBrief":{"routeIntent":"draft","targetScope":"workspace","targetPaths":["workflows/scenarios/apply.yaml"],"allowedCompanionPaths":["workflows/vars.yaml"],"modeIntent":"apply-only","connectivity":"offline","completenessTarget":"complete","topology":"multi-node","nodeCount":3,"requiredCapabilities":["kubeadm-bootstrap","kubeadm-join","cluster-verification"]},"authoringProgram":{"cluster":{"joinFile":"/tmp/deck/join.txt","roleSelector":"vars.role","controlPlaneCount":1,"workerCount":2},"verification":{"expectedNodeCount":3,"expectedReadyCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane","interval":"5s","timeout":"15m"}},"executionModel":{"sharedStateContracts":[{"name":"join-file","producerPath":"/tmp/deck/join.txt","consumerPaths":["/tmp/deck/join.txt"],"availabilityModel":"published-for-worker-consumption","description":"publish join file for workers"}],"roleExecution":{"roleSelector":"vars.role","controlPlaneFlow":"bootstrap","workerFlow":"join","perNodeInvocation":true},"verification":{"expectedNodeCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane"}},"blockers":[],"targetOutcome":"Generate reviewed workflows","assumptions":[],"openQuestions":[],"clarifications":[{"id":"topology.roleModel","question":"Which role layout should the plan use?","kind":"topology","decision":"defaulted","options":["1cp-2workers"],"recommendedDefault":"1cp-2workers","answer":"1cp-2workers","blocksGeneration":false,"affects":["authoringProgram.cluster.controlPlaneCount","authoringProgram.cluster.workerCount"]}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry scenario"},{"path":"workflows/vars.yaml","kind":"vars","action":"create","purpose":"role selector values"}],"validationChecklist":["lint"]}`
+}
+
+func complexDirectPlanCriticJSON() string {
+	return `{"summary":"plan review highlighted worker join sequencing","blocking":[],"advisory":["worker join publication needs explicit sequencing"],"missingContracts":[],"suggestedFixes":["publish the join contract before worker consumption"],"findings":[{"code":"worker_join_fanout_gap","severity":"advisory","message":"worker join publication needs explicit sequencing","path":"workflows/scenarios/apply.yaml","recoverable":true}]}`
+}
+
+func terseLocalRepoEditPlanJSON() string {
+	return `{"version":1,"request":"switch this apply workflow to local repo packages","intent":"refine","complexity":"medium","authoringBrief":{"routeIntent":"refine","targetScope":"workspace","targetPaths":["workflows/prepare.yaml","workflows/scenarios/apply.yaml"],"anchorPaths":["workflows/scenarios/apply.yaml"],"allowedCompanionPaths":["workflows/vars.yaml"],"modeIntent":"prepare+apply","connectivity":"offline","completenessTarget":"refine","topology":"multi-node","nodeCount":3,"platformFamily":"rhel","requiredCapabilities":["package-staging","prepare-artifacts","kubeadm-bootstrap","kubeadm-join","cluster-verification"]},"authoringProgram":{"platform":{"family":"rhel","release":"9","repoType":"local-repo"},"artifacts":{"packages":["kubeadm","kubelet","kubectl","containerd"]},"cluster":{"joinFile":"/tmp/deck/join.txt","roleSelector":"vars.role","controlPlaneCount":1,"workerCount":2},"verification":{"expectedNodeCount":3,"expectedReadyCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane","interval":"5s","timeout":"15m"}},"executionModel":{"artifactContracts":[{"kind":"package","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"offline package flow"},{"kind":"repository-setup","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"repo metadata flow"}],"sharedStateContracts":[{"name":"join-file","producerPath":"/tmp/deck/join.txt","consumerPaths":["/tmp/deck/join.txt"],"availabilityModel":"published-for-worker-consumption","description":"publish join file for workers"}],"roleExecution":{"roleSelector":"vars.role","controlPlaneFlow":"bootstrap","workerFlow":"join","perNodeInvocation":true},"verification":{"expectedNodeCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane"}},"artifactKinds":["package"],"blockers":["Platform family/release and local repository delivery method are not specified, so repo configuration cannot be generated safely.","Exact package set/version pinning for Kubernetes and container runtime is not specified, so prepare package staging cannot be made deterministic."],"targetOutcome":"Refine reviewed workflows","assumptions":[],"openQuestions":[],"clarifications":[{"id":"runtime.platformFamily","question":"This request depends on distro-specific package or repository behavior, but the target platform family is not explicit. Which platform family should the plan target?","kind":"enum","decision":"runtime","options":["rhel","debian","custom"],"recommendedDefault":"rhel","blocksGeneration":true,"affects":["authoringBrief.platformFamily","validationChecklist"]},{"id":"repo-delivery","question":"How will apply hosts access the local repository content?","kind":"choice","decision":"scope","options":["http mirror served inside environment","filesystem-mounted repo on each node","copied repo payload unpacked locally on each node"],"recommendedDefault":"http mirror served inside environment","blocksGeneration":true,"affects":["executionModel.artifactContracts"]},{"id":"kubernetes-version","question":"What Kubernetes version should package staging and install target?","kind":"string","decision":"version","recommendedDefault":"v1.30.0","blocksGeneration":true,"affects":["authoringProgram.cluster.kubernetesVersion"]}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"create","purpose":"prepare workflow"},{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"update","purpose":"refined apply workflow"}],"validationChecklist":["lint"]}`
+}
+
+func terseLocalRepoEditPlanCriticJSON() string {
+	return `{"summary":"plan review approved local repo refine contract","blocking":[],"advisory":["worker join publication should remain explicit"],"missingContracts":[],"suggestedFixes":["preserve join publication semantics during refine"],"findings":[{"code":"worker_join_fanout_gap","severity":"warning","message":"worker join publication should remain explicit","path":"workflows/scenarios/apply.yaml","recoverable":true}]}`
+}
+
+func complexDirectEditPlanJSON() string {
+	return `{"version":1,"request":"refine the existing 3-node kubeadm apply workflow for rhel9","intent":"refine","complexity":"complex","authoringBrief":{"routeIntent":"refine","targetScope":"workspace","targetPaths":["workflows/prepare.yaml","workflows/scenarios/apply.yaml"],"anchorPaths":["workflows/scenarios/apply.yaml"],"modeIntent":"prepare+apply","connectivity":"offline","completenessTarget":"refine","topology":"multi-node","nodeCount":3,"platformFamily":"rhel","requiredCapabilities":["prepare-artifacts","package-staging","image-staging","kubeadm-bootstrap","kubeadm-join","cluster-verification"]},"authoringProgram":{"platform":{"family":"rhel","release":"9","repoType":"offline-local"},"artifacts":{"packages":["kubeadm","kubelet","kubectl"],"images":["registry.k8s.io/kube-apiserver:v1.30.0"],"packageOutputDir":"/tmp/deck/artifacts/packages","imageOutputDir":"/tmp/deck/artifacts/images"},"cluster":{"joinFile":"/tmp/deck/join.txt","kubernetesVersion":"v1.30.0","roleSelector":"vars.role","controlPlaneCount":1,"workerCount":2},"verification":{"expectedNodeCount":3,"expectedReadyCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane","interval":"5s","timeout":"15m"}},"executionModel":{"artifactContracts":[{"kind":"package","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"offline package flow"},{"kind":"image","producerPath":"workflows/prepare.yaml","consumerPath":"workflows/scenarios/apply.yaml","description":"offline image flow"}],"sharedStateContracts":[{"name":"join-file","producerPath":"/tmp/deck/join.txt","consumerPaths":["/tmp/deck/join.txt"],"availabilityModel":"published-for-worker-consumption","description":"publish join file for workers"}],"roleExecution":{"roleSelector":"vars.role","controlPlaneFlow":"bootstrap","workerFlow":"join","perNodeInvocation":true},"verification":{"expectedNodeCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane"}},"blockers":[],"targetOutcome":"Refine reviewed workflows","assumptions":[],"openQuestions":[],"clarifications":[{"id":"runtime.platformFamily","question":"Which platform family should the plan target?","kind":"environment","decision":"defaulted","options":["rhel"],"recommendedDefault":"rhel","answer":"rhel","blocksGeneration":false,"affects":["authoringBrief.platformFamily","validationChecklist"]}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/prepare.yaml","kind":"workflow","action":"create","purpose":"prepare workflow"},{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"update","purpose":"refined apply workflow"}],"validationChecklist":["lint"]}`
+}
+
+func complexDirectEditPlanCriticJSON() string {
+	return `{"summary":"plan review approved explicit refine contract","blocking":[],"advisory":["worker join publication needs explicit sequencing"],"missingContracts":[],"suggestedFixes":["preserve join publication semantics during refine"],"findings":[{"code":"worker_join_fanout_gap","severity":"advisory","message":"worker join publication needs explicit sequencing","path":"workflows/scenarios/apply.yaml","recoverable":true}]}`
+}
+
+func complexDirectEditBlockingCriticJSON() string {
+	return `{"summary":"plan review found blocking review issues","blocking":["refine plan still needs manual review"],"advisory":[],"missingContracts":[],"suggestedFixes":["tighten the refine contract before execution"],"findings":[{"code":"ask_unclassified_critic_finding","severity":"blocking","message":"refine plan still needs manual review","path":"executionModel","recoverable":false}]}`
+}
+
+func complexDirectEditAskResponses() []askprovider.Response {
+	return []askprovider.Response{
+		toolResponse(
+			mockToolCall{Name: "file_write", Path: "workflows/prepare.yaml", Content: strings.TrimLeft(`
+version: v1alpha1
+steps:
+  - id: stage-packages
+    kind: DownloadPackage
+    spec:
+      packages: [kubeadm, kubelet, kubectl]
+      distro:
+        family: rhel
+        release: "9"
+      repo:
+        type: rpm
+  - id: stage-images
+    kind: DownloadImage
+    spec:
+      images:
+        - registry.k8s.io/kube-apiserver:v1.30.0
+      outputDir: images/control-plane
+`, "\n")},
+			mockToolCall{Name: "file_write", Path: "workflows/scenarios/apply.yaml", Content: strings.TrimLeft(`
+version: v1alpha1
+phases:
+  - name: runtime
+    steps:
+      - id: install-k8s-packages
+        kind: InstallPackage
+        spec:
+          packages: [kubeadm, kubelet, kubectl]
+          source:
+            type: local-repo
+            path: /tmp/deck/artifacts/packages
+      - id: init-control-plane
+        kind: InitKubeadm
+        when: vars.role == "control-plane"
+        spec:
+          outputJoinFile: /tmp/deck/join.txt
+          kubernetesVersion: v1.30.0
+          podNetworkCIDR: 10.244.0.0/16
+      - id: join-worker
+        kind: JoinKubeadm
+        when: vars.role == "worker"
+        spec:
+          joinFile: /tmp/deck/join.txt
+  - name: verify
+    steps:
+      - id: verify-cluster
+        kind: CheckKubernetesCluster
+        when: vars.role == "control-plane"
+        spec:
+          interval: 5s
+          timeout: 15m
+          nodes:
+            total: 3
+            ready: 3
+            controlPlaneReady: 1
+`, "\n")},
+			mockToolCall{Name: "validate"},
+		),
+		finishResponse("generated reviewed workflows"),
+	}
+}
+
+func complexDirectAskResponses() []askprovider.Response {
+	return []askprovider.Response{
+		toolResponse(
+			mockToolCall{Name: "file_write", Path: "workflows/scenarios/apply.yaml", Content: strings.TrimLeft(`
+version: v1alpha1
+phases:
+  - name: cluster
+    steps:
+      - id: init-control-plane
+        kind: InitKubeadm
+        when: vars.role == "control-plane"
+        spec:
+          outputJoinFile: /tmp/deck/join.txt
+          podNetworkCIDR: 10.244.0.0/16
+      - id: join-worker
+        kind: JoinKubeadm
+        when: vars.role == "worker"
+        spec:
+          joinFile: /tmp/deck/join.txt
+  - name: verify
+    steps:
+      - id: verify-cluster
+        kind: CheckKubernetesCluster
+        when: vars.role == "control-plane"
+        spec:
+          interval: 5s
+          timeout: 15m
+          nodes:
+            total: 3
+            ready: 3
+            controlPlaneReady: 1
+`, "\n")},
+			mockToolCall{Name: "file_write", Path: "workflows/vars.yaml", Content: "role: control-plane\njoinFile: /tmp/deck/join.txt\n"},
+			mockToolCall{Name: "validate"},
+		),
+		finishResponse("generated reviewed workflows"),
+	}
 }
 
 func validPlanJSON() string {

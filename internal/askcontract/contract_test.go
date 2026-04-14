@@ -292,6 +292,16 @@ func TestParsePlanRejectsEntryScenarioMissingFromFiles(t *testing.T) {
 	}
 }
 
+func TestParsePlanPreservesRawAliasedFileActions(t *testing.T) {
+	resp, err := ParsePlan(`{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create-or-modify","purpose":"entry"}],"validationChecklist":["lint"]}`)
+	if err != nil {
+		t.Fatalf("expected raw action to parse, got %v", err)
+	}
+	if got := resp.Files[0].Action; got != "create-or-modify" {
+		t.Fatalf("expected parser to preserve raw aliased action, got %q", got)
+	}
+}
+
 func TestParsePlanRepairsTrailingCommas(t *testing.T) {
 	resp, err := ParsePlan(`{"version":1,"request":"create workflow","intent":"draft","complexity":"complex","blockers":[],"targetOutcome":"generate files","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry",}],"validationChecklist":["lint",],}`)
 	if err != nil {
@@ -322,6 +332,16 @@ func TestParsePlanCriticWithStructuredFindings(t *testing.T) {
 	}
 	if resp.Findings[0].Code != workflowissues.CodeMissingRoleSelector || resp.Findings[1].Severity != workflowissues.SeverityAdvisory {
 		t.Fatalf("unexpected findings: %#v", resp.Findings)
+	}
+}
+
+func TestParsePlanCriticAcceptsCommonSeverityAliases(t *testing.T) {
+	resp, err := ParsePlanCritic(`{"summary":"critic summary","blocking":[],"advisory":[],"missingContracts":[],"suggestedFixes":[],"findings":[{"code":"missing_role_selector","severity":"error","message":"role selector missing"},{"code":"ambiguous_join_contract","severity":"warning","message":"join handoff should be explicit","recoverable":true}]}`)
+	if err != nil {
+		t.Fatalf("expected severity aliases to parse, got %v", err)
+	}
+	if resp.Findings[0].Severity != workflowissues.SeverityBlocking || resp.Findings[1].Severity != workflowissues.SeverityAdvisory {
+		t.Fatalf("expected aliases to normalize, got %#v", resp.Findings)
 	}
 }
 

@@ -129,6 +129,18 @@ phases:
 `, "\n")
 }
 
+func complexDraftPlanJSON() string {
+	return `{"version":1,"request":"create a 3-node kubeadm cluster apply workflow","intent":"draft","complexity":"complex","authoringBrief":{"routeIntent":"draft","targetScope":"workspace","targetPaths":["workflows/scenarios/apply.yaml"],"allowedCompanionPaths":["workflows/vars.yaml"],"modeIntent":"apply-only","connectivity":"offline","completenessTarget":"complete","topology":"multi-node","nodeCount":3,"requiredCapabilities":["kubeadm-bootstrap","kubeadm-join","cluster-verification"]},"authoringProgram":{"cluster":{"joinFile":"/tmp/deck/join.txt","roleSelector":"vars.role","controlPlaneCount":1,"workerCount":2},"verification":{"expectedNodeCount":3,"expectedReadyCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane","interval":"5s","timeout":"15m"}},"executionModel":{"sharedStateContracts":[{"name":"join-file","producerPath":"/tmp/deck/join.txt","consumerPaths":["/tmp/deck/join.txt"],"availabilityModel":"published-for-worker-consumption","description":"publish join file for workers"}],"roleExecution":{"roleSelector":"vars.role","controlPlaneFlow":"bootstrap","workerFlow":"join","perNodeInvocation":true},"verification":{"expectedNodeCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane"}},"blockers":[],"targetOutcome":"Generate reviewed workflows","assumptions":[],"openQuestions":[],"clarifications":[{"id":"topology.roleModel","question":"Which role layout should the plan use?","kind":"topology","decision":"defaulted","options":["1cp-2workers"],"recommendedDefault":"1cp-2workers","answer":"1cp-2workers","blocksGeneration":false,"affects":["authoringProgram.cluster.controlPlaneCount","authoringProgram.cluster.workerCount"]}],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"create","purpose":"entry scenario"},{"path":"workflows/vars.yaml","kind":"vars","action":"create","purpose":"role selector values"}],"validationChecklist":["lint"]}`
+}
+
+func complexRefinePlanJSON() string {
+	return `{"version":1,"request":"refine the existing air-gapped multi-node workflow","intent":"refine","complexity":"complex","authoringBrief":{"routeIntent":"refine","targetScope":"scenario","targetPaths":["workflows/scenarios/apply.yaml"],"anchorPaths":["workflows/scenarios/apply.yaml"],"allowedCompanionPaths":["workflows/vars.yaml"],"modeIntent":"apply-only","connectivity":"offline","completenessTarget":"refine","topology":"multi-node","nodeCount":3,"platformFamily":"rhel","requiredCapabilities":["kubeadm-join","cluster-verification"]},"authoringProgram":{"platform":{"family":"rhel","release":"9","repoType":"offline-local"},"cluster":{"joinFile":"/tmp/deck/join.txt","roleSelector":"vars.role","controlPlaneCount":1,"workerCount":2},"verification":{"expectedNodeCount":3,"expectedReadyCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane","interval":"5s","timeout":"15m"}},"executionModel":{"verification":{"expectedNodeCount":3,"expectedControlPlaneReady":1,"finalVerificationRole":"control-plane"}},"blockers":[],"targetOutcome":"Refine reviewed workflow","assumptions":[],"openQuestions":[],"entryScenario":"workflows/scenarios/apply.yaml","files":[{"path":"workflows/scenarios/apply.yaml","kind":"scenario","action":"update","purpose":"entry scenario"}],"validationChecklist":["lint"]}`
+}
+
+func advisoryPlanCriticJSON(summary string) string {
+	return fmt.Sprintf(`{"summary":%q,"blocking":[],"advisory":["worker join publication needs explicit sequencing"],"missingContracts":[],"suggestedFixes":["publish the join contract before worker consumption"],"findings":[{"code":"worker_join_fanout_gap","severity":"advisory","message":"worker join publication needs explicit sequencing","path":"workflows/scenarios/apply.yaml","recoverable":true}]}`, summary)
+}
+
 func kubernetesWaitWorkflow() string {
 	return strings.TrimLeft(`
 version: v1alpha1
@@ -142,6 +154,42 @@ phases:
           interval: 1s
           timeout: 5s
 `, "\n")
+}
+
+func multiNodeApplyWorkflow() string {
+	return strings.TrimLeft(`
+version: v1alpha1
+phases:
+  - name: cluster
+    steps:
+      - id: init-control-plane
+        kind: InitKubeadm
+        when: vars.role == "control-plane"
+        spec:
+          outputJoinFile: /tmp/deck/join.txt
+          podNetworkCIDR: 10.244.0.0/16
+      - id: join-worker
+        kind: JoinKubeadm
+        when: vars.role == "worker"
+        spec:
+          joinFile: /tmp/deck/join.txt
+  - name: verify
+    steps:
+      - id: verify-cluster
+        kind: CheckKubernetesCluster
+        when: vars.role == "control-plane"
+        spec:
+          interval: 5s
+          timeout: 15m
+          nodes:
+            total: 3
+            ready: 3
+            controlPlaneReady: 1
+`, "\n")
+}
+
+func roleVarsWorkflow() string {
+	return "role: control-plane\njoinFile: /tmp/deck/join.txt\n"
 }
 
 func invalidCommandWorkflow() string {
@@ -180,6 +228,9 @@ func TestExecuteUsesAgentDraftToolLoop(t *testing.T) {
 	if client.calls != 2 {
 		t.Fatalf("expected two llm turns, got %d", client.calls)
 	}
+	if _, err := os.Stat(filepath.Join(root, ".deck", "plan", "latest.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected simple draft to avoid reviewed plan artifacts, got err=%v", err)
+	}
 	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(workspacepaths.CanonicalApplyWorkflow)))
 	if err != nil {
 		t.Fatalf("read apply workflow: %v", err)
@@ -214,12 +265,121 @@ func TestExecuteUsesAgentRefineToolLoop(t *testing.T) {
 	if !strings.Contains(stdout.String(), "ask write: ok") {
 		t.Fatalf("expected successful refine write, got %q", stdout.String())
 	}
+	if _, err := os.Stat(filepath.Join(root, ".deck", "plan", "latest.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected simple refine to avoid reviewed plan artifacts, got err=%v", err)
+	}
 	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(workspacepaths.CanonicalApplyWorkflow)))
 	if err != nil {
 		t.Fatalf("read apply workflow: %v", err)
 	}
 	if !strings.Contains(string(content), "timeout: 30s") {
 		t.Fatalf("expected updated workflow content, got %q", string(content))
+	}
+}
+
+func TestExecuteComplexDraftUsesReviewedPlanBeforeAgentRuntime(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "test-key")
+	root := t.TempDir()
+	stdout := &bytes.Buffer{}
+	applyFile := askcontract.GeneratedFile{Path: workspacepaths.CanonicalApplyWorkflow, Content: multiNodeApplyWorkflow()}
+	varsFile := askcontract.GeneratedFile{Path: workspacepaths.CanonicalVarsWorkflow, Content: roleVarsWorkflow()}
+	responses := []askprovider.Response{agentToolCallsResponse(t, "stage complex candidates", testToolCall{Name: "file_write", Path: applyFile.Path, Content: applyFile.Content}, testToolCall{Name: "file_write", Path: varsFile.Path, Content: varsFile.Content}, testToolCall{Name: "validate"}), agentFinishResponse(t, "generated reviewed workflows")}
+	client := &stubClient{responses: []string{complexDraftPlanJSON(), advisoryPlanCriticJSON("plan review highlighted worker join sequencing")}, providerResponses: responses}
+	prompt := "create a 3-node kubeadm cluster apply workflow with one control-plane and two workers"
+	if err := Execute(context.Background(), Options{Root: root, Prompt: prompt, Create: true, Stdin: strings.NewReader(""), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if client.calls != 4 {
+		t.Fatalf("expected planner, critic, and runtime turns, got %d calls", client.calls)
+	}
+	out := stdout.String()
+	for _, want := range []string{"plan:", "plan-json:", "plan-review: plan review highlighted worker join sequencing", "ask write: ok"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in output, got %q", want, out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".deck", "plan", "latest.json")); err != nil {
+		t.Fatalf("expected reviewed plan artifact: %v", err)
+	}
+}
+
+func TestExecuteComplexRefineUsesReviewedPlanBeforeAgentRuntime(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "test-key")
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflow dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte(waitForHostsWorkflow("5s")), 0o600); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	applyFile := askcontract.GeneratedFile{Path: workspacepaths.CanonicalApplyWorkflow, Content: multiNodeApplyWorkflow()}
+	responses := []askprovider.Response{agentToolCallsResponse(t, "stage refine candidate", testToolCall{Name: "file_write", Path: applyFile.Path, Content: applyFile.Content}, testToolCall{Name: "validate"}), agentFinishResponse(t, "generated reviewed workflows")}
+	client := &stubClient{responses: []string{complexRefinePlanJSON(), advisoryPlanCriticJSON("plan review highlighted role-aware refine scope")}, providerResponses: responses}
+	prompt := "refactor the existing 3-node kubeadm apply workflow for one control-plane and two workers to strengthen role-aware worker join handling and control-plane verification"
+	if err := Execute(context.Background(), Options{Root: root, Prompt: prompt, Edit: true, Stdin: strings.NewReader(""), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if client.calls != 4 {
+		t.Fatalf("expected planner, critic, and runtime turns, got %d calls", client.calls)
+	}
+	out := stdout.String()
+	for _, want := range []string{"plan:", "plan-json:", "plan-review: plan review highlighted role-aware refine scope", "ask write: ok"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in output, got %q", want, out)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".deck", "plan", "latest.json")); err != nil {
+		t.Fatalf("expected reviewed plan artifact: %v", err)
+	}
+	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(workspacepaths.CanonicalApplyWorkflow)))
+	if err != nil {
+		t.Fatalf("read refined apply workflow: %v", err)
+	}
+	if !strings.Contains(string(content), "kind: InitKubeadm") || !strings.Contains(string(content), "kind: JoinKubeadm") || strings.Contains(string(content), "timeout: 5s") {
+		t.Fatalf("expected complex refine to replace the starter apply content, got %q", string(content))
+	}
+}
+
+func TestWorkspaceIndicatesComplexAuthoringForMultiRoleRefine(t *testing.T) {
+	workspace := askretrieve.WorkspaceSummary{Files: []askretrieve.WorkspaceFile{{
+		Path:    workspacepaths.CanonicalApplyWorkflow,
+		Content: multiNodeApplyWorkflow(),
+	}}}
+	decision := askintent.Decision{Route: askintent.RouteRefine, Target: askintent.Target{Kind: "scenario", Path: workspacepaths.CanonicalApplyWorkflow}}
+	req := askpolicy.ScenarioRequirements{Connectivity: "offline", EntryScenario: workspacepaths.CanonicalApplyWorkflow, RequiredFiles: []string{workspacepaths.CanonicalApplyWorkflow}}
+	if !workspaceIndicatesComplexAuthoring(decision, workspace, req) {
+		t.Fatalf("expected multi-role apply workflow content to trigger complex refine routing")
+	}
+}
+
+func TestExecuteComplexRefineStopsOnReviewedPlanBlockers(t *testing.T) {
+	t.Setenv("DECK_ASK_API_KEY", "test-key")
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir workflow dir: %v", err)
+	}
+	original := waitForHostsWorkflow("5s")
+	if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte(original), 0o600); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+	stdout := &bytes.Buffer{}
+	blockingCritic := `{"summary":"plan review found blocking artifact issues","blocking":["artifact contracts still unresolved"],"advisory":[],"missingContracts":[],"suggestedFixes":["define explicit prepare/apply handoff"],"findings":[{"code":"artifact_contract_gap","severity":"blocking","message":"artifact contracts still unresolved","path":"executionModel.artifactContracts","recoverable":false}]}`
+	client := &stubClient{responses: []string{complexRefinePlanJSON(), blockingCritic, complexRefinePlanJSON(), blockingCritic}}
+	prompt := "refactor the existing 3-node kubeadm apply workflow to add offline staging but keep the topology details ambiguous"
+	if err := Execute(context.Background(), Options{Root: root, Prompt: prompt, Edit: true, Stdin: strings.NewReader(""), Stdout: stdout, Stderr: io.Discard}, client); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "plan-review: plan review found blocking artifact issues") || strings.Contains(out, "ask write: ok") {
+		t.Fatalf("expected reviewed blocker stop without writes, got %q", out)
+	}
+	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(workspacepaths.CanonicalApplyWorkflow)))
+	if err != nil {
+		t.Fatalf("read blocked apply workflow: %v", err)
+	}
+	if string(content) != original {
+		t.Fatalf("expected blocker path to leave apply workflow untouched")
 	}
 }
 

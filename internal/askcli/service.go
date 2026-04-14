@@ -54,6 +54,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 				return loadErr
 			}
 		}
+		loadedPlan = adaptPlanBoundary(loadedPlan)
 		resumedPlan = &loadedPlan
 		resumedPlanJSON = planJSONPath
 	}
@@ -184,6 +185,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	mcpEvents = normalizeAugmentEvents(mcpEvents)
 	retrieval := askretrieve.Retrieve(decision.Route, requestText, decision.Target, workspace, state, externalChunks)
 	requirements := askpolicy.BuildScenarioRequirements(requestText, retrieval, workspace, decision)
+	requestComplexity := askpolicy.InferRequestComplexity(requestText, requirements)
 	result := runResult{
 		Route:         decision.Route,
 		Target:        decision.Target,
@@ -218,46 +220,50 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	if opts.PlanOnly && !isAuthoringRoute(decision.Route) {
 		return fmt.Errorf("ask plan is intended for draft/refine authoring requests; got route %s. Try `deck ask %q` instead", decision.Route, strings.TrimSpace(requestText))
 	}
-	if updatedResult, handled, runtimeErr := maybeExecuteAuthoringRuntime(ctx, opts, client, effective, logger, progress, requestText, decision, workspace, state, retrieval, evidencePlan, result, resumedPlan); runtimeErr != nil {
-		return runtimeErr
-	} else if handled {
-		result = updatedResult
-		if err := askstate.Save(resolvedRoot, askstate.Context{
-			LastMode:            string(result.Route),
-			LastRoute:           string(result.Route),
-			LastConfidence:      result.Confidence,
-			LastReason:          result.Reason,
-			LastTargetKind:      result.Target.Kind,
-			LastTargetPath:      result.Target.Path,
-			LastTargetName:      result.Target.Name,
-			LastPrompt:          strings.TrimSpace(requestText),
-			LastFiles:           filePaths(result.Files),
-			LastLint:            result.LintSummary,
-			LastVerifierSummary: result.LintSummary,
-			LastApprovedPaths:   append([]string(nil), result.ApprovedPaths...),
-			LastToolCalls:       append([]string(nil), result.ToolCalls...),
-			LastToolTranscript:  strings.TrimSpace(result.ToolTranscriptPath),
-			LastCandidateFiles:  append([]string(nil), result.CandidateFiles...),
-			LastLLMUsed:         result.LLMUsed,
-			LastClassifierLLM:   result.ClassifierLLM,
-			LastChunkIDs:        chunkIDs(result.Chunks),
-			LastDroppedChunkIDs: append([]string(nil), result.DroppedChunks...),
-			LastAugmentEvents:   append([]string(nil), result.AugmentEvents...),
-			LastMCPChunkIDs:     chunkIDsBySource(result.Chunks, "mcp"),
-			LastRetries:         result.RetriesUsed,
-			LastTermination:     result.Termination,
-		}, requestText, resultToMarkdown(result)); err != nil {
-			return err
+	complexDirectAuthoring := isAuthoringRoute(decision.Route) && !opts.PlanOnly && resumedPlan == nil && (requestComplexity == "complex" || workspaceIndicatesComplexAuthoring(decision, workspace, requirements))
+	if !complexDirectAuthoring {
+		if updatedResult, handled, runtimeErr := maybeExecuteAuthoringRuntime(ctx, opts, client, effective, logger, progress, requestText, decision, workspace, state, retrieval, evidencePlan, result, resumedPlan); runtimeErr != nil {
+			return runtimeErr
+		} else if handled {
+			result = updatedResult
+			if err := askstate.Save(resolvedRoot, askstate.Context{
+				LastMode:            string(result.Route),
+				LastRoute:           string(result.Route),
+				LastConfidence:      result.Confidence,
+				LastReason:          result.Reason,
+				LastTargetKind:      result.Target.Kind,
+				LastTargetPath:      result.Target.Path,
+				LastTargetName:      result.Target.Name,
+				LastPrompt:          strings.TrimSpace(requestText),
+				LastFiles:           filePaths(result.Files),
+				LastLint:            result.LintSummary,
+				LastVerifierSummary: result.LintSummary,
+				LastApprovedPaths:   append([]string(nil), result.ApprovedPaths...),
+				LastToolCalls:       append([]string(nil), result.ToolCalls...),
+				LastToolTranscript:  strings.TrimSpace(result.ToolTranscriptPath),
+				LastCandidateFiles:  append([]string(nil), result.CandidateFiles...),
+				LastLLMUsed:         result.LLMUsed,
+				LastClassifierLLM:   result.ClassifierLLM,
+				LastChunkIDs:        chunkIDs(result.Chunks),
+				LastDroppedChunkIDs: append([]string(nil), result.DroppedChunks...),
+				LastAugmentEvents:   append([]string(nil), result.AugmentEvents...),
+				LastMCPChunkIDs:     chunkIDsBySource(result.Chunks, "mcp"),
+				LastRetries:         result.RetriesUsed,
+				LastTermination:     result.Termination,
+			}, requestText, resultToMarkdown(result)); err != nil {
+				return err
+			}
+			return render(opts.Stdout, opts.Stderr, result)
 		}
-		return render(opts.Stdout, opts.Stderr, result)
 	}
 
-	planNeeded := isAuthoringRoute(decision.Route) && resumedPlan == nil
+	planNeeded := opts.PlanOnly || complexDirectAuthoring
 	var plan askcontract.PlanResponse
 	var planCritic askcontract.PlanCriticResponse
 	if resumedPlan != nil && opts.PlanOnly {
 		progress.status("resuming saved plan")
-		plan = *resumedPlan
+		plan = adaptPlanBoundary(*resumedPlan)
+		plan = askpolicy.NormalizePlan(plan, requestText, retrieval, workspace, decision)
 		result.Plan = &plan
 		result.PlanJSON = resumedPlanJSON
 		planMD := renderPlanMarkdown(plan, strings.TrimSuffix(resumedPlanJSON, ".json")+".md")
@@ -379,6 +385,45 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 		result.Chunks = retrieval.Chunks
 		result.DroppedChunks = retrieval.Dropped
 		logger.debug("retrieve_summary", "phase", "retrieve-second-pass", "chunks", len(result.Chunks), "dropped", len(result.DroppedChunks))
+		if complexDirectAuthoring {
+			resumedPlan = &plan
+		}
+	}
+
+	if complexDirectAuthoring {
+		if updatedResult, handled, runtimeErr := maybeExecuteAuthoringRuntime(ctx, opts, client, effective, logger, progress, requestText, decision, workspace, state, retrieval, evidencePlan, result, resumedPlan); runtimeErr != nil {
+			return runtimeErr
+		} else if handled {
+			result = updatedResult
+			if err := askstate.Save(resolvedRoot, askstate.Context{
+				LastMode:            string(result.Route),
+				LastRoute:           string(result.Route),
+				LastConfidence:      result.Confidence,
+				LastReason:          result.Reason,
+				LastTargetKind:      result.Target.Kind,
+				LastTargetPath:      result.Target.Path,
+				LastTargetName:      result.Target.Name,
+				LastPrompt:          strings.TrimSpace(requestText),
+				LastFiles:           filePaths(result.Files),
+				LastLint:            result.LintSummary,
+				LastVerifierSummary: result.LintSummary,
+				LastApprovedPaths:   append([]string(nil), result.ApprovedPaths...),
+				LastToolCalls:       append([]string(nil), result.ToolCalls...),
+				LastToolTranscript:  strings.TrimSpace(result.ToolTranscriptPath),
+				LastCandidateFiles:  append([]string(nil), result.CandidateFiles...),
+				LastLLMUsed:         result.LLMUsed,
+				LastClassifierLLM:   result.ClassifierLLM,
+				LastChunkIDs:        chunkIDs(result.Chunks),
+				LastDroppedChunkIDs: append([]string(nil), result.DroppedChunks...),
+				LastAugmentEvents:   append([]string(nil), result.AugmentEvents...),
+				LastMCPChunkIDs:     chunkIDsBySource(result.Chunks, "mcp"),
+				LastRetries:         result.RetriesUsed,
+				LastTermination:     result.Termination,
+			}, requestText, resultToMarkdown(result)); err != nil {
+				return err
+			}
+			return render(opts.Stdout, opts.Stderr, result)
+		}
 	}
 
 	if decision.Route == askintent.RouteReview {
@@ -440,6 +485,37 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	}
 
 	return render(opts.Stdout, opts.Stderr, result)
+}
+
+func workspaceIndicatesComplexAuthoring(decision askintent.Decision, workspace askretrieve.WorkspaceSummary, req askpolicy.ScenarioRequirements) bool {
+	if decision.Route != askintent.RouteRefine {
+		return false
+	}
+	paths := map[string]bool{}
+	if path := strings.TrimSpace(decision.Target.Path); path != "" {
+		paths[path] = true
+	}
+	if path := strings.TrimSpace(req.EntryScenario); path != "" {
+		paths[path] = true
+	}
+	for _, path := range req.RequiredFiles {
+		path = strings.TrimSpace(path)
+		if path != "" {
+			paths[path] = true
+		}
+	}
+	var samples []string
+	for _, file := range workspace.Files {
+		if len(paths) > 0 && !paths[strings.TrimSpace(file.Path)] {
+			continue
+		}
+		samples = append(samples, strings.TrimSpace(file.Content))
+	}
+	if len(samples) == 0 {
+		return false
+	}
+	facts := askpolicy.InferFacts(strings.Join(samples, "\n"), req.ArtifactKinds, req.Connectivity)
+	return facts.Topology == "multi-node" || facts.Topology == "ha" || facts.NodeCount > 1 || facts.MultiRoleRequested
 }
 
 func resumedPlanDecision(plan askcontract.PlanResponse) askintent.Decision {

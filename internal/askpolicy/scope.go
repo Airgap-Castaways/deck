@@ -14,11 +14,28 @@ func normalizeRefineScope(plan askcontract.PlanResponse, prompt string, workspac
 	if decision.Route != askintent.RouteRefine {
 		return plan
 	}
+	explicitPaths := normalizeAllowedPaths(askintent.ExtractWorkflowPaths(prompt), nil)
 	anchors, companions := refineScopePaths(prompt, plan)
 	plan.AuthoringBrief.AnchorPaths = normalizeAllowedPaths(anchors, plan.AuthoringBrief.AnchorPaths)
 	plan.AuthoringBrief.AllowedCompanionPaths = normalizeAllowedPaths(companions, plan.AuthoringBrief.AllowedCompanionPaths)
 	targetPaths := append([]string{}, plan.AuthoringBrief.AnchorPaths...)
-	targetPaths = append(targetPaths, plan.AuthoringBrief.AllowedCompanionPaths...)
+	for _, path := range explicitPaths {
+		clean := filepath.ToSlash(strings.TrimSpace(path))
+		if clean == "" || containsString(targetPaths, clean) {
+			continue
+		}
+		targetPaths = append(targetPaths, clean)
+	}
+	for _, file := range plan.Files {
+		clean := filepath.ToSlash(strings.TrimSpace(file.Path))
+		if clean == "" || containsString(targetPaths, clean) {
+			continue
+		}
+		if clean != workspacepaths.CanonicalPrepareWorkflow {
+			continue
+		}
+		targetPaths = append(targetPaths, clean)
+	}
 	plan.AuthoringBrief.TargetPaths = normalizeAllowedPaths(targetPaths, plan.AuthoringBrief.TargetPaths)
 	plan.AuthoringBrief.DisallowedExpansionPaths = disallowedRefinePaths(workspace, plan.AuthoringBrief.TargetPaths)
 	plan.AuthoringBrief.TargetScope = refineTargetScope(plan.AuthoringBrief.TargetPaths)

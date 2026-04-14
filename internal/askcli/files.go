@@ -287,7 +287,7 @@ func loadRequestText(root string, prompt string, fromPath string) (string, strin
 	source := "file"
 	if strings.HasPrefix(filepath.ToSlash(rel), ".deck/plan/") && (strings.HasSuffix(strings.ToLower(resolved), ".md") || strings.HasSuffix(strings.ToLower(resolved), ".json")) {
 		if plan, _, planErr := loadPlanArtifact(root, fromPath); planErr == nil {
-			fromText = buildPlanSourceText(plan)
+			fromText = buildPlanSourceText(adaptPlanBoundary(plan))
 			source = "plan-json"
 		} else if strings.HasSuffix(strings.ToLower(resolved), ".md") {
 			source = "plan-markdown"

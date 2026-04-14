@@ -199,14 +199,6 @@ func validatePlanResponse(resp PlanResponse) (PlanResponse, error) {
 		if resp.Files[i].Action == "" {
 			resp.Files[i].Action = "create"
 		}
-		switch resp.Files[i].Action {
-		case "modify", "update", "create-or-modify", "create-or-update":
-			if strings.HasPrefix(resp.Files[i].Path, "workflows/") {
-				resp.Files[i].Action = "update"
-			}
-		case "create":
-			// keep as-is
-		}
 		if !workspacepaths.IsAllowedAuthoringPath(resp.Files[i].Path) {
 			return PlanResponse{}, fmt.Errorf("plan response has file outside allowed ask paths: %s", resp.Files[i].Path)
 		}

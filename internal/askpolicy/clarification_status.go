@@ -44,24 +44,38 @@ func NormalizePlanNotes(existingBlockers []string, existingQuestions []string, c
 
 func clarificationTopicHints(clarifications []askcontract.PlanClarification) map[string]bool {
 	topics := map[string]bool{}
+	addTopics := func(values ...string) {
+		for _, topic := range values {
+			topic = strings.TrimSpace(strings.ToLower(topic))
+			if topic != "" {
+				topics[topic] = true
+			}
+		}
+	}
 	for _, item := range clarifications {
+		if strings.TrimSpace(item.Answer) == "" {
+			continue
+		}
 		switch strings.TrimSpace(item.ID) {
 		case "topology.kind":
-			for _, topic := range []string{"topology", "single-node", "multi-node", "ha"} {
-				topics[topic] = true
-			}
+			addTopics("topology", "single-node", "multi-node", "ha")
 		case "topology.nodeCount":
-			for _, topic := range []string{"node count", "total node count", "how many nodes"} {
-				topics[topic] = true
-			}
+			addTopics("node count", "total node count", "how many nodes")
 		case "topology.roleModel":
-			for _, topic := range []string{"role model", "control-plane", "worker", "role layout"} {
-				topics[topic] = true
-			}
+			addTopics("role model", "control-plane", "worker", "role layout")
 		case "cluster.implementation":
-			for _, topic := range []string{"implementation", "kubeadm"} {
-				topics[topic] = true
-			}
+			addTopics("implementation", "kubeadm")
+		case "runtime.platformFamily":
+			addTopics("platform family", "distro", "debian", "rhel", "os family")
+		}
+		question := strings.ToLower(strings.TrimSpace(item.Question))
+		switch {
+		case strings.Contains(question, "platform family") || strings.Contains(question, "os family") || strings.Contains(question, "distro"):
+			addTopics("platform family", "distro", "debian", "rhel", "os family")
+		case strings.Contains(question, "repository") || strings.Contains(question, "repo"):
+			addTopics("repository", "repo", "local repo", "mirror")
+		case strings.Contains(question, "kubernetes version") || strings.Contains(question, "version should") || strings.Contains(question, "version should package staging"):
+			addTopics("kubernetes version", "package version", "version pinning")
 		}
 	}
 	return topics
@@ -72,8 +86,28 @@ func clarificationNoteMatchesTopic(note string, topics map[string]bool) bool {
 		return false
 	}
 	lower := strings.ToLower(strings.TrimSpace(note))
+	if !clarificationNoteLooksLikeMissingInput(lower) {
+		return false
+	}
 	for topic := range topics {
 		if strings.Contains(lower, topic) {
+			return true
+		}
+	}
+	return false
+}
+
+func clarificationNoteLooksLikeMissingInput(note string) bool {
+	for _, marker := range []string{
+		"not specified",
+		"not explicit",
+		"unclear",
+		"which ",
+		"what ",
+		"missing ",
+		"depends on",
+	} {
+		if strings.Contains(note, marker) {
 			return true
 		}
 	}

@@ -14,6 +14,7 @@ func applyPlanAnswers(plan askcontract.PlanResponse, answers []string) (askcontr
 	if len(answers) == 0 {
 		return plan, nil
 	}
+	plan = adaptPlanBoundary(plan)
 	byID := map[string]int{}
 	for i, item := range plan.Clarifications {
 		byID[strings.TrimSpace(item.ID)] = i
@@ -30,6 +31,8 @@ func applyPlanAnswers(plan askcontract.PlanResponse, answers []string) (askcontr
 		id := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
 		id = strings.TrimPrefix(id, "clarification.")
+		id = adaptClarificationID(askcontract.PlanClarification{ID: id})
+		value = adaptClarificationAnswer(id, value)
 		idx, ok := byID[id]
 		if !ok {
 			return plan, fmt.Errorf("unknown clarification id %q", id)
@@ -43,6 +46,7 @@ func applyPlanAnswers(plan askcontract.PlanResponse, answers []string) (askcontr
 		plan.Clarifications[idx].Answer = value
 	}
 	decision := askintent.Decision{Route: planRoute(plan), Target: planTarget(plan, askintent.Target{Kind: plan.AuthoringBrief.TargetScope})}
+	plan = adaptPlanBoundary(plan)
 	return askpolicy.NormalizePlan(plan, plan.Request, askretrieve.RetrievalResult{}, askretrieve.WorkspaceSummary{}, decision), nil
 }
 

@@ -135,14 +135,14 @@ func planWithLLM(ctx context.Context, client askprovider.Client, cfg askconfigSe
 		if strings.TrimSpace(partial.Intent) == "" {
 			partial.Intent = string(decision.Route)
 		}
-		planned = askpolicy.NormalizePlan(partial, prompt, retrieval, workspace, decision)
+		planned = askpolicy.NormalizePlan(adaptPlanBoundary(partial), prompt, retrieval, workspace, decision)
 		if validateErr := askpolicy.ValidatePlanStructure(planned); validateErr == nil {
 			logger.debug("phase_recovered", "phase", "plan", "error", err)
 			return planned, nil
 		}
 		return askcontract.PlanResponse{}, err
 	}
-	planned = askpolicy.NormalizePlan(planned, prompt, retrieval, workspace, decision)
+	planned = askpolicy.NormalizePlan(adaptPlanBoundary(planned), prompt, retrieval, workspace, decision)
 	if err := askpolicy.ValidatePlanStructure(planned); err != nil {
 		return askcontract.PlanResponse{}, err
 	}

@@ -18,6 +18,7 @@ import (
 var (
 	roleModelCPWorkersRE = regexp.MustCompile(`^(\d+)cp-(\d+)workers?$`)
 	roleModelCPHARE      = regexp.MustCompile(`^(\d+)cp-ha$`)
+	concreteVersionRE    = regexp.MustCompile(`^v?(\d+)\.(\d+)(?:\.(\d+))?(?:[-+][0-9A-Za-z.]+)?$`)
 )
 
 func NormalizePlan(plan askcontract.PlanResponse, prompt string, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, decision askintent.Decision) askcontract.PlanResponse {
@@ -154,7 +155,7 @@ func normalizeClarifications(items []askcontract.PlanClarification, req Scenario
 		defaultIDs[strings.TrimSpace(item.ID)] = true
 	}
 	for _, item := range items {
-		id := canonicalClarificationID(item, defaultIDs)
+		id := strings.TrimSpace(item.ID)
 		if id == "" {
 			continue
 		}
@@ -189,7 +190,10 @@ func normalizeClarifications(items []askcontract.PlanClarification, req Scenario
 			}
 		}
 		if strings.TrimSpace(item.Answer) != "" {
-			base.Answer = normalizeClarificationAnswer(id, item.Answer)
+			base.Answer = strings.TrimSpace(item.Answer)
+		}
+		if id == "refine.componentPath" && strings.EqualFold(strings.TrimSpace(base.Answer), "none") {
+			continue
 		}
 		applyClarificationHints(&base, facts)
 		byID[id] = base
@@ -199,55 +203,6 @@ func normalizeClarifications(items []askcontract.PlanClarification, req Scenario
 		out = append(out, item)
 	}
 	return sortClarifications(out)
-}
-
-func canonicalClarificationID(item askcontract.PlanClarification, defaults map[string]bool) string {
-	id := strings.TrimSpace(item.ID)
-	if defaults[id] {
-		return id
-	}
-	text := strings.ToLower(strings.TrimSpace(item.Question + " " + strings.Join(item.Options, " ")))
-	switch {
-	case strings.Contains(text, "control-plane") || strings.Contains(text, "control plane"):
-		if strings.Contains(text, "worker") {
-			return "topology.roleModel"
-		}
-	case strings.Contains(text, "node count") || strings.Contains(text, "how many nodes") || strings.Contains(text, "total node count"):
-		return "topology.nodeCount"
-	case strings.Contains(text, "single-node") || strings.Contains(text, "multi-node") || strings.Contains(text, "topology") || strings.Contains(text, "ha"):
-		return "topology.kind"
-	case strings.Contains(text, "implementation") && strings.Contains(text, "kubeadm"):
-		return "cluster.implementation"
-	}
-	return id
-}
-
-func normalizeClarificationAnswer(id string, answer string) string {
-	answer = strings.TrimSpace(answer)
-	lower := strings.ToLower(answer)
-	switch strings.TrimSpace(id) {
-	case "topology.kind":
-		switch {
-		case strings.Contains(lower, "single"):
-			return "single-node"
-		case strings.Contains(lower, "multi"):
-			return "multi-node"
-		case lower == "ha" || strings.Contains(lower, "high availability"):
-			return "ha"
-		}
-	case "topology.roleModel":
-		switch {
-		case strings.Contains(lower, "1 control-plane") && strings.Contains(lower, "1 worker"):
-			return "1cp-1worker"
-		case strings.Contains(lower, "1 control-plane") && strings.Contains(lower, "2 worker"):
-			return "1cp-2workers"
-		case strings.Contains(lower, "2 control-plane"):
-			return "2cp-ha"
-		case strings.Contains(lower, "3 control-plane") || strings.Contains(lower, "3 control plane"):
-			return "3cp-ha"
-		}
-	}
-	return answer
 }
 
 func clarificationUsesCodeOwnedShape(id string, defaults []askcontract.PlanClarification) bool {
@@ -344,6 +299,19 @@ func applyClarificationAnswers(plan askcontract.PlanResponse) askcontract.PlanRe
 	}
 	if answer := byID["runtime.platformFamily"]; answer != "" {
 		plan.AuthoringBrief.PlatformFamily = strings.TrimSpace(answer)
+		if strings.TrimSpace(plan.AuthoringProgram.Platform.Family) == "" || strings.TrimSpace(plan.AuthoringProgram.Platform.Family) == "custom" {
+			plan.AuthoringProgram.Platform.Family = strings.TrimSpace(answer)
+		}
+	}
+	if answer := firstNonEmpty(byID["kubernetes-version"]); answer != "" {
+		if normalized := normalizeConcreteVersion(answer); normalized != "" {
+			plan.AuthoringProgram.Cluster.KubernetesVersion = normalized
+		}
+	}
+	if answer := byID["repo-delivery"]; answer != "" {
+		if !containsString(plan.ExecutionModel.ApplyAssumptions, strings.TrimSpace(answer)) {
+			plan.ExecutionModel.ApplyAssumptions = append(plan.ExecutionModel.ApplyAssumptions, strings.TrimSpace(answer))
+		}
 	}
 	plan = reconcilePlanTopology(plan)
 	return plan
@@ -354,6 +322,34 @@ type roleModel struct {
 	nodeCount         int
 	controlPlaneCount int
 	workerCount       int
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func looksConcreteVersion(value string) bool {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" || strings.ContainsAny(value, " \t\n") {
+		return false
+	}
+	return concreteVersionRE.MatchString(value)
+}
+
+func normalizeConcreteVersion(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if !looksConcreteVersion(value) {
+		return ""
+	}
+	if strings.HasPrefix(value, "v") {
+		return value
+	}
+	return "v" + value
 }
 
 func parseRoleModelAnswer(answer string) (roleModel, bool) {
@@ -939,15 +935,6 @@ func inferWorkerCount(brief askcontract.AuthoringBrief, execution askcontract.Ex
 	return total - controlPlaneCount
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
-}
-
 func briefNeedsWorkerRole(brief askcontract.AuthoringBrief) bool {
 	if brief.Topology == "multi-node" || brief.Topology == "ha" || brief.NodeCount > 1 {
 		return true
@@ -1371,18 +1358,14 @@ func containsPlannedPath(files []askcontract.PlanFile, want string) bool {
 func normalizePlannedAction(action string, path string) string {
 	action = strings.ToLower(strings.TrimSpace(action))
 	action = strings.ReplaceAll(action, "_", "-")
-	switch action {
-	case "create", "update":
-		return action
-	case "add":
-		return "create"
-	case "modify", "create-or-modify", "create-or-update", "createorupdate", "createormodify":
-		if strings.HasPrefix(strings.TrimSpace(path), "workflows/") {
-			return "update"
-		}
-	}
 	if action == "" {
 		return "create"
+	}
+	if action == "create" || action == "update" {
+		return action
+	}
+	if strings.HasPrefix(strings.TrimSpace(path), "workflows/") {
+		return action
 	}
 	return action
 }
