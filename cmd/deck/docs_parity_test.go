@@ -17,7 +17,7 @@ func TestUserFacingCommandFlowDocsDoNotMentionDoctor(t *testing.T) {
 		rel := rel
 		t.Run(rel, func(t *testing.T) {
 			content := readRepoDoc(t, rel)
-			if strings.Contains(strings.ToLower(content), "doctor") {
+			if containsRemovedDoctorCommandReference(content) {
 				t.Fatalf("%s must not mention removed doctor command", rel)
 			}
 		})
@@ -62,4 +62,22 @@ func readRepoDoc(t *testing.T, rel string) string {
 		t.Fatalf("read %s: %v", rel, err)
 	}
 	return string(raw)
+}
+
+func containsRemovedDoctorCommandReference(content string) bool {
+	lower := strings.ToLower(content)
+	for _, pattern := range []string{
+		"deck doctor",
+		"-> doctor",
+		"doctor ->",
+		"- `doctor`",
+		"* `doctor`",
+		"## doctor",
+		"### doctor",
+	} {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
 }

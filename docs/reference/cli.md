@@ -13,9 +13,7 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 - `apply`: execute the `apply` workflow locally
 
 ## Additional helpers
-
 - `plan`: inspect which apply steps would run or skip before execution (`-o text|json`)
-
 - `list`: list available scenarios from the local workspace or the saved remote server
 - `cache list`: inspect cached artifact entries
 - `cache clean`: delete cached entries, optionally by age or as a dry run
