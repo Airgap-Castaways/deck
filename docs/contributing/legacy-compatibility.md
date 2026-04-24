@@ -25,6 +25,7 @@ This document describes the few pre-`v1.0.0` compatibility exceptions that are s
 ## Test Coverage
 
 - `cmd/deck/source_defaults_compat_test.go`
+- `cmd/deck/cache_compat_test.go`
 - `internal/install/state_compat_test.go`
 - `internal/prepare/cache_compat_test.go`
 

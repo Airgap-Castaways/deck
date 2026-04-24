@@ -69,7 +69,7 @@ Important outputs:
 
 ## Execution Model
 
-This document is for maintaining the Vagrant regression environment. The product-facing local workflow remains the documented `plan -> doctor -> apply` path.
+This document is for maintaining the Vagrant regression environment. The product-facing local workflow remains the documented `init -> lint -> prepare -> bundle build -> apply` path.
 
 - The internal regression flow is: host preparation, VM startup, scenario execution, verification collection, and optional cleanup
 - Scenario entrypoint workflows live under `test/workflows/scenarios/*.yaml`

@@ -9,10 +9,12 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 - `init`: create starter workflow files under `workflows/`
 - `lint`: validate a workflow file or workspace against the workflow and step schemas (`-o text|json`)
 - `prepare`: gather artifacts into `outputs/`, write a local `deck` launcher, and write `.deck/manifest.json`
-- `plan`: inspect which apply steps would run or skip before execution (`-o text|json`)
+- `bundle build`: package the current workspace into a transportable archive
 - `apply`: execute the `apply` workflow locally
 
 ## Additional helpers
+
+- `plan`: inspect which apply steps would run or skip before execution (`-o text|json`)
 
 - `list`: list available scenarios from the local workspace or the saved remote server
 - `cache list`: inspect cached artifact entries
