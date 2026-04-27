@@ -120,6 +120,28 @@ func TestTryAutoRepairRestoresTypedLiteralsFromProgramDefaults(t *testing.T) {
 	}
 }
 
+func TestDiagnosticFileTrimsOnlyNumericLineSuffix(t *testing.T) {
+	tests := []struct {
+		name string
+		file string
+		want string
+	}{
+		{name: "relative line", file: "workflows/scenarios/apply.yaml:10", want: "workflows/scenarios/apply.yaml"},
+		{name: "absolute line", file: "/tmp/demo/workflows/scenarios/apply.yaml:10", want: "/tmp/demo/workflows/scenarios/apply.yaml"},
+		{name: "windows absolute line", file: "C:/demo/workflows/scenarios/apply.yaml:10", want: "C:/demo/workflows/scenarios/apply.yaml"},
+		{name: "windows absolute no line", file: "C:/demo/workflows/scenarios/apply.yaml", want: "C:/demo/workflows/scenarios/apply.yaml"},
+		{name: "nonnumeric suffix", file: "workflows/scenarios/apply.yaml:note", want: "workflows/scenarios/apply.yaml:note"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := diagnosticFile(askdiagnostic.Diagnostic{File: tt.file})
+			if got != tt.want {
+				t.Fatalf("unexpected diagnostic file: got %q want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func currentRepairClusterCheckKind() string {
 	for _, step := range askcatalog.Current().StepKinds() {
 		if strings.Contains(step.Kind, "Check") && strings.Contains(step.Kind, "Cluster") {

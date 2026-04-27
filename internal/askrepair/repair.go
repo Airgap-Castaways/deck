@@ -163,13 +163,23 @@ func diagnosticFile(diag askdiagnostic.Diagnostic) string {
 	for _, value := range []string{diag.File, diag.Path} {
 		clean := filepath.ToSlash(strings.TrimSpace(value))
 		if workspacepaths.IsWorkflowAuthoringPath(clean) {
-			if idx := strings.Index(clean, ":"); idx > 0 {
-				clean = strings.TrimSpace(clean[:idx])
-			}
-			return clean
+			return trimLineSuffix(clean)
 		}
 	}
 	return ""
+}
+
+func trimLineSuffix(path string) string {
+	idx := strings.LastIndex(path, ":")
+	if idx <= 0 || idx == len(path)-1 {
+		return path
+	}
+	for _, ch := range path[idx+1:] {
+		if ch < '0' || ch > '9' {
+			return path
+		}
+	}
+	return strings.TrimSpace(path[:idx])
 }
 
 func repairRawPath(diag askdiagnostic.Diagnostic) string {
