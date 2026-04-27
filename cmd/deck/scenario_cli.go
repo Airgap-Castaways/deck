@@ -16,6 +16,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/httpfetch"
 	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 const (
@@ -276,7 +277,7 @@ func resolveLocalScenarioPath(root, scenario string) (string, error) {
 }
 
 func buildServerScenarioWorkflowURL(serverURL, scenario string) string {
-	return strings.TrimRight(strings.TrimSpace(serverURL), "/") + "/workflows/scenarios/" + strings.TrimLeft(scenario, "/") + ".yaml"
+	return strings.TrimRight(strings.TrimSpace(serverURL), "/") + "/" + workspacepaths.CanonicalScenariosPrefix + strings.TrimLeft(scenario, "/") + ".yaml"
 }
 
 func fetchScenarioIndexFromServer(ctx context.Context, server string) ([]string, error) {
@@ -284,7 +285,7 @@ func fetchScenarioIndexFromServer(ctx context.Context, server string) ([]string,
 		return nil, fmt.Errorf("context is nil")
 	}
 	trimmed := strings.TrimRight(server, "/")
-	indexURL := trimmed + "/workflows/index.json"
+	indexURL := trimmed + "/" + workspacepaths.WorkflowIndexPathRel
 	resp, err := httpfetch.Do(ctx, scenarioHTTPClient, http.MethodGet, indexURL, nil, "scenario list request")
 	if err != nil {
 		return nil, err

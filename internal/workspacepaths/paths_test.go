@@ -37,3 +37,41 @@ func TestWorkflowSubdirDetectors(t *testing.T) {
 		t.Fatalf("did not expect unrelated path to be treated as component: %s", otherPath)
 	}
 }
+
+func TestWorkflowAuthoringPathDetector(t *testing.T) {
+	for _, path := range []string{
+		"workflows/prepare.yaml",
+		"workflows/scenarios/apply.yaml",
+		"/tmp/demo/workflows/scenarios/apply.yaml",
+	} {
+		if !IsWorkflowAuthoringPath(path) {
+			t.Fatalf("expected workflow authoring path: %s", path)
+		}
+	}
+	for _, path := range []string{"outputs/files/a.txt", "docs/workflows.md", ""} {
+		if IsWorkflowAuthoringPath(path) {
+			t.Fatalf("did not expect workflow authoring path: %s", path)
+		}
+	}
+}
+
+func TestPreparedManifestPathDetectorsAcceptCanonicalAndBundlePaths(t *testing.T) {
+	for _, path := range []string{"files/a.txt", "outputs/files/a.txt"} {
+		if !IsPreparedFilePath(path) {
+			t.Fatalf("expected prepared file path: %s", path)
+		}
+	}
+	for _, path := range []string{"images/control-plane.tar", "outputs/images/control-plane.tar"} {
+		if !IsPreparedImagePath(path) {
+			t.Fatalf("expected prepared image path: %s", path)
+		}
+	}
+	for _, path := range []string{"packages/p.rpm", "outputs/packages/p.rpm"} {
+		if !IsPreparedPackagePath(path) {
+			t.Fatalf("expected prepared package path: %s", path)
+		}
+	}
+	if IsPreparedFilePath("packages/p.rpm") {
+		t.Fatal("did not expect package path to be classified as file path")
+	}
+}

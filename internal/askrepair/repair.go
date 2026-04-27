@@ -16,6 +16,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/stepspec"
 	"github.com/Airgap-Castaways/deck/internal/structurededit"
 	"github.com/Airgap-Castaways/deck/internal/validate"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func TryAutoRepair(root string, files []askcontract.GeneratedFile, diags []askdiagnostic.Diagnostic, repairPaths []string) ([]askcontract.GeneratedFile, []string, bool, error) {
@@ -161,14 +162,24 @@ func repairPathAllowed(path string, repairPaths []string) bool {
 func diagnosticFile(diag askdiagnostic.Diagnostic) string {
 	for _, value := range []string{diag.File, diag.Path} {
 		clean := filepath.ToSlash(strings.TrimSpace(value))
-		if strings.HasPrefix(clean, "workflows/") {
-			if idx := strings.Index(clean, ":"); idx > 0 {
-				clean = strings.TrimSpace(clean[:idx])
-			}
-			return clean
+		if workspacepaths.IsWorkflowAuthoringPath(clean) {
+			return trimLineSuffix(clean)
 		}
 	}
 	return ""
+}
+
+func trimLineSuffix(path string) string {
+	idx := strings.LastIndex(path, ":")
+	if idx <= 0 || idx == len(path)-1 {
+		return path
+	}
+	for _, ch := range path[idx+1:] {
+		if ch < '0' || ch > '9' {
+			return path
+		}
+	}
+	return strings.TrimSpace(path[:idx])
 }
 
 func repairRawPath(diag askdiagnostic.Diagnostic) string {
