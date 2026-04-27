@@ -4,8 +4,8 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/prepare"
 )
 
-func verbosePrepareStepSink() prepare.StepEventSink {
+func verbosePrepareStepSink(env *cliEnv) prepare.StepEventSink {
 	return func(event prepare.StepEvent) {
-		_ = stderrPrintf("%s\n", formatWorkflowEventLine("prepare", event))
+		_ = env.stderrPrintf("%s\n", formatWorkflowEventLine("prepare", event))
 	}
 }

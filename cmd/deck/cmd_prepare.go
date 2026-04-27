@@ -21,7 +21,7 @@ type prepareOptions struct {
 	varOverrides   map[string]string
 }
 
-func newPrepareCommand() *cobra.Command {
+func newPrepareCommand(env *cliEnv) *cobra.Command {
 	vars := &varFlag{}
 	binaries := &stringSliceFlag{}
 	excludes := &stringSliceFlag{}
@@ -58,7 +58,7 @@ func newPrepareCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runPrepareWithOptions(cmd, prepareOptions{
+			return runPrepareWithOptions(env, cmd, prepareOptions{
 				preparedRoot:   preparedRoot,
 				dryRun:         dryRun,
 				refresh:        refresh,
@@ -85,8 +85,8 @@ func newPrepareCommand() *cobra.Command {
 	return cmd
 }
 
-func runPrepareWithOptions(cmd *cobra.Command, opts prepareOptions) error {
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "prepare", Event: "run_requested", Attrs: map[string]any{"root": opts.preparedRoot, "dry_run": opts.dryRun, "refresh": opts.refresh, "clean": opts.clean}}); err != nil {
+func runPrepareWithOptions(env *cliEnv, cmd *cobra.Command, opts prepareOptions) error {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "prepare", Event: "run_requested", Attrs: map[string]any{"root": opts.preparedRoot, "dry_run": opts.dryRun, "refresh": opts.refresh, "clean": opts.clean}}); err != nil {
 		return err
 	}
 	return preparecli.Run(cmd.Context(), preparecli.Options{
@@ -100,8 +100,8 @@ func runPrepareWithOptions(cmd *cobra.Command, opts prepareOptions) error {
 		Binaries:       opts.binaries,
 		BinaryExcludes: opts.binaryExcludes,
 		VarOverrides:   varsAsAnyMap(opts.varOverrides),
-		Stdout:         stdoutWriter(),
-		Diagnosticf:    verbosef,
-		EventSink:      verbosePrepareStepSink(),
+		Stdout:         env.stdoutWriter(),
+		Diagnosticf:    env.verbosef,
+		EventSink:      verbosePrepareStepSink(env),
 	})
 }

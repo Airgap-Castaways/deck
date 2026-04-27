@@ -13,7 +13,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askconfig"
 )
 
-func newAskLoginCommand() *cobra.Command {
+func newAskLoginCommand(env *cliEnv) *cobra.Command {
 	var provider string
 	var oauthToken string
 	var refreshToken string
@@ -40,7 +40,7 @@ func newAskLoginCommand() *cobra.Command {
 				return err
 			}
 			if accessToken == "" {
-				session, err := runOpenAILoginFlow(cmd, callbackPort, noBrowser, headless)
+				session, err := runOpenAILoginFlow(env, cmd, callbackPort, noBrowser, headless)
 				if err != nil {
 					return err
 				}
@@ -50,7 +50,7 @@ func newAskLoginCommand() *cobra.Command {
 				if err := askauth.Save(session); err != nil {
 					return err
 				}
-				return printSavedSession(providerName, session)
+				return printSavedSession(env, providerName, session)
 			}
 			session, err := buildImportedSession(providerName, accessToken, refreshToken, accountEmail, expiresAt)
 			if err != nil {
@@ -59,7 +59,7 @@ func newAskLoginCommand() *cobra.Command {
 			if err := askauth.Save(session); err != nil {
 				return err
 			}
-			return printSavedSession(providerName, session)
+			return printSavedSession(env, providerName, session)
 		},
 	}
 	cmd.Flags().StringVar(&provider, "provider", "", "provider to associate with this oauth session")
@@ -74,7 +74,7 @@ func newAskLoginCommand() *cobra.Command {
 	return cmd
 }
 
-func newAskLogoutCommand() *cobra.Command {
+func newAskLogoutCommand(env *cliEnv) *cobra.Command {
 	var provider string
 	cmd := &cobra.Command{
 		Use:   "logout",
@@ -91,14 +91,14 @@ func newAskLogoutCommand() *cobra.Command {
 			if err := askauth.Delete(providerName); err != nil {
 				return err
 			}
-			return stdoutPrintf("ask logout removed provider=%s\n", providerName)
+			return env.stdoutPrintf("ask logout removed provider=%s\n", providerName)
 		},
 	}
 	cmd.Flags().StringVar(&provider, "provider", "", "provider whose saved oauth session should be deleted")
 	return cmd
 }
 
-func newAskStatusCommand() *cobra.Command {
+func newAskStatusCommand(env *cliEnv) *cobra.Command {
 	var provider string
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -126,34 +126,34 @@ func newAskStatusCommand() *cobra.Command {
 				effective.AuthStatus = status
 				effective.AccountID = session.AccountID
 			}
-			if err := stdoutPrintf("provider=%s\n", providerName); err != nil {
+			if err := env.stdoutPrintf("provider=%s\n", providerName); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("authenticated=%t\n", ok); err != nil {
+			if err := env.stdoutPrintf("authenticated=%t\n", ok); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("oauthTokenSource=%s\n", effective.OAuthTokenSource); err != nil {
+			if err := env.stdoutPrintf("oauthTokenSource=%s\n", effective.OAuthTokenSource); err != nil {
 				return err
 			}
 			if !ok {
-				if err := stdoutPrintf("status=missing\n"); err != nil {
+				if err := env.stdoutPrintf("status=missing\n"); err != nil {
 					return err
 				}
-				return stdoutPrintf("accountEmail=\n")
+				return env.stdoutPrintf("accountEmail=\n")
 			}
-			if err := stdoutPrintf("status=%s\n", status); err != nil {
+			if err := env.stdoutPrintf("status=%s\n", status); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("accountEmail=%s\n", session.AccountEmail); err != nil {
+			if err := env.stdoutPrintf("accountEmail=%s\n", session.AccountEmail); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("accountID=%s\n", session.AccountID); err != nil {
+			if err := env.stdoutPrintf("accountID=%s\n", session.AccountID); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("expiresAt=%s\n", formatExpiry(session.ExpiresAt)); err != nil {
+			if err := env.stdoutPrintf("expiresAt=%s\n", formatExpiry(session.ExpiresAt)); err != nil {
 				return err
 			}
-			return stdoutPrintf("hasRefreshToken=%t\n", strings.TrimSpace(session.RefreshToken) != "")
+			return env.stdoutPrintf("hasRefreshToken=%t\n", strings.TrimSpace(session.RefreshToken) != "")
 		},
 	}
 	cmd.Flags().StringVar(&provider, "provider", "", "provider whose oauth session should be inspected")
@@ -172,11 +172,11 @@ func resolveImportedOAuthToken(cmd *cobra.Command, oauthToken string, stdinToken
 	return strings.TrimSpace(string(raw)), nil
 }
 
-func runOpenAILoginFlow(cmd *cobra.Command, callbackPort int, noBrowser bool, headless bool) (askauth.Session, error) {
-	if err := askLoginProgressf("Starting OpenAI Codex login...\n"); err != nil {
+func runOpenAILoginFlow(env *cliEnv, cmd *cobra.Command, callbackPort int, noBrowser bool, headless bool) (askauth.Session, error) {
+	if err := askLoginProgressf(env, "Starting OpenAI Codex login...\n"); err != nil {
 		return askauth.Session{}, err
 	}
-	authOpts := askauth.OpenAICodexOptions{CallbackPort: callbackPort, OpenBrowser: !noBrowser, Writer: os.Stderr}
+	authOpts := askauth.OpenAICodexOptions{CallbackPort: callbackPort, OpenBrowser: !noBrowser, Writer: env.stderr}
 	if headless {
 		return askauth.LoginOpenAICodexDevice(cmd.Context(), authOpts)
 	}
@@ -217,8 +217,8 @@ func overrideSessionMetadata(session *askauth.Session, refreshToken string, acco
 	return nil
 }
 
-func printSavedSession(providerName string, session askauth.Session) error {
-	return stdoutPrintf("ask login saved provider=%s account=%s expiresAt=%s\n", providerName, fallbackValue(session.AccountEmail, "unknown"), formatExpiry(session.ExpiresAt))
+func printSavedSession(env *cliEnv, providerName string, session askauth.Session) error {
+	return env.stdoutPrintf("ask login saved provider=%s account=%s expiresAt=%s\n", providerName, fallbackValue(session.AccountEmail, "unknown"), formatExpiry(session.ExpiresAt))
 }
 
 func formatExpiry(value time.Time) string {
@@ -235,8 +235,8 @@ func fallbackValue(value string, fallback string) string {
 	return strings.TrimSpace(value)
 }
 
-func askLoginProgressf(format string, args ...any) error {
-	_, err := fmt.Fprintf(os.Stderr, format, args...)
+func askLoginProgressf(env *cliEnv, format string, args ...any) error {
+	_, err := fmt.Fprintf(env.stderr, format, args...)
 	return err
 }
 

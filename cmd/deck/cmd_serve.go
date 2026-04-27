@@ -22,7 +22,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/server"
 )
 
-func executeServe(ctx context.Context, root string, addr string, auditMaxSizeMB int, auditMaxFiles int, tlsCert string, tlsKey string, tlsSelfSigned bool) error {
+func executeServe(env *cliEnv, ctx context.Context, root string, addr string, auditMaxSizeMB int, auditMaxFiles int, tlsCert string, tlsKey string, tlsSelfSigned bool) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
@@ -83,10 +83,10 @@ func executeServe(ctx context.Context, root string, addr string, auditMaxSizeMB 
 		errCh <- httpServer.ListenAndServe()
 	}()
 	serverURL := displayServerURL(resolvedAddr, certPath != "")
-	if err := stdoutCLIEvent(ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "started", Attrs: map[string]any{"url": serverURL, "bind": resolvedAddr, "root": resolvedRoot}}); err != nil {
+	if err := env.stdoutCLIEvent(ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "started", Attrs: map[string]any{"url": serverURL, "bind": resolvedAddr, "root": resolvedRoot}}); err != nil {
 		return err
 	}
-	if err := stdoutCLIEvent(ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "open", Attrs: map[string]any{"url": strings.TrimRight(serverURL, "/") + "/"}}); err != nil {
+	if err := env.stdoutCLIEvent(ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "open", Attrs: map[string]any{"url": strings.TrimRight(serverURL, "/") + "/"}}); err != nil {
 		return err
 	}
 	select {
@@ -148,7 +148,7 @@ type healthReport struct {
 	HTTPStatus int    `json:"httpStatus"`
 }
 
-func executeHealth(ctx context.Context, server string, output string) error {
+func executeHealth(env *cliEnv, ctx context.Context, server string, output string) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
@@ -160,13 +160,13 @@ func executeHealth(ctx context.Context, server string, output string) error {
 	if err != nil {
 		return err
 	}
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer}}); err != nil {
 		return err
 	}
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	healthURL := strings.TrimRight(resolvedServer, "/") + "/healthz"
-	if err := verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "debug", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer, "url": healthURL}}); err != nil {
+	if err := env.verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "debug", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer, "url": healthURL}}); err != nil {
 		return err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
@@ -175,28 +175,28 @@ func executeHealth(ctx context.Context, server string, output string) error {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		_ = verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "error", Component: "server", Event: "health_check_failed", Attrs: map[string]any{"server": resolvedServer, "url": healthURL, "error": err}})
+		_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "error", Component: "server", Event: "health_check_failed", Attrs: map[string]any{"server": resolvedServer, "url": healthURL, "error": err}})
 		return fmt.Errorf("health: request failed: %w", err)
 	}
 	defer closeSilently(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		_ = verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "warn", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer, "url": healthURL, "http_status": resp.StatusCode}})
+		_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "warn", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer, "url": healthURL, "http_status": resp.StatusCode}})
 		return fmt.Errorf("health: unexpected status %d", resp.StatusCode)
 	}
-	if err := verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer, "url": healthURL, "http_status": resp.StatusCode}}); err != nil {
+	if err := env.verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer, "url": healthURL, "http_status": resp.StatusCode}}); err != nil {
 		return err
 	}
 	report := healthReport{Status: "ok", Server: resolvedServer, HealthURL: healthURL, HTTPStatus: resp.StatusCode}
 	if resolvedOutput == "json" {
-		enc := stdoutJSONEncoder()
+		enc := env.stdoutJSONEncoder()
 		enc.SetIndent("", "  ")
 		return enc.Encode(report)
 	}
 
-	return stdoutPrintf("health: ok (%s)\n", report.Server)
+	return env.stdoutPrintf("health: ok (%s)\n", report.Server)
 }
 
-func executeLogs(ctx context.Context, root string, source string, path string, unit string, output string) error {
+func executeLogs(env *cliEnv, ctx context.Context, root string, source string, path string, unit string, output string) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
@@ -205,7 +205,7 @@ func executeLogs(ctx context.Context, root string, source string, path string, u
 	if err != nil {
 		return err
 	}
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_query", Attrs: map[string]any{"root": strings.TrimSpace(root), "source": resolvedSource, "path": strings.TrimSpace(path), "unit": strings.TrimSpace(unit), "output": strings.TrimSpace(output)}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_query", Attrs: map[string]any{"root": strings.TrimSpace(root), "source": resolvedSource, "path": strings.TrimSpace(path), "unit": strings.TrimSpace(unit), "output": strings.TrimSpace(output)}}); err != nil {
 		return err
 	}
 	if resolvedSource != "file" && resolvedSource != "journal" && resolvedSource != "both" {
@@ -218,14 +218,14 @@ func executeLogs(ctx context.Context, root string, source string, path string, u
 		if err != nil {
 			return err
 		}
-		if err := verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_file", Attrs: map[string]any{"file": logPath}}); err != nil {
+		if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_file", Attrs: map[string]any{"file": logPath}}); err != nil {
 			return err
 		}
 		fileRecords, err := readLogsFile(logPath)
 		if err != nil {
 			return err
 		}
-		if err := verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_file_loaded", Attrs: map[string]any{"file_records": len(fileRecords)}}); err != nil {
+		if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_file_loaded", Attrs: map[string]any{"file_records": len(fileRecords)}}); err != nil {
 			return err
 		}
 		records = append(records, fileRecords...)
@@ -235,28 +235,28 @@ func executeLogs(ctx context.Context, root string, source string, path string, u
 		if resolvedUnit == "" {
 			return errors.New("--unit is required when --source includes journal")
 		}
-		if err := verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_journal", Attrs: map[string]any{"unit": resolvedUnit}}); err != nil {
+		if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_journal", Attrs: map[string]any{"unit": resolvedUnit}}); err != nil {
 			return err
 		}
 		journalRecords, err := readControlLogsJournal(ctx, resolvedUnit, 50, 0)
 		if err != nil {
 			return fmt.Errorf("logs: %w\nsuggestion: %s", err, suggestJournalctlCommand(resolvedUnit))
 		}
-		if err := verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_journal_loaded", Attrs: map[string]any{"journal_records": len(journalRecords)}}); err != nil {
+		if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_journal_loaded", Attrs: map[string]any{"journal_records": len(journalRecords)}}); err != nil {
 			return err
 		}
 		records = append(records, journalRecords...)
 	}
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_loaded", Attrs: map[string]any{"records": len(records)}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_loaded", Attrs: map[string]any{"records": len(records)}}); err != nil {
 		return err
 	}
 
 	if resolvedOutput == "json" {
-		enc := stdoutJSONEncoder()
+		enc := env.stdoutJSONEncoder()
 		return enc.Encode(records)
 	}
 	for _, record := range records {
-		if err := stdoutPrintln(ctrllogs.FormatLogText(record)); err != nil {
+		if err := env.stdoutPrintln(ctrllogs.FormatLogText(record)); err != nil {
 			return err
 		}
 	}

@@ -65,6 +65,7 @@ type applyRunEventRecord struct {
 
 type applyRunLogger struct {
 	mu        sync.Mutex
+	env       *cliEnv
 	dir       string
 	record    applyRunRecord
 	stepOrder []string
@@ -79,7 +80,7 @@ func (l *applyRunLogger) Dir() string {
 	return l.dir
 }
 
-func newApplyRunLogger(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (*applyRunLogger, error) {
+func newApplyRunLogger(env *cliEnv, workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (*applyRunLogger, error) {
 	runsRoot, err := userdirs.RunsRoot()
 	if err != nil {
 		return nil, err
@@ -96,6 +97,7 @@ func newApplyRunLogger(workflowPath, workflowSource, scenario, bundleRoot, selec
 	}
 	hostname, _ := os.Hostname()
 	logger := &applyRunLogger{
+		env:    env,
 		dir:    dir,
 		events: eventsFile,
 		steps:  map[string]*applyRunStepRecord{},
@@ -147,7 +149,7 @@ func (l *applyRunLogger) EventSink() install.StepEventSink {
 	}
 	return func(event install.StepEvent) {
 		if err := l.writeEvent(event); err != nil {
-			_ = stderrCLIEvent(ctrllogs.CLIEvent{Level: "error", Component: "apply", Event: "runlog_write_failed", Attrs: map[string]any{"error": err}})
+			_ = l.env.stderrCLIEvent(ctrllogs.CLIEvent{Level: "error", Component: "apply", Event: "runlog_write_failed", Attrs: map[string]any{"error": err}})
 		}
 	}
 }
