@@ -10,6 +10,8 @@ const (
 	WorkflowRootDir             = "workflows"
 	WorkflowScenariosDir        = "scenarios"
 	WorkflowComponentsDir       = "components"
+	WorkflowIndexRel            = "index.json"
+	WorkflowIndexPathRel        = WorkflowRootDir + "/" + WorkflowIndexRel
 	CanonicalScenariosDir       = WorkflowRootDir + "/" + WorkflowScenariosDir
 	CanonicalComponentsDir      = WorkflowRootDir + "/" + WorkflowComponentsDir
 	CanonicalScenariosPrefix    = CanonicalScenariosDir + "/"
@@ -127,6 +129,14 @@ func IsScenarioAuthoringPath(path string) bool {
 	return strings.HasPrefix(clean, CanonicalScenariosPrefix) || strings.Contains(clean, "/"+CanonicalScenariosPrefix)
 }
 
+func IsWorkflowAuthoringPath(path string) bool {
+	clean := filepath.ToSlash(strings.TrimSpace(path))
+	if clean == "" {
+		return false
+	}
+	return strings.HasPrefix(clean, WorkflowRootDir+"/") || strings.Contains(clean, "/"+WorkflowRootDir+"/")
+}
+
 func IsComponentAuthoringPath(path string) bool {
 	clean := filepath.ToSlash(strings.TrimSpace(path))
 	if clean == "" {
@@ -166,6 +176,30 @@ func IsPreparedPathUnderRoot(rel string, root string) bool {
 		return false
 	}
 	return cleaned == cleanedRoot || strings.HasPrefix(cleaned, cleanedRoot+"/")
+}
+
+func PreparedRootPath(root string) string {
+	return filepath.ToSlash(filepath.Join(PreparedDirRel, strings.TrimSpace(root)))
+}
+
+func IsPreparedFilePath(rel string) bool {
+	return IsPreparedManifestPathUnderRoot(rel, PreparedFilesRoot)
+}
+
+func IsPreparedImagePath(rel string) bool {
+	return IsPreparedManifestPathUnderRoot(rel, PreparedImagesRoot)
+}
+
+func IsPreparedPackagePath(rel string) bool {
+	return IsPreparedManifestPathUnderRoot(rel, PreparedPackagesRoot)
+}
+
+func IsPreparedManifestPathUnderRoot(rel string, root string) bool {
+	trimmed := filepath.ToSlash(strings.TrimSpace(rel))
+	if trimmed == "" {
+		return false
+	}
+	return IsPreparedPathUnderRoot(trimmed, root) || IsPreparedPathUnderRoot(trimmed, PreparedRootPath(root))
 }
 
 func LocateWorkflowTreeRoot(workflowPath string) (string, error) {

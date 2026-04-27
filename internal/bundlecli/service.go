@@ -8,6 +8,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/bundle"
 	"github.com/Airgap-Castaways/deck/internal/logs"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type VerifyOptions struct {
@@ -131,11 +132,11 @@ func summarizeBundleManifest(entries []bundle.ManifestEntry) manifestSummary {
 	for _, entry := range entries {
 		path := strings.TrimSpace(entry.Path)
 		switch {
-		case strings.HasPrefix(path, "outputs/files/") || strings.HasPrefix(path, "files/"):
+		case workspacepaths.IsPreparedFilePath(path):
 			summary.Files++
-		case strings.HasPrefix(path, "outputs/images/") || strings.HasPrefix(path, "images/"):
+		case workspacepaths.IsPreparedImagePath(path):
 			summary.Images++
-		case strings.HasPrefix(path, "outputs/packages/") || strings.HasPrefix(path, "packages/"):
+		case workspacepaths.IsPreparedPackagePath(path):
 			summary.Packages++
 		default:
 			summary.Other++
