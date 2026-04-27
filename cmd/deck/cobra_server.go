@@ -14,7 +14,7 @@ import (
 	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 )
 
-func newServerCommand() *cobra.Command {
+func newServerCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "server",
 		Short: "Run the local content server and manage remote lookup defaults",
@@ -25,17 +25,17 @@ func newServerCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(
-		newServerUpCommand(),
-		newServerDownCommand(),
-		newServerHealthCommand(),
-		newServerLogsCommand(),
-		newServerRemoteCommand(),
+		newServerUpCommand(env),
+		newServerDownCommand(env),
+		newServerHealthCommand(env),
+		newServerLogsCommand(env),
+		newServerRemoteCommand(env),
 	)
 
 	return cmd
 }
 
-func newServerUpCommand() *cobra.Command {
+func newServerUpCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "up",
 		Short: "Start the local bundle server",
@@ -77,7 +77,7 @@ func newServerUpCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeServerUp(cmd.Context(), serverUpOptions{
+			return executeServerUp(env, cmd.Context(), serverUpOptions{
 				root:          root,
 				addr:          addr,
 				auditMaxSize:  auditMaxSize,
@@ -102,7 +102,7 @@ func newServerUpCommand() *cobra.Command {
 	return cmd
 }
 
-func newServerDownCommand() *cobra.Command {
+func newServerDownCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "down",
 		Short: "Stop the local server daemon",
@@ -112,14 +112,14 @@ func newServerDownCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeServerDown(cmd.Context(), unit)
+			return executeServerDown(env, cmd.Context(), unit)
 		},
 	}
 	cmd.Flags().String("unit", "deck-server", "systemd unit name to stop")
 	return cmd
 }
 
-func newServerHealthCommand() *cobra.Command {
+func newServerHealthCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "health",
 		Short: "Probe an explicit server or the saved remote server URL",
@@ -133,7 +133,7 @@ func newServerHealthCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeHealth(cmd.Context(), server, output)
+			return executeHealth(env, cmd.Context(), server, output)
 		},
 	}
 	cmd.Flags().String("server", "", "server base URL (defaults to the saved remote server URL)")
@@ -141,7 +141,7 @@ func newServerHealthCommand() *cobra.Command {
 	return cmd
 }
 
-func newServerLogsCommand() *cobra.Command {
+func newServerLogsCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "logs",
 		Short: "Read local server audit logs from file or journal",
@@ -167,7 +167,7 @@ func newServerLogsCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeLogs(cmd.Context(), root, source, path, unit, output)
+			return executeLogs(env, cmd.Context(), root, source, path, unit, output)
 		},
 	}
 	cmd.Flags().String("root", ".", "serve root directory")
@@ -178,7 +178,7 @@ func newServerLogsCommand() *cobra.Command {
 	return cmd
 }
 
-func newServerRemoteCommand() *cobra.Command {
+func newServerRemoteCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remote",
 		Short: "Manage the saved remote server URL for scenario lookup",
@@ -189,51 +189,51 @@ func newServerRemoteCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(
-		newServerRemoteSetCommand(),
-		newServerRemoteShowCommand(),
-		newServerRemoteUnsetCommand(),
+		newServerRemoteSetCommand(env),
+		newServerRemoteShowCommand(env),
+		newServerRemoteUnsetCommand(env),
 	)
 
 	return cmd
 }
 
-func newServerRemoteSetCommand() *cobra.Command {
+func newServerRemoteSetCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set <url>",
 		Short: "Save the default remote server URL for scenario lookup",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return executeServerRemoteSet(args[0])
+			return executeServerRemoteSet(env, args[0])
 		},
 	}
 	return cmd
 }
 
-func newServerRemoteShowCommand() *cobra.Command {
+func newServerRemoteShowCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "show",
 		Short: "Show the effective saved remote server URL",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return executeServerRemoteShow()
+			return executeServerRemoteShow(env)
 		},
 	}
 	return cmd
 }
 
-func newServerRemoteUnsetCommand() *cobra.Command {
+func newServerRemoteUnsetCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "unset",
 		Short: "Clear the saved remote server URL",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return executeServerRemoteUnset()
+			return executeServerRemoteUnset(env)
 		},
 	}
 	return cmd
 }
 
-func executeServerRemoteSet(rawURL string) error {
+func executeServerRemoteSet(env *cliEnv, rawURL string) error {
 	resolved := strings.TrimRight(strings.TrimSpace(rawURL), "/")
 	if err := validateSourceURL(resolved); err != nil {
 		return err
@@ -242,16 +242,16 @@ func executeServerRemoteSet(rawURL string) error {
 	if err != nil {
 		return err
 	}
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_set", Attrs: map[string]any{"url": resolved, "config": configPath}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_set", Attrs: map[string]any{"url": resolved, "config": configPath}}); err != nil {
 		return err
 	}
 	if err := saveSourceDefaults(sourceDefaults{URL: resolved}); err != nil {
 		return err
 	}
-	return stdoutPrintf("server remote set: %s\n", resolved)
+	return env.stdoutPrintf("server remote set: %s\n", resolved)
 }
 
-func executeServerRemoteShow() error {
+func executeServerRemoteShow(env *cliEnv) error {
 	configPath, err := sourceDefaultsPath()
 	if err != nil {
 		return err
@@ -260,33 +260,33 @@ func executeServerRemoteShow() error {
 	if err != nil {
 		return err
 	}
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_show", Attrs: map[string]any{"config": configPath, "resolved": displayValueOrDash(resolved), "origin": displayValueOrDash(source)}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_show", Attrs: map[string]any{"config": configPath, "resolved": displayValueOrDash(resolved), "origin": displayValueOrDash(source)}}); err != nil {
 		return err
 	}
 	if resolved == "" {
-		if err := stdoutPrintln("remote="); err != nil {
+		if err := env.stdoutPrintln("remote="); err != nil {
 			return err
 		}
-		return stdoutPrintln("origin=none")
+		return env.stdoutPrintln("origin=none")
 	}
-	if err := stdoutPrintf("remote=%s\n", resolved); err != nil {
+	if err := env.stdoutPrintf("remote=%s\n", resolved); err != nil {
 		return err
 	}
-	return stdoutPrintf("origin=%s\n", source)
+	return env.stdoutPrintf("origin=%s\n", source)
 }
 
-func executeServerRemoteUnset() error {
+func executeServerRemoteUnset(env *cliEnv) error {
 	configPath, err := sourceDefaultsPath()
 	if err != nil {
 		return err
 	}
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_unset", Attrs: map[string]any{"config": configPath}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_unset", Attrs: map[string]any{"config": configPath}}); err != nil {
 		return err
 	}
 	if err := clearSourceDefaults(); err != nil {
 		return err
 	}
-	return stdoutPrintln("server remote cleared")
+	return env.stdoutPrintln("server remote cleared")
 }
 
 type serverUpOptions struct {
@@ -301,7 +301,7 @@ type serverUpOptions struct {
 	unit          string
 }
 
-func executeServerUp(ctx context.Context, opts serverUpOptions) error {
+func executeServerUp(env *cliEnv, ctx context.Context, opts serverUpOptions) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
@@ -309,12 +309,12 @@ func executeServerUp(ctx context.Context, opts serverUpOptions) error {
 		return err
 	}
 	if !opts.daemon {
-		return executeServe(ctx, opts.root, opts.addr, opts.auditMaxSize, opts.auditMaxFiles, opts.tlsCert, opts.tlsKey, opts.tlsSelfSigned)
+		return executeServe(env, ctx, opts.root, opts.addr, opts.auditMaxSize, opts.auditMaxFiles, opts.tlsCert, opts.tlsKey, opts.tlsSelfSigned)
 	}
-	return runServerDaemon(ctx, opts)
+	return runServerDaemon(env, ctx, opts)
 }
 
-func executeServerDown(ctx context.Context, unit string) error {
+func executeServerDown(env *cliEnv, ctx context.Context, unit string) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
@@ -327,10 +327,10 @@ func executeServerDown(ctx context.Context, unit string) error {
 		}
 		return fmt.Errorf("server down: %s", msg)
 	}
-	return stdoutPrintf("server down: ok (%s)\n", resolvedUnit)
+	return env.stdoutPrintf("server down: ok (%s)\n", resolvedUnit)
 }
 
-func runServerDaemon(ctx context.Context, opts serverUpOptions) error {
+func runServerDaemon(env *cliEnv, ctx context.Context, opts serverUpOptions) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
@@ -352,14 +352,14 @@ func runServerDaemon(ctx context.Context, opts serverUpOptions) error {
 		}
 		return fmt.Errorf("server up: %s", msg)
 	}
-	if err := stdoutPrintf("server up: ok (%s.service)\n", resolvedUnit); err != nil {
+	if err := env.stdoutPrintf("server up: ok (%s.service)\n", resolvedUnit); err != nil {
 		return err
 	}
 	trimmed := strings.TrimSpace(string(raw))
 	if trimmed == "" {
 		return nil
 	}
-	return stdoutPrintf("%s\n", trimmed)
+	return env.stdoutPrintf("%s\n", trimmed)
 }
 
 func buildServerDaemonArgs(resolvedUnit string, execPath string, cwd string, opts serverUpOptions) []string {

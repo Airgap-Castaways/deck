@@ -9,9 +9,9 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/lintcli"
 )
 
-func verboseApplyStepSink() install.StepEventSink {
+func verboseApplyStepSink(env *cliEnv) install.StepEventSink {
 	return func(event install.StepEvent) {
-		_ = stderrPrintf("%s\n", formatWorkflowEventLine("apply", event))
+		_ = env.stderrPrintf("%s\n", formatWorkflowEventLine("apply", event))
 	}
 }
 
@@ -43,7 +43,7 @@ func resolveApplyWorkflowAndBundle(ctx context.Context, opts applyOptions, posit
 	})
 }
 
-func executeLint(ctx context.Context, root string, file string, scenario string, output string) error {
+func executeLint(env *cliEnv, ctx context.Context, root string, file string, scenario string, output string) error {
 	resolvedOutput, err := resolveOutputFormat(output)
 	if err != nil {
 		return err
@@ -53,9 +53,9 @@ func executeLint(ctx context.Context, root string, file string, scenario string,
 		File:            file,
 		Scenario:        scenario,
 		Output:          resolvedOutput,
-		Verbosef:        verbosef,
-		StdoutPrintf:    stdoutPrintf,
-		JSONEncoderFunc: stdoutJSONEncoder,
+		Verbosef:        env.verbosef,
+		StdoutPrintf:    env.stdoutPrintf,
+		JSONEncoderFunc: env.stdoutJSONEncoder,
 		WorkflowRootDir: workflowRootDir,
 		ScenarioDirName: workflowScenariosDir,
 	})

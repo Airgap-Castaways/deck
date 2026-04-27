@@ -19,7 +19,7 @@ var newAskBackend = func() askprovider.Client {
 	return openaiprovider.New()
 }
 
-func newAskCommand() *cobra.Command {
+func newAskCommand(env *cliEnv) *cobra.Command {
 	var fromPath string
 	var answers []string
 	var create bool
@@ -84,9 +84,9 @@ func newAskCommand() *cobra.Command {
 	cmd.Flags().StringVar(&planDir, "plan-dir", ".deck/plan", "directory for ask plan artifacts")
 
 	cmd.AddCommand(newAskPlanCommand())
-	cmd.AddCommand(newAskConfigCommand())
+	cmd.AddCommand(newAskConfigCommand(env))
 	cmd.AddCommand(newAskMCPCommand())
-	cmd.AddCommand(newAskLoginCommand(), newAskLogoutCommand(), newAskStatusCommand())
+	cmd.AddCommand(newAskLoginCommand(env), newAskLogoutCommand(env), newAskStatusCommand(env))
 	return cmd
 }
 
@@ -137,7 +137,7 @@ func newAskPlanCommand() *cobra.Command {
 	return cmd
 }
 
-func newAskConfigCommand() *cobra.Command {
+func newAskConfigCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   askcontext.CurrentCommandSpec().Config.Use,
 		Short: askcontext.CurrentCommandSpec().Config.Short,
@@ -146,11 +146,11 @@ func newAskConfigCommand() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(newAskConfigSetCommand(), newAskConfigShowCommand(), newAskConfigHealthCommand(), newAskConfigUnsetCommand())
+	cmd.AddCommand(newAskConfigSetCommand(env), newAskConfigShowCommand(env), newAskConfigHealthCommand(env), newAskConfigUnsetCommand(env))
 	return cmd
 }
 
-func newAskConfigSetCommand() *cobra.Command {
+func newAskConfigSetCommand(env *cliEnv) *cobra.Command {
 	var apiKey string
 	var oauthToken string
 	var provider string
@@ -197,7 +197,7 @@ func newAskConfigSetCommand() *cobra.Command {
 			if err := askconfig.SaveStored(updated); err != nil {
 				return err
 			}
-			return stdoutPrintln("ask config saved")
+			return env.stdoutPrintln("ask config saved")
 		},
 	}
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "save the ask api key in XDG config")
@@ -209,7 +209,7 @@ func newAskConfigSetCommand() *cobra.Command {
 	return cmd
 }
 
-func newAskConfigShowCommand() *cobra.Command {
+func newAskConfigShowCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "show",
 		Short: "Show the effective ask provider, model, and masked key source",
@@ -219,36 +219,36 @@ func newAskConfigShowCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := stdoutPrintf("provider=%s\n", effective.Provider); err != nil {
+			if err := env.stdoutPrintf("provider=%s\n", effective.Provider); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("providerSource=%s\n", effective.ProviderSource); err != nil {
+			if err := env.stdoutPrintf("providerSource=%s\n", effective.ProviderSource); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("model=%s\n", effective.Model); err != nil {
+			if err := env.stdoutPrintf("model=%s\n", effective.Model); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("modelSource=%s\n", effective.ModelSource); err != nil {
+			if err := env.stdoutPrintf("modelSource=%s\n", effective.ModelSource); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("endpoint=%s\n", effective.Endpoint); err != nil {
+			if err := env.stdoutPrintf("endpoint=%s\n", effective.Endpoint); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("endpointSource=%s\n", effective.EndpointSource); err != nil {
+			if err := env.stdoutPrintf("endpointSource=%s\n", effective.EndpointSource); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("logLevel=%s\n", effective.LogLevel); err != nil {
+			if err := env.stdoutPrintf("logLevel=%s\n", effective.LogLevel); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("mcpEnabled=%t\n", effective.MCP.Enabled); err != nil {
+			if err := env.stdoutPrintf("mcpEnabled=%t\n", effective.MCP.Enabled); err != nil {
 				return err
 			}
 			providers := mcpaugment.DescribeConfiguredProviders(effective.MCP)
-			if err := stdoutPrintf("mcpProviderCount=%d\n", len(providers)); err != nil {
+			if err := env.stdoutPrintf("mcpProviderCount=%d\n", len(providers)); err != nil {
 				return err
 			}
 			for idx, provider := range providers {
-				if err := printKeyValues(fmt.Sprintf("mcpProvider[%d]", idx), map[string]string{
+				if err := printKeyValues(env, fmt.Sprintf("mcpProvider[%d]", idx), map[string]string{
 					"name":            provider.ConfiguredName,
 					"id":              provider.ProviderID,
 					"transport":       provider.Transport,
@@ -259,25 +259,25 @@ func newAskConfigShowCommand() *cobra.Command {
 					return err
 				}
 			}
-			if err := stdoutPrintf("apiKey=%s\n", askconfig.MaskAPIKey(effective.APIKey)); err != nil {
+			if err := env.stdoutPrintf("apiKey=%s\n", askconfig.MaskAPIKey(effective.APIKey)); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("apiKeySource=%s\n", effective.APIKeySource); err != nil {
+			if err := env.stdoutPrintf("apiKeySource=%s\n", effective.APIKeySource); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("oauthToken=%s\n", askconfig.MaskAPIKey(effective.OAuthToken)); err != nil {
+			if err := env.stdoutPrintf("oauthToken=%s\n", askconfig.MaskAPIKey(effective.OAuthToken)); err != nil {
 				return err
 			}
-			if err := stdoutPrintf("oauthTokenSource=%s\n", effective.OAuthTokenSource); err != nil {
+			if err := env.stdoutPrintf("oauthTokenSource=%s\n", effective.OAuthTokenSource); err != nil {
 				return err
 			}
-			return stdoutPrintf("authStatus=%s\n", effective.AuthStatus)
+			return env.stdoutPrintf("authStatus=%s\n", effective.AuthStatus)
 		},
 	}
 	return cmd
 }
 
-func newAskConfigHealthCommand() *cobra.Command {
+func newAskConfigHealthCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "health",
 		Short: "Probe built-in ask augmentation providers",
@@ -287,15 +287,15 @@ func newAskConfigHealthCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := stdoutPrintf("mcpEnabled=%t\n", effective.MCP.Enabled); err != nil {
+			if err := env.stdoutPrintf("mcpEnabled=%t\n", effective.MCP.Enabled); err != nil {
 				return err
 			}
 			health := mcpaugment.ProbeConfiguredProviders(cmd.Context(), effective.MCP)
-			if err := stdoutPrintf("mcpProviderCount=%d\n", len(health)); err != nil {
+			if err := env.stdoutPrintf("mcpProviderCount=%d\n", len(health)); err != nil {
 				return err
 			}
 			for idx, provider := range health {
-				if err := printKeyValues(fmt.Sprintf("mcpProvider[%d]", idx), map[string]string{
+				if err := printKeyValues(env, fmt.Sprintf("mcpProvider[%d]", idx), map[string]string{
 					"name":                provider.ConfiguredName,
 					"id":                  provider.ProviderID,
 					"transport":           provider.Transport,
@@ -316,21 +316,21 @@ func newAskConfigHealthCommand() *cobra.Command {
 	return cmd
 }
 
-func printKeyValues(prefix string, fields map[string]string) error {
+func printKeyValues(env *cliEnv, prefix string, fields map[string]string) error {
 	orderedKeys := []string{"name", "id", "transport", "transportSource", "status", "phase", "tools", "capabilities", "missingCapabilities", "message", "warning"}
 	for _, key := range orderedKeys {
 		value, ok := fields[key]
 		if !ok || value == "" {
 			continue
 		}
-		if err := stdoutPrintf("%s.%s=%s\n", prefix, key, value); err != nil {
+		if err := env.stdoutPrintf("%s.%s=%s\n", prefix, key, value); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func newAskConfigUnsetCommand() *cobra.Command {
+func newAskConfigUnsetCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "unset",
 		Short: "Clear saved ask config settings from XDG config",
@@ -339,7 +339,7 @@ func newAskConfigUnsetCommand() *cobra.Command {
 			if err := askconfig.ClearStored(); err != nil {
 				return err
 			}
-			return stdoutPrintln("ask config cleared")
+			return env.stdoutPrintln("ask config cleared")
 		},
 	}
 	return cmd

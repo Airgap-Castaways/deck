@@ -19,7 +19,7 @@ type cacheEntry struct {
 	ModTime   string `json:"mod_time"`
 }
 
-func executeCacheList(output string) error {
+func executeCacheList(env *cliEnv, output string) error {
 	resolvedOutput, err := resolveOutputFormat(output)
 	if err != nil {
 		return err
@@ -29,34 +29,34 @@ func executeCacheList(output string) error {
 	if err != nil {
 		return err
 	}
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "list_requested", Attrs: map[string]any{"root": root, "output": strings.TrimSpace(output)}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "list_requested", Attrs: map[string]any{"root": root, "output": strings.TrimSpace(output)}}); err != nil {
 		return err
 	}
 	entries, err := listCacheEntries(root)
 	if err != nil {
 		return err
 	}
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "list_loaded", Attrs: map[string]any{"entries": len(entries)}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "list_loaded", Attrs: map[string]any{"entries": len(entries)}}); err != nil {
 		return err
 	}
 	if resolvedOutput == "json" {
-		enc := stdoutJSONEncoder()
+		enc := env.stdoutJSONEncoder()
 		return enc.Encode(entries)
 	}
 	for _, e := range entries {
-		if err := stdoutPrintf("%s\t%d\t%s\n", e.Path, e.SizeBytes, e.ModTime); err != nil {
+		if err := env.stdoutPrintf("%s\t%d\t%s\n", e.Path, e.SizeBytes, e.ModTime); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func executeCacheClean(olderThan string, dryRun bool) error {
+func executeCacheClean(env *cliEnv, olderThan string, dryRun bool) error {
 	root, err := defaultDeckCacheRoot()
 	if err != nil {
 		return err
 	}
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "clean_requested", Attrs: map[string]any{"root": root, "older_than": strings.TrimSpace(olderThan), "dry_run": dryRun}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "clean_requested", Attrs: map[string]any{"root": root, "older_than": strings.TrimSpace(olderThan), "dry_run": dryRun}}); err != nil {
 		return err
 	}
 	cutoff, hasCutoff, err := parseOlderThan(olderThan)
@@ -67,14 +67,14 @@ func executeCacheClean(olderThan string, dryRun bool) error {
 	if err != nil {
 		return err
 	}
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "clean_planned", Attrs: map[string]any{"matches": len(plan)}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "clean_planned", Attrs: map[string]any{"matches": len(plan)}}); err != nil {
 		return err
 	}
 	for _, p := range plan {
-		if err := verboseCLIEvent(2, ctrllogs.CLIEvent{Component: "cache", Event: "clean_match", Attrs: map[string]any{"path": p}}); err != nil {
+		if err := env.verboseCLIEvent(2, ctrllogs.CLIEvent{Component: "cache", Event: "clean_match", Attrs: map[string]any{"path": p}}); err != nil {
 			return err
 		}
-		if err := stdoutPrintln(p); err != nil {
+		if err := env.stdoutPrintln(p); err != nil {
 			return err
 		}
 	}

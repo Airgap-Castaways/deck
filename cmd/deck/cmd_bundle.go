@@ -5,15 +5,15 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/initcli"
 )
 
-func executeInit(output string) error {
+func executeInit(env *cliEnv, output string) error {
 	return initcli.Run(initcli.Options{
 		Output:       output,
 		DeckWorkDir:  deckWorkDirName,
-		StdoutPrintf: stdoutPrintf,
+		StdoutPrintf: env.stdoutPrintf,
 	})
 }
 
-func executeBundleVerify(filePath string, positionalArgs []string, output string) error {
+func executeBundleVerify(env *cliEnv, filePath string, positionalArgs []string, output string) error {
 	resolvedOutput, err := resolveOutputFormat(output)
 	if err != nil {
 		return err
@@ -22,21 +22,21 @@ func executeBundleVerify(filePath string, positionalArgs []string, output string
 		FilePath:       filePath,
 		PositionalArgs: positionalArgs,
 		Output:         resolvedOutput,
-		Verbosef:       verbosef,
+		Verbosef:       env.verbosef,
 		JSONEncoder: func(v any) error {
-			enc := stdoutJSONEncoder()
+			enc := env.stdoutJSONEncoder()
 			enc.SetIndent("", "  ")
 			return enc.Encode(v)
 		},
-		StdoutPrintf: stdoutPrintf,
+		StdoutPrintf: env.stdoutPrintf,
 	})
 }
 
-func executeBundleBuild(root string, out string) error {
+func executeBundleBuild(env *cliEnv, root string, out string) error {
 	return bundlecli.Build(bundlecli.BuildOptions{
 		Root:         root,
 		Out:          out,
-		Verbosef:     verbosef,
-		StdoutPrintf: stdoutPrintf,
+		Verbosef:     env.verbosef,
+		StdoutPrintf: env.stdoutPrintf,
 	})
 }

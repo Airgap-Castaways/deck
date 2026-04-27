@@ -20,9 +20,8 @@ func main() {
 }
 
 func runMain(args []string) error {
-	root := newRootCommand()
-	setCLIWriters(os.Stdout, os.Stderr)
-	defer setCLIWriters(os.Stdout, os.Stderr)
+	env := newCLIEnv(os.Stdout, os.Stderr)
+	root := newRootCommand(env)
 	root.SetOut(os.Stdout)
 	root.SetErr(os.Stderr)
 	root.SetArgs(args)
@@ -39,11 +38,10 @@ func run(args []string) error {
 }
 
 func execute(args []string) cliResult {
-	root := newRootCommand()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	setCLIWriters(&stdout, &stderr)
-	defer setCLIWriters(os.Stdout, os.Stderr)
+	env := newCLIEnv(&stdout, &stderr)
+	root := newRootCommand(env)
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs(args)
