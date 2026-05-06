@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newCacheCommand() *cobra.Command {
+func newCacheCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cache",
 		Short: "Inspect or clean deck cache data",
@@ -15,8 +15,8 @@ func newCacheCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(
-		newCacheListCommand(),
-		newCacheCleanCommand(),
+		newCacheListCommand(env),
+		newCacheCleanCommand(env),
 	)
 
 	return cmd

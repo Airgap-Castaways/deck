@@ -11,12 +11,19 @@ import (
 	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 )
 
-var (
-	cliStdout    io.Writer = os.Stdout
-	cliStderr    io.Writer = os.Stderr
-	cliVerbosity int
-	cliLogFormat string = "text"
-)
+type cliEnv struct {
+	stdout    io.Writer
+	stderr    io.Writer
+	verbosity int
+	logFormat string
+}
+
+func newCLIEnv(stdout io.Writer, stderr io.Writer) *cliEnv {
+	env := &cliEnv{logFormat: "text"}
+	env.setWriters(stdout, stderr)
+	env.setLogFormat("text")
+	return env
+}
 
 type varFlag struct {
 	values map[string]string
@@ -128,86 +135,108 @@ func resolveCLILogFormat(format string) (string, error) {
 	return resolved, nil
 }
 
-func setCLIWriters(stdout io.Writer, stderr io.Writer) {
+func (e *cliEnv) setWriters(stdout io.Writer, stderr io.Writer) {
+	if e == nil {
+		return
+	}
 	if stdout == nil {
 		stdout = os.Stdout
 	}
 	if stderr == nil {
 		stderr = os.Stderr
 	}
-	cliStdout = stdout
-	cliStderr = stderr
-	refreshCLIStyle()
+	e.stdout = stdout
+	e.stderr = stderr
+	e.refreshStyle()
 }
 
-func setCLILogFormat(format string) {
+func (e *cliEnv) setLogFormat(format string) {
+	if e == nil {
+		return
+	}
 	resolved, err := resolveCLILogFormat(format)
 	if err != nil {
 		resolved = "text"
 	}
-	cliLogFormat = resolved
+	e.logFormat = resolved
 	ctrllogs.SetCLIFormat(resolved)
-	refreshCLIStyle()
+	e.refreshStyle()
 }
 
-func refreshCLIStyle() {
-	ctrllogs.SetCLIColorEnabled(cliLogFormat == "text" && (ctrllogs.WriterSupportsANSI(cliStderr) || ctrllogs.WriterSupportsANSI(cliStdout)))
+func (e *cliEnv) refreshStyle() {
+	if e == nil {
+		return
+	}
+	ctrllogs.SetCLIColorEnabled(e.logFormat == "text" && (ctrllogs.WriterSupportsANSI(e.stderr) || ctrllogs.WriterSupportsANSI(e.stdout)))
 }
 
-func stdoutWriter() io.Writer {
-	return cliStdout
+func (e *cliEnv) stdoutWriter() io.Writer {
+	if e == nil || e.stdout == nil {
+		return os.Stdout
+	}
+	return e.stdout
 }
 
-func stdoutJSONEncoder() *json.Encoder {
-	return json.NewEncoder(stdoutWriter())
+func (e *cliEnv) stdoutJSONEncoder() *json.Encoder {
+	return json.NewEncoder(e.stdoutWriter())
 }
 
-func setCLIVerbosity(level int) {
+func (e *cliEnv) setVerbosity(level int) {
+	if e == nil {
+		return
+	}
 	if level < 0 {
 		level = 0
 	}
-	cliVerbosity = level
+	e.verbosity = level
 }
 
 func formatCLIEvent(event ctrllogs.CLIEvent) string {
 	return ctrllogs.RenderCLIOrFallback(event)
 }
 
-func stderrCLIEvent(event ctrllogs.CLIEvent) error {
-	return ctrllogs.WriteCLIEvent(cliStderr, event)
+func (e *cliEnv) stderrCLIEvent(event ctrllogs.CLIEvent) error {
+	if e == nil || e.stderr == nil {
+		return ctrllogs.WriteCLIEvent(os.Stderr, event)
+	}
+	return ctrllogs.WriteCLIEvent(e.stderr, event)
 }
 
-func stdoutCLIEvent(event ctrllogs.CLIEvent) error {
-	return ctrllogs.WriteCLIEvent(stdoutWriter(), event)
+func (e *cliEnv) stdoutCLIEvent(event ctrllogs.CLIEvent) error {
+	return ctrllogs.WriteCLIEvent(e.stdoutWriter(), event)
 }
 
-func verboseCLIEvent(level int, event ctrllogs.CLIEvent) error {
-	if cliVerbosity < level {
+func (e *cliEnv) verboseCLIEvent(level int, event ctrllogs.CLIEvent) error {
+	if e == nil || e.verbosity < level {
 		return nil
 	}
-	return stderrCLIEvent(event)
+	return e.stderrCLIEvent(event)
 }
 
-func verbosef(level int, format string, args ...any) error {
-	if cliVerbosity < level {
+func (e *cliEnv) verbosef(level int, format string, args ...any) error {
+	if e == nil || e.verbosity < level {
 		return nil
 	}
-	_, err := fmt.Fprintf(cliStderr, format, args...)
+	_, err := fmt.Fprintf(e.stderr, format, args...)
 	return err
 }
 
-func stdoutPrintf(format string, args ...any) error {
-	_, err := fmt.Fprintf(stdoutWriter(), format, args...)
+func (e *cliEnv) stdoutPrintf(format string, args ...any) error {
+	_, err := fmt.Fprintf(e.stdoutWriter(), format, args...)
 	return err
 }
 
-func stdoutPrintln(args ...any) error {
-	_, err := fmt.Fprintln(stdoutWriter(), args...)
+func (e *cliEnv) stdoutPrintln(args ...any) error {
+	_, err := fmt.Fprintln(e.stdoutWriter(), args...)
 	return err
 }
 
-func stderrPrintf(format string, args ...any) error {
-	_, err := fmt.Fprintf(cliStderr, format, args...)
+func (e *cliEnv) stderrPrintf(format string, args ...any) error {
+	if e == nil || e.stderr == nil {
+		_, err := fmt.Fprintf(os.Stderr, format, args...)
+		return err
+	}
+	_, err := fmt.Fprintf(e.stderr, format, args...)
 	return err
 }
 

@@ -423,12 +423,12 @@ func TestCache(t *testing.T) {
 }
 
 func TestRunServerAuditRotationFlagValidation(t *testing.T) {
-	err := executeServe(context.Background(), "./bundle", ":8080", 0, 10, "", "", false)
+	err := executeServe(newCLIEnv(nil, nil), context.Background(), "./bundle", ":8080", 0, 10, "", "", false)
 	if err == nil || !strings.Contains(err.Error(), "--audit-max-size-mb must be > 0") {
 		t.Fatalf("expected audit max size validation error, got %v", err)
 	}
 
-	err = executeServe(context.Background(), "./bundle", ":8080", 50, 0, "", "", false)
+	err = executeServe(newCLIEnv(nil, nil), context.Background(), "./bundle", ":8080", 50, 0, "", "", false)
 	if err == nil || !strings.Contains(err.Error(), "--audit-max-files must be > 0") {
 		t.Fatalf("expected audit max files validation error, got %v", err)
 	}

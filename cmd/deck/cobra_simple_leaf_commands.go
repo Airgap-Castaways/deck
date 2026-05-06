@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newLintCommand() *cobra.Command {
+func newLintCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "lint [scenario]",
 		Short: "Lint the workflow tree or a single workflow file",
@@ -29,7 +29,7 @@ func newLintCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeLint(cmd.Context(), root, file, scenario, output)
+			return executeLint(env, cmd.Context(), root, file, scenario, output)
 		},
 	}
 	cmd.Flags().String("root", ".", "workspace root containing workflows/")
@@ -38,7 +38,7 @@ func newLintCommand() *cobra.Command {
 	return cmd
 }
 
-func newInitCommand() *cobra.Command {
+func newInitCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Scaffold starter deck files",
@@ -48,7 +48,7 @@ func newInitCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeInit(out)
+			return executeInit(env, out)
 		},
 	}
 	cmd.Flags().String("out", ".", "output directory")
@@ -56,7 +56,7 @@ func newInitCommand() *cobra.Command {
 	return cmd
 }
 
-func newCacheListCommand() *cobra.Command {
+func newCacheListCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "Show cached files",
@@ -66,14 +66,14 @@ func newCacheListCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeCacheList(output)
+			return executeCacheList(env, output)
 		},
 	}
 	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
 	return cmd
 }
 
-func newCacheCleanCommand() *cobra.Command {
+func newCacheCleanCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clean",
 		Short: "Delete cached entries, optionally by age",
@@ -86,7 +86,7 @@ func newCacheCleanCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeCacheClean(olderThan, dryRun)
+			return executeCacheClean(env, olderThan, dryRun)
 		},
 	}
 	cmd.Flags().SetInterspersed(false)

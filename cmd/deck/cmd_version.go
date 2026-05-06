@@ -6,7 +6,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/buildinfo"
 )
 
-func newVersionCommand() *cobra.Command {
+func newVersionCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Show deck build version",
@@ -21,10 +21,10 @@ func newVersionCommand() *cobra.Command {
 				return err
 			}
 			if resolvedOutput == "text" {
-				return stdoutPrintf("%s\nrepo %s\n", buildinfo.Summary(), buildinfo.Current().Repository)
+				return env.stdoutPrintf("%s\nrepo %s\n", buildinfo.Summary(), buildinfo.Current().Repository)
 			}
 
-			enc := stdoutJSONEncoder()
+			enc := env.stdoutJSONEncoder()
 			enc.SetIndent("", "  ")
 			return enc.Encode(buildinfo.Current())
 		},

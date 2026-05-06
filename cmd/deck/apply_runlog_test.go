@@ -13,7 +13,7 @@ import (
 
 func TestApplyRunLoggerHandlesConcurrentEvents(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	logger, err := newApplyRunLogger("workflow.yaml", "local", "", "", "")
+	logger, err := newApplyRunLogger(newCLIEnv(nil, nil), "workflow.yaml", "local", "", "", "")
 	if err != nil {
 		t.Fatalf("newApplyRunLogger: %v", err)
 	}

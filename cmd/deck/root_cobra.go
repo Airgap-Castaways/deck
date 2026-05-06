@@ -7,10 +7,13 @@ const (
 	commandGroupAdditional = "additional"
 )
 
-func newRootCommand() *cobra.Command {
+func newRootCommand(env *cliEnv) *cobra.Command {
+	if env == nil {
+		env = newCLIEnv(nil, nil)
+	}
 	cobra.EnableCommandSorting = false
-	setCLIVerbosity(0)
-	setCLILogFormat("text")
+	env.setVerbosity(0)
+	env.setLogFormat("text")
 
 	cmd := &cobra.Command{
 		Use:                "deck",
@@ -20,16 +23,17 @@ func newRootCommand() *cobra.Command {
 		SilenceUsage:       true,
 		DisableSuggestions: true,
 		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
-			resolved, err := resolveCLILogFormat(cliLogFormat)
+			resolved, err := resolveCLILogFormat(env.logFormat)
 			if err != nil {
 				return err
 			}
-			setCLILogFormat(resolved)
+			env.setLogFormat(resolved)
+			env.setVerbosity(env.verbosity)
 			return nil
 		},
 	}
-	cmd.PersistentFlags().IntVar(&cliVerbosity, "v", 0, "diagnostic verbosity level")
-	cmd.PersistentFlags().StringVar(&cliLogFormat, "log-format", "text", "diagnostic log format (text|json)")
+	cmd.PersistentFlags().IntVar(&env.verbosity, "v", 0, "diagnostic verbosity level")
+	cmd.PersistentFlags().StringVar(&env.logFormat, "log-format", "text", "diagnostic log format (text|json)")
 
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	cmd.SetHelpCommandGroupID(commandGroupAdditional)
@@ -39,18 +43,18 @@ func newRootCommand() *cobra.Command {
 	)
 
 	for _, child := range []*cobra.Command{
-		withGroup(newInitCommand(), commandGroupCore),
-		withGroup(newLintCommand(), commandGroupCore),
-		withGroup(newPrepareCommand(), commandGroupCore),
-		withGroup(newBundleCommand(), commandGroupCore),
-		withGroup(newPlanCommand(), commandGroupCore),
-		withGroup(newApplyCommand(), commandGroupCore),
-		withGroup(newListCommand(), commandGroupAdditional),
-		withGroup(newServerCommand(), commandGroupAdditional),
-		withGroup(newAskCommand(), commandGroupAdditional),
-		withGroup(newVersionCommand(), commandGroupAdditional),
+		withGroup(newInitCommand(env), commandGroupCore),
+		withGroup(newLintCommand(env), commandGroupCore),
+		withGroup(newPrepareCommand(env), commandGroupCore),
+		withGroup(newBundleCommand(env), commandGroupCore),
+		withGroup(newPlanCommand(env), commandGroupCore),
+		withGroup(newApplyCommand(env), commandGroupCore),
+		withGroup(newListCommand(env), commandGroupAdditional),
+		withGroup(newServerCommand(env), commandGroupAdditional),
+		withGroup(newAskCommand(env), commandGroupAdditional),
+		withGroup(newVersionCommand(env), commandGroupAdditional),
 		withGroup(newCompletionCommand(), commandGroupAdditional),
-		withGroup(newCacheCommand(), commandGroupAdditional),
+		withGroup(newCacheCommand(env), commandGroupAdditional),
 	} {
 		if child != nil {
 			cmd.AddCommand(child)

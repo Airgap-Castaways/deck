@@ -33,7 +33,7 @@ type scenarioEntry struct {
 	Workflow string `json:"workflow"`
 }
 
-func newListCommand() *cobra.Command {
+func newListCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List available scenarios from local workflows or the saved remote server",
@@ -47,7 +47,7 @@ func newListCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeList(cmd.Context(), strings.TrimSpace(source), strings.TrimSpace(output))
+			return executeList(env, cmd.Context(), strings.TrimSpace(source), strings.TrimSpace(output))
 		},
 	}
 	cmd.Flags().String("source", scenarioSourceAll, "scenario source (local|server|all)")
@@ -56,7 +56,7 @@ func newListCommand() *cobra.Command {
 	return cmd
 }
 
-func executeList(ctx context.Context, source, output string) error {
+func executeList(env *cliEnv, ctx context.Context, source, output string) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
@@ -68,33 +68,33 @@ func executeList(ctx context.Context, source, output string) error {
 	if err != nil {
 		return err
 	}
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "list", Event: "list_requested", Attrs: map[string]any{"source": resolvedSource, "output": strings.TrimSpace(output)}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "list", Event: "list_requested", Attrs: map[string]any{"source": resolvedSource, "output": strings.TrimSpace(output)}}); err != nil {
 		return err
 	}
 
-	entries, err := discoverScenarioEntries(ctx, resolvedSource)
+	entries, err := discoverScenarioEntries(env, ctx, resolvedSource)
 	if err != nil {
 		return err
 	}
-	if err := verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "list", Event: "list_loaded", Attrs: map[string]any{"entries": len(entries)}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "list", Event: "list_loaded", Attrs: map[string]any{"entries": len(entries)}}); err != nil {
 		return err
 	}
 
 	if resolvedOutput == "json" {
-		enc := stdoutJSONEncoder()
+		enc := env.stdoutJSONEncoder()
 		enc.SetIndent("", "  ")
 		return enc.Encode(entries)
 	}
 
 	for _, entry := range entries {
-		if err := stdoutPrintf("%s\t%s\t%s\n", entry.Source, entry.Name, entry.Workflow); err != nil {
+		if err := env.stdoutPrintf("%s\t%s\t%s\n", entry.Source, entry.Name, entry.Workflow); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func discoverScenarioEntries(ctx context.Context, source string) ([]scenarioEntry, error) {
+func discoverScenarioEntries(env *cliEnv, ctx context.Context, source string) ([]scenarioEntry, error) {
 	entries := make([]scenarioEntry, 0)
 
 	if source == scenarioSourceLocal || source == scenarioSourceAll {
@@ -103,7 +103,7 @@ func discoverScenarioEntries(ctx context.Context, source string) ([]scenarioEntr
 			if source != scenarioSourceAll {
 				return nil, err
 			}
-			_ = verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "local_skipped", Attrs: map[string]any{"error": err}})
+			_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "local_skipped", Attrs: map[string]any{"error": err}})
 		} else {
 			entries = append(entries, localEntries...)
 		}
@@ -116,19 +116,19 @@ func discoverScenarioEntries(ctx context.Context, source string) ([]scenarioEntr
 			if source != scenarioSourceAll {
 				return nil, err
 			}
-			_ = verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "server_skipped", Attrs: map[string]any{"error": err}})
+			_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "server_skipped", Attrs: map[string]any{"error": err}})
 		case strings.TrimSpace(serverURL) != "":
 			serverEntries, err := discoverServerScenarioEntries(ctx, serverURL)
 			if err != nil {
 				if source != scenarioSourceAll {
 					return nil, err
 				}
-				_ = verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "server_lookup_failed", Attrs: map[string]any{"server": serverURL, "error": err}})
+				_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "server_lookup_failed", Attrs: map[string]any{"server": serverURL, "error": err}})
 			} else {
 				entries = append(entries, serverEntries...)
 			}
 		case source == scenarioSourceAll:
-			_ = verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "server_skipped", Attrs: map[string]any{"reason": "no-remote"}})
+			_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "server_skipped", Attrs: map[string]any{"reason": "no-remote"}})
 		case source == scenarioSourceServer:
 			return nil, errors.New("saved remote server URL is required; set one with \"deck server remote set <url>\"")
 		}

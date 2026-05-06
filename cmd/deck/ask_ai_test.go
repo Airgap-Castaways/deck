@@ -217,7 +217,7 @@ func TestAskLoginRejectsNonOpenAIProvider(t *testing.T) {
 }
 
 func TestAskCommandMetadataMatchesAskContext(t *testing.T) {
-	cmd := newAskCommand()
+	cmd := newAskCommand(newCLIEnv(nil, nil))
 	meta := askcontext.AskCommandMeta()
 	if cmd.Short != meta.Short {
 		t.Fatalf("unexpected ask short help: %q", cmd.Short)

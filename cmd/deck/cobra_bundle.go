@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newBundleCommand() *cobra.Command {
+func newBundleCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "bundle",
 		Short: "Build or verify bundles",
@@ -17,14 +17,14 @@ func newBundleCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(
-		newBundleBuildCommand(),
-		newBundleVerifyCommand(),
+		newBundleBuildCommand(env),
+		newBundleVerifyCommand(env),
 	)
 
 	return cmd
 }
 
-func newBundleVerifyCommand() *cobra.Command {
+func newBundleVerifyCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "verify [path]",
 		Short: "Verify bundle manifest integrity",
@@ -38,7 +38,7 @@ func newBundleVerifyCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeBundleVerify(file, args, output)
+			return executeBundleVerify(env, file, args, output)
 		},
 	}
 	cmd.Flags().String("file", "", "bundle path (directory or bundle.tar)")
@@ -46,7 +46,7 @@ func newBundleVerifyCommand() *cobra.Command {
 	return cmd
 }
 
-func newBundleBuildCommand() *cobra.Command {
+func newBundleBuildCommand(env *cliEnv) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build",
 		Short: "Archive deck, workflows, outputs, and manifest",
@@ -60,7 +60,7 @@ func newBundleBuildCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeBundleBuild(root, out)
+			return executeBundleBuild(env, root, out)
 		},
 	}
 	cmd.Flags().String("root", ".", "workspace root containing deck, workflows, outputs, and .deck/manifest.json")

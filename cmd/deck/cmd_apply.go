@@ -21,7 +21,7 @@ type diffOptions struct {
 	varOverrides  map[string]string
 }
 
-func newPlanCommand() *cobra.Command {
+func newPlanCommand(env *cliEnv) *cobra.Command {
 	vars := &varFlag{}
 	cmd := &cobra.Command{
 		Use:     "plan",
@@ -52,7 +52,7 @@ func newPlanCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runDiffWithOptions(cmd.Context(), diffOptions{
+			return runDiffWithOptions(env, cmd.Context(), diffOptions{
 				workflowPath:  workflowPath,
 				scenario:      scenario,
 				source:        source,
@@ -76,25 +76,25 @@ func newPlanCommand() *cobra.Command {
 	return cmd
 }
 
-func runDiffWithOptions(ctx context.Context, opts diffOptions) error {
+func runDiffWithOptions(env *cliEnv, ctx context.Context, opts diffOptions) error {
 	workflowPath, err := resolvePlanWorkflowPath(ctx, strings.TrimSpace(opts.workflowPath), strings.TrimSpace(opts.scenario), strings.TrimSpace(opts.source))
 	if err != nil {
 		return err
 	}
 	selectedPhase := strings.TrimSpace(opts.selectedPhase)
-	return executeDiff(ctx, workflowPath, selectedPhase, opts.output, opts.fresh, varsAsAnyMap(opts.varOverrides))
+	return executeDiff(env, ctx, workflowPath, selectedPhase, opts.output, opts.fresh, varsAsAnyMap(opts.varOverrides))
 }
 
-func executeDiff(ctx context.Context, workflowPath, selectedPhase, output string, fresh bool, varOverrides map[string]any) error {
+func executeDiff(env *cliEnv, ctx context.Context, workflowPath, selectedPhase, output string, fresh bool, varOverrides map[string]any) error {
 	return applycli.RunPlanCommand(ctx, applycli.PlanCommandOptions{
 		WorkflowPath:    workflowPath,
 		SelectedPhase:   selectedPhase,
 		Output:          output,
 		Fresh:           fresh,
 		VarOverrides:    varOverrides,
-		Verbosef:        verbosef,
-		StdoutPrintf:    stdoutPrintf,
-		JSONEncoderFunc: stdoutJSONEncoder,
+		Verbosef:        env.verbosef,
+		StdoutPrintf:    env.stdoutPrintf,
+		JSONEncoderFunc: env.stdoutJSONEncoder,
 		ResolveOutput:   resolveOutputFormat,
 	})
 }
@@ -110,7 +110,7 @@ type applyOptions struct {
 	positional    []string
 }
 
-func newApplyCommand() *cobra.Command {
+func newApplyCommand(env *cliEnv) *cobra.Command {
 	vars := &varFlag{}
 	cmd := &cobra.Command{
 		Use:   "apply [workflow] [bundle]",
@@ -146,7 +146,7 @@ func newApplyCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runApplyWithOptions(cmd.Context(), applyOptions{
+			return runApplyWithOptions(env, cmd.Context(), applyOptions{
 				workflowPath:  workflowPath,
 				scenario:      scenario,
 				source:        source,
@@ -171,7 +171,7 @@ func newApplyCommand() *cobra.Command {
 	return cmd
 }
 
-func runApplyWithOptions(ctx context.Context, opts applyOptions) error {
+func runApplyWithOptions(env *cliEnv, ctx context.Context, opts applyOptions) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
@@ -196,12 +196,12 @@ func runApplyWithOptions(ctx context.Context, opts applyOptions) error {
 		Fresh:          opts.fresh,
 		DryRun:         opts.dryRun,
 		VarOverrides:   varsAsAnyMap(opts.varOverrides),
-		Verbosef:       verbosef,
-		StdoutPrintf:   stdoutPrintf,
-		StdoutPrintln:  stdoutPrintln,
-		AdditionalSink: verboseApplyStepSink(),
+		Verbosef:       env.verbosef,
+		StdoutPrintf:   env.stdoutPrintf,
+		StdoutPrintln:  env.stdoutPrintln,
+		AdditionalSink: verboseApplyStepSink(env),
 		NewRunLogger: func(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (applycli.RunLogger, error) {
-			return newApplyRunLogger(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase)
+			return newApplyRunLogger(env, workflowPath, workflowSource, scenario, bundleRoot, selectedPhase)
 		},
 	})
 }
