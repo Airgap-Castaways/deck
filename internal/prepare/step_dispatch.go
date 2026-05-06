@@ -14,23 +14,19 @@ import (
 
 type prepareStepHandler func(ctx context.Context, runner CommandRunner, bundleRoot string, step config.Step, rendered map[string]any, inputVars map[string]string, opts RunOptions) ([]string, map[string]any, error)
 
-var prepareStepHandlers = map[string]prepareStepHandler{
+var prepareStepHandlers = workflowexec.MustStepRoleHandlers("prepare", map[string]prepareStepHandler{
 	"CheckHost":       prepareCheckHost,
 	"DownloadFile":    prepareDownloadFile,
 	"DownloadImage":   prepareDownloadImage,
 	"DownloadPackage": prepareDownloadPackage,
-}
+})
 
 func runPrepareRenderedStepWithKey(ctx context.Context, runner CommandRunner, bundleRoot string, step config.Step, rendered map[string]any, key workflowexec.StepTypeKey, inputVars map[string]string, opts RunOptions) ([]string, map[string]any, error) {
 	kind := step.Kind
-	allowed, err := workflowexec.StepAllowedForRoleForKey("prepare", key)
+	handler, ok, err := workflowexec.StepRoleHandlerForKey("prepare", prepareStepHandlers, key)
 	if err != nil {
 		return nil, nil, err
 	}
-	if !allowed {
-		return nil, nil, errcode.Newf(errCodePrepareKindUnsupported, "unsupported step kind %s", kind)
-	}
-	handler, ok := prepareStepHandlers[kind]
 	if !ok {
 		return nil, nil, errcode.Newf(errCodePrepareKindUnsupported, "unsupported step kind %s", kind)
 	}
