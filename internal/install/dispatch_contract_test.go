@@ -7,16 +7,7 @@ import (
 )
 
 func TestInstallStepHandlersCoverApplyKinds(t *testing.T) {
-	defs, err := workflowexec.StepDefinitions()
-	if err != nil {
-		t.Fatalf("StepDefinitions: %v", err)
-	}
-	for _, def := range defs {
-		if !contains(def.Roles, "apply") {
-			continue
-		}
-		if _, ok := installStepHandlers[def.Kind]; !ok {
-			t.Fatalf("missing install handler for apply kind %s", def.Kind)
-		}
+	if _, err := workflowexec.StepRoleHandlers("apply", installStepHandlers); err != nil {
+		t.Fatalf("install step handler registration: %v", err)
 	}
 }

@@ -7,16 +7,7 @@ import (
 )
 
 func TestPrepareStepHandlersCoverPrepareKinds(t *testing.T) {
-	defs, err := workflowexec.StepDefinitions()
-	if err != nil {
-		t.Fatalf("StepDefinitions: %v", err)
-	}
-	for _, def := range defs {
-		if !contains(def.Roles, "prepare") {
-			continue
-		}
-		if _, ok := prepareStepHandlers[def.Kind]; !ok {
-			t.Fatalf("missing prepare handler for prepare kind %s", def.Kind)
-		}
+	if _, err := workflowexec.StepRoleHandlers("prepare", prepareStepHandlers); err != nil {
+		t.Fatalf("prepare step handler registration: %v", err)
 	}
 }

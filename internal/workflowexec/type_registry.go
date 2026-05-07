@@ -3,6 +3,8 @@ package workflowexec
 import "github.com/Airgap-Castaways/deck/internal/workflowcontract"
 
 type (
+	// These aliases keep schema/documentation callers on the workflowexec facade
+	// when they need runtime step keys and contract projections together.
 	FieldDoc              = workflowcontract.FieldDoc
 	ToolMetadata          = workflowcontract.ToolMetadata
 	SchemaMetadata        = workflowcontract.SchemaMetadata

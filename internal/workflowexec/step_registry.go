@@ -7,6 +7,8 @@ import (
 )
 
 type (
+	// StepDefinition is re-exported so runtime packages can use workflowexec as
+	// the facade for step keys, role checks, and dispatch registration.
 	StepDefinition = workflowcontract.StepDefinition
 	StepTypeKey    = workflowcontract.StepTypeKey
 )

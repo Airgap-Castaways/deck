@@ -21,7 +21,7 @@ func (installLookPathRunner) LookPath(file string) (string, error) {
 
 type installStepHandler func(ctx context.Context, step config.Step, rendered map[string]any, effectiveSpec map[string]any, execCtx ExecutionContext) (map[string]any, error)
 
-var installStepHandlers = map[string]installStepHandler{
+var installStepHandlers = workflowexec.MustStepRoleHandlers("apply", map[string]installStepHandler{
 	"CheckHost":                    installCheckHost,
 	"CheckKubernetesCluster":       installCheckKubernetesCluster,
 	"Command":                      installCommand,
@@ -56,19 +56,15 @@ var installStepHandlers = map[string]installStepHandler{
 	"WriteContainerdRegistryHosts": installWriteContainerdRegistryHosts,
 	"WriteFile":                    installWriteFile,
 	"WriteSystemdUnit":             installWriteSystemdUnit,
-}
+})
 
 func executeWorkflowStep(ctx context.Context, step config.Step, rendered map[string]any, key workflowexec.StepTypeKey, execCtx ExecutionContext) (map[string]any, error) {
 	kind := step.Kind
 	effectiveSpec := specWithStepTimeout(rendered, step.Timeout)
-	allowed, err := workflowexec.StepAllowedForRoleForKey("apply", key)
+	handler, ok, err := workflowexec.StepRoleHandlerForKey("apply", installStepHandlers, key)
 	if err != nil {
 		return nil, err
 	}
-	if !allowed {
-		return nil, errcode.Newf(errCodeInstallKindUnsupported, "unsupported step kind %s", kind)
-	}
-	handler, ok := installStepHandlers[kind]
 	if !ok {
 		return nil, errcode.Newf(errCodeInstallKindUnsupported, "unsupported step kind %s", kind)
 	}
