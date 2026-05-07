@@ -15,20 +15,25 @@ func MustStepRoleHandlers[T any](role string, handlers map[string]T) map[string]
 }
 
 func StepRoleHandlers[T any](role string, handlers map[string]T) (map[string]T, error) {
-	role = strings.TrimSpace(role)
-	if role == "" {
-		return nil, fmt.Errorf("step role is required")
-	}
 	defs, err := StepDefinitions()
 	if err != nil {
 		return nil, err
 	}
+	return stepRoleHandlersForDefinitions(role, handlers, defs)
+}
+
+func stepRoleHandlersForDefinitions[T any](role string, handlers map[string]T, defs []StepDefinition) (map[string]T, error) {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return nil, fmt.Errorf("step role is required")
+	}
 	required := map[string]struct{}{}
 	rolesByKind := map[string][]string{}
 	for _, def := range defs {
-		rolesByKind[def.Kind] = def.Roles
+		kind := strings.TrimSpace(def.Kind)
+		rolesByKind[kind] = append(rolesByKind[kind], def.Roles...)
 		if containsString(def.Roles, role) {
-			required[def.Kind] = struct{}{}
+			required[kind] = struct{}{}
 		}
 	}
 	if len(required) == 0 {
@@ -46,7 +51,7 @@ func StepRoleHandlers[T any](role string, handlers map[string]T) (map[string]T, 
 			return nil, fmt.Errorf("step handler for role %q references unknown kind %q", role, kind)
 		}
 		if !containsString(roles, role) {
-			return nil, fmt.Errorf("step handler for kind %q is registered for role %q, but metadata roles are %s", kind, role, strings.Join(roles, ","))
+			return nil, fmt.Errorf("step handler for kind %q is registered for role %q, but metadata roles are %s", kind, role, strings.Join(roles, ", "))
 		}
 		if _, exists := registered[kind]; exists {
 			return nil, fmt.Errorf("duplicate step handler for role %q and kind %q", role, kind)

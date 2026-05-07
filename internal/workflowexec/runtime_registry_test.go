@@ -31,6 +31,19 @@ func TestStepRoleHandlersRejectWrongRole(t *testing.T) {
 	}
 }
 
+func TestStepRoleHandlersAggregateRolesForDuplicateKinds(t *testing.T) {
+	registered, err := stepRoleHandlersForDefinitions("apply", map[string]string{"Shared": "handler"}, []StepDefinition{
+		{Kind: "Shared ", Roles: []string{"apply"}},
+		{Kind: "Shared", Roles: []string{"prepare"}},
+	})
+	if err != nil {
+		t.Fatalf("StepRoleHandlers: %v", err)
+	}
+	if got := registered["Shared"]; got != "handler" {
+		t.Fatalf("handler mismatch: got %q", got)
+	}
+}
+
 func TestStepRoleHandlerForKeyRejectsUnsupportedRole(t *testing.T) {
 	handlers := MustStepRoleHandlers("apply", handlersForRole(t, "apply"))
 
