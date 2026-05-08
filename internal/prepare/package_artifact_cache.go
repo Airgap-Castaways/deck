@@ -181,7 +181,7 @@ func publishCachedPackageArtifact(bundleRoot, rootRel, cachePath string, relFile
 	return replacePublishedArtifactDir(stageRoot, filepath.Join(bundleRoot, filepath.FromSlash(rootRel)))
 }
 
-func copyArtifactFile(src, dst string) error {
+func copyArtifactFile(src, dst string) (err error) {
 	if err := filemode.EnsureParentArtifactDir(dst); err != nil {
 		return err
 	}
@@ -190,13 +190,21 @@ func copyArtifactFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("open src artifact: %w", err)
 	}
-	defer func() { _ = in.Close() }()
+	defer func() {
+		if closeErr := in.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("close src artifact: %w", closeErr)
+		}
+	}()
 	// #nosec G304 -- dst is derived from bundle/cache paths controlled by deck.
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, filemode.ArtifactFileMode)
 	if err != nil {
 		return fmt.Errorf("open dst artifact: %w", err)
 	}
-	defer func() { _ = out.Close() }()
+	defer func() {
+		if closeErr := out.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("close dst artifact: %w", closeErr)
+		}
+	}()
 	if _, err := io.Copy(out, in); err != nil {
 		return fmt.Errorf("copy artifact: %w", err)
 	}

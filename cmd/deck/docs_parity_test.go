@@ -25,7 +25,7 @@ func TestUserFacingCommandFlowDocsDoNotMentionDoctor(t *testing.T) {
 }
 
 func TestQuickStartDocsIncludeCurrentLifecycleCommands(t *testing.T) {
-	for _, rel := range []string{"README.md", "docs/guides/quick-start.md"} {
+	for _, rel := range []string{"README.md", "README.ko.md", "docs/guides/quick-start.md"} {
 		rel := rel
 		t.Run(rel, func(t *testing.T) {
 			content := readRepoDoc(t, rel)
@@ -35,6 +35,17 @@ func TestQuickStartDocsIncludeCurrentLifecycleCommands(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestLocalizedReadmeKeepsGoRequirementInSync(t *testing.T) {
+	english := readRepoDoc(t, "README.md")
+	korean := readRepoDoc(t, "README.ko.md")
+	if !strings.Contains(english, "Go 1.25.10") {
+		t.Fatalf("README.md must include the canonical Go requirement")
+	}
+	if !strings.Contains(korean, "Go 1.25.10") {
+		t.Fatalf("README.ko.md must include the canonical Go requirement")
 	}
 }
 
