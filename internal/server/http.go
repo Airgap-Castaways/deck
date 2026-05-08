@@ -66,7 +66,7 @@ func NewHandler(root string, opts HandlerOptions) (http.Handler, error) {
 			"duration_ms": time.Since(start).Milliseconds(),
 		})
 		if err := logger.Write(entry); err != nil {
-			_ = ctrllogs.WriteCLIEvent(accessLog, ctrllogs.CLIEvent{TS: start.UTC(), Level: "error", Component: "server", Event: "audit_log_write_failed", Attrs: map[string]any{"error": err.Error(), "original_event": auditEventRequest}})
+			_ = ctrllogs.WriteCLIEvent(accessLog, ctrllogs.CLIEvent{TS: start.UTC(), Level: "error", Component: "server", Event: "audit_log_error", Attrs: map[string]any{"error": err.Error(), "original_event": auditEventRequest}})
 		}
 		writeAccessLog(accessLog, start, r, rw)
 	}), nil

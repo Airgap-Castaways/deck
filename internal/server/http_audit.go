@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -74,19 +75,23 @@ func newAuditLogger(root string, opts auditLoggerOptions) (*auditLogger, error) 
 func (a *auditLogger) Write(entry map[string]any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	var rotateErr error
 	if a.shouldRotateLocked() {
 		if err := a.rotateLocked(); err != nil {
-			return fmt.Errorf("rotate audit log: %w", err)
+			rotateErr = fmt.Errorf("rotate audit log: %w", err)
 		}
 	}
 	raw, err := json.Marshal(entry)
 	if err != nil {
-		return fmt.Errorf("encode audit log entry: %w", err)
+		return errors.Join(rotateErr, fmt.Errorf("encode audit log entry: %w", err))
 	}
-	if _, err := a.f.Write(append(raw, '\n')); err != nil {
-		return fmt.Errorf("write audit log entry: %w", err)
+	if _, err := a.f.Write(raw); err != nil {
+		return errors.Join(rotateErr, fmt.Errorf("write audit log entry: %w", err))
 	}
-	return nil
+	if _, err := a.f.WriteString("\n"); err != nil {
+		return errors.Join(rotateErr, fmt.Errorf("write audit log newline: %w", err))
+	}
+	return rotateErr
 }
 
 func (a *auditLogger) shouldRotateLocked() bool {

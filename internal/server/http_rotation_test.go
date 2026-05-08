@@ -63,6 +63,37 @@ func TestAuditWriteReturnsFileError(t *testing.T) {
 	}
 }
 
+func TestAuditWritePreservesEntryAfterNonFatalRotationError(t *testing.T) {
+	root := t.TempDir()
+	logger, err := newAuditLogger(root, auditLoggerOptions{maxSizeBytes: 1, maxFiles: 1})
+	if err != nil {
+		t.Fatalf("newAuditLogger: %v", err)
+	}
+	first := "first-" + strings.Repeat("a", 120)
+	second := "second-" + strings.Repeat("b", 120)
+	if err := logger.Write(map[string]any{"message": first}); err != nil {
+		t.Fatalf("write first audit entry: %v", err)
+	}
+
+	auditPath := filepath.Join(root, ".deck", "logs", "server-audit.log")
+	blockedRotationPath := auditPath + ".1"
+	if err := os.Mkdir(blockedRotationPath, 0o755); err != nil {
+		t.Fatalf("mkdir blocked rotation path: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(blockedRotationPath, "entry"), []byte("blocked"), 0o600); err != nil {
+		t.Fatalf("write blocked rotation entry: %v", err)
+	}
+
+	err = logger.Write(map[string]any{"message": second})
+	if err == nil || !strings.Contains(err.Error(), "rotate audit log") {
+		t.Fatalf("expected non-fatal rotation error, got %v", err)
+	}
+	current := mustReadFile(t, auditPath)
+	if !strings.Contains(current, second) {
+		t.Fatalf("expected current audit log to preserve second entry, got %q", current)
+	}
+}
+
 func mustReadFile(t *testing.T, path string) string {
 	t.Helper()
 	raw, err := os.ReadFile(path)
