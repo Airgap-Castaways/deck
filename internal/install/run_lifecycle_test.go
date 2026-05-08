@@ -303,6 +303,30 @@ func TestRun_ResumeFromFailedStep(t *testing.T) {
 	}
 }
 
+func TestRun_ReturnsStateSaveErrorOnStepFailure(t *testing.T) {
+	dir := t.TempDir()
+	stateParent := filepath.Join(dir, "state-parent")
+	if err := os.WriteFile(stateParent, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("write state parent file: %v", err)
+	}
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name:  "install",
+			Steps: []config.Step{{ID: "fail", Kind: "Command", Spec: map[string]any{"command": []any{"false"}}}},
+		}},
+	}
+
+	err := Run(context.Background(), wf, RunOptions{StatePath: filepath.Join(stateParent, "state.json"), Fresh: true})
+	if err == nil {
+		t.Fatalf("expected command and state save failure")
+	}
+	message := err.Error()
+	if !strings.Contains(message, "step fail (Command)") || !strings.Contains(message, "save failed apply state") {
+		t.Fatalf("expected command failure and state save failure, got %v", err)
+	}
+}
+
 func TestRun_UnsupportedInstallKindFails(t *testing.T) {
 	dir := t.TempDir()
 	bundle := filepath.Join(dir, "bundle")

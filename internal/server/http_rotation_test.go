@@ -18,9 +18,15 @@ func TestAuditRotation(t *testing.T) {
 	second := "second-" + strings.Repeat("b", 120)
 	third := "third-" + strings.Repeat("c", 120)
 
-	logger.Write(map[string]any{"message": first})
-	logger.Write(map[string]any{"message": second})
-	logger.Write(map[string]any{"message": third})
+	if err := logger.Write(map[string]any{"message": first}); err != nil {
+		t.Fatalf("write first audit entry: %v", err)
+	}
+	if err := logger.Write(map[string]any{"message": second}); err != nil {
+		t.Fatalf("write second audit entry: %v", err)
+	}
+	if err := logger.Write(map[string]any{"message": third}); err != nil {
+		t.Fatalf("write third audit entry: %v", err)
+	}
 
 	auditPath := filepath.Join(root, ".deck", "logs", "server-audit.log")
 	current := mustReadFile(t, auditPath)
@@ -38,6 +44,22 @@ func TestAuditRotation(t *testing.T) {
 	}
 	if _, err := os.Stat(auditPath + ".3"); !os.IsNotExist(err) {
 		t.Fatalf("expected .3 to be removed, stat err=%v", err)
+	}
+}
+
+func TestAuditWriteReturnsFileError(t *testing.T) {
+	root := t.TempDir()
+	logger, err := newAuditLogger(root, auditLoggerOptions{})
+	if err != nil {
+		t.Fatalf("newAuditLogger: %v", err)
+	}
+	if err := logger.f.Close(); err != nil {
+		t.Fatalf("close audit file: %v", err)
+	}
+
+	err = logger.Write(map[string]any{"message": "lost"})
+	if err == nil || !strings.Contains(err.Error(), "write audit log entry") {
+		t.Fatalf("expected audit write error, got %v", err)
 	}
 }
 

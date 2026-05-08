@@ -71,17 +71,22 @@ func newAuditLogger(root string, opts auditLoggerOptions) (*auditLogger, error) 
 	return &auditLogger{f: f, path: logPath, maxSizeBytes: opts.maxSizeBytes, maxFiles: opts.maxFiles}, nil
 }
 
-func (a *auditLogger) Write(entry map[string]any) {
+func (a *auditLogger) Write(entry map[string]any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.shouldRotateLocked() {
-		_ = a.rotateLocked()
+		if err := a.rotateLocked(); err != nil {
+			return fmt.Errorf("rotate audit log: %w", err)
+		}
 	}
 	raw, err := json.Marshal(entry)
 	if err != nil {
-		return
+		return fmt.Errorf("encode audit log entry: %w", err)
 	}
-	_, _ = a.f.Write(append(raw, '\n'))
+	if _, err := a.f.Write(append(raw, '\n')); err != nil {
+		return fmt.Errorf("write audit log entry: %w", err)
+	}
+	return nil
 }
 
 func (a *auditLogger) shouldRotateLocked() bool {

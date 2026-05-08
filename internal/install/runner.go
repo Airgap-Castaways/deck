@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -146,7 +147,9 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 				st.FailedPhase = phase.Name
 				st.Error = err.Error()
 				st.RuntimeVars = runtimeVars
-				_ = SaveState(statePath, st)
+				if saveErr := SaveState(statePath, st); saveErr != nil {
+					return errors.Join(err, fmt.Errorf("save failed apply state: %w", saveErr))
+				}
 				return err
 			}
 		}

@@ -49,7 +49,7 @@ deck apply
 ## 설치
 
 **요구 사항:**
-- **Go 1.25 이상** (모든 OS에서 빌드 및 `prepare` 실행 가능)
+- **Go 1.25.9** (모든 OS에서 빌드 및 `prepare` 실행 가능)
 - **Linux 실행 환경** (RHEL, Ubuntu 계열 지원; `apply` 단계에서 필요)
 
 릴리즈 바이너리와 Linux 패키지는 GitHub Releases 페이지에 게시합니다. Homebrew는 `homebrew-core`가 아니라 Airgap Castaways tap으로 제공합니다.

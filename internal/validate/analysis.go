@@ -46,14 +46,22 @@ func AnalyzeFilesWithContext(ctx context.Context, paths []string) ([]Finding, er
 			if err != nil {
 				return nil, withWorkflowName(path, err)
 			}
-			findings = append(findings, analyzeStepsWithContext(ctx, displayPath, "", fragment.Steps)...)
+			stepFindings, err := analyzeStepsWithContext(ctx, displayPath, "", fragment.Steps)
+			if err != nil {
+				return nil, err
+			}
+			findings = append(findings, stepFindings...)
 			continue
 		}
 		wf, err := parseWorkflow(content)
 		if err != nil {
 			return nil, withWorkflowName(path, err)
 		}
-		findings = append(findings, analyzeWorkflowWithContext(ctx, displayPath, wf)...)
+		workflowFindings, err := analyzeWorkflowWithContext(ctx, displayPath, wf)
+		if err != nil {
+			return nil, err
+		}
+		findings = append(findings, workflowFindings...)
 	}
 	slices.SortFunc(findings, func(a, b Finding) int {
 		if c := strings.Compare(a.Path, b.Path); c != 0 {
@@ -70,35 +78,39 @@ func AnalyzeFilesWithContext(ctx context.Context, paths []string) ([]Finding, er
 	return findings, nil
 }
 
-func analyzeWorkflowWithContext(ctx context.Context, path string, wf *config.Workflow) []Finding {
+func analyzeWorkflowWithContext(ctx context.Context, path string, wf *config.Workflow) ([]Finding, error) {
 	if wf == nil {
-		return nil
+		return nil, nil
 	}
 	findings := make([]Finding, 0)
 	for _, step := range wf.Steps {
-		if ctx.Err() != nil {
-			return findings
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		findings = append(findings, analyzeStep(path, "", step)...)
 	}
 	for _, phase := range wf.Phases {
-		if ctx.Err() != nil {
-			return findings
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
-		findings = append(findings, analyzeStepsWithContext(ctx, path, phase.Name, phase.Steps)...)
+		stepFindings, err := analyzeStepsWithContext(ctx, path, phase.Name, phase.Steps)
+		if err != nil {
+			return nil, err
+		}
+		findings = append(findings, stepFindings...)
 	}
-	return findings
+	return findings, nil
 }
 
-func analyzeStepsWithContext(ctx context.Context, path string, phase string, steps []config.Step) []Finding {
+func analyzeStepsWithContext(ctx context.Context, path string, phase string, steps []config.Step) ([]Finding, error) {
 	findings := make([]Finding, 0, len(steps))
 	for _, step := range steps {
-		if ctx.Err() != nil {
-			return findings
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		findings = append(findings, analyzeStep(path, phase, step)...)
 	}
-	return findings
+	return findings, nil
 }
 
 func analyzeStep(path string, phase string, step config.Step) []Finding {
