@@ -41,10 +41,10 @@ func TestQuickStartDocsIncludeCurrentLifecycleCommands(t *testing.T) {
 func TestLocalizedReadmeKeepsGoRequirementInSync(t *testing.T) {
 	english := readRepoDoc(t, "README.md")
 	korean := readRepoDoc(t, "README.ko.md")
-	if !strings.Contains(english, "Go 1.25.9") {
+	if !strings.Contains(english, "Go 1.25.10") {
 		t.Fatalf("README.md must include the canonical Go requirement")
 	}
-	if !strings.Contains(korean, "Go 1.25.9") {
+	if !strings.Contains(korean, "Go 1.25.10") {
 		t.Fatalf("README.ko.md must include the canonical Go requirement")
 	}
 }
