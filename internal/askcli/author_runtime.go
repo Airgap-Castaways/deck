@@ -583,7 +583,6 @@ func relativeScaffoldPaths(root string, paths []string) []string {
 		}
 		relative = append(relative, filepath.ToSlash(rel))
 	}
-	sort.Strings(relative)
 	return relative
 }
 

@@ -46,3 +46,26 @@ func TestEnsureWorkspaceScaffoldCreatesMinimalLayoutOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestRunUpgradesMinimalScaffoldToFullStarterLayout(t *testing.T) {
+	root := t.TempDir()
+	if _, err := EnsureWorkspaceScaffold(root, ".deck"); err != nil {
+		t.Fatalf("EnsureWorkspaceScaffold: %v", err)
+	}
+	if err := Run(Options{Output: root}); err != nil {
+		t.Fatalf("Run after minimal scaffold: %v", err)
+	}
+	for _, rel := range []string{
+		workspacepaths.CanonicalPrepareWorkflow,
+		workspacepaths.CanonicalApplyWorkflow,
+		workspacepaths.CanonicalVarsWorkflow,
+		filepath.Join(workspacepaths.WorkflowRootDir, workspacepaths.WorkflowComponentsDir, "example-apply.yaml"),
+		filepath.Join(workspacepaths.PreparedDirRel, workspacepaths.PreparedFilesRoot, ".keep"),
+		filepath.Join(workspacepaths.PreparedDirRel, workspacepaths.PreparedImagesRoot, ".keep"),
+		filepath.Join(workspacepaths.PreparedDirRel, workspacepaths.PreparedPackagesRoot, ".keep"),
+	} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+			t.Fatalf("expected full starter path %s: %v", rel, err)
+		}
+	}
+}

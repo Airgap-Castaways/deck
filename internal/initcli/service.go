@@ -31,8 +31,6 @@ func Run(opts Options) error {
 	if deckWorkDir == "" {
 		deckWorkDir = ".deck"
 	}
-	gitignorePath := filepath.Join(resolvedOutput, ".gitignore")
-	deckignorePath := filepath.Join(resolvedOutput, ".deckignore")
 	templates := templateFiles(resolvedOutput)
 	overwriteTargets := make([]string, 0, len(templates))
 	for path := range templates {
@@ -47,7 +45,8 @@ func Run(opts Options) error {
 		return fmt.Errorf("init: starter layout already contains target paths; refusing to overwrite: %s (choose another --out or remove these files)", strings.Join(overwriteTargets, ", "))
 	}
 
-	if _, err := EnsureWorkspaceScaffold(resolvedOutput, deckWorkDir); err != nil {
+	scaffold, err := EnsureWorkspaceScaffold(resolvedOutput, deckWorkDir)
+	if err != nil {
 		return err
 	}
 	for path, body := range templates {
@@ -55,9 +54,9 @@ func Run(opts Options) error {
 			return fmt.Errorf("init: write %s: %w", path, err)
 		}
 	}
-	created := make([]string, 0, len(templates)+2)
-	created = append(created, templateDirs(resolvedOutput, deckWorkDir)...)
-	created = append(created, gitignorePath, deckignorePath)
+	created := make([]string, 0, len(templates)+len(scaffold.Directories)+len(scaffold.Files))
+	created = append(created, scaffold.Directories...)
+	created = append(created, scaffold.Files...)
 	for path := range templates {
 		created = append(created, path)
 	}
@@ -92,7 +91,6 @@ func EnsureWorkspaceScaffold(root string, deckWorkDir string) (ScaffoldResult, e
 		}
 	}
 	sort.Strings(result.Directories)
-	sort.Strings(result.Files)
 	return result, nil
 }
 
@@ -109,13 +107,10 @@ func scaffoldDirs(root string, deckWorkDir string) []string {
 	}
 }
 
-func templateDirs(root string, deckWorkDir string) []string {
-	return scaffoldDirs(root, deckWorkDir)
-}
-
 func scaffoldFiles(root string) []string {
-	files := make([]string, 0, len(scaffoldFileDefaults(root)))
-	for path := range scaffoldFileDefaults(root) {
+	defaults := scaffoldFileDefaults(root)
+	files := make([]string, 0, len(defaults))
+	for path := range defaults {
 		files = append(files, path)
 	}
 	sort.Strings(files)
@@ -142,9 +137,6 @@ func templateFiles(root string) map[string]string {
 		workspacepaths.CanonicalPrepareWorkflowPath(root): prepareScenarioContent,
 		workspacepaths.CanonicalApplyWorkflowPath(root):   applyScenarioContent,
 		filepath.Join(root, workspacepaths.WorkflowRootDir, workspacepaths.WorkflowComponentsDir, "example-apply.yaml"): applyComponentContent,
-		filepath.Join(root, workspacepaths.PreparedDirRel, workspacepaths.PreparedFilesRoot, ".keep"):                   "",
-		filepath.Join(root, workspacepaths.PreparedDirRel, workspacepaths.PreparedImagesRoot, ".keep"):                  "",
-		filepath.Join(root, workspacepaths.PreparedDirRel, workspacepaths.PreparedPackagesRoot, ".keep"):                "",
 	}
 }
 
