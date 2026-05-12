@@ -765,6 +765,70 @@ phases:
 		}
 	})
 
+	t.Run("parallel group rejects metadata target path conflict", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: write-a
+        apiVersion: deck/v1alpha1
+        kind: WriteFile
+        parallelGroup: files
+        spec:
+          path: /etc/deck.conf
+          content: a
+      - id: write-b
+        apiVersion: deck/v1alpha1
+        kind: WriteFile
+        parallelGroup: files
+        spec:
+          path: /etc/deck.conf
+          content: b
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+		err := File(path)
+		if err == nil || !strings.Contains(err.Error(), "E_PARALLEL_PATH_CONFLICT") {
+			t.Fatalf("expected parallel target path conflict, got %v", err)
+		}
+	})
+
+	t.Run("parallel group rejects metadata prepare output conflict", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: download-a
+        apiVersion: deck/v1alpha1
+        kind: DownloadFile
+        parallelGroup: files
+        spec:
+          source:
+            url: https://example.local/a
+          outputPath: files/shared.bin
+      - id: download-b
+        apiVersion: deck/v1alpha1
+        kind: DownloadFile
+        parallelGroup: files
+        spec:
+          source:
+            url: https://example.local/b
+          outputPath: files/shared.bin
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+		err := File(path)
+		if err == nil || !strings.Contains(err.Error(), "E_PARALLEL_OUTPUT_CONFLICT") {
+			t.Fatalf("expected parallel prepare output conflict, got %v", err)
+		}
+	})
+
 	t.Run("tool schema rejects invalid register output key for action", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")

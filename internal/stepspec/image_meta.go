@@ -1,6 +1,9 @@
 package stepspec
 
-import "github.com/Airgap-Castaways/deck/internal/stepmeta"
+import (
+	"github.com/Airgap-Castaways/deck/internal/stepmeta"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
+)
 
 var _ = stepmeta.MustRegister[DownloadImage](stepmeta.Definition{
 	Kind:        "DownloadImage",
@@ -15,6 +18,7 @@ var _ = stepmeta.MustRegister[DownloadImage](stepmeta.Definition{
 	Outputs:     []string{"artifacts"},
 	SchemaFile:  "image.download.schema.json",
 	SchemaPatch: stepmeta.PatchDownloadImageToolSchema,
+	Parallel:    parallelPrepareOutput("spec.outputDir", workspacepaths.PreparedImagesRoot, workspacepaths.PreparedImagesRoot+"/control-plane"),
 	Notes: []string{
 		"`outputDir` must stay under the prepared `images/` root.",
 		"Omit `outputDir` unless you need a dedicated image subdirectory under `images/`.",

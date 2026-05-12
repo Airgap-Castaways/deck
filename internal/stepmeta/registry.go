@@ -28,7 +28,20 @@ type Definition struct {
 	WhenToUse   string
 	Example     string
 	Notes       []string
+	Parallel    ParallelMetadata
 	Ask         AskMetadata
+}
+
+type ParallelMetadata struct {
+	ApplySafe        bool
+	ApplyTargetPaths []string
+	PrepareOutput    OutputRootConstraint
+}
+
+type OutputRootConstraint struct {
+	Path    string
+	Root    string
+	Example string
 }
 
 type AskMetadata struct {
@@ -225,6 +238,7 @@ func cloneDefinition(def Definition) Definition {
 	cloned.Roles = append([]string(nil), def.Roles...)
 	cloned.Outputs = append([]string(nil), def.Outputs...)
 	cloned.Notes = append([]string(nil), def.Notes...)
+	cloned.Parallel.ApplyTargetPaths = append([]string(nil), def.Parallel.ApplyTargetPaths...)
 	cloned.Ask.Capabilities = append([]string(nil), def.Ask.Capabilities...)
 	cloned.Ask.ContractHints.ProducesArtifacts = append([]string(nil), def.Ask.ContractHints.ProducesArtifacts...)
 	cloned.Ask.ContractHints.ConsumesArtifacts = append([]string(nil), def.Ask.ContractHints.ConsumesArtifacts...)

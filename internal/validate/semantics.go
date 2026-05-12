@@ -28,8 +28,12 @@ func validateSemantics(name string, wf *config.Workflow) error {
 				return fmt.Errorf("E_SCHEMA_INVALID: step %s (%s): spec.refreshCache is no longer supported; use a separate `RefreshRepository` step", step.ID, step.Kind)
 			}
 		}
-		if output := literalPrepareOutputRoot(step); output != "" {
-			if err := validatePrepareOutputRoot(step, output); err != nil {
+		meta, _, err := parallelMetadata(wf.Version, step)
+		if err != nil {
+			return err
+		}
+		if output, constraint := literalPrepareOutputRoot(step, meta); output != "" {
+			if err := validatePrepareOutputRoot(step, output, constraint); err != nil {
 				return err
 			}
 		}

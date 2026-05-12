@@ -1,19 +1,22 @@
 package stepspec
 
-import "github.com/Airgap-Castaways/deck/internal/stepmeta"
+import (
+	"github.com/Airgap-Castaways/deck/internal/stepmeta"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
+)
 
 var (
 	_ = stepmeta.MustRegister[ManageService](manageServiceDefinition())
 	_ = stepmeta.MustRegister[Swap](swapDefinition())
 	_ = stepmeta.MustRegister[KernelModule](kernelModuleDefinition())
 	_ = stepmeta.MustRegister[Sysctl](sysctlDefinition())
-	_ = stepmeta.MustRegister[WriteSystemdUnit](writeSystemdUnitDefinition())
-	_ = stepmeta.MustRegister[EnsureDirectory](ensureDirectoryDefinition())
-	_ = stepmeta.MustRegister[CreateSymlink](createSymlinkDefinition())
-	_ = stepmeta.MustRegister[ConfigureRepository](configureRepositoryDefinition())
+	_ = stepmeta.MustRegister[WriteSystemdUnit](withParallel(writeSystemdUnitDefinition(), parallelTargetPaths("spec.output.path", "spec.path")))
+	_ = stepmeta.MustRegister[EnsureDirectory](withParallel(ensureDirectoryDefinition(), parallelApplySafe("spec.path")))
+	_ = stepmeta.MustRegister[CreateSymlink](withParallel(createSymlinkDefinition(), parallelTargetPaths("spec.path")))
+	_ = stepmeta.MustRegister[ConfigureRepository](withParallel(configureRepositoryDefinition(), parallelTargetPaths("spec.path")))
 	_ = stepmeta.MustRegister[RefreshRepository](refreshRepositoryDefinition())
 	_ = stepmeta.MustRegister[InstallPackage](installPackageDefinition())
-	_ = stepmeta.MustRegister[DownloadPackage](downloadPackageDefinition())
+	_ = stepmeta.MustRegister[DownloadPackage](withParallel(downloadPackageDefinition(), parallelPrepareOutput("spec.outputDir", workspacepaths.PreparedPackagesRoot, workspacepaths.PreparedPackagesRoot+"/kubernetes")))
 )
 
 func manageServiceDefinition() stepmeta.Definition {

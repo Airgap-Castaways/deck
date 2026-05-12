@@ -14,6 +14,7 @@ var _ = stepmeta.MustRegister[Command](stepmeta.Definition{
 	Roles:       []string{"apply"},
 	SchemaFile:  "command.schema.json",
 	SchemaPatch: stepmeta.PatchCommandToolSchema,
+	Parallel:    parallelApplySafe(),
 	Summary:     "Run a narrowly scoped host command when no typed step models the action.",
 	WhenToUse:   "Use this only as an escape hatch for vendor tools, custom probes, or one-off local commands that do not map cleanly to an existing typed step.",
 	Example:     "kind: Command\nspec:\n  command: [/opt/vendor/bin/node-health, --quick]\n  timeout: 30s",
