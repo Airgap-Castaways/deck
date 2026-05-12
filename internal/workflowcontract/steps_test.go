@@ -97,6 +97,16 @@ func TestStepDefinitionsProjectParallelMetadata(t *testing.T) {
 			t.Fatalf("%s ApplyTargetPaths=%v, want %v", kind, got, want)
 		}
 	}
+	for _, def := range defs {
+		for _, path := range def.Parallel.ApplyTargetPaths {
+			if !strings.HasPrefix(path, "spec.") {
+				t.Fatalf("%s ApplyTargetPaths contains non-spec path %q", def.Kind, path)
+			}
+		}
+		if path := def.Parallel.PrepareOutput.Path; path != "" && !strings.HasPrefix(path, "spec.") {
+			t.Fatalf("%s PrepareOutput.Path contains non-spec path %q", def.Kind, path)
+		}
+	}
 
 	prepareOutputs := map[string]OutputRootConstraint{
 		"DownloadFile":    {Path: "spec.outputPath", Root: workspacepaths.PreparedFilesRoot, Example: "files/flannel.yaml"},
