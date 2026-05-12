@@ -258,7 +258,7 @@ func TestAuthoringAgentGlobAndReadSupportCandidateState(t *testing.T) {
 	}
 }
 
-func TestAuthoringAgentInitCreatesScaffoldInEmptyWorkspace(t *testing.T) {
+func TestAuthoringAgentInitCreatesMinimalScaffoldInEmptyWorkspace(t *testing.T) {
 	root := t.TempDir()
 	session := newTestAgentSession(t, root, "create a simple apply workflow", askintent.Decision{Route: askintent.RouteDraft, Target: askintent.Target{Kind: "workspace"}})
 	result := session.runInit()
@@ -266,14 +266,27 @@ func TestAuthoringAgentInitCreatesScaffoldInEmptyWorkspace(t *testing.T) {
 		t.Fatalf("expected init to succeed, got %s", renderAgentPayload(result.Payload))
 	}
 	for _, rel := range []string{
+		".deck",
 		".gitignore",
 		".deckignore",
+		filepath.Join("workflows", "scenarios"),
+		filepath.Join("workflows", "components"),
 		filepath.Join("outputs", "files", ".keep"),
 		filepath.Join("outputs", "images", ".keep"),
 		filepath.Join("outputs", "packages", ".keep"),
 	} {
 		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
 			t.Fatalf("expected scaffold path %s to exist: %v", rel, err)
+		}
+	}
+	for _, rel := range []string{
+		workspacepaths.CanonicalPrepareWorkflow,
+		workspacepaths.CanonicalApplyWorkflow,
+		workspacepaths.CanonicalVarsWorkflow,
+		filepath.Join("workflows", "components", "example-apply.yaml"),
+	} {
+		if _, err := os.Stat(filepath.Join(root, rel)); !os.IsNotExist(err) {
+			t.Fatalf("ask init must not create starter workflow file %s, stat err=%v", rel, err)
 		}
 	}
 }
@@ -348,7 +361,7 @@ func TestAuthoringAgentStagesInvalidCandidateForRepair(t *testing.T) {
 	}
 }
 
-func TestAuthoringAgentDeckInitIsDisabledWhenWorkflowTreeExists(t *testing.T) {
+func TestAuthoringAgentInitIsDisabledWhenWorkflowTreeExists(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
 		t.Fatalf("mkdir workflow dir: %v", err)
@@ -359,7 +372,7 @@ func TestAuthoringAgentDeckInitIsDisabledWhenWorkflowTreeExists(t *testing.T) {
 	session := newTestAgentSession(t, root, "refine workflows/scenarios/apply.yaml", askintent.Decision{Route: askintent.RouteRefine, Target: askintent.Target{Kind: "scenario", Path: workspacepaths.CanonicalApplyWorkflow}})
 	result := session.runInit()
 	if result.OK {
-		t.Fatalf("expected deck_init to be disabled when workflow tree exists")
+		t.Fatalf("expected ask init to be disabled when workflow tree exists")
 	}
 }
 

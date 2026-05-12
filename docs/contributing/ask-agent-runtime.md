@@ -56,6 +56,7 @@ The important boundary is that the model operates on file tools, not on a deck-s
 - write scope is derived during preflight and enforced before candidate state mutates
 - refine stays inside the anchor and any code-approved companion paths
 - `file_write` updates candidate state first; disk writes happen only after successful finish
+- the internal `init` tool is the exception: in an empty workflow workspace it may create the minimal scaffold directories, ignore files, and output `.keep` files needed before final workflow writes
 - `finish` is rejected until `deck_lint` succeeds in the current session
 - tool calls and verifier output are persisted in `.deck/ask/last-agent-session.json`
 - final disk writes still go through normal scaffold and validation helpers
@@ -66,6 +67,7 @@ Ask may project deck facts into prompts and runtime tools, but it must not becom
 
 - step and field validity belong to `internal/stepmeta`, generated schema, and `internal/validate`
 - canonical workflow path rules belong to workspace/path helpers, not ask prompts
+- workspace scaffold primitives belong to `internal/initcli`; ask must not maintain a parallel copy of `deck init` layout logic
 - evidence planning decides when upstream docs are needed, but external docs do not override deck-owned workflow truth
 - clarification decisions, path scope, and finish gating stay code-driven
 
