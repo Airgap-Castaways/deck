@@ -36,6 +36,14 @@ func validateEntry(entry Entry) error {
 	if isPlaceholder(entry.Docs.Example) {
 		problems = append(problems, formatSourceProblem(entry.Docs.Source, "placeholder type example"))
 	}
+	for _, path := range entry.Definition.Parallel.ApplyTargetPaths {
+		if !isSpecPath(path) {
+			problems = append(problems, fmt.Sprintf("parallel apply target path %q must start with spec.", path))
+		}
+	}
+	if path := strings.TrimSpace(entry.Definition.Parallel.PrepareOutput.Path); path != "" && !isSpecPath(path) {
+		problems = append(problems, fmt.Sprintf("parallel prepare output path %q must start with spec.", path))
+	}
 	if len(problems) == 0 {
 		return nil
 	}
@@ -68,4 +76,8 @@ func isPlaceholder(value string) bool {
 		return false
 	}
 	return trimmed == "example" || trimmed == "spec: {}"
+}
+
+func isSpecPath(path string) bool {
+	return strings.HasPrefix(strings.TrimSpace(path), "spec.")
 }

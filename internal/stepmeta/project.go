@@ -28,6 +28,7 @@ type WorkflowProjection struct {
 	WhenToUse   string
 	Roles       []string
 	Outputs     []string
+	Parallel    ParallelMetadata
 	Generator   string
 }
 
@@ -50,6 +51,8 @@ type SchemaProjection struct {
 func ProjectWorkflow(entry Entry, generator string) WorkflowProjection {
 	roles := append([]string(nil), entry.Definition.Roles...)
 	outputs := append([]string(nil), entry.Definition.Outputs...)
+	parallel := entry.Definition.Parallel
+	parallel.ApplyTargetPaths = append([]string(nil), entry.Definition.Parallel.ApplyTargetPaths...)
 	sort.Strings(roles)
 	sort.Strings(outputs)
 	category := CategoryForEntry(entry)
@@ -68,6 +71,7 @@ func ProjectWorkflow(entry Entry, generator string) WorkflowProjection {
 		WhenToUse:   entry.Docs.WhenToUse,
 		Roles:       roles,
 		Outputs:     outputs,
+		Parallel:    parallel,
 		Generator:   generator,
 	}
 }

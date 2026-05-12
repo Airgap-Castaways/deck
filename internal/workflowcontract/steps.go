@@ -26,6 +26,19 @@ type StepDefinition struct {
 	WhenToUse           string
 	Roles               []string
 	Outputs             []string
+	Parallel            ParallelMetadata
+}
+
+type ParallelMetadata struct {
+	ApplySafe        bool
+	ApplyTargetPaths []string
+	PrepareOutput    OutputRootConstraint
+}
+
+type OutputRootConstraint struct {
+	Path    string
+	Root    string
+	Example string
 }
 
 type StepTypeKey struct {
@@ -64,7 +77,7 @@ func StepDefinitionForKey(key StepTypeKey) (StepDefinition, bool, error) {
 	return StepDefinition{}, false, nil
 }
 
-func stepDef(kind, family, familyTitle, group string, groupOrder int, docsPage string, docsOrder int, schemaFile, generator, visibility, category, summary, whenToUse string, roles, outputs []string) StepDefinition {
+func stepDef(kind, family, familyTitle, group string, groupOrder int, docsPage string, docsOrder int, schemaFile, generator, visibility, category, summary, whenToUse string, roles, outputs []string, parallel ParallelMetadata) StepDefinition {
 	def := StepDefinition{
 		APIVersion:          BuiltInStepAPIVersion,
 		Kind:                kind,
@@ -82,7 +95,9 @@ func stepDef(kind, family, familyTitle, group string, groupOrder int, docsPage s
 		WhenToUse:           whenToUse,
 		Roles:               append([]string(nil), roles...),
 		Outputs:             append([]string(nil), outputs...),
+		Parallel:            parallel,
 	}
+	def.Parallel.ApplyTargetPaths = append([]string(nil), parallel.ApplyTargetPaths...)
 	sort.Strings(def.Roles)
 	sort.Strings(def.Outputs)
 	return def
@@ -113,6 +128,15 @@ func stepDefFromMeta(kind string, generator string) (StepDefinition, error) {
 		projection.WhenToUse,
 		projection.Roles,
 		projection.Outputs,
+		ParallelMetadata{
+			ApplySafe:        projection.Parallel.ApplySafe,
+			ApplyTargetPaths: append([]string(nil), projection.Parallel.ApplyTargetPaths...),
+			PrepareOutput: OutputRootConstraint{
+				Path:    projection.Parallel.PrepareOutput.Path,
+				Root:    projection.Parallel.PrepareOutput.Root,
+				Example: projection.Parallel.PrepareOutput.Example,
+			},
+		},
 	), nil
 }
 

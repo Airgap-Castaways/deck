@@ -1,6 +1,9 @@
 package stepspec
 
-import "github.com/Airgap-Castaways/deck/internal/stepmeta"
+import (
+	"github.com/Airgap-Castaways/deck/internal/stepmeta"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
+)
 
 var _ = stepmeta.MustRegister[DownloadFile](stepmeta.Definition{
 	Kind:        "DownloadFile",
@@ -15,6 +18,7 @@ var _ = stepmeta.MustRegister[DownloadFile](stepmeta.Definition{
 	Outputs:     []string{"outputPath", "outputPaths", "artifacts"},
 	SchemaFile:  "file.download.schema.json",
 	SchemaPatch: stepmeta.PatchDownloadFileToolSchema,
+	Parallel:    parallelPrepareOutput("spec.outputPath", workspacepaths.PreparedFilesRoot, workspacepaths.PreparedFilesRoot+"/flannel.yaml"),
 	Notes: []string{
 		"`outputPath` must stay under the prepared `files/` root.",
 		"Omit `outputPath` unless later steps need a stable custom location inside `files/`.",
@@ -35,6 +39,7 @@ var _ = stepmeta.MustRegister[WriteFile](stepmeta.Definition{
 	Outputs:     []string{"path"},
 	SchemaFile:  "file.write.schema.json",
 	SchemaPatch: stepmeta.PatchWriteFileToolSchema,
+	Parallel:    parallelApplySafe("spec.path"),
 	Ask:         stepmeta.AskMetadata{MatchSignals: []string{"write", "file", "config", "motd", "content"}, KeyFields: []string{"spec.path", "spec.content", "spec.template", "spec.mode"}},
 })
 
@@ -51,6 +56,7 @@ var _ = stepmeta.MustRegister[CopyFile](stepmeta.Definition{
 	Outputs:     []string{"path"},
 	SchemaFile:  "file.copy.schema.json",
 	SchemaPatch: stepmeta.PatchCopyFileToolSchema,
+	Parallel:    parallelApplySafe("spec.path"),
 	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.source", "spec.path", "spec.mode"}},
 })
 
@@ -67,6 +73,7 @@ var _ = stepmeta.MustRegister[ExtractArchive](stepmeta.Definition{
 	Outputs:     []string{"path"},
 	SchemaFile:  "file.extract-archive.schema.json",
 	SchemaPatch: stepmeta.PatchExtractArchiveToolSchema,
+	Parallel:    parallelApplySafe("spec.output.path", "spec.path"),
 })
 
 var _ = stepmeta.MustRegister[EditFile](stepmeta.Definition{
@@ -82,5 +89,6 @@ var _ = stepmeta.MustRegister[EditFile](stepmeta.Definition{
 	Outputs:     []string{"path"},
 	SchemaFile:  "file.edit.schema.json",
 	SchemaPatch: stepmeta.PatchEditFileToolSchema,
+	Parallel:    parallelTargetPaths("spec.output.path", "spec.path"),
 	Ask:         stepmeta.AskMetadata{KeyFields: []string{"spec.path", "spec.edits", "spec.backup", "spec.mode"}},
 })

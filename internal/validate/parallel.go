@@ -6,18 +6,10 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/config"
+	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
 	"github.com/Airgap-Castaways/deck/internal/workflowrefs"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
-
-func parallelApplyKindAllowed(kind string) bool {
-	switch kind {
-	case "Command", "CopyFile", "EnsureDirectory", "ExtractArchive", "WaitForCommand", "WaitForFile", "WaitForMissingFile", "WaitForService", "WaitForTCPPort", "WaitForMissingTCPPort", "WriteFile":
-		return true
-	default:
-		return false
-	}
-}
 
 func referencedRuntimeVars(step config.Step) ([]string, error) {
 	seen := map[string]bool{}
@@ -43,51 +35,71 @@ func referencedRuntimeVars(step config.Step) ([]string, error) {
 	return vars, nil
 }
 
-func literalApplyTargetPath(step config.Step) string {
-	if step.Kind == "WriteFile" || step.Kind == "CopyFile" || step.Kind == "EnsureDirectory" || step.Kind == "CreateSymlink" || step.Kind == "WriteContainerdConfig" || step.Kind == "WriteContainerdRegistryHosts" || step.Kind == "ConfigureRepository" || step.Kind == "EditTOML" || step.Kind == "EditYAML" || step.Kind == "EditJSON" {
-		return stableLiteralPath(stringValue(step.Spec, "path"))
+func parallelMetadata(workflowVersion string, step config.Step) (workflowcontract.ParallelMetadata, bool, error) {
+	key, err := effectiveStepTypeKey(workflowVersion, step)
+	if err != nil {
+		return workflowcontract.ParallelMetadata{}, false, err
 	}
-	if step.Kind == "ExtractArchive" || step.Kind == "EditFile" || step.Kind == "WriteSystemdUnit" {
-		if nested := mapValue(step.Spec, "output"); len(nested) > 0 {
-			if path := stableLiteralPath(stringValue(nested, "path")); path != "" {
-				return path
-			}
+	def, ok, err := workflowcontract.StepDefinitionForKey(workflowcontract.StepTypeKey(key))
+	if err != nil {
+		return workflowcontract.ParallelMetadata{}, false, err
+	}
+	if !ok {
+		return workflowcontract.ParallelMetadata{}, false, nil
+	}
+	return def.Parallel, true, nil
+}
+
+func literalApplyTargetPath(step config.Step, meta workflowcontract.ParallelMetadata) string {
+	for _, path := range meta.ApplyTargetPaths {
+		if value := stableLiteralPath(specStringValue(step.Spec, path)); value != "" {
+			return value
 		}
-		return stableLiteralPath(stringValue(step.Spec, "path"))
 	}
 	return ""
 }
 
-func literalPrepareOutputRoot(step config.Step) string {
-	switch step.Kind {
-	case "DownloadPackage", "DownloadImage":
-		return stableLiteralPath(stringValue(step.Spec, "outputDir"))
-	case "DownloadFile":
-		return stableLiteralPath(stringValue(step.Spec, "outputPath"))
-	default:
-		return ""
+func literalPrepareOutputRoot(step config.Step, meta workflowcontract.ParallelMetadata) (string, workflowcontract.OutputRootConstraint) {
+	constraint := meta.PrepareOutput
+	if strings.TrimSpace(constraint.Path) == "" {
+		return "", workflowcontract.OutputRootConstraint{}
 	}
+	return stableLiteralPath(specStringValue(step.Spec, constraint.Path)), constraint
 }
 
-func validatePrepareOutputRoot(step config.Step, output string) error {
+func validatePrepareOutputRoot(step config.Step, output string, constraint workflowcontract.OutputRootConstraint) error {
 	trimmed := strings.TrimSpace(output)
-	switch step.Kind {
-	case "DownloadFile":
-		if workspacepaths.IsPreparedPathUnderRoot(trimmed, workspacepaths.PreparedFilesRoot) {
-			return nil
-		}
-		return fmt.Errorf("E_PREPARE_OUTPUT_ROOT_INVALID: step %s (%s) outputPath must stay under %s/ (e.g. %s/flannel.yaml); omit outputPath to use the default", step.ID, step.Kind, workspacepaths.PreparedFilesRoot, workspacepaths.PreparedFilesRoot)
-	case "DownloadImage":
-		if workspacepaths.IsPreparedPathUnderRoot(trimmed, workspacepaths.PreparedImagesRoot) {
-			return nil
-		}
-		return fmt.Errorf("E_PREPARE_OUTPUT_ROOT_INVALID: step %s (%s) outputDir must stay under %s/ (e.g. %s/control-plane); omit outputDir to use the default", step.ID, step.Kind, workspacepaths.PreparedImagesRoot, workspacepaths.PreparedImagesRoot)
-	case "DownloadPackage":
-		if workspacepaths.IsPreparedPathUnderRoot(trimmed, workspacepaths.PreparedPackagesRoot) {
-			return nil
-		}
-		return fmt.Errorf("E_PREPARE_OUTPUT_ROOT_INVALID: step %s (%s) outputDir must stay under %s/ (e.g. %s/kubernetes); omit outputDir to use the default", step.ID, step.Kind, workspacepaths.PreparedPackagesRoot, workspacepaths.PreparedPackagesRoot)
-	default:
+	root := strings.TrimSpace(constraint.Root)
+	if root == "" || workspacepaths.IsPreparedPathUnderRoot(trimmed, root) {
 		return nil
 	}
+	field := specFieldName(constraint.Path)
+	example := strings.TrimSpace(constraint.Example)
+	if example == "" {
+		example = root + "/..."
+	}
+	return fmt.Errorf("E_PREPARE_OUTPUT_ROOT_INVALID: step %s (%s) %s must stay under %s/ (e.g. %s); omit %s to use the default", step.ID, step.Kind, field, root, example, field)
+}
+
+func specStringValue(spec map[string]any, path string) string {
+	parts := strings.Split(strings.TrimSpace(path), ".")
+	if len(parts) < 2 || parts[0] != "spec" {
+		return ""
+	}
+	current := spec
+	for _, part := range parts[1 : len(parts)-1] {
+		current = mapValue(current, part)
+		if len(current) == 0 {
+			return ""
+		}
+	}
+	return stringValue(current, parts[len(parts)-1])
+}
+
+func specFieldName(path string) string {
+	parts := strings.Split(strings.TrimSpace(path), ".")
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[len(parts)-1]
 }

@@ -626,14 +626,14 @@ func validatePhaseSemantics(wf *config.Workflow, role string) error {
 			return schemaValidationError(fmt.Sprintf("E_DUPLICATE_PHASE_NAME: %s", phaseName), []Issue{issueForDuplicatePhase("", phaseName)})
 		}
 		seenPhase[phaseName] = true
-		if err := validatePhaseParallelSemantics(phase, role); err != nil {
+		if err := validatePhaseParallelSemantics(wf.Version, phase, role); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validatePhaseParallelSemantics(phase config.Phase, role string) error {
+func validatePhaseParallelSemantics(workflowVersion string, phase config.Phase, role string) error {
 	if phase.MaxParallelism < 0 {
 		return fmt.Errorf("E_SCHEMA_INVALID: phase %s: maxParallelism must be >= 0", phase.Name)
 	}
@@ -661,31 +661,35 @@ func validatePhaseParallelSemantics(phase config.Phase, role string) error {
 		if !batch.Parallel() {
 			continue
 		}
-		if err := validateParallelBatch(batch, role); err != nil {
+		if err := validateParallelBatch(workflowVersion, batch, role); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateParallelBatch(batch workflowexec.StepBatch, role string) error {
+func validateParallelBatch(workflowVersion string, batch workflowexec.StepBatch, role string) error {
 	registered := map[string]string{}
 	paths := map[string]string{}
 	prepareOutputs := map[string]string{}
 	for _, step := range batch.Steps {
-		if role == "apply" && !parallelApplyKindAllowed(step.Kind) {
+		meta, ok, err := parallelMetadata(workflowVersion, step)
+		if err != nil {
+			return err
+		}
+		if role == "apply" && (!ok || !meta.ApplySafe) {
 			return fmt.Errorf("E_PARALLEL_KIND_UNSAFE: phase %s step %s (%s) is not allowed in parallelGroup", batch.PhaseName, step.ID, step.Kind)
 		}
 		for runtimeVar := range step.Register {
 			registered[runtimeVar] = step.ID
 		}
-		if path := literalApplyTargetPath(step); path != "" {
+		if path := literalApplyTargetPath(step, meta); path != "" {
 			if prev, exists := paths[path]; exists {
 				return fmt.Errorf("E_PARALLEL_PATH_CONFLICT: phase %s steps %s and %s both target %s in the same parallelGroup", batch.PhaseName, prev, step.ID, path)
 			}
 			paths[path] = step.ID
 		}
-		if output := literalPrepareOutputRoot(step); output != "" {
+		if output, _ := literalPrepareOutputRoot(step, meta); output != "" {
 			if prev, exists := prepareOutputs[output]; exists {
 				return fmt.Errorf("E_PARALLEL_OUTPUT_CONFLICT: phase %s steps %s and %s both write %s in the same parallelGroup", batch.PhaseName, prev, step.ID, output)
 			}
