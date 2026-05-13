@@ -24,6 +24,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/askstate"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
+	"github.com/Airgap-Castaways/deck/internal/initcli"
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
 )
 
@@ -565,11 +566,24 @@ func (s *authoringAgentSession) runInit() agentToolResult {
 	if s.workspace.HasWorkflowTree {
 		return agentToolResult{OK: false, Summary: "init is disabled", Payload: map[string]any{"ok": false, "error": "init is disabled because the workspace already has a workflow tree"}}
 	}
-	if err := ensureScaffold(s.root); err != nil {
+	scaffold, err := initcli.EnsureWorkspaceScaffold(s.root, ".deck")
+	if err != nil {
 		return agentToolResult{OK: false, Summary: "init failed", Payload: map[string]any{"ok": false, "error": err.Error()}}
 	}
 	s.scaffoldRequested = true
-	return agentToolResult{OK: true, Summary: "prepared default workspace scaffold", Payload: map[string]any{"ok": true, "createdDirectories": []string{"workflows/scenarios", "workflows/components", "outputs/files", "outputs/images", "outputs/packages"}, "createdFiles": []string{".gitignore", ".deckignore", "outputs/files/.keep", "outputs/images/.keep", "outputs/packages/.keep"}}}
+	return agentToolResult{OK: true, Summary: "prepared minimal workspace scaffold", Payload: map[string]any{"ok": true, "createdDirectories": relativeScaffoldPaths(s.root, scaffold.Directories), "createdFiles": relativeScaffoldPaths(s.root, scaffold.Files)}}
+}
+
+func relativeScaffoldPaths(root string, paths []string) []string {
+	relative := make([]string, 0, len(paths))
+	for _, path := range paths {
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			rel = path
+		}
+		relative = append(relative, filepath.ToSlash(rel))
+	}
+	return relative
 }
 
 func (s *authoringAgentSession) runValidate(ctx context.Context, call authorToolCall) agentToolResult {

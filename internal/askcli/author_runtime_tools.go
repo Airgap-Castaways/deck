@@ -154,7 +154,7 @@ func authorToolDescription(name string) string {
 	case "schema":
 		return "Read repo-owned workflow rules or exact typed step schema/example data."
 	case "init":
-		return "Prepare the default workspace scaffold for an empty workflow workspace."
+		return "Prepare the minimal workspace scaffold for ask-generated files in an empty workflow workspace; this is not full deck init."
 	case "web_search":
 		return "Look up optional external evidence when policy allows it."
 	default:

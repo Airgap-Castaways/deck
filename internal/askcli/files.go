@@ -20,6 +20,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/askreview"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
+	"github.com/Airgap-Castaways/deck/internal/initcli"
 	"github.com/Airgap-Castaways/deck/internal/validate"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
@@ -205,34 +206,9 @@ func localFindings(files []askcontract.GeneratedFile) []askreview.Finding {
 }
 
 func ensureScaffold(root string) error {
-	for _, dir := range []string{
-		filepath.Join(root, ".deck"),
-		filepath.Join(root, workspacepaths.WorkflowRootDir, workspacepaths.WorkflowScenariosDir),
-		filepath.Join(root, workspacepaths.WorkflowRootDir, workspacepaths.WorkflowComponentsDir),
-		filepath.Join(root, workspacepaths.PreparedDirRel, "files"),
-		filepath.Join(root, workspacepaths.PreparedDirRel, "images"),
-		filepath.Join(root, workspacepaths.PreparedDirRel, "packages"),
-	} {
-		if err := os.MkdirAll(dir, 0o750); err != nil {
-			return fmt.Errorf("create workspace scaffold: %w", err)
-		}
-	}
-	defaults := map[string]string{
-		filepath.Join(root, ".gitignore"):                                       strings.Join([]string{"/.deck/", "/deck", "/outputs/", "*.tar", ""}, "\n"),
-		filepath.Join(root, ".deckignore"):                                      strings.Join([]string{".git/", ".gitignore", ".deckignore", "/*.tar", ""}, "\n"),
-		filepath.Join(root, workspacepaths.PreparedDirRel, "files", ".keep"):    "",
-		filepath.Join(root, workspacepaths.PreparedDirRel, "images", ".keep"):   "",
-		filepath.Join(root, workspacepaths.PreparedDirRel, "packages", ".keep"): "",
-	}
-	for path, content := range defaults {
-		if _, err := os.Stat(path); err == nil {
-			continue
-		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("stat scaffold file %s: %w", path, err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			return fmt.Errorf("write scaffold file %s: %w", path, err)
-		}
+	_, err := initcli.EnsureWorkspaceScaffold(root, ".deck")
+	if err != nil {
+		return fmt.Errorf("create workspace scaffold: %w", err)
 	}
 	return nil
 }

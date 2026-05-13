@@ -71,14 +71,15 @@ Before the model can edit anything, code performs preflight work to decide:
 
 The model then works through a small tool set over the real workspace:
 
-- `file_search`
-- `file_read`
+- `glob`
+- `read`
 - `file_write`
-- `deck_init`
-- `deck_lint`
+- `file_edit`
+- `init`
+- `validate`
 - `mcp_web_search` when external evidence is allowed and needed
 
-`file_write` does not write to disk immediately. It updates session-owned candidate state first, then `deck ask` writes files only after the session finishes successfully.
+`file_write` and `file_edit` do not write workflow files to disk immediately. They update session-owned candidate state first, then `deck ask` writes files only after the session finishes successfully. In an empty workspace, the authoring runtime may call its internal `init` tool first; that tool prepares only the minimal directories, ignore files, and output `.keep` files needed for generated workflow files. It does not run full `deck init` or create starter workflow templates.
 
 ### Step 4: Lint gates the final write
 
