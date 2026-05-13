@@ -6,6 +6,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askdefaults"
 	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
 	_ "github.com/Airgap-Castaways/deck/internal/stepspec"
 )
@@ -117,6 +118,38 @@ func TestTryAutoRepairRestoresTypedLiteralsFromProgramDefaults(t *testing.T) {
 		if !strings.Contains(content, want) {
 			t.Fatalf("expected %q in repaired content, got %q", want, content)
 		}
+	}
+}
+
+func TestDeriveRepairValueUsesAskDefaults(t *testing.T) {
+	program := askcontract.AuthoringProgram{
+		Platform:     askcontract.ProgramPlatform{Family: "debian", Release: "12", RepoType: "deb-flat"},
+		Cluster:      askcontract.ProgramCluster{ControlPlaneCount: 2},
+		Verification: askcontract.ProgramVerification{ExpectedNodeCount: 3},
+	}
+	tests := []struct {
+		name string
+		want any
+	}{
+		{name: "platform.repoType", want: askdefaults.RepoType(program.Platform.Family)},
+		{name: "platform.backendImage", want: askdefaults.BackendImage(program.Platform.Family)},
+		{name: "artifacts.packageOutputDir", want: askdefaults.PackageOutputDir(program.Platform.Family, program.Platform.Release, program.Platform.RepoType)},
+		{name: "artifacts.imageOutputDir", want: askdefaults.ImageOutputDir},
+		{name: "cluster.joinFile", want: askdefaults.JoinFile},
+		{name: "cluster.podCIDR", want: askdefaults.PodCIDR},
+		{name: "cluster.criSocket", want: askdefaults.CRISocket},
+		{name: "verification.expectedReadyCount", want: 3},
+		{name: "verification.expectedControlPlaneReady", want: 2},
+		{name: "verification.interval", want: askdefaults.VerificationInterval},
+		{name: "verification.timeout", want: askdefaults.MultiNodeVerificationTimeout},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := deriveRepairValue(tt.name, program)
+			if !ok || got != tt.want {
+				t.Fatalf("deriveRepairValue(%s)=(%#v,%t), want %#v,true", tt.name, got, ok, tt.want)
+			}
+		})
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askdefaults"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
@@ -44,7 +45,7 @@ func BuildContractGraph(facts Facts, req RequirementLike, workspace askretrieve.
 		}
 	}
 	if facts.MultiRoleRequested || facts.Topology == "multi-node" || facts.Topology == "ha" || facts.NodeCount > 1 {
-		graph.SharedState = append(graph.SharedState, askcontract.SharedStateContract{Name: "join-file", ProducerPath: "/tmp/deck/join.txt", ConsumerPaths: []string{"/tmp/deck/join.txt"}, AvailabilityModel: "published-for-worker-consumption", Description: "bootstrap flow publishes join data before join flows consume it"})
+		graph.SharedState = append(graph.SharedState, askcontract.SharedStateContract{Name: "join-file", ProducerPath: askdefaults.JoinFile, ConsumerPaths: []string{askdefaults.JoinFile}, AvailabilityModel: "published-for-worker-consumption", Description: "bootstrap flow publishes join data before join flows consume it"})
 		graph.RoleExecution = askcontract.RoleExecutionModel{RoleSelector: "vars.role", ControlPlaneFlow: "preflight -> runtime setup -> bootstrap", WorkerFlow: "preflight -> runtime setup -> join", PerNodeInvocation: true}
 	}
 	graph.Verification = askcontract.VerificationStrategy{BootstrapPhase: "bootstrap", FinalPhase: "verify-cluster", FinalVerificationRole: "control-plane"}
