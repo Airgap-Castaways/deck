@@ -10,6 +10,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askdefaults"
 	"github.com/Airgap-Castaways/deck/internal/askdiagnostic"
 	"github.com/Airgap-Castaways/deck/internal/askir"
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
@@ -279,57 +280,29 @@ func bindingSourceValue(source string, program askcontract.AuthoringProgram) (an
 func deriveRepairValue(name string, program askcontract.AuthoringProgram) (any, bool) {
 	switch strings.TrimSpace(name) {
 	case "platform.repoType":
-		if strings.EqualFold(strings.TrimSpace(program.Platform.Family), "debian") {
-			return "deb-flat", true
-		}
-		return "rpm", true
+		return askdefaults.RepoType(program.Platform.Family), true
 	case "platform.backendImage":
-		if strings.EqualFold(strings.TrimSpace(program.Platform.Family), "debian") {
-			return "ubuntu:22.04", true
-		}
-		return "rockylinux:9", true
+		return askdefaults.BackendImage(program.Platform.Family), true
 	case "artifacts.packageOutputDir":
-		family := strings.ToLower(strings.TrimSpace(program.Platform.Family))
-		release := strings.TrimSpace(program.Platform.Release)
-		repoType := strings.ToLower(strings.TrimSpace(program.Platform.RepoType))
-		if family == "debian" || repoType == "deb-flat" {
-			if release == "" {
-				return "packages/", true
-			}
-			return filepath.ToSlash(filepath.Join("packages", "deb", release)), true
-		}
-		if release == "" {
-			return "packages/", true
-		}
-		return filepath.ToSlash(filepath.Join("packages", "rpm", release)), true
+		return askdefaults.PackageOutputDir(program.Platform.Family, program.Platform.Release, program.Platform.RepoType), true
 	case "artifacts.imageOutputDir":
-		return "images/control-plane", true
+		return askdefaults.ImageOutputDir, true
 	case "cluster.joinFile":
-		return "/tmp/deck/join.txt", true
+		return askdefaults.JoinFile, true
 	case "cluster.podCIDR":
-		return "10.244.0.0/16", true
+		return askdefaults.PodCIDR, true
+	case "cluster.criSocket":
+		return askdefaults.CRISocket, true
 	case "verification.expectedReadyCount":
-		if program.Verification.ExpectedReadyCount > 0 {
-			return program.Verification.ExpectedReadyCount, true
-		}
-		if program.Verification.ExpectedNodeCount > 0 {
-			return program.Verification.ExpectedNodeCount, true
+		if value, ok := askdefaults.ExpectedReadyCount(program); ok {
+			return value, true
 		}
 	case "verification.expectedControlPlaneReady":
-		if program.Verification.ExpectedControlPlaneReady > 0 {
-			return program.Verification.ExpectedControlPlaneReady, true
-		}
-		if program.Cluster.ControlPlaneCount > 0 {
-			return program.Cluster.ControlPlaneCount, true
-		}
-		return 1, true
+		return askdefaults.ExpectedControlPlaneReady(program), true
 	case "verification.interval":
-		return "5s", true
+		return askdefaults.VerificationInterval, true
 	case "verification.timeout":
-		if program.Verification.ExpectedNodeCount > 1 {
-			return "10m", true
-		}
-		return "5m", true
+		return askdefaults.VerificationTimeout(program.Verification.ExpectedNodeCount), true
 	}
 	return nil, false
 }

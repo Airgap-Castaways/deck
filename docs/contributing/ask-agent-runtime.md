@@ -66,6 +66,7 @@ The important boundary is that the model operates on file tools, not on a deck-s
 Ask may project deck facts into prompts and runtime tools, but it must not become a second schema system.
 
 - step and field validity belong to `internal/stepmeta`, generated schema, and `internal/validate`
+- shared ask authoring defaults belong to `internal/askdefaults`, not duplicated in prompt, policy, or repair code
 - canonical workflow path rules belong to workspace/path helpers, not ask prompts
 - workspace scaffold primitives belong to `internal/initcli`; ask must not maintain a parallel copy of `deck init` layout logic
 - evidence planning decides when upstream docs are needed, but external docs do not override deck-owned workflow truth

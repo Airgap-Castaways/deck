@@ -10,6 +10,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/askcatalog"
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askdefaults"
 	"github.com/Airgap-Castaways/deck/internal/askintent"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
@@ -686,16 +687,16 @@ func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askco
 		program.Platform.Release = defaultPlatformRelease(program.Platform.Family)
 	}
 	if strings.TrimSpace(program.Platform.RepoType) == "" && !minimalSingleNodeBootstrap {
-		program.Platform.RepoType = defaultRepoType(program.Platform.Family)
+		program.Platform.RepoType = askdefaults.RepoType(program.Platform.Family)
 	}
 	if strings.TrimSpace(program.Platform.BackendImage) == "" && !minimalSingleNodeBootstrap {
-		program.Platform.BackendImage = defaultBackendImage(program.Platform.Family, program.Platform.Release)
+		program.Platform.BackendImage = askdefaults.BackendImage(program.Platform.Family)
 	}
 	if strings.TrimSpace(program.Artifacts.PackageOutputDir) == "" && !minimalSingleNodeBootstrap {
-		program.Artifacts.PackageOutputDir = defaultPackageOutputDir(program.Platform.Family, program.Platform.Release, program.Platform.RepoType)
+		program.Artifacts.PackageOutputDir = askdefaults.PackageOutputDir(program.Platform.Family, program.Platform.Release, program.Platform.RepoType)
 	}
 	if strings.TrimSpace(program.Artifacts.ImageOutputDir) == "" && !minimalSingleNodeBootstrap {
-		program.Artifacts.ImageOutputDir = "images/control-plane"
+		program.Artifacts.ImageOutputDir = askdefaults.ImageOutputDir
 	}
 	if len(program.Artifacts.Packages) == 0 && (hasBriefCapability(brief, "package-staging") || hasBriefCapability(brief, "prepare-artifacts")) {
 		program.Artifacts.Packages = defaultKubeadmPackages(prompt, brief)
@@ -704,16 +705,16 @@ func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askco
 		program.Artifacts.Images = defaultKubeadmImages(program.Cluster.KubernetesVersion, brief)
 	}
 	if strings.TrimSpace(program.Cluster.JoinFile) == "" {
-		program.Cluster.JoinFile = "/tmp/deck/join.txt"
+		program.Cluster.JoinFile = askdefaults.JoinFile
 	}
 	if strings.TrimSpace(program.Cluster.PodCIDR) == "" {
-		program.Cluster.PodCIDR = "10.244.0.0/16"
+		program.Cluster.PodCIDR = askdefaults.PodCIDR
 	}
 	if strings.TrimSpace(program.Cluster.KubernetesVersion) == "" {
 		program.Cluster.KubernetesVersion = inferKubernetesVersion(prompt)
 	}
 	if strings.TrimSpace(program.Cluster.CriSocket) == "" && hasBriefCapability(brief, "kubeadm-bootstrap") {
-		program.Cluster.CriSocket = "unix:///run/containerd/containerd.sock"
+		program.Cluster.CriSocket = askdefaults.CRISocket
 	}
 	program.Cluster.RoleSelector = normalizeRoleSelector(firstNonEmpty(strings.TrimSpace(program.Cluster.RoleSelector), strings.TrimSpace(execution.RoleExecution.RoleSelector)))
 	if !briefNeedsRoleSelector(brief) {
@@ -758,14 +759,10 @@ func normalizeAuthoringProgram(program askcontract.AuthoringProgram, brief askco
 		}
 	}
 	if strings.TrimSpace(program.Verification.Interval) == "" {
-		program.Verification.Interval = "5s"
+		program.Verification.Interval = askdefaults.VerificationInterval
 	}
 	if strings.TrimSpace(program.Verification.Timeout) == "" {
-		if program.Verification.ExpectedNodeCount > 1 {
-			program.Verification.Timeout = "10m"
-		} else {
-			program.Verification.Timeout = "5m"
-		}
+		program.Verification.Timeout = askdefaults.VerificationTimeout(program.Verification.ExpectedNodeCount)
 	}
 	return program
 }
@@ -789,24 +786,14 @@ func defaultKubeadmPackages(prompt string, brief askcontract.AuthoringBrief) []s
 	if !hasBriefCapability(brief, "kubeadm-bootstrap") && !hasBriefCapability(brief, "kubeadm-join") && !strings.Contains(strings.ToLower(strings.TrimSpace(prompt)), "kubeadm") {
 		return nil
 	}
-	return []string{"kubeadm", "kubelet", "kubectl", "cri-tools", "containerd"}
+	return askdefaults.KubeadmPackages()
 }
 
 func defaultKubeadmImages(version string, brief askcontract.AuthoringBrief) []string {
 	if !hasBriefCapability(brief, "kubeadm-bootstrap") && !hasBriefCapability(brief, "kubeadm-join") {
 		return nil
 	}
-	version = strings.TrimSpace(strings.TrimPrefix(version, "v"))
-	if version == "" || strings.EqualFold(version, "stable") {
-		version = "1.30.0"
-	}
-	return []string{
-		"registry.k8s.io/kube-apiserver:v" + version,
-		"registry.k8s.io/kube-controller-manager:v" + version,
-		"registry.k8s.io/kube-scheduler:v" + version,
-		"registry.k8s.io/kube-proxy:v" + version,
-		"registry.k8s.io/pause:3.9",
-	}
+	return askdefaults.KubeadmImages(version)
 }
 
 func isMinimalSingleNodeBootstrapPrompt(prompt string, brief askcontract.AuthoringBrief) bool {
@@ -873,34 +860,6 @@ func inferKubernetesVersion(prompt string) string {
 		return "v" + strings.TrimPrefix(version, "v")
 	}
 	return ""
-}
-
-func defaultRepoType(family string) string {
-	if strings.EqualFold(strings.TrimSpace(family), "debian") {
-		return "deb-flat"
-	}
-	return "rpm"
-}
-
-func defaultBackendImage(family string, release string) string {
-	if strings.EqualFold(strings.TrimSpace(family), "debian") {
-		return "ubuntu:22.04"
-	}
-	_ = release
-	return "rockylinux:9"
-}
-
-func defaultPackageOutputDir(family string, release string, repoType string) string {
-	family = strings.ToLower(strings.TrimSpace(family))
-	release = strings.TrimSpace(release)
-	repoType = strings.ToLower(strings.TrimSpace(repoType))
-	if release == "" {
-		return "packages/"
-	}
-	if repoType == "deb-flat" || family == "debian" {
-		return filepath.ToSlash(filepath.Join("packages", "deb", release))
-	}
-	return filepath.ToSlash(filepath.Join("packages", "rpm", release))
 }
 
 func normalizeRoleSelector(value string) string {

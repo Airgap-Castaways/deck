@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
+	"github.com/Airgap-Castaways/deck/internal/askdefaults"
 )
 
 func TestNormalizeAuthoringProgramBuildsDefaultsFromBriefAndExecution(t *testing.T) {
@@ -11,10 +12,10 @@ func TestNormalizeAuthoringProgramBuildsDefaultsFromBriefAndExecution(t *testing
 	if program.Platform.Family != "rhel" || program.Platform.Release != "9" || program.Platform.RepoType != "rpm" {
 		t.Fatalf("expected normalized platform defaults, got %#v", program.Platform)
 	}
-	if program.Cluster.JoinFile != "/tmp/deck/join.txt" || program.Cluster.RoleSelector != "role" {
+	if program.Cluster.JoinFile != askdefaults.JoinFile || program.Cluster.RoleSelector != "role" {
 		t.Fatalf("expected normalized cluster defaults, got %#v", program.Cluster)
 	}
-	if program.Verification.ExpectedReadyCount != 2 || program.Verification.Timeout != "10m" {
+	if program.Verification.ExpectedReadyCount != 2 || program.Verification.Timeout != askdefaults.MultiNodeVerificationTimeout {
 		t.Fatalf("expected normalized verification defaults, got %#v", program.Verification)
 	}
 }
@@ -39,7 +40,7 @@ func TestNormalizeAuthoringProgramUsesPreinstalledDefaultsForMinimalSingleNodeBo
 	if program.Cluster.KubernetesVersion != "v1.35.1" {
 		t.Fatalf("expected inferred kubernetes version for minimal flow, got %#v", program.Cluster)
 	}
-	if program.Cluster.CriSocket != "unix:///run/containerd/containerd.sock" {
+	if program.Cluster.CriSocket != askdefaults.CRISocket {
 		t.Fatalf("expected default cri socket for kubeadm flow, got %#v", program.Cluster)
 	}
 }
@@ -60,7 +61,7 @@ func TestNormalizeAuthoringProgramSeedsPrepareArtifactsForKubeadmDraft(t *testin
 	if len(program.Artifacts.Packages) == 0 || len(program.Artifacts.Images) == 0 {
 		t.Fatalf("expected seeded kubeadm prepare artifacts, got %#v", program.Artifacts)
 	}
-	if program.Artifacts.PackageOutputDir == "" || program.Artifacts.ImageOutputDir == "" {
+	if program.Artifacts.PackageOutputDir == "" || program.Artifacts.ImageOutputDir != askdefaults.ImageOutputDir {
 		t.Fatalf("expected canonical artifact output dirs, got %#v", program.Artifacts)
 	}
 }
