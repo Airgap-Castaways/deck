@@ -32,3 +32,12 @@ func TestKubeadmImagesDefaultVersion(t *testing.T) {
 		t.Fatalf("unexpected first image: %q", images[0])
 	}
 }
+
+func TestKubeadmImagesNormalizesVersionPrefix(t *testing.T) {
+	for _, version := range []string{"1.30.0", "v1.30.0", "V1.30.0", " v1.30.0 "} {
+		images := KubeadmImages(version)
+		if images[0] != "registry.k8s.io/kube-apiserver:v1.30.0" {
+			t.Fatalf("KubeadmImages(%q)[0]=%q", version, images[0])
+		}
+	}
+}

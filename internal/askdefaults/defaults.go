@@ -50,7 +50,9 @@ func KubeadmPackages() []string {
 }
 
 func KubeadmImages(version string) []string {
-	version = strings.TrimSpace(strings.TrimPrefix(version, "v"))
+	version = strings.TrimSpace(version)
+	version = strings.TrimPrefix(version, "v")
+	version = strings.TrimPrefix(version, "V")
 	if version == "" || strings.EqualFold(version, "stable") {
 		version = DefaultKubernetesVersion
 	}
