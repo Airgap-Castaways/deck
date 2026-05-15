@@ -166,6 +166,7 @@ spec:
 | `spec.distro` | `object` | no | `` | `` | Target distribution hint used to select resolver behavior. | `{family:rhel,release:rocky9}` |
 | `spec.outputDir` | `string` | no | `` | `` | Optional bundle-relative output directory for downloaded package artifacts. | `packages/kubernetes` |
 | `spec.packages` | `array<string>` | yes | `` | `` | Package names to download. | `[kubelet,kubeadm,kubectl]` |
+| `spec.platform` | `string` | no | `` | `` | Target container platform for package resolution in os/arch or os/arch/variant form. | `linux/amd64` |
 | `spec.repo` | `object` | no | `` | `` | Repository settings applied before download. | `{type:rpm,modules:[{name:container-tools,stream:4.0}]}` |
 
 ### Nested Objects
@@ -238,6 +239,7 @@ spec:
 | `spec.backend` | `object` | no | `` | `` | Backend-specific download settings. | `{engine:go-containerregistry}` |
 | `spec.images` | `array<string>` | yes | `` | `` | Fully qualified image references to download. | `[registry.k8s.io/pause:3.9]` |
 | `spec.outputDir` | `string` | no | `` | `` | Optional bundle-relative directory for per-image tar archives. | `images/control-plane` |
+| `spec.platforms` | `array<string>` | no | `` | `` | Optional target platforms in os/arch or os/arch/variant form. | `[linux/amd64,linux/arm64]` |
 
 ### Nested Objects
 
@@ -259,6 +261,7 @@ spec:
 
 - `outputDir` must stay under the prepared `images/` root.
 - Omit `outputDir` unless you need a dedicated image subdirectory under `images/`.
+- Use `spec.platforms` to pull target platforms explicitly; platform-specific archives include the platform in the filename.
 - `spec.auth` is optional and only applies to `DownloadImage`.
 
 ## Related

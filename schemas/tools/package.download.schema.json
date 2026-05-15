@@ -129,6 +129,13 @@
           "minItems": 1,
           "type": "array"
         },
+        "platform": {
+          "description": "Target container platform for package resolution in os/arch or os/arch/variant form.",
+          "examples": [
+            "linux/amd64"
+          ],
+          "type": "string"
+        },
         "repo": {
           "additionalProperties": false,
           "description": "Repository settings applied before download.",

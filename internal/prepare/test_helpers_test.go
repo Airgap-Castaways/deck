@@ -35,7 +35,7 @@ func stubDownloadImageOps() imageDownloadOps {
 		parseReference: func(v string) (name.Reference, error) {
 			return name.ParseReference(v, name.WeakValidation)
 		},
-		fetchImage: func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
+		fetchImage: func(_ name.Reference, _ *v1.Platform, _ ...remote.Option) (v1.Image, error) {
 			return empty.Image, nil
 		},
 		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
@@ -47,6 +47,7 @@ func stubDownloadImageOps() imageDownloadOps {
 type fakeRunner struct {
 	mu                sync.Mutex
 	containerPayloads map[string]map[string][]byte
+	createArgs        [][]string
 	failExport        bool
 }
 
@@ -181,6 +182,7 @@ func (f *fakeRunner) RunWithIO(_ context.Context, stdout io.Writer, _ io.Writer,
 	switch args[0] {
 	case "create":
 		f.mu.Lock()
+		f.createArgs = append(f.createArgs, append([]string(nil), args...))
 		containerID := fmt.Sprintf("container-%d", len(f.containerPayloads)+1)
 		f.containerPayloads[containerID] = fakePackageContainerPayload(args)
 		f.mu.Unlock()

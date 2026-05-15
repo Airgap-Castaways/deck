@@ -23,6 +23,7 @@ import (
 
 type imageArtifactMeta struct {
 	Images        []string          `json:"images"`
+	Platforms     []string          `json:"platforms,omitempty"`
 	Files         []string          `json:"files"`
 	Checksums     map[string]string `json:"checksums,omitempty"`
 	SourceDigests map[string]string `json:"sourceDigests,omitempty"`
@@ -30,16 +31,23 @@ type imageArtifactMeta struct {
 
 type imageDownloadOps struct {
 	parseReference func(string) (name.Reference, error)
-	fetchImage     func(name.Reference, ...remote.Option) (v1.Image, error)
+	fetchImage     func(name.Reference, *v1.Platform, ...remote.Option) (v1.Image, error)
 	writeArchive   func(string, name.Reference, v1.Image, ...tarball.WriteOption) error
 }
 
 func defaultDownloadImageOps() imageDownloadOps {
 	return imageDownloadOps{
 		parseReference: parseWeakImageReference,
-		fetchImage:     remote.Image,
+		fetchImage:     fetchRemoteImage,
 		writeArchive:   tarball.WriteToFile,
 	}
+}
+
+func fetchRemoteImage(ref name.Reference, platform *v1.Platform, opts ...remote.Option) (v1.Image, error) {
+	if platform != nil {
+		opts = append(opts, remote.WithPlatform(*platform))
+	}
+	return remote.Image(ref, opts...)
 }
 
 func parseWeakImageReference(v string) (name.Reference, error) {
@@ -88,65 +96,119 @@ func runDownloadImage(ctx context.Context, runner CommandRunner, bundleRoot stri
 		return nil, err
 	}
 
-	return runGoContainerRegistryDownloads(ctx, bundleRoot, dir, images, auth, opts)
+	platforms, err := parseImagePlatforms(decoded.Platforms)
+	if err != nil {
+		return nil, err
+	}
+
+	return runGoContainerRegistryDownloads(ctx, bundleRoot, dir, images, platforms, auth, opts)
 }
 
-func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string, images []string, auth imageRegistryAuthMap, opts RunOptions) ([]string, error) {
+type imagePlatformSelection struct {
+	Raw      string
+	Platform v1.Platform
+}
+
+func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string, images []string, platforms []imagePlatformSelection, auth imageRegistryAuthMap, opts RunOptions) ([]string, error) {
 	deps := resolveDownloadImageOps(opts)
-	if files, reused, err := tryReuseImageArtifact(bundleRoot, dir, images, opts); err != nil {
+	platformKeys := imagePlatformKeys(platforms)
+	if files, reused, err := tryReuseImageArtifact(bundleRoot, dir, images, platformKeys, opts); err != nil {
 		return nil, err
 	} else if reused {
 		return files, nil
 	}
-	files := make([]string, 0, len(images))
+	fetchTargets := imageFetchTargets(platforms)
+	files := make([]string, 0, len(images)*len(fetchTargets))
 	sourceDigests := map[string]string{}
 	for _, img := range images {
-		rel := filepath.ToSlash(filepath.Join(dir, sanitizeImageName(img)+".tar"))
-		target := filepath.Join(bundleRoot, filepath.FromSlash(rel))
-		if err := filemode.EnsureParentDir(target, filemode.PublishedArtifact); err != nil {
-			return nil, err
-		}
-		if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
-			return nil, err
-		}
-
 		ref, err := deps.parseReference(img)
 		if err != nil {
 			return nil, fmt.Errorf("parse image reference %s: %w", img, err)
 		}
 		registry := ref.Context().RegistryStr()
 
-		imageObj, err := deps.fetchImage(
-			ref,
-			remote.WithAuthFromKeychain(auth.keychain()),
-			remote.WithContext(ctx),
-		)
-		if err != nil {
-			if auth.hasRegistry(registry) {
-				return nil, fmt.Errorf("pull image %s from registry %s with configured auth: %w", img, registry, err)
+		for _, fetchTarget := range fetchTargets {
+			rel := imageArchiveRel(dir, img, fetchTarget.raw)
+			target := filepath.Join(bundleRoot, filepath.FromSlash(rel))
+			if err := filemode.EnsureParentDir(target, filemode.PublishedArtifact); err != nil {
+				return nil, err
 			}
-			return nil, fmt.Errorf("pull image %s: %w", img, err)
-		}
+			if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+				return nil, err
+			}
 
-		if err := deps.writeArchive(target, ref, imageObj); err != nil {
-			return nil, fmt.Errorf("write image archive %s: %w", img, err)
-		}
-		if digest, digestErr := imageObj.Digest(); digestErr == nil {
-			sourceDigests[img] = digest.String()
-		}
+			imageObj, err := deps.fetchImage(
+				ref,
+				fetchTarget.platform,
+				remote.WithAuthFromKeychain(auth.keychain()),
+				remote.WithContext(ctx),
+			)
+			if err != nil {
+				if auth.hasRegistry(registry) {
+					return nil, fmt.Errorf("pull image %s%s from registry %s with configured auth: %w", img, imagePlatformErrorSuffix(fetchTarget.raw), registry, err)
+				}
+				return nil, fmt.Errorf("pull image %s%s: %w", img, imagePlatformErrorSuffix(fetchTarget.raw), err)
+			}
 
-		if info, err := os.Stat(target); err != nil {
-			return nil, err
-		} else if info.Size() == 0 {
-			return nil, fmt.Errorf("write image archive %s: empty archive", img)
-		}
+			if err := deps.writeArchive(target, ref, imageObj); err != nil {
+				return nil, fmt.Errorf("write image archive %s%s: %w", img, imagePlatformErrorSuffix(fetchTarget.raw), err)
+			}
+			if digest, digestErr := imageObj.Digest(); digestErr == nil {
+				sourceDigests[imageDigestKey(img, fetchTarget.raw)] = digest.String()
+			}
 
-		files = append(files, rel)
+			if info, err := os.Stat(target); err != nil {
+				return nil, err
+			} else if info.Size() == 0 {
+				return nil, fmt.Errorf("write image archive %s%s: empty archive", img, imagePlatformErrorSuffix(fetchTarget.raw))
+			}
+
+			files = append(files, rel)
+		}
 	}
-	if err := writeImageArtifactMeta(bundleRoot, dir, images, files, sourceDigests); err != nil {
+	if err := writeImageArtifactMeta(bundleRoot, dir, images, platformKeys, files, sourceDigests); err != nil {
 		return nil, err
 	}
 	return files, nil
+}
+
+type imageFetchTarget struct {
+	raw      string
+	platform *v1.Platform
+}
+
+func imageFetchTargets(platforms []imagePlatformSelection) []imageFetchTarget {
+	if len(platforms) == 0 {
+		return []imageFetchTarget{{}}
+	}
+	targets := make([]imageFetchTarget, 0, len(platforms))
+	for _, platform := range platforms {
+		p := platform.Platform
+		targets = append(targets, imageFetchTarget{raw: platform.Raw, platform: &p})
+	}
+	return targets
+}
+
+func imagePlatformErrorSuffix(platform string) string {
+	if strings.TrimSpace(platform) == "" {
+		return ""
+	}
+	return " for platform " + platform
+}
+
+func imageDigestKey(img, platform string) string {
+	if strings.TrimSpace(platform) == "" {
+		return img
+	}
+	return img + "@" + platform
+}
+
+func imageArchiveRel(dir, img, platform string) string {
+	name := sanitizeImageName(img)
+	if strings.TrimSpace(platform) != "" {
+		name += "_" + sanitizeImagePlatformName(platform)
+	}
+	return filepath.ToSlash(filepath.Join(dir, name+".tar"))
 }
 
 func imageMetaFileAbs(bundleRoot, dir string) string {
@@ -168,6 +230,7 @@ func parseImageArtifactMeta(raw []byte) (imageArtifactMeta, bool) {
 		return imageArtifactMeta{}, false
 	}
 	meta.Images = normalizeStrings(meta.Images)
+	meta.Platforms = normalizeStrings(meta.Platforms)
 	meta.Files = normalizeStrings(meta.Files)
 	meta.Checksums = normalizeChecksumMap(meta.Checksums)
 	meta.SourceDigests = normalizeChecksumMap(meta.SourceDigests)
@@ -189,13 +252,14 @@ func loadImageArtifactMeta(bundleRoot, dir string) (imageArtifactMeta, bool, err
 	return meta, true, nil
 }
 
-func writeImageArtifactMeta(bundleRoot, dir string, images, files []string, sourceDigests map[string]string) error {
+func writeImageArtifactMeta(bundleRoot, dir string, images, platforms, files []string, sourceDigests map[string]string) error {
 	checksums, err := computeArtifactChecksums(bundleRoot, files)
 	if err != nil {
 		return err
 	}
 	meta := imageArtifactMeta{
 		Images:        normalizeStrings(images),
+		Platforms:     normalizeStrings(platforms),
 		Files:         normalizeStrings(files),
 		Checksums:     checksums,
 		SourceDigests: normalizeChecksumMap(sourceDigests),
@@ -211,7 +275,7 @@ func writeImageArtifactMeta(bundleRoot, dir string, images, files []string, sour
 	return filemode.WriteArtifactFile(path, raw)
 }
 
-func tryReuseImageArtifact(bundleRoot, dir string, images []string, opts RunOptions) ([]string, bool, error) {
+func tryReuseImageArtifact(bundleRoot, dir string, images, platforms []string, opts RunOptions) ([]string, bool, error) {
 	if opts.ForceRedownload {
 		return nil, false, nil
 	}
@@ -223,6 +287,9 @@ func tryReuseImageArtifact(bundleRoot, dir string, images []string, opts RunOpti
 		return nil, false, nil
 	}
 	if !equalStrings(normalizeStrings(images), meta.Images) {
+		return nil, false, nil
+	}
+	if !equalStrings(normalizeStrings(platforms), meta.Platforms) {
 		return nil, false, nil
 	}
 	checksumsOK, err := verifyArtifactChecksums(bundleRoot, meta.Files, meta.Checksums)
@@ -303,6 +370,70 @@ func parseImageRegistryAuth(spec stepspec.DownloadImage) (imageRegistryAuthMap, 
 	return entries, nil
 }
 
+func parseImagePlatforms(raw []stepspec.ImagePlatform) ([]imagePlatformSelection, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	platforms := make([]imagePlatformSelection, 0, len(raw))
+	seen := map[string]bool{}
+	duplicates := make([]string, 0)
+	for _, item := range raw {
+		platform, err := parseImagePlatform(string(item))
+		if err != nil {
+			return nil, err
+		}
+		if seen[platform.Raw] {
+			duplicates = append(duplicates, platform.Raw)
+			continue
+		}
+		seen[platform.Raw] = true
+		platforms = append(platforms, platform)
+	}
+	if len(duplicates) > 0 {
+		sort.Strings(duplicates)
+		return nil, fmt.Errorf("image platforms contains duplicate entries: %s", strings.Join(duplicates, ", "))
+	}
+	return platforms, nil
+}
+
+func parseImagePlatform(raw string) (imagePlatformSelection, error) {
+	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	parts := strings.Split(trimmed, "/")
+	if len(parts) != 2 && len(parts) != 3 {
+		return imagePlatformSelection{}, fmt.Errorf("image platform %q must use os/arch or os/arch/variant", raw)
+	}
+	for i, part := range parts {
+		parts[i] = strings.TrimSpace(part)
+		if parts[i] == "" {
+			return imagePlatformSelection{}, fmt.Errorf("image platform %q must not contain empty components", raw)
+		}
+	}
+	platform := v1.Platform{OS: parts[0], Architecture: parts[1]}
+	if len(parts) == 3 {
+		platform.Variant = parts[2]
+	}
+	return imagePlatformSelection{Raw: imagePlatformKey(platform), Platform: platform}, nil
+}
+
+func imagePlatformKeys(platforms []imagePlatformSelection) []string {
+	if len(platforms) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(platforms))
+	for _, platform := range platforms {
+		keys = append(keys, platform.Raw)
+	}
+	return keys
+}
+
+func imagePlatformKey(platform v1.Platform) string {
+	key := strings.ToLower(strings.TrimSpace(platform.OS)) + "/" + strings.ToLower(strings.TrimSpace(platform.Architecture))
+	if variant := strings.ToLower(strings.TrimSpace(platform.Variant)); variant != "" {
+		key += "/" + variant
+	}
+	return key
+}
+
 func sanitizeImageName(v string) string {
 	replacer := strings.NewReplacer(
 		"/", "_",
@@ -310,4 +441,8 @@ func sanitizeImageName(v string) string {
 		"@", "_",
 	)
 	return replacer.Replace(v)
+}
+
+func sanitizeImagePlatformName(v string) string {
+	return strings.NewReplacer("/", "_").Replace(strings.ToLower(strings.TrimSpace(v)))
 }

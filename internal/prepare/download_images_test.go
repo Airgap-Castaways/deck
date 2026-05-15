@@ -1,12 +1,17 @@
 package prepare
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/empty"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/Airgap-Castaways/deck/internal/stepspec"
 )
@@ -87,6 +92,62 @@ func TestImageAuthKeychainFallsBackWhenRegistryNotConfigured(t *testing.T) {
 	}
 	if config.Username == "robot" {
 		t.Fatalf("expected fallback auth, got explicit credentials: %+v", config)
+	}
+}
+
+func TestRunDownloadImageUsesExplicitPlatforms(t *testing.T) {
+	bundle := t.TempDir()
+	platforms := make([]string, 0)
+	imageOps := imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, platform *v1.Platform, _ ...remote.Option) (v1.Image, error) {
+			if platform == nil {
+				platforms = append(platforms, "")
+			} else {
+				platforms = append(platforms, imagePlatformKey(*platform))
+			}
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte(filepath.Base(path)), 0o644)
+		},
+	}
+
+	files, err := runDownloadImage(context.Background(), nil, bundle, map[string]any{
+		"images":    []any{"registry.k8s.io/pause:3.9"},
+		"platforms": []any{"linux/amd64", "linux/arm64"},
+	}, RunOptions{imageDownloadOps: imageOps})
+	if err != nil {
+		t.Fatalf("runDownloadImage failed: %v", err)
+	}
+
+	wantFiles := []string{
+		"images/registry.k8s.io_pause_3.9_linux_amd64.tar",
+		"images/registry.k8s.io_pause_3.9_linux_arm64.tar",
+	}
+	if strings.Join(files, "\n") != strings.Join(wantFiles, "\n") {
+		t.Fatalf("unexpected files: got %#v want %#v", files, wantFiles)
+	}
+	if strings.Join(platforms, ",") != "linux/amd64,linux/arm64" {
+		t.Fatalf("unexpected platforms: %#v", platforms)
+	}
+	meta, ok, err := loadImageArtifactMeta(bundle, "images")
+	if err != nil || !ok {
+		t.Fatalf("load image meta: ok=%v err=%v", ok, err)
+	}
+	if strings.Join(meta.Platforms, ",") != "linux/amd64,linux/arm64" {
+		t.Fatalf("expected platforms in metadata, got %#v", meta.Platforms)
+	}
+}
+
+func TestParseImagePlatformsRejectsInvalidValues(t *testing.T) {
+	if _, err := parseImagePlatforms([]stepspec.ImagePlatform{"linux"}); err == nil || !strings.Contains(err.Error(), "os/arch") {
+		t.Fatalf("expected invalid platform error, got %v", err)
+	}
+	if _, err := parseImagePlatforms([]stepspec.ImagePlatform{"linux/amd64", "linux/amd64"}); err == nil || !strings.Contains(err.Error(), "duplicate") {
+		t.Fatalf("expected duplicate platform error, got %v", err)
 	}
 }
 

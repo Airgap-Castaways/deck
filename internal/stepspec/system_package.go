@@ -388,6 +388,8 @@ type DownloadPackageBackend struct {
 	Image string `json:"image"`
 }
 
+type PackagePlatform string
+
 // Download packages into prepared bundle storage.
 // @deck.when Use this during prepare to collect package-manager content for offline installation.
 // @deck.note Omit `outputDir` unless you need a custom package location.
@@ -413,6 +415,9 @@ type DownloadPackage struct {
 	// Package names to download.
 	// @deck.example [kubelet,kubeadm,kubectl]
 	Packages []string `json:"packages"`
+	// Target container platform for package resolution in os/arch or os/arch/variant form.
+	// @deck.example linux/amd64
+	Platform PackagePlatform `json:"platform"`
 	// Target distribution hint used to select resolver behavior.
 	// @deck.example {family:rhel,release:rocky9}
 	Distro DownloadPackageDistro `json:"distro"`

@@ -216,12 +216,14 @@ spec:
 |---|---|---:|---|---|---|---|
 | `spec.command` | `array<string>` | no | `` | `` | Optional runtime command override. | `[ctr,-n,k8s.io,images,import,{archive}]` |
 | `spec.images` | `array<string>` | yes | `` | `` | Image references to load from the prepared archives. | `[registry.k8s.io/kube-apiserver:v1.30.1]` |
+| `spec.platforms` | `array<string>` | no | `` | `` | Optional target platforms matching DownloadImage archive suffixes. | `[linux/amd64]` |
 | `spec.runtime` | `string` | no | `` | `auto, ctr, docker, podman` | Runtime loader to use for imports. | `ctr` |
 | `spec.sourceDir` | `string` | no | `` | `` | Directory containing prepared image archives. | `images/control-plane` |
 
 ### Notes
 
 - `command` may include `{archive}` placeholders that deck substitutes per image archive.
+- When `spec.platforms` is set, deck loads archives with matching platform suffixes produced by `DownloadImage`.
 
 ## `VerifyImage`
 

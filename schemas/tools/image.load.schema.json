@@ -62,6 +62,16 @@
           "minItems": 1,
           "type": "array"
         },
+        "platforms": {
+          "description": "Optional target platforms matching DownloadImage archive suffixes.",
+          "examples": [
+            "[linux/amd64]"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "runtime": {
           "description": "Runtime loader to use for imports.",
           "enum": [
