@@ -66,6 +66,7 @@ jobs:
       - name: Run test set
         run: |
           make test
+          ./bin/deck lint --root test
           ./bin/deck lint --file docs/guides/examples/vagrant-smoke-install.yaml
           ./bin/deck lint --file test/workflows/scenarios/control-plane-bootstrap.yaml
           ./bin/deck lint --file test/workflows/scenarios/worker-join.yaml
