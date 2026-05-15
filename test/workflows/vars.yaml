@@ -5,6 +5,9 @@ all:
   upgradeEtcdImage: registry.k8s.io/etcd:3.5.15-0
   upgradeCoreDNSImage: registry.k8s.io/coredns/coredns:v1.11.1
   arch: amd64
+  packagePlatform: linux/amd64
+  imagePlatforms:
+    - linux/amd64
   backendRuntime: auto
   serverURL: 192.168.57.10:18080
   registryHost: 192.168.57.10:18080
