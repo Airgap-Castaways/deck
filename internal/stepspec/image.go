@@ -24,10 +24,13 @@ type ImageBackend struct {
 	Engine string `json:"engine"`
 }
 
+type ImagePlatform string
+
 // Download container images into prepared bundle storage.
 // @deck.when Use this during prepare to collect required images for offline use.
 // @deck.note Omit `outputDir` unless you need a dedicated image subdirectory; deck writes to `images/` by default.
 // @deck.note `spec.auth` is optional and only applies to `DownloadImage`.
+// @deck.note Use `spec.platforms` to pull target platforms explicitly instead of relying on the download engine default.
 // @deck.example
 // kind: DownloadImage
 // spec:
@@ -44,6 +47,9 @@ type DownloadImage struct {
 	// Fully qualified image references to download.
 	// @deck.example [registry.k8s.io/pause:3.9]
 	Images []string `json:"images"`
+	// Optional target platforms in os/arch or os/arch/variant form.
+	// @deck.example [linux/amd64,linux/arm64]
+	Platforms []ImagePlatform `json:"platforms"`
 	// Optional registry authentication entries used during download.
 	// @deck.example [{registry:registry.example.com,basic:{username:robot,password:${REGISTRY_PASSWORD}}}]
 	Auth []ImageAuth `json:"auth"`
@@ -73,6 +79,9 @@ type LoadImage struct {
 	// Image references to load from the prepared archives.
 	// @deck.example [registry.k8s.io/kube-apiserver:v1.30.1]
 	Images []string `json:"images"`
+	// Optional target platforms matching DownloadImage archive suffixes.
+	// @deck.example [linux/amd64]
+	Platforms []ImagePlatform `json:"platforms"`
 	// Directory containing prepared image archives.
 	// @deck.example images/control-plane
 	SourceDir string `json:"sourceDir"`

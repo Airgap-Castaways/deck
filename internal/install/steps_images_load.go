@@ -26,14 +26,20 @@ func runLoadImage(ctx context.Context, bundleRoot string, spec map[string]any) e
 	if strings.TrimSpace(bundleRoot) != "" {
 		sourceDir = filepath.Join(bundleRoot, sourceDir)
 	}
+	platforms, err := loadImagePlatforms(decoded.Platforms)
+	if err != nil {
+		return err
+	}
 	for _, image := range decoded.Images {
-		archivePath := filepath.ToSlash(filepath.Join(sourceDir, sanitizeImageArchiveName(image)+".tar"))
-		args, err := loadImageCommandArgs(decoded, archivePath)
-		if err != nil {
-			return err
-		}
-		if err := runTimedCommandWithContext(ctx, args[0], args[1:], commandTimeoutWithDefault(spec, 10*time.Minute)); err != nil {
-			return fmt.Errorf("load image %s: %w", image, err)
+		for _, platform := range platforms {
+			archivePath := filepath.ToSlash(filepath.Join(sourceDir, imageArchiveName(image, platform)+".tar"))
+			args, err := loadImageCommandArgs(decoded, archivePath)
+			if err != nil {
+				return err
+			}
+			if err := runTimedCommandWithContext(ctx, args[0], args[1:], commandTimeoutWithDefault(spec, 10*time.Minute)); err != nil {
+				return fmt.Errorf("load image %s%s: %w", image, imagePlatformErrorSuffix(platform), err)
+			}
 		}
 	}
 	return nil
@@ -62,4 +68,39 @@ func loadImageCommandArgs(spec stepspec.LoadImage, archivePath string) ([]string
 func sanitizeImageArchiveName(v string) string {
 	replacer := strings.NewReplacer("/", "_", ":", "_", "@", "_")
 	return replacer.Replace(v)
+}
+
+func loadImagePlatforms(raw []stepspec.ImagePlatform) ([]string, error) {
+	if len(raw) == 0 {
+		return []string{""}, nil
+	}
+	platforms := make([]string, 0, len(raw))
+	seen := map[string]bool{}
+	for _, item := range raw {
+		platform, err := stepspec.NormalizePlatform(string(item))
+		if err != nil {
+			return nil, err
+		}
+		if seen[platform] {
+			return nil, fmt.Errorf("LoadImage platforms contains duplicate entry: %s", platform)
+		}
+		seen[platform] = true
+		platforms = append(platforms, platform)
+	}
+	return platforms, nil
+}
+
+func imageArchiveName(image, platform string) string {
+	name := sanitizeImageArchiveName(image)
+	if strings.TrimSpace(platform) != "" {
+		name += "_" + strings.NewReplacer("/", "_").Replace(platform)
+	}
+	return name
+}
+
+func imagePlatformErrorSuffix(platform string) string {
+	if strings.TrimSpace(platform) == "" {
+		return ""
+	}
+	return " for platform " + platform
 }

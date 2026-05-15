@@ -12,11 +12,15 @@ import (
 
 var packageContainerCounter uint64
 
-func runPackageContainerWithExport(ctx context.Context, runner CommandRunner, runtimeSel, image, script string) ([]byte, error) {
+func runPackageContainerWithExport(ctx context.Context, runner CommandRunner, runtimeSel, image, platform, script string) ([]byte, error) {
 	containerName := fmt.Sprintf("deck-prepare-%d", atomic.AddUint64(&packageContainerCounter, 1))
 	createStdout := &bytes.Buffer{}
 	createStderr := &bytes.Buffer{}
-	createArgs := []string{"create", "--name", containerName, image, "bash", "-lc", script}
+	createArgs := []string{"create"}
+	if strings.TrimSpace(platform) != "" {
+		createArgs = append(createArgs, "--platform", platform)
+	}
+	createArgs = append(createArgs, "--name", containerName, image, "bash", "-lc", script)
 	if err := runner.RunWithIO(ctx, createStdout, createStderr, runtimeSel, createArgs...); err != nil {
 		return nil, formatContainerCommandError("create package download container", err, createStderr.String())
 	}

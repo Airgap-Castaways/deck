@@ -26,6 +26,7 @@ var packageArtifactStageCounter uint64
 type exportedPackageCacheMeta struct {
 	RootRel   string            `json:"root_rel"`
 	Packages  []string          `json:"packages"`
+	Platform  string            `json:"platform,omitempty"`
 	Files     []string          `json:"files"`
 	Checksums map[string]string `json:"checksums,omitempty"`
 }
@@ -83,6 +84,7 @@ func loadExportedPackageCache(path string) (exportedPackageCacheMeta, bool, erro
 	}
 	meta.Files = normalizeStrings(meta.Files)
 	meta.Packages = normalizeStrings(meta.Packages)
+	meta.Platform = normalizePackagePlatformKey(meta.Platform)
 	meta.Checksums = normalizeChecksumMap(meta.Checksums)
 	return meta, true, nil
 }
@@ -90,6 +92,7 @@ func loadExportedPackageCache(path string) (exportedPackageCacheMeta, bool, erro
 func saveExportedPackageCacheMeta(path string, meta exportedPackageCacheMeta) error {
 	meta.Files = normalizeStrings(meta.Files)
 	meta.Packages = normalizeStrings(meta.Packages)
+	meta.Platform = normalizePackagePlatformKey(meta.Platform)
 	checksums, err := computeArtifactChecksums(exportedPackageCachePayloadPath(path), meta.Files)
 	if err != nil {
 		return err
@@ -114,7 +117,7 @@ func buildPublishedArtifactStage(path string) string {
 	return fmt.Sprintf("%s.stage-%d", path, atomic.AddUint64(&packageArtifactStageCounter, 1))
 }
 
-func tryReuseExportedPackageArtifact(bundleRoot, rootRel, cachePath string, packages []string, opts RunOptions) ([]string, bool, error) {
+func tryReuseExportedPackageArtifact(bundleRoot, rootRel, cachePath string, packages []string, platform string, opts RunOptions) ([]string, bool, error) {
 	if opts.ForceRedownload {
 		return nil, false, nil
 	}
@@ -129,6 +132,9 @@ func tryReuseExportedPackageArtifact(bundleRoot, rootRel, cachePath string, pack
 		return nil, false, nil
 	}
 	if !equalStrings(normalizeStrings(packages), meta.Packages) {
+		return nil, false, nil
+	}
+	if normalizePackagePlatformKey(meta.Platform) != normalizePackagePlatformKey(platform) {
 		return nil, false, nil
 	}
 	if len(meta.Files) == 0 {

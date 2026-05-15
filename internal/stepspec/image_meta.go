@@ -22,6 +22,7 @@ var _ = stepmeta.MustRegister[DownloadImage](stepmeta.Definition{
 	Notes: []string{
 		"`outputDir` must stay under the prepared `images/` root.",
 		"Omit `outputDir` unless you need a dedicated image subdirectory under `images/`.",
+		"Use `spec.platforms` to pull target platforms explicitly; platform-specific archives include the platform in the filename.",
 		"`spec.auth` is optional and only applies to `DownloadImage`.",
 	},
 	Ask: stepmeta.AskMetadata{
@@ -41,7 +42,7 @@ var _ = stepmeta.MustRegister[DownloadImage](stepmeta.Definition{
 			},
 		}},
 		MatchSignals:             []string{"air-gapped", "image", "images", "registry", "mirror", "offline", "prepare"},
-		KeyFields:                []string{"spec.images", "spec.auth", "spec.backend", "spec.outputDir"},
+		KeyFields:                []string{"spec.images", "spec.platforms", "spec.auth", "spec.backend", "spec.outputDir"},
 		ValidationHints:          []stepmeta.ValidationHint{{ErrorContains: "spec.backend.engine must be one of", Fix: "Keep spec.backend.engine as the literal value `go-containerregistry`; do not replace it with a vars template."}, {ErrorContains: "is not supported for role prepare", Fix: "For prepare-time image collection, use DownloadImage instead of Command so the step matches the prepare role."}},
 		ConstrainedLiteralFields: []stepmeta.ConstrainedLiteralField{{Path: "spec.backend.engine", AllowedValues: []string{"go-containerregistry"}, Guidance: "Keep spec.backend.engine as a literal enum, not a vars template."}},
 	},
@@ -59,6 +60,10 @@ var _ = stepmeta.MustRegister[LoadImage](stepmeta.Definition{
 	Roles:       []string{"apply"},
 	SchemaFile:  "image.load.schema.json",
 	SchemaPatch: stepmeta.PatchImageLoadToolSchema,
+	Notes: []string{
+		"`command` may include `{archive}` placeholders that deck substitutes per image archive.",
+		"When `spec.platforms` is set, deck loads archives with matching platform suffixes produced by `DownloadImage`.",
+	},
 	Ask: stepmeta.AskMetadata{
 		Capabilities:  []string{"image-staging", "apply-artifact-consumer", "kubeadm-bootstrap"},
 		ContractHints: stepmeta.ContractHints{ConsumesArtifacts: []string{"image"}},
@@ -76,7 +81,7 @@ var _ = stepmeta.MustRegister[LoadImage](stepmeta.Definition{
 			},
 		}},
 		MatchSignals:             []string{"air-gapped", "image", "images", "archive", "containerd", "docker", "offline"},
-		KeyFields:                []string{"spec.images", "spec.sourceDir", "spec.runtime", "spec.command"},
+		KeyFields:                []string{"spec.images", "spec.platforms", "spec.sourceDir", "spec.runtime", "spec.command"},
 		ConstrainedLiteralFields: []stepmeta.ConstrainedLiteralField{{Path: "spec.runtime", AllowedValues: []string{"auto", "ctr", "docker", "podman"}, Guidance: "Keep spec.runtime as a literal enum, not a vars template."}},
 	},
 })

@@ -116,6 +116,16 @@
           ],
           "minLength": 1,
           "type": "string"
+        },
+        "platforms": {
+          "description": "Optional target platforms in os/arch or os/arch/variant form.",
+          "examples": [
+            "[linux/amd64,linux/arm64]"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [

@@ -19,6 +19,7 @@ import (
 
 type packageCacheMeta struct {
 	Packages  []string          `json:"packages"`
+	Platform  string            `json:"platform,omitempty"`
 	Files     []string          `json:"files"`
 	Checksums map[string]string `json:"checksums,omitempty"`
 }
@@ -48,6 +49,10 @@ func runDownloadPackage(ctx context.Context, runner CommandRunner, bundleRoot st
 	packages := decoded.Packages
 	if len(packages) == 0 {
 		return nil, fmt.Errorf("packages action download requires packages")
+	}
+	platform, err := parsePackagePlatform(decoded.Platform)
+	if err != nil {
+		return nil, err
 	}
 
 	if decoded.Backend.Mode == "container" && decoded.Backend.Image != "" {
@@ -79,32 +84,32 @@ func runDownloadPackage(ctx context.Context, runner CommandRunner, bundleRoot st
 				return nil, fmt.Errorf("packages action download repo.type must be deb-flat or rpm")
 			}
 
-			if files, reused, err := tryReusePackageArtifact(bundleRoot, repoRoot, packages, opts); err != nil {
+			if files, reused, err := tryReusePackageArtifact(bundleRoot, repoRoot, packages, platform, opts); err != nil {
 				return nil, err
 			} else if reused {
 				return files, nil
 			}
-			files, err := runContainerPackageRepoBuild(ctx, runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, step, decoded, inputVars, packages, opts)
+			files, err := runContainerPackageRepoBuild(ctx, runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, step, decoded, inputVars, packages, platform, opts)
 			if err != nil {
 				return nil, err
 			}
-			if err := writePackageArtifactMeta(bundleRoot, repoRoot, packages, files); err != nil {
+			if err := writePackageArtifactMeta(bundleRoot, repoRoot, packages, platform, files); err != nil {
 				return nil, err
 			}
 			return files, nil
 		}
 
-		if files, reused, err := tryReusePackageArtifact(bundleRoot, dir, packages, opts); err != nil {
+		if files, reused, err := tryReusePackageArtifact(bundleRoot, dir, packages, platform, opts); err != nil {
 			return nil, err
 		} else if reused {
 			return files, nil
 		}
 
-		files, err := runContainerDownloadPackageAll(ctx, runner, bundleRoot, dir, step, decoded, inputVars, packages, opts)
+		files, err := runContainerDownloadPackageAll(ctx, runner, bundleRoot, dir, step, decoded, inputVars, packages, platform, opts)
 		if err != nil {
 			return nil, err
 		}
-		if err := writePackageArtifactMeta(bundleRoot, dir, packages, files); err != nil {
+		if err := writePackageArtifactMeta(bundleRoot, dir, packages, platform, files); err != nil {
 			return nil, err
 		}
 		return files, nil
@@ -126,6 +131,7 @@ func runContainerPackageRepoBuild(
 	spec stepspec.DownloadPackage,
 	inputVars map[string]string,
 	packages []string,
+	platform string,
 	opts RunOptions,
 ) ([]string, error) {
 	runtimeSel, err := detectRuntime(runner, spec.Backend.Runtime)
@@ -145,10 +151,10 @@ func runContainerPackageRepoBuild(
 	if err != nil {
 		return nil, err
 	}
-	return runContainerDownloadPackageToCache(ctx, runner, runtimeSel, image, bundleRoot, repoRoot, step, inputVars, packages, cmdScript, opts)
+	return runContainerDownloadPackageToCache(ctx, runner, runtimeSel, image, platform, bundleRoot, repoRoot, step, inputVars, packages, cmdScript, opts)
 }
 
-func runContainerDownloadPackageAll(ctx context.Context, runner CommandRunner, bundleRoot, dir string, step config.Step, decoded stepspec.DownloadPackage, inputVars map[string]string, packages []string, opts RunOptions) ([]string, error) {
+func runContainerDownloadPackageAll(ctx context.Context, runner CommandRunner, bundleRoot, dir string, step config.Step, decoded stepspec.DownloadPackage, inputVars map[string]string, packages []string, platform string, opts RunOptions) ([]string, error) {
 	runtimeSel, err := detectRuntime(runner, decoded.Backend.Runtime)
 	if err != nil {
 		return nil, err
@@ -172,7 +178,7 @@ func runContainerDownloadPackageAll(ctx context.Context, runner CommandRunner, b
 	if err != nil {
 		return nil, err
 	}
-	return runContainerDownloadPackageToCache(ctx, runner, runtimeSel, image, bundleRoot, dir, step, inputVars, packages, cmdScript, opts)
+	return runContainerDownloadPackageToCache(ctx, runner, runtimeSel, image, platform, bundleRoot, dir, step, inputVars, packages, cmdScript, opts)
 }
 
 func buildDownloadPackageAllScript(family string, packages []string, modules []rpmModuleSpec) (string, error) {
@@ -297,6 +303,24 @@ func parseRPMModules(repo stepspec.DownloadPackageRepo) ([]rpmModuleSpec, error)
 	return modules, nil
 }
 
+func parsePackagePlatform(raw stepspec.PackagePlatform) (string, error) {
+	if strings.TrimSpace(string(raw)) == "" {
+		return "", nil
+	}
+	return stepspec.NormalizePlatform(string(raw))
+}
+
+func normalizePackagePlatformKey(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return ""
+	}
+	platform, err := stepspec.NormalizePlatform(raw)
+	if err != nil {
+		return strings.ToLower(strings.TrimSpace(raw))
+	}
+	return platform
+}
+
 func buildRPMModuleEnableCommand(modules []rpmModuleSpec) (string, error) {
 	if len(modules) == 0 {
 		return "", nil
@@ -308,21 +332,21 @@ func buildRPMModuleEnableCommand(modules []rpmModuleSpec) (string, error) {
 	return "dnf -y module enable " + strings.Join(parts, " ") + " >/dev/null 2>&1", nil
 }
 
-func runContainerDownloadPackageToCache(ctx context.Context, runner CommandRunner, runtimeSel, image, bundleRoot, rootRel string, step config.Step, inputVars map[string]string, packages []string, script string, opts RunOptions) ([]string, error) {
+func runContainerDownloadPackageToCache(ctx context.Context, runner CommandRunner, runtimeSel, image, platform, bundleRoot, rootRel string, step config.Step, inputVars map[string]string, packages []string, script string, opts RunOptions) ([]string, error) {
 	cacheKey := computeStepCacheKey(step)
 	cachePath, err := exportedPackageCachePath(cacheKey, inputVars)
 	if err != nil {
 		return nil, err
 	}
-	if files, reused, err := tryReuseExportedPackageArtifact(bundleRoot, rootRel, cachePath, packages, opts); err != nil {
+	if files, reused, err := tryReuseExportedPackageArtifact(bundleRoot, rootRel, cachePath, packages, platform, opts); err != nil {
 		return nil, err
 	} else if reused {
-		if err := writePackageArtifactMeta(bundleRoot, rootRel, packages, files); err != nil {
+		if err := writePackageArtifactMeta(bundleRoot, rootRel, packages, platform, files); err != nil {
 			return nil, err
 		}
 		return files, nil
 	}
-	exported, err := runPackageContainerWithExport(ctx, runner, runtimeSel, image, script)
+	exported, err := runPackageContainerWithExport(ctx, runner, runtimeSel, image, platform, script)
 	if err != nil {
 		return nil, err
 	}
@@ -336,7 +360,7 @@ func runContainerDownloadPackageToCache(ctx context.Context, runner CommandRunne
 		_ = os.RemoveAll(cacheStage)
 		return nil, errcode.Newf(errCodePrepareArtifactEmpty, "no package artifacts generated in %s", rootRel)
 	}
-	meta := exportedPackageCacheMeta{RootRel: rootRel, Packages: packages, Files: relFiles}
+	meta := exportedPackageCacheMeta{RootRel: rootRel, Packages: packages, Platform: platform, Files: relFiles}
 	if err := saveExportedPackageCacheMeta(cacheStage, meta); err != nil {
 		_ = os.RemoveAll(cacheStage)
 		return nil, err
@@ -349,7 +373,7 @@ func runContainerDownloadPackageToCache(ctx context.Context, runner CommandRunne
 		return nil, err
 	}
 	files := packageFilesFromDirListing(rootRel, relFiles)
-	if err := writePackageArtifactMeta(bundleRoot, rootRel, packages, files); err != nil {
+	if err := writePackageArtifactMeta(bundleRoot, rootRel, packages, platform, files); err != nil {
 		return nil, err
 	}
 	return files, nil
@@ -409,7 +433,7 @@ func packageMetaFileAbs(bundleRoot, rootRel string) string {
 	return filepath.Join(bundleRoot, filepath.FromSlash(rootRel), packageCacheMetaFile)
 }
 
-func tryReusePackageArtifact(bundleRoot, rootRel string, packages []string, opts RunOptions) ([]string, bool, error) {
+func tryReusePackageArtifact(bundleRoot, rootRel string, packages []string, platform string, opts RunOptions) ([]string, bool, error) {
 	if opts.ForceRedownload {
 		return nil, false, nil
 	}
@@ -430,6 +454,9 @@ func tryReusePackageArtifact(bundleRoot, rootRel string, packages []string, opts
 	if !equalStrings(want, got) {
 		return nil, false, nil
 	}
+	if normalizePackagePlatformKey(meta.Platform) != normalizePackagePlatformKey(platform) {
+		return nil, false, nil
+	}
 	files := normalizeStrings(meta.Files)
 	if len(files) == 0 {
 		return nil, false, nil
@@ -447,13 +474,14 @@ func tryReusePackageArtifact(bundleRoot, rootRel string, packages []string, opts
 	return files, true, nil
 }
 
-func writePackageArtifactMeta(bundleRoot, rootRel string, packages, files []string) error {
+func writePackageArtifactMeta(bundleRoot, rootRel string, packages []string, platform string, files []string) error {
 	checksums, err := computeArtifactChecksums(bundleRoot, files)
 	if err != nil {
 		return err
 	}
 	meta := packageCacheMeta{
 		Packages:  normalizeStrings(packages),
+		Platform:  normalizePackagePlatformKey(platform),
 		Files:     normalizeStrings(files),
 		Checksums: checksums,
 	}

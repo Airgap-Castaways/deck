@@ -2,6 +2,7 @@ package prepare
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -172,6 +173,83 @@ func TestRun_PackagesContainerBackend(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(bundle, "packages", "mock-package.deb")); err != nil {
 		t.Fatalf("expected mock package artifact: %v", err)
+	}
+}
+
+func TestRun_DownloadPackagePassesPlatformToContainer(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	bundle := t.TempDir()
+	r := &fakeRunner{}
+
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{{
+				ID:   "k8s-pkgs",
+				Kind: "DownloadPackage",
+				Spec: map[string]any{
+					"packages": []any{"kubelet", "kubeadm"},
+					"platform": " linux/AMD64 ",
+					"backend": map[string]any{
+						"mode":    "container",
+						"runtime": "docker",
+						"image":   "ubuntu:22.04",
+					},
+				},
+			}},
+		}},
+	}
+
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: r}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	r.mu.Lock()
+	if len(r.createArgs) == 0 {
+		r.mu.Unlock()
+		t.Fatalf("expected container create call")
+	}
+	createArgs := append([]string(nil), r.createArgs[0]...)
+	r.mu.Unlock()
+	if len(createArgs) < 4 || createArgs[0] != "create" || createArgs[1] != "--platform" || createArgs[2] != "linux/amd64" || createArgs[3] != "--name" {
+		t.Fatalf("expected docker create --platform linux/amd64, got %#v", createArgs)
+	}
+
+	raw, err := os.ReadFile(packageMetaFileAbs(bundle, "packages"))
+	if err != nil {
+		t.Fatalf("read package metadata: %v", err)
+	}
+	var meta packageCacheMeta
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		t.Fatalf("decode package metadata: %v", err)
+	}
+	if meta.Platform != "linux/amd64" {
+		t.Fatalf("expected platform metadata, got %q", meta.Platform)
+	}
+}
+
+func TestRun_DownloadPackageRejectsInvalidPlatform(t *testing.T) {
+	bundle := t.TempDir()
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{{
+				ID:   "k8s-pkgs",
+				Kind: "DownloadPackage",
+				Spec: map[string]any{
+					"packages": []any{"kubelet"},
+					"platform": "linux",
+					"backend":  map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"},
+				},
+			}},
+		}},
+	}
+
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}})
+	if err == nil || !strings.Contains(err.Error(), "os/arch") {
+		t.Fatalf("expected invalid platform error, got %v", err)
 	}
 }
 
@@ -436,7 +514,7 @@ func TestRun_DownloadImageCorruptedArchiveTriggersRefetch(t *testing.T) {
 		parseReference: func(v string) (name.Reference, error) {
 			return name.ParseReference(v, name.WeakValidation)
 		},
-		fetchImage: func(_ name.Reference, _ ...remote.Option) (v1.Image, error) {
+		fetchImage: func(_ name.Reference, _ *v1.Platform, _ ...remote.Option) (v1.Image, error) {
 			fetches++
 			return empty.Image, nil
 		},

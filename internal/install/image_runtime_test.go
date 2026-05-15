@@ -107,3 +107,39 @@ func TestRun_Image(t *testing.T) {
 		}
 	})
 }
+
+func TestRunLoadImageUsesPlatformArchiveSuffix(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "bundle")
+	if err := os.MkdirAll(bundle, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	logPath := filepath.Join(dir, "archives.txt")
+
+	err := runLoadImage(context.Background(), bundle, map[string]any{
+		"images":    []any{"registry.k8s.io/pause:3.9"},
+		"platforms": []any{"linux/amd64", "linux/arm64"},
+		"command": []any{
+			"sh",
+			"-c",
+			"printf '%s\n' \"$1\" >> \"$2\"",
+			"sh",
+			"{archive}",
+			logPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("runLoadImage failed: %v", err)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read archive log: %v", err)
+	}
+	want := strings.Join([]string{
+		filepath.ToSlash(filepath.Join(bundle, "images", "registry.k8s.io_pause_3.9_linux_amd64.tar")),
+		filepath.ToSlash(filepath.Join(bundle, "images", "registry.k8s.io_pause_3.9_linux_arm64.tar")),
+	}, "\n") + "\n"
+	if string(raw) != want {
+		t.Fatalf("unexpected archive paths:\n%s\nwant:\n%s", string(raw), want)
+	}
+}
