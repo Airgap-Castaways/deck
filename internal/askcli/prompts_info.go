@@ -11,6 +11,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/askir"
 	"github.com/Airgap-Castaways/deck/internal/askretrieve"
 	"github.com/Airgap-Castaways/deck/internal/validate"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 func infoPrompts(route askintent.Route, target askintent.Target, retrieval askretrieve.RetrievalResult, workspace askretrieve.WorkspaceSummary, prompt string) (string, string) {
@@ -40,6 +41,7 @@ func buildInfoSystemPrompt(route askintent.Route, target askintent.Target, retri
 		b.WriteString("You are deck ask reviewing an existing deck workspace.\n")
 		b.WriteString("Use the retrieved evidence and any local findings to produce a scoped review with practical concerns and suggested changes.\n")
 		b.WriteString("Narrate the findings instead of only repeating raw warnings.\n")
+		b.WriteString("Preserve local severity labels: do not convert advisory warn findings into blocking findings unless schema or validation evidence marks them blocking.\n")
 	default:
 		b.WriteString("You are deck ask.\n")
 		b.WriteString("Route: ")
@@ -139,7 +141,7 @@ func workspaceStructuredIssuePromptBlock(workspace askretrieve.WorkspaceSummary,
 	issues := []validate.Issue{}
 	for _, file := range workspace.Files {
 		path := filepath.ToSlash(strings.TrimSpace(file.Path))
-		if path == "" || !strings.HasPrefix(path, workflowRootPrefix) {
+		if !structuredIssueReviewPath(path) {
 			continue
 		}
 		if target.Path != "" && path != filepath.ToSlash(strings.TrimSpace(target.Path)) {
@@ -171,6 +173,13 @@ func workspaceStructuredIssuePromptBlock(workspace askretrieve.WorkspaceSummary,
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func structuredIssueReviewPath(path string) bool {
+	if path == "" || !strings.HasPrefix(path, workflowRootPrefix) {
+		return false
+	}
+	return workspacepaths.IsCanonicalPrepareWorkflowPath(path) || workspacepaths.IsScenarioAuthoringPath(path)
 }
 
 func retrievalDocumentSummaryBlock(retrieval askretrieve.RetrievalResult) string {

@@ -377,3 +377,15 @@ func findingsToLines(findings []askreview.Finding) []string {
 	}
 	return out
 }
+
+func localReviewFindingsChunk(findings []askreview.Finding) askretrieve.Chunk {
+	lines := []string{"Local review findings:", "Address each blocking local finding explicitly in the review.", "Preserve local severity labels: warn findings are advisory and must not be restated as blocking unless another blocking validator finding supports that severity."}
+	lines = append(lines, findingsToLines(findings)...)
+	return askretrieve.Chunk{
+		ID:      "local-review-findings",
+		Source:  "local-review",
+		Label:   "local-review-findings",
+		Content: strings.Join(lines, "\n"),
+		Score:   95,
+	}
+}

@@ -384,6 +384,8 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	if decision.Route == askintent.RouteReview {
 		result.LocalFindings = askreview.Workspace(resolvedRoot)
 		result.ReviewLines = append(result.ReviewLines, findingsToLines(result.LocalFindings)...)
+		retrieval.Chunks = append(retrieval.Chunks, localReviewFindingsChunk(result.LocalFindings))
+		result.Chunks = retrieval.Chunks
 	}
 	switch {
 	case decision.Route == askintent.RouteClarify:
