@@ -104,7 +104,7 @@ func reviewValidationErrors(path string, raw []byte) []error {
 	if err := validate.Bytes(path, raw); err != nil {
 		errs = append(errs, err)
 	}
-	if workspacepaths.IsScenarioWorkflowPath(path) {
+	if workspacepaths.IsScenarioWorkflowPath(path) || workspacepaths.IsCanonicalPrepareWorkflowPath(path) {
 		if _, err := validate.Entrypoint(path); err != nil && !hasErrorMessage(errs, err) {
 			errs = append(errs, err)
 		}
@@ -138,7 +138,7 @@ func yamlFilesUnder(root string) []string {
 		}
 		return nil
 	}); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil
+		return paths
 	}
 	return paths
 }

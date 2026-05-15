@@ -61,6 +61,27 @@ phases:
 	}
 }
 
+func TestWorkspaceReportsValidationFindingsFromPrepareImports(t *testing.T) {
+	root := t.TempDir()
+	writeReviewFile(t, root, workspacepaths.CanonicalPrepareWorkflow, `version: v1alpha1
+phases:
+  - name: prepare
+    imports:
+      - path: bad-prepare.yaml
+`)
+	writeReviewFile(t, root, filepath.Join(workspacepaths.CanonicalComponentsDir, "bad-prepare.yaml"), `steps:
+  - id: install
+    kind: InstallPackage
+    spec:
+      packages: kubeadm
+`)
+
+	findings := Workspace(root)
+	if !hasFindingWithSeverity(findings, "blocking", "Invalid type. Expected: array") {
+		t.Fatalf("expected prepare import validation finding, got %#v", findings)
+	}
+}
+
 func TestWorkspaceDoesNotValidateComponentsWithoutScenarioVars(t *testing.T) {
 	root := t.TempDir()
 	writeReviewFile(t, root, filepath.Join(workspacepaths.CanonicalComponentsDir, "templated.yaml"), `steps:
@@ -73,6 +94,27 @@ func TestWorkspaceDoesNotValidateComponentsWithoutScenarioVars(t *testing.T) {
 	findings := Workspace(root)
 	if hasFindingWithSeverity(findings, "blocking", "Invalid type. Expected: array") {
 		t.Fatalf("expected component templates to avoid context-free validation blockers, got %#v", findings)
+	}
+}
+
+func TestYAMLFilesUnderReturnsPartialPathsAfterWalkError(t *testing.T) {
+	root := t.TempDir()
+	writeReviewFile(t, root, "ok.yaml", "version: v1alpha1\nsteps: []\n")
+	blocked := filepath.Join(root, "zz-blocked")
+	if err := os.Mkdir(blocked, 0o755); err != nil {
+		t.Fatalf("mkdir blocked: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(blocked, "hidden.yaml"), []byte("version: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write hidden: %v", err)
+	}
+	if err := os.Chmod(blocked, 0); err != nil {
+		t.Fatalf("chmod blocked: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(blocked, 0o755) })
+
+	paths := yamlFilesUnder(root)
+	if len(paths) == 0 || !hasPath(paths, filepath.Join(root, "ok.yaml")) {
+		t.Fatalf("expected partial paths after walk error, got %#v", paths)
 	}
 }
 
@@ -114,6 +156,15 @@ func writeReviewFile(t *testing.T, root string, rel string, content string) {
 func hasFinding(findings []Finding, needle string) bool {
 	for _, finding := range findings {
 		if strings.Contains(finding.Message, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPath(paths []string, target string) bool {
+	for _, path := range paths {
+		if path == target {
 			return true
 		}
 	}
