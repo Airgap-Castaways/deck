@@ -15,7 +15,10 @@ import (
 )
 
 type LoadOptions struct {
-	VarOverrides map[string]any
+	VarOverrides   map[string]any
+	NodeScopedVars bool
+	Hostname       string
+	DetectHostname func() (string, error)
 }
 
 func Load(ctx context.Context, source string) (*Workflow, error) {
@@ -44,12 +47,29 @@ func LoadWithOptions(ctx context.Context, source string, opts LoadOptions) (*Wor
 		return nil, fmt.Errorf("workflow cannot set both phases and steps")
 	}
 
-	effectiveVars := map[string]any{}
 	baseVars, err := loadBaseVars(ctx, origin)
 	if err != nil {
 		return nil, err
 	}
-	mergeVars(effectiveVars, baseVars)
+	baseVarsForMerge := baseVars
+	allVars := map[string]any(nil)
+	hostVars := map[string]any(nil)
+	if opts.NodeScopedVars {
+		var scoped bool
+		baseVarsForMerge, allVars, hostVars, scoped, err = resolveNodeScopedVars(baseVars, opts)
+		if err != nil {
+			return nil, err
+		}
+		if !scoped {
+			allVars = nil
+			hostVars = nil
+		}
+	}
+
+	effectiveVars := map[string]any{}
+	mergeVars(effectiveVars, baseVarsForMerge)
+	mergeVars(effectiveVars, allVars)
+	mergeVars(effectiveVars, hostVars)
 	mergeVars(effectiveVars, resolved.Vars)
 	mergeVars(effectiveVars, opts.VarOverrides)
 

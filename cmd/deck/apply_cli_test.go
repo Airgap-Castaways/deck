@@ -117,6 +117,103 @@ phases:
 	}
 }
 
+func TestPlanAndApplySelectNodeScopedVarsByHostname(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	hostname, err := os.Hostname()
+	if err != nil || strings.TrimSpace(hostname) == "" {
+		t.Skipf("hostname unavailable: %v", err)
+	}
+
+	root := t.TempDir()
+	workflowDir := filepath.Join(root, "workflows")
+	scenarioDir := filepath.Join(workflowDir, "scenarios")
+	if err := os.MkdirAll(scenarioDir, 0o755); err != nil {
+		t.Fatalf("mkdir scenarios: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "vars.yaml"), []byte(fmt.Sprintf(`all:
+  site: lab-a
+hosts:
+  %q:
+    role: worker
+`, hostname)), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	workflowPath := filepath.Join(scenarioDir, "apply.yaml")
+	writeWorkflowYAML(t, workflowPath, `version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: host-match
+        kind: Command
+        when: vars.role == "worker" && vars.site == "lab-a"
+        spec:
+          command: ["true"]
+      - id: host-miss
+        kind: Command
+        when: vars.role == "control-plane"
+        spec:
+          command: ["true"]
+`)
+
+	planOut, err := runWithCapturedStdout([]string{"plan", "--workflow", workflowPath})
+	if err != nil {
+		t.Fatalf("plan failed: %v", err)
+	}
+	if !strings.Contains(planOut, "host-match Command RUN") || !strings.Contains(planOut, "host-miss Command SKIP") {
+		t.Fatalf("expected plan to select hostname-scoped vars, got %q", planOut)
+	}
+
+	applyOut, err := runWithCapturedStdout([]string{"apply", "--workflow", workflowPath, "--dry-run", root})
+	if err != nil {
+		t.Fatalf("apply dry-run failed: %v", err)
+	}
+	if !strings.Contains(applyOut, "host-match Command PLAN") || !strings.Contains(applyOut, "host-miss Command SKIP") {
+		t.Fatalf("expected apply dry-run to select hostname-scoped vars, got %q", applyOut)
+	}
+}
+
+func TestPlanAllowsUnmatchedNodeScopedHostname(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	hostname, err := os.Hostname()
+	if err != nil || strings.TrimSpace(hostname) == "" {
+		t.Skipf("hostname unavailable: %v", err)
+	}
+
+	root := t.TempDir()
+	workflowDir := filepath.Join(root, "workflows")
+	scenarioDir := filepath.Join(workflowDir, "scenarios")
+	if err := os.MkdirAll(scenarioDir, 0o755); err != nil {
+		t.Fatalf("mkdir scenarios: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "vars.yaml"), []byte(fmt.Sprintf(`all:
+  site: lab-a
+hosts:
+  %q:
+    role: worker
+`, "not-"+hostname)), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	workflowPath := filepath.Join(scenarioDir, "apply.yaml")
+	writeWorkflowYAML(t, workflowPath, `version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: unmatched-host
+        kind: Command
+        when: vars.site == "lab-a"
+        spec:
+          command: ["true"]
+`)
+
+	planOut, err := runWithCapturedStdout([]string{"plan", "--workflow", workflowPath})
+	if err != nil {
+		t.Fatalf("plan failed: %v", err)
+	}
+	if !strings.Contains(planOut, "unmatched-host Command RUN") {
+		t.Fatalf("expected unmatched hostname to remain runnable, got %q", planOut)
+	}
+}
+
 func TestRunApplyPhaseSelectionAndSkip(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "home")
 	if err := os.MkdirAll(home, 0o755); err != nil {

@@ -33,6 +33,9 @@ type ExecutionRequestOptions struct {
 	AllowRemoteWorkflow          bool
 	NormalizeLocalWorkflowPath   bool
 	VarOverrides                 map[string]any
+	NodeScopedVars               bool
+	Hostname                     string
+	DetectHostname               func() (string, error)
 	Fresh                        bool
 	SelectedPhase                string
 	DefaultPhase                 string
@@ -85,7 +88,12 @@ func ResolveExecutionRequest(ctx context.Context, opts ExecutionRequestOptions) 
 		}
 	}
 
-	wf, err := config.LoadWithOptions(ctx, workflowPath, config.LoadOptions{VarOverrides: opts.VarOverrides})
+	wf, err := config.LoadWithOptions(ctx, workflowPath, config.LoadOptions{
+		VarOverrides:   opts.VarOverrides,
+		NodeScopedVars: opts.NodeScopedVars,
+		Hostname:       opts.Hostname,
+		DetectHostname: opts.DetectHostname,
+	})
 	if err != nil {
 		return ExecutionRequest{}, err
 	}

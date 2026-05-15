@@ -93,7 +93,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
-	prepareWorkflow, err := config.LoadWithOptions(ctx, prepareWorkflowPath, config.LoadOptions{VarOverrides: opts.VarOverrides})
+	prepareWorkflow, err := config.LoadWithOptions(ctx, prepareWorkflowPath, config.LoadOptions{VarOverrides: opts.VarOverrides, NodeScopedVars: true})
 	if err != nil {
 		return err
 	}
@@ -249,7 +249,7 @@ func discoverPrepareWorkflow(ctx context.Context) (string, error) {
 	if statErr != nil || preferredInfo.IsDir() {
 		return "", fmt.Errorf("prepare workflow not found: %s", preferred)
 	}
-	if _, loadErr := config.Load(ctx, preferred); loadErr != nil {
+	if _, loadErr := config.LoadWithOptions(ctx, preferred, config.LoadOptions{NodeScopedVars: true}); loadErr != nil {
 		return "", loadErr
 	}
 	return preferred, nil

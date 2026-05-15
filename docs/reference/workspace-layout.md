@@ -80,6 +80,8 @@ steps:
 ### Variables (`workflows/vars.yaml`)
 A central YAML file for shared defaults. Values defined here are available to all workflows and components via the `{{ .vars.NAME }}` syntax.
 
+For node-specific runs, `vars.yaml` may contain `all:` defaults and `hosts:` overlays selected by local hostname. See [Workflow Model](workflow-model.md#variables) for precedence and hostname matching details.
+
 ## Prepared Outputs (`outputs/`)
 
 These directories hold the prepared source material that `apply` consumes.

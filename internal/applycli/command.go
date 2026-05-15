@@ -15,6 +15,8 @@ type PlanCommandOptions struct {
 	Output          string
 	Fresh           bool
 	VarOverrides    map[string]any
+	Hostname        string
+	DetectHostname  func() (string, error)
 	Verbosef        func(level int, format string, args ...any) error
 	StdoutPrintf    func(format string, args ...any) error
 	JSONEncoderFunc func() *json.Encoder
@@ -30,6 +32,8 @@ type ApplyCommandOptions struct {
 	Fresh          bool
 	DryRun         bool
 	VarOverrides   map[string]any
+	Hostname       string
+	DetectHostname func() (string, error)
 	Verbosef       func(level int, format string, args ...any) error
 	StdoutPrintf   func(format string, args ...any) error
 	StdoutPrintln  func(args ...any) error
@@ -52,6 +56,9 @@ func RunPlanCommand(ctx context.Context, opts PlanCommandOptions) error {
 		CommandName:                  "diff",
 		WorkflowPath:                 strings.TrimSpace(opts.WorkflowPath),
 		VarOverrides:                 opts.VarOverrides,
+		NodeScopedVars:               true,
+		Hostname:                     opts.Hostname,
+		DetectHostname:               opts.DetectHostname,
 		Fresh:                        opts.Fresh,
 		SelectedPhase:                strings.TrimSpace(opts.SelectedPhase),
 		DefaultPhase:                 "",
@@ -80,6 +87,9 @@ func RunApplyCommand(ctx context.Context, opts ApplyCommandOptions) error {
 		WorkflowPath:                 strings.TrimSpace(opts.WorkflowPath),
 		AllowRemoteWorkflow:          true,
 		VarOverrides:                 opts.VarOverrides,
+		NodeScopedVars:               true,
+		Hostname:                     opts.Hostname,
+		DetectHostname:               opts.DetectHostname,
 		Fresh:                        opts.Fresh,
 		SelectedPhase:                strings.TrimSpace(opts.SelectedPhase),
 		DefaultPhase:                 "",

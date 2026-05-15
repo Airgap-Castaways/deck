@@ -167,6 +167,24 @@ deck plan --scenario apply --var role=worker
 deck apply --scenario apply --var role=control-plane --var nodeIP=10.0.0.10
 ```
 
+### Node-scoped workflow variables
+
+`deck lint`, `deck prepare`, `deck plan`, and `deck apply` automatically select node-scoped variables from `workflows/vars.yaml` when the file contains a `hosts:` map. There is no node-selection flag. Deck detects the local hostname, matches `hosts.<hostname>` or the short hostname before the first `.`, and merges that host entry into top-level `vars`.
+
+```yaml
+all:
+  kubernetesVersion: v1.35.5
+
+hosts:
+  k8s-cp1:
+    role: control-plane
+    ip: 192.168.81.211
+```
+
+If the hostname is not listed, these commands still run with ordinary `vars.yaml` values and `all:` values. Workflows that branch on host-specific fields should provide safe defaults in `all:`, such as `role: ""`, then use conditions such as `vars.role == "control-plane"`.
+
+CLI `--var` overrides remain highest precedence. For example, `--var kubernetesVersion=v1.35.6` overrides a value from `all:`.
+
 ### `server up` operational flags
 
 `deck server up` supports a few operational modes beyond the default `--root` and `--addr` pair:

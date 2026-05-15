@@ -7,14 +7,62 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Airgap-Castaways/deck/internal/applycli"
 	"github.com/Airgap-Castaways/deck/internal/config"
 )
+
+func TestHostedSmokeFixtureNodeScopedVars(t *testing.T) {
+	root := projectRoot(t)
+	workflowPath := filepath.Join(root, ".github", "e2e", "hosted", "fixtures", "smoke", "workflows", "scenarios", "apply.yaml")
+
+	req, err := applycli.ResolveExecutionRequest(context.Background(), applycli.ExecutionRequestOptions{
+		CommandName:                  "apply",
+		WorkflowPath:                 workflowPath,
+		NodeScopedVars:               true,
+		Hostname:                     "hosted-smoke-example",
+		BuildExecutionWorkflow:       true,
+		ResolveStatePath:             true,
+		StatePathFromExecutionTarget: false,
+	})
+	if err != nil {
+		t.Fatalf("resolve hosted smoke workflow: %v", err)
+	}
+
+	vars := req.Workflow.Vars
+	if got := vars["installPackages"]; got != "true" {
+		t.Fatalf("expected all.installPackages to merge into top-level vars, got %#v", got)
+	}
+	if got := vars["packageManager"]; got != "apt" {
+		t.Fatalf("expected all.packageManager to merge into top-level vars, got %#v", got)
+	}
+	if got := vars["packageName"]; got != "jq" {
+		t.Fatalf("expected all.packageName to merge into top-level vars, got %#v", got)
+	}
+	if got := vars["role"]; got != "smoke" {
+		t.Fatalf("expected selected host role to merge into top-level vars, got %#v", got)
+	}
+	if _, ok := vars["all"]; ok {
+		t.Fatalf("unexpected scoped all key in effective vars: %#v", vars["all"])
+	}
+	if _, ok := vars["hosts"]; ok {
+		t.Fatalf("unexpected scoped hosts key in effective vars: %#v", vars["hosts"])
+	}
+	if _, ok := vars["node"]; ok {
+		t.Fatalf("unexpected synthetic node var: %#v", vars["node"])
+	}
+	if req.StatePath == "" {
+		t.Fatalf("expected state path to be resolved")
+	}
+	if req.ExecutionWorkflow == nil || len(req.ExecutionWorkflow.Phases) == 0 {
+		t.Fatalf("expected execution workflow to be built")
+	}
+}
 
 func TestWorkflowIntegrationBootstrap(t *testing.T) {
 	root := projectRoot(t)
 	workflowPath := filepath.Join(root, "test", "workflows", "scenarios", "control-plane-bootstrap.yaml")
 
-	wf, err := config.LoadWithOptions(context.Background(), workflowPath, config.LoadOptions{VarOverrides: map[string]any{"clusterName": "bootstrap-cli"}})
+	wf, err := config.LoadWithOptions(context.Background(), workflowPath, config.LoadOptions{VarOverrides: map[string]any{"clusterName": "bootstrap-cli"}, NodeScopedVars: true})
 	if err != nil {
 		t.Fatalf("load bootstrap workflow: %v", err)
 	}
@@ -58,7 +106,7 @@ func TestWorkflowIntegrationWorkerJoin(t *testing.T) {
 	root := projectRoot(t)
 	workflowPath := filepath.Join(root, "test", "workflows", "scenarios", "worker-join.yaml")
 
-	wf, err := config.LoadWithOptions(context.Background(), workflowPath, config.LoadOptions{VarOverrides: map[string]any{"joinFile": "/tmp/join-cli.txt"}})
+	wf, err := config.LoadWithOptions(context.Background(), workflowPath, config.LoadOptions{VarOverrides: map[string]any{"joinFile": "/tmp/join-cli.txt"}, NodeScopedVars: true})
 	if err != nil {
 		t.Fatalf("load worker join workflow: %v", err)
 	}
@@ -85,7 +133,7 @@ func TestWorkflowIntegrationNodeReset(t *testing.T) {
 	root := projectRoot(t)
 	workflowPath := filepath.Join(root, "test", "workflows", "scenarios", "node-reset.yaml")
 
-	wf, err := config.Load(context.Background(), workflowPath)
+	wf, err := config.LoadWithOptions(context.Background(), workflowPath, config.LoadOptions{NodeScopedVars: true})
 	if err != nil {
 		t.Fatalf("load node-reset workflow: %v", err)
 	}
@@ -112,7 +160,7 @@ func TestWorkflowIntegrationUpgrade(t *testing.T) {
 	wf, err := config.LoadWithOptions(context.Background(), workflowPath, config.LoadOptions{VarOverrides: map[string]any{
 		"kubernetesVersion":        "v1.30.1",
 		"upgradeKubernetesVersion": "v1.31.0",
-	}})
+	}, NodeScopedVars: true})
 	if err != nil {
 		t.Fatalf("load upgrade workflow: %v", err)
 	}

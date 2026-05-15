@@ -60,6 +60,7 @@ phases:
           enabled: true
           state: started
       - id: kubeadm-init
+        when: vars.role == "control-plane"
         apiVersion: deck/v1alpha1
         kind: InitKubeadm
         spec:

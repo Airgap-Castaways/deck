@@ -125,6 +125,174 @@ func TestVarsOverridesDeepMerge(t *testing.T) {
 	}
 }
 
+func TestNodeScopedVarsSelection(t *testing.T) {
+	dir := t.TempDir()
+	workflowPath := filepath.Join(dir, "apply.yaml")
+
+	if err := os.WriteFile(filepath.Join(dir, "vars.yaml"), []byte(`clusterName: base-cluster
+all:
+  kubernetesVersion: v1.35.5
+  packageManager: apt
+  region: shared
+hosts:
+  k8s-cp1:
+    ip: 192.168.81.211
+    packageManager: dnf
+    role: control-plane
+    region: host-region
+`), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	if err := os.WriteFile(workflowPath, []byte(`version: v1alpha1
+vars:
+  region: workflow-region
+  role: scenario-role
+phases: []
+`), 0o644); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	wf, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{NodeScopedVars: true, Hostname: "k8s-cp1"})
+	if err != nil {
+		t.Fatalf("LoadWithOptions failed: %v", err)
+	}
+	if _, ok := wf.Vars["all"]; ok {
+		t.Fatalf("expected scoped all key to be excluded from effective vars")
+	}
+	if _, ok := wf.Vars["hosts"]; ok {
+		t.Fatalf("expected scoped hosts key to be excluded from effective vars")
+	}
+	if got := wf.Vars["clusterName"]; got != "base-cluster" {
+		t.Fatalf("expected ordinary base var, got %#v", got)
+	}
+	if got := wf.Vars["kubernetesVersion"]; got != "v1.35.5" {
+		t.Fatalf("expected all overlay var, got %#v", got)
+	}
+	if got := wf.Vars["packageManager"]; got != "dnf" {
+		t.Fatalf("expected host overlay to override all overlay, got %#v", got)
+	}
+	if got := wf.Vars["region"]; got != "workflow-region" {
+		t.Fatalf("expected workflow vars to override host overlay, got %#v", got)
+	}
+	if got := wf.Vars["ip"]; got != "192.168.81.211" {
+		t.Fatalf("expected host overlay ip, got %#v", got)
+	}
+	if got := wf.Vars["role"]; got != "scenario-role" {
+		t.Fatalf("expected workflow role to override host overlay, got %#v", got)
+	}
+	if _, ok := wf.Vars["node"]; ok {
+		t.Fatalf("unexpected synthetic node var: %#v", wf.Vars["node"])
+	}
+}
+
+func TestNodeScopedVarsUnmatchedHostnameStillLoads(t *testing.T) {
+	dir := t.TempDir()
+	workflowPath := filepath.Join(dir, "apply.yaml")
+
+	if err := os.WriteFile(filepath.Join(dir, "vars.yaml"), []byte(`all:
+  site: lab-a
+hosts:
+  k8s-cp1:
+    role: control-plane
+`), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	if err := os.WriteFile(workflowPath, []byte("version: v1alpha1\nphases: []\n"), 0o644); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	wf, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{NodeScopedVars: true, Hostname: "unknown-host"})
+	if err != nil {
+		t.Fatalf("LoadWithOptions failed: %v", err)
+	}
+	if got := wf.Vars["site"]; got != "lab-a" {
+		t.Fatalf("expected all overlay for unmatched host, got %#v", got)
+	}
+	if _, ok := wf.Vars["role"]; ok {
+		t.Fatalf("unexpected host overlay role for unmatched host: %#v", wf.Vars)
+	}
+	if _, ok := wf.Vars["node"]; ok {
+		t.Fatalf("unexpected synthetic node var for unmatched host: %#v", wf.Vars["node"])
+	}
+}
+
+func TestNodeScopedVarsShortHostnameFallback(t *testing.T) {
+	dir := t.TempDir()
+	workflowPath := filepath.Join(dir, "apply.yaml")
+
+	if err := os.WriteFile(filepath.Join(dir, "vars.yaml"), []byte(`hosts:
+  k8s-cp1:
+    role: control-plane
+`), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	if err := os.WriteFile(workflowPath, []byte("version: v1alpha1\nphases: []\n"), 0o644); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	wf, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{NodeScopedVars: true, Hostname: "k8s-cp1.example.local"})
+	if err != nil {
+		t.Fatalf("LoadWithOptions failed: %v", err)
+	}
+	if got := wf.Vars["role"]; got != "control-plane" {
+		t.Fatalf("expected short hostname host overlay, got %#v", wf.Vars)
+	}
+}
+
+func TestNodeScopedVarsCanBeOverriddenByCLI(t *testing.T) {
+	dir := t.TempDir()
+	workflowPath := filepath.Join(dir, "apply.yaml")
+
+	if err := os.WriteFile(filepath.Join(dir, "vars.yaml"), []byte(`hosts:
+  k8s-cp1:
+    role: control-plane
+`), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	if err := os.WriteFile(workflowPath, []byte("version: v1alpha1\nphases: []\n"), 0o644); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	wf, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{NodeScopedVars: true, Hostname: "k8s-cp1", VarOverrides: map[string]any{"role": "worker"}})
+	if err != nil {
+		t.Fatalf("LoadWithOptions failed: %v", err)
+	}
+	if got := wf.Vars["role"]; got != "worker" {
+		t.Fatalf("expected CLI override to win, got %#v", got)
+	}
+}
+
+func TestNodeScopedVarsDisabledKeepsHostsAsOrdinaryVars(t *testing.T) {
+	dir := t.TempDir()
+	workflowPath := filepath.Join(dir, "apply.yaml")
+
+	if err := os.WriteFile(filepath.Join(dir, "vars.yaml"), []byte(`all:
+  site: lab-a
+hosts:
+  k8s-cp1:
+    role: control-plane
+`), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	if err := os.WriteFile(workflowPath, []byte("version: v1alpha1\nphases: []\n"), 0o644); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	wf, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{})
+	if err != nil {
+		t.Fatalf("LoadWithOptions failed: %v", err)
+	}
+	if _, ok := wf.Vars["hosts"]; !ok {
+		t.Fatalf("expected hosts to remain ordinary vars when node-scoped vars are disabled")
+	}
+	if _, ok := wf.Vars["all"]; !ok {
+		t.Fatalf("expected all to remain ordinary vars when node-scoped vars are disabled")
+	}
+	if _, ok := wf.Vars["node"]; ok {
+		t.Fatalf("unexpected node var when node-scoped vars are disabled")
+	}
+}
+
 func TestVarsURLFetch(t *testing.T) {
 	t.Run("loads vars yaml when present", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -252,6 +420,31 @@ func TestStateKey(t *testing.T) {
 
 		if wf1.StateKey == wf2.StateKey {
 			t.Fatalf("expected state key to change when --var override changes")
+		}
+	})
+
+	t.Run("changes when selected host overlay changes", func(t *testing.T) {
+		dir := t.TempDir()
+		workflowPath := filepath.Join(dir, "apply.yaml")
+		workflowContent := []byte("version: v1alpha1\nphases: []\n")
+		if err := os.WriteFile(workflowPath, workflowContent, 0o644); err != nil {
+			t.Fatalf("write workflow: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "vars.yaml"), []byte("hosts:\n  node-a:\n    role: worker\n  node-b:\n    role: control-plane\n"), 0o644); err != nil {
+			t.Fatalf("write vars.yaml: %v", err)
+		}
+
+		wf1, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{NodeScopedVars: true, Hostname: "node-a"})
+		if err != nil {
+			t.Fatalf("LoadWithOptions(context.Background(), node-a) failed: %v", err)
+		}
+		wf2, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{NodeScopedVars: true, Hostname: "node-b"})
+		if err != nil {
+			t.Fatalf("LoadWithOptions(context.Background(), node-b) failed: %v", err)
+		}
+
+		if wf1.StateKey == wf2.StateKey {
+			t.Fatalf("expected state key to change when selected host overlay changes")
 		}
 	})
 }

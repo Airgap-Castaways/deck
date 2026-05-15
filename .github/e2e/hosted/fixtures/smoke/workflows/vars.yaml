@@ -1,3 +1,8 @@
-installPackages: "true"
-packageManager: apt
-packageName: jq
+all:
+  installPackages: "true"
+  packageManager: apt
+  packageName: jq
+
+hosts:
+  hosted-smoke-example:
+    role: smoke

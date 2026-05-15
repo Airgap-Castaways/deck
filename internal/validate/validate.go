@@ -243,7 +243,7 @@ func lintLocalEntrypoint(ctx context.Context, path string, inheritedVars map[str
 		return nil, withWorkflowName(absPath, fmt.Errorf("parse yaml: %w", err))
 	}
 
-	loadOpts := config.LoadOptions{VarOverrides: cloneAnyMap(inheritedVars)}
+	loadOpts := config.LoadOptions{VarOverrides: cloneAnyMap(inheritedVars), NodeScopedVars: true}
 	wf, err := config.LoadWithOptions(ctx, absPath, loadOpts)
 	if err != nil {
 		return nil, withWorkflowName(absPath, err)
