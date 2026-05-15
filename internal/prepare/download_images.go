@@ -397,17 +397,11 @@ func parseImagePlatforms(raw []stepspec.ImagePlatform) ([]imagePlatformSelection
 }
 
 func parseImagePlatform(raw string) (imagePlatformSelection, error) {
-	trimmed := strings.ToLower(strings.TrimSpace(raw))
-	parts := strings.Split(trimmed, "/")
-	if len(parts) != 2 && len(parts) != 3 {
-		return imagePlatformSelection{}, fmt.Errorf("image platform %q must use os/arch or os/arch/variant", raw)
+	normalized, err := stepspec.NormalizePlatform(raw)
+	if err != nil {
+		return imagePlatformSelection{}, err
 	}
-	for i, part := range parts {
-		parts[i] = strings.TrimSpace(part)
-		if parts[i] == "" {
-			return imagePlatformSelection{}, fmt.Errorf("image platform %q must not contain empty components", raw)
-		}
-	}
+	parts := strings.Split(normalized, "/")
 	platform := v1.Platform{OS: parts[0], Architecture: parts[1]}
 	if len(parts) == 3 {
 		platform.Variant = parts[2]

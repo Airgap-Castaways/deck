@@ -77,7 +77,7 @@ func loadImagePlatforms(raw []stepspec.ImagePlatform) ([]string, error) {
 	platforms := make([]string, 0, len(raw))
 	seen := map[string]bool{}
 	for _, item := range raw {
-		platform, err := normalizeImagePlatform(string(item))
+		platform, err := stepspec.NormalizePlatform(string(item))
 		if err != nil {
 			return nil, err
 		}
@@ -88,21 +88,6 @@ func loadImagePlatforms(raw []stepspec.ImagePlatform) ([]string, error) {
 		platforms = append(platforms, platform)
 	}
 	return platforms, nil
-}
-
-func normalizeImagePlatform(raw string) (string, error) {
-	trimmed := strings.ToLower(strings.TrimSpace(raw))
-	parts := strings.Split(trimmed, "/")
-	if len(parts) != 2 && len(parts) != 3 {
-		return "", fmt.Errorf("image platform %q must use os/arch or os/arch/variant", raw)
-	}
-	for i, part := range parts {
-		parts[i] = strings.TrimSpace(part)
-		if parts[i] == "" {
-			return "", fmt.Errorf("image platform %q must not contain empty components", raw)
-		}
-	}
-	return strings.Join(parts, "/"), nil
 }
 
 func imageArchiveName(image, platform string) string {

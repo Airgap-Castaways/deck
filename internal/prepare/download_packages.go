@@ -304,32 +304,21 @@ func parseRPMModules(repo stepspec.DownloadPackageRepo) ([]rpmModuleSpec, error)
 }
 
 func parsePackagePlatform(raw stepspec.PackagePlatform) (string, error) {
-	platform := normalizePackagePlatformKey(string(raw))
-	if platform == "" {
+	if strings.TrimSpace(string(raw)) == "" {
 		return "", nil
 	}
-	parts := strings.Split(platform, "/")
-	if len(parts) != 2 && len(parts) != 3 {
-		return "", fmt.Errorf("package platform %q must use os/arch or os/arch/variant", string(raw))
-	}
-	for _, part := range parts {
-		if part == "" {
-			return "", fmt.Errorf("package platform %q must not contain empty components", string(raw))
-		}
-	}
-	return platform, nil
+	return stepspec.NormalizePlatform(string(raw))
 }
 
 func normalizePackagePlatformKey(raw string) string {
-	trimmed := strings.ToLower(strings.TrimSpace(raw))
-	if trimmed == "" {
+	if strings.TrimSpace(raw) == "" {
 		return ""
 	}
-	parts := strings.Split(trimmed, "/")
-	for i, part := range parts {
-		parts[i] = strings.TrimSpace(part)
+	platform, err := stepspec.NormalizePlatform(raw)
+	if err != nil {
+		return strings.ToLower(strings.TrimSpace(raw))
 	}
-	return strings.Join(parts, "/")
+	return platform
 }
 
 func buildRPMModuleEnableCommand(modules []rpmModuleSpec) (string, error) {
