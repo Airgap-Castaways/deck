@@ -686,6 +686,17 @@ func TestReviewSystemPromptIncludesStructuredValidationIssues(t *testing.T) {
 	}
 }
 
+func TestReviewSystemPromptIgnoresComponentAndVarsValidationIssues(t *testing.T) {
+	workspace := askretrieve.WorkspaceSummary{Files: []askretrieve.WorkspaceFile{
+		{Path: "workflows/components/k8s/runtime.yaml", Content: "steps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: \"{{ .vars.runtimePackages }}\"\n"},
+		{Path: "workflows/vars.yaml", Content: "runtimePackages: [containerd]\n"},
+	}}
+	prompt := buildInfoSystemPrompt(askintent.RouteReview, askintent.Target{Kind: "workspace"}, askretrieve.RetrievalResult{}, workspace)
+	if strings.Contains(prompt, "Structured validation issues:") {
+		t.Fatalf("expected review prompt to avoid context-free component and vars validation issues, got %q", prompt)
+	}
+}
+
 func TestRequiredFixesForValidationFlagsTemplatedCollections(t *testing.T) {
 	fixes := requiredFixesForValidation("parse yaml: yaml: invalid map key: map[string]interface {}{\".vars.dockerPackages\":interface {}(nil)}")
 	if len(fixes) < 2 {
