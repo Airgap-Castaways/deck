@@ -67,10 +67,40 @@ steps:
 
 Variables and runtime values come from distinct sources:
 
-Static `vars` flow from two sources, in order of precedence:
+Static `vars` flow from three sources, in order of precedence:
 
-1. `vars:` block in the scenario file (highest)
-2. `workflows/vars.yaml` (shared defaults)
+1. CLI `--var` overrides
+2. `vars:` block in the scenario file
+3. `workflows/vars.yaml` shared defaults
+
+`deck lint`, `deck prepare`, `deck plan`, and `deck apply` also support node-scoped shared variables in `workflows/vars.yaml`. When `hosts:` is present, deck detects the local hostname at execution time, applies optional `all:` values as shared defaults, and merges the matching host entry into top-level `vars`. If the hostname is not listed, execution continues with ordinary `vars.yaml` values and `all:` values.
+
+Node-scoped `vars.yaml` example:
+
+```yaml
+all:
+  kubernetesVersion: v1.35.5
+  podCIDR: 10.244.0.0/16
+
+hosts:
+  k8s-cp1:
+    ip: 192.168.81.211
+    role: control-plane
+
+  k8s-worker1:
+    ip: 192.168.81.221
+    role: worker
+```
+
+For `deck lint`, `deck prepare`, `deck plan`, and `deck apply`, the effective variable precedence is:
+
+1. ordinary `workflows/vars.yaml` values, excluding `all` and `hosts` when `hosts:` is present
+2. `workflows/vars.yaml` `all:` values
+3. selected host values from `hosts.<hostname>`
+4. selected workflow or scenario `vars:` values
+5. CLI `--var` overrides
+
+Hostname matching tries the detected hostname first, then the short hostname before the first `.`. Missing host entries are not fatal. Workflows that branch on host-specific fields should provide safe defaults in `all:`, such as `role: ""`, then use conditions such as `vars.role == "control-plane"`.
 
 Runtime values flow separately through `register` outputs and built-in runtime facts such as `runtime.host`.
 
@@ -107,6 +137,8 @@ vars:
     packages: [kubeadm, kubelet, kubectl]
   when: runtime.host.os.family == "rhel"
 ```
+
+Node-scoped vars are static inputs selected before planning and state hashing; `runtime.host` remains the runtime fact namespace for detected OS, architecture, and kernel data.
 
 `runtime.host` is a built-in reserved runtime namespace in both prepare and apply. Use it for detected host facts such as OS family, distro ID, version, architecture, and kernel release. Do not model detected local host facts as static `vars` values.
 

@@ -60,6 +60,7 @@ phases:
           enabled: true
           state: started
       - id: kubeadm-join
+        when: vars.role == "worker"
         apiVersion: deck/v1alpha1
         kind: JoinKubeadm
         spec:
