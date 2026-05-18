@@ -243,7 +243,7 @@ func (h *serverHandler) renderImageBrowse(rel string) (string, error) {
 		items = append([]browseEntry{{Name: "..", Href: "/", Kind: "dir"}}, items...)
 		return renderBrowsePage("/browse/images/", items)
 	}
-	if repoExists(canonicalRegistryEntries(entries), rel) {
+	if repoExists(entries, rel, true) {
 		repo := rel
 		tags := map[string]bool{}
 		for _, entry := range entries {
@@ -258,7 +258,7 @@ func (h *serverHandler) renderImageBrowse(rel string) (string, error) {
 		sort.Slice(items[1:], func(i, j int) bool { return items[1+i].Name < items[1+j].Name })
 		return renderBrowsePage("/browse/images/"+repo+"/", items)
 	}
-	repo, tag := splitRepoTag(canonicalRegistryEntries(entries), rel)
+	repo, tag := splitRepoTag(entries, rel, true)
 	if repo == "" || tag == "" {
 		items := []browseEntry{{Name: "..", Href: "/browse/images/", Kind: "dir"}}
 		return renderBrowsePage("/browse/images/"+rel+"/", items)
@@ -291,21 +291,11 @@ func (h *serverHandler) renderImageBrowse(rel string) (string, error) {
 	return renderBrowsePage("/browse/images/"+repo+"/"+tag+"/", items)
 }
 
-func canonicalRegistryEntries(entries []registryCatalogEntry) []registryCatalogEntry {
-	out := make([]registryCatalogEntry, 0, len(entries))
-	for _, entry := range entries {
-		if entry.isCanonical() {
-			out = append(out, entry)
-		}
-	}
-	return out
-}
-
 func registryAliasesForResolved(entries []registryCatalogEntry, resolved *registryResolvedImage) []string {
 	if resolved == nil {
 		return nil
 	}
-	aliases := make([]string, 0)
+	var aliases []string
 	seen := map[string]bool{}
 	for _, entry := range entries {
 		if entry.isCanonical() || entry.canonicalRepo != resolved.repo || entry.tag != resolved.tag || entry.tarPath != resolved.tarPath {
@@ -321,8 +311,11 @@ func registryAliasesForResolved(entries []registryCatalogEntry, resolved *regist
 	return aliases
 }
 
-func repoExists(entries []registryCatalogEntry, repo string) bool {
+func repoExists(entries []registryCatalogEntry, repo string, canonicalOnly bool) bool {
 	for _, entry := range entries {
+		if canonicalOnly && !entry.isCanonical() {
+			continue
+		}
 		if entry.repo == repo {
 			return true
 		}
@@ -330,10 +323,13 @@ func repoExists(entries []registryCatalogEntry, repo string) bool {
 	return false
 }
 
-func splitRepoTag(entries []registryCatalogEntry, rel string) (string, string) {
+func splitRepoTag(entries []registryCatalogEntry, rel string, canonicalOnly bool) (string, string) {
 	bestRepo := ""
 	bestTag := ""
 	for _, entry := range entries {
+		if canonicalOnly && !entry.isCanonical() {
+			continue
+		}
 		prefix := entry.repo + "/"
 		if !strings.HasPrefix(rel, prefix) {
 			continue

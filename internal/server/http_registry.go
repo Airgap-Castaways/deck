@@ -30,7 +30,7 @@ type registryCatalogEntry struct {
 }
 
 func (e registryCatalogEntry) isCanonical() bool {
-	return strings.TrimSpace(e.canonicalRepo) == "" || e.repo == e.canonicalRepo
+	return e.canonicalRepo == "" || e.repo == e.canonicalRepo
 }
 
 type registryResolvedImage struct {
