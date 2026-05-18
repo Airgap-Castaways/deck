@@ -115,6 +115,18 @@ func TestServe_StaticReadOnly(t *testing.T) {
 	if err := tarball.WriteToFile(nestedTarPath, nestedTag, nestedImage); err != nil {
 		t.Fatalf("tarball.WriteToFile nested: %v", err)
 	}
+	quayTag, err := name.NewTag("quay.io/calico/node-driver-registrar:v3.28.0", name.WeakValidation)
+	if err != nil {
+		t.Fatalf("name.NewTag quay: %v", err)
+	}
+	quayImage, err := random.Image(256, 1)
+	if err != nil {
+		t.Fatalf("random.Image quay: %v", err)
+	}
+	quayTarPath := filepath.Join(root, "outputs", "images", "quay.io_calico_node-driver-registrar_v3.28.0.tar")
+	if err := tarball.WriteToFile(quayTarPath, quayTag, quayImage); err != nil {
+		t.Fatalf("tarball.WriteToFile quay: %v", err)
+	}
 
 	h, err := NewHandler(root, HandlerOptions{})
 	if err != nil {
@@ -150,11 +162,12 @@ func TestServe_StaticReadOnly(t *testing.T) {
 			{path: "/browse/bin/", want: "linux"},
 			{path: "/browse/workflows/", want: "scenarios"},
 			{path: "/browse/images/", want: "kube-apiserver"},
-			{path: "/browse/images/coredns/coredns/", want: "v1.11.1"},
-			{path: "/browse/images/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", registryTarInfo.Size())},
-			{path: "/browse/images/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", len(rawManifest))},
-			{path: "/browse/images/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", manifest.Config.Size)},
-			{path: "/browse/images/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", manifest.Layers[0].Size)},
+			{path: "/browse/images/registry.k8s.io/coredns/coredns/", want: "v1.11.1"},
+			{path: "/browse/images/registry.k8s.io/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", registryTarInfo.Size())},
+			{path: "/browse/images/registry.k8s.io/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", len(rawManifest))},
+			{path: "/browse/images/registry.k8s.io/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", manifest.Config.Size)},
+			{path: "/browse/images/registry.k8s.io/kube-apiserver/v1.30.1/", want: fmt.Sprintf("%d bytes", manifest.Layers[0].Size)},
+			{path: "/browse/images/quay.io/calico/node-driver-registrar/v3.28.0/", want: "calico/node-driver-registrar"},
 		} {
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			rr := httptest.NewRecorder()
@@ -165,6 +178,20 @@ func TestServe_StaticReadOnly(t *testing.T) {
 			if !strings.Contains(rr.Body.String(), tc.want) {
 				t.Fatalf("expected %s body to contain %q, got %q", tc.path, tc.want, rr.Body.String())
 			}
+		}
+
+		rootReq := httptest.NewRequest(http.MethodGet, "/browse/images/", nil)
+		rootRR := httptest.NewRecorder()
+		h.ServeHTTP(rootRR, rootReq)
+		if rootRR.Code != http.StatusOK {
+			t.Fatalf("expected /browse/images/ 200, got %d", rootRR.Code)
+		}
+		rootBody := rootRR.Body.String()
+		if !strings.Contains(rootBody, `href="/browse/images/quay.io/calico/node-driver-registrar/"`) {
+			t.Fatalf("expected canonical quay repo link, got %q", rootBody)
+		}
+		if strings.Contains(rootBody, `href="/browse/images/calico/node-driver-registrar/"`) {
+			t.Fatalf("expected alias repo to be hidden from browse root, got %q", rootBody)
 		}
 	})
 
@@ -257,6 +284,13 @@ func TestServe_StaticReadOnly(t *testing.T) {
 		}
 		if !strings.Contains(nestedTagsRR.Body.String(), `"name":"coredns/coredns"`) || !strings.Contains(nestedTagsRR.Body.String(), `"v1.11.1"`) {
 			t.Fatalf("expected nested tags list body, got %q", nestedTagsRR.Body.String())
+		}
+
+		quayAliasReq := httptest.NewRequest(http.MethodGet, "/v2/calico/node-driver-registrar/manifests/v3.28.0", nil)
+		quayAliasRR := httptest.NewRecorder()
+		h.ServeHTTP(quayAliasRR, quayAliasReq)
+		if quayAliasRR.Code != http.StatusOK {
+			t.Fatalf("expected alias manifest GET 200, got %d", quayAliasRR.Code)
 		}
 	})
 

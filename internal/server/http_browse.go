@@ -230,6 +230,9 @@ func (h *serverHandler) renderImageBrowse(rel string) (string, error) {
 	if rel == "" {
 		repos := map[string]bool{}
 		for _, entry := range entries {
+			if !entry.isCanonical() {
+				continue
+			}
 			repos[entry.repo] = true
 		}
 		items := make([]browseEntry, 0, len(repos))
@@ -240,11 +243,11 @@ func (h *serverHandler) renderImageBrowse(rel string) (string, error) {
 		items = append([]browseEntry{{Name: "..", Href: "/", Kind: "dir"}}, items...)
 		return renderBrowsePage("/browse/images/", items)
 	}
-	if repoExists(entries, rel) {
+	if repoExists(canonicalRegistryEntries(entries), rel) {
 		repo := rel
 		tags := map[string]bool{}
 		for _, entry := range entries {
-			if entry.repo == repo {
+			if entry.repo == repo && entry.isCanonical() {
 				tags[entry.tag] = true
 			}
 		}
@@ -255,7 +258,7 @@ func (h *serverHandler) renderImageBrowse(rel string) (string, error) {
 		sort.Slice(items[1:], func(i, j int) bool { return items[1+i].Name < items[1+j].Name })
 		return renderBrowsePage("/browse/images/"+repo+"/", items)
 	}
-	repo, tag := splitRepoTag(entries, rel)
+	repo, tag := splitRepoTag(canonicalRegistryEntries(entries), rel)
 	if repo == "" || tag == "" {
 		items := []browseEntry{{Name: "..", Href: "/browse/images/", Kind: "dir"}}
 		return renderBrowsePage("/browse/images/"+rel+"/", items)
@@ -276,6 +279,9 @@ func (h *serverHandler) renderImageBrowse(rel string) (string, error) {
 		browseEntry{Name: "archive", Kind: "meta", Meta: resolved.tarPath, Size: archiveSize},
 		browseEntry{Name: "registry manifest", Href: "/v2/" + repo + "/manifests/" + tag, Kind: "link", Meta: "open raw manifest", Size: int64(len(resolved.rawManifest))},
 	)
+	if aliases := registryAliasesForResolved(entries, resolved); len(aliases) > 0 {
+		items = append(items, browseEntry{Name: "aliases", Kind: "meta", Meta: strings.Join(aliases, ", ")})
+	}
 	if resolved.manifest != nil {
 		items = append(items, browseEntry{Name: "config", Kind: "meta", Meta: resolved.manifest.Config.Digest.String(), Size: resolved.manifest.Config.Size})
 		for _, layer := range resolved.manifest.Layers {
@@ -283,6 +289,36 @@ func (h *serverHandler) renderImageBrowse(rel string) (string, error) {
 		}
 	}
 	return renderBrowsePage("/browse/images/"+repo+"/"+tag+"/", items)
+}
+
+func canonicalRegistryEntries(entries []registryCatalogEntry) []registryCatalogEntry {
+	out := make([]registryCatalogEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.isCanonical() {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
+func registryAliasesForResolved(entries []registryCatalogEntry, resolved *registryResolvedImage) []string {
+	if resolved == nil {
+		return nil
+	}
+	aliases := make([]string, 0)
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		if entry.isCanonical() || entry.canonicalRepo != resolved.repo || entry.tag != resolved.tag || entry.tarPath != resolved.tarPath {
+			continue
+		}
+		if seen[entry.repo] {
+			continue
+		}
+		seen[entry.repo] = true
+		aliases = append(aliases, entry.repo)
+	}
+	sort.Strings(aliases)
+	return aliases
 }
 
 func repoExists(entries []registryCatalogEntry, repo string) bool {
