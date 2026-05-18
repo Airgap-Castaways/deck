@@ -4,6 +4,7 @@ steps:
     parallelGroup: distro-package-downloads
     spec:
       packages: "{{ .vars.runtimeDepPackages.debian }}"
+      platform: "{{ .vars.packagePlatform }}"
       distro:
         family: debian
         release: ubuntu2204
@@ -20,6 +21,7 @@ steps:
     parallelGroup: distro-package-downloads
     spec:
       packages: "{{ .vars.runtimeDepPackages.debian }}"
+      platform: "{{ .vars.packagePlatform }}"
       distro:
         family: debian
         release: ubuntu2404
@@ -36,6 +38,7 @@ steps:
     parallelGroup: distro-package-downloads
     spec:
       packages: "{{ .vars.runtimeDepPackages.rhel }}"
+      platform: "{{ .vars.packagePlatform }}"
       distro:
         family: rhel
         release: rocky9

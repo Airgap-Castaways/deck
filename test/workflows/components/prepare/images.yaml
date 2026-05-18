@@ -3,10 +3,12 @@ steps:
     kind: DownloadImage
     spec:
       images: "{{ .vars.controlPlaneImages }}"
+      platforms: "{{ .vars.imagePlatforms }}"
       outputDir: images/control-plane
   - id: download-upgrade-control-plane-images
     kind: DownloadImage
     when: vars.upgradeKubernetesVersion != ""
     spec:
       images: "{{ .vars.upgradeControlPlaneImages }}"
+      platforms: "{{ .vars.imagePlatforms }}"
       outputDir: images/control-plane
