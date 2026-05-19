@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/config"
+	"github.com/Airgap-Castaways/deck/internal/workflowcontext"
 )
 
 func TestRun_WhenAndRegisterSemantics(t *testing.T) {
@@ -76,6 +77,40 @@ func TestRun_WhenAndRegisterSemantics(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(bundle, "files", "skip.bin")); err == nil {
 		t.Fatalf("expected skipped artifact to not exist")
+	}
+}
+
+func TestRun_ContextFieldsInWhenAndTemplates(t *testing.T) {
+	bundle := t.TempDir()
+	localCache := t.TempDir()
+	sourceRel := filepath.ToSlash(filepath.Join("files", "payload.txt"))
+	sourceAbs := filepath.Join(localCache, filepath.FromSlash(sourceRel))
+	if err := os.MkdirAll(filepath.Dir(sourceAbs), 0o755); err != nil {
+		t.Fatalf("mkdir source dir: %v", err)
+	}
+	if err := os.WriteFile(sourceAbs, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+	wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "prepare", Steps: []config.Step{{
+		ID:   "context-download",
+		Kind: "DownloadFile",
+		When: "context.command == \"prepare\" && context.workflow.source == \"filesystem\" && context.workflow.isServer == false && context.paths.outputRoot == \"" + bundle + "\"",
+		Spec: map[string]any{
+			"source":     map[string]any{"path": sourceRel},
+			"fetch":      map[string]any{"sources": []any{map[string]any{"type": "local", "path": localCache}}},
+			"outputPath": "files/{{ .context.command }}-{{ .context.workflow.source }}.txt",
+		},
+	}}}}}
+	execContext := workflowcontext.Context{
+		Command:  workflowcontext.CommandPrepare,
+		Workflow: workflowcontext.Workflow{Source: workflowcontext.SourceFilesystem, Path: filepath.Join(t.TempDir(), "workflows", "prepare.yaml")},
+		Paths:    workflowcontext.Paths{BundleRoot: bundle, OutputRoot: bundle},
+	}
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, Context: execContext}); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(bundle, "files", "prepare-filesystem.txt")); err != nil {
+		t.Fatalf("expected context-rendered artifact: %v", err)
 	}
 }
 
@@ -263,19 +298,19 @@ func TestWhen_NamespaceEnforced(t *testing.T) {
 		t.Fatalf("expected bare identifier guidance, got %v", err)
 	}
 
-	_, err = EvaluateWhen("context.nodeRole == \"worker\"", vars, runtimeVars)
-	if err == nil {
-		t.Fatalf("expected context namespace to fail")
+	ok, err = EvaluateWhenWithContext("context.nodeRole == \"worker\"", vars, runtimeVars, map[string]any{"nodeRole": "worker"})
+	if err != nil {
+		t.Fatalf("expected context namespace expression to pass, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "unknown identifier \"context.nodeRole\"; supported prefixes are vars. and runtime") {
-		t.Fatalf("expected namespace restriction message, got %v", err)
+	if !ok {
+		t.Fatalf("expected context namespace expression to be true")
 	}
 
 	_, err = EvaluateWhen("other.nodeRole == \"worker\"", vars, runtimeVars)
 	if err == nil {
 		t.Fatalf("expected unknown dotted namespace to fail")
 	}
-	if !strings.Contains(err.Error(), "unknown identifier \"other.nodeRole\"; supported prefixes are vars. and runtime") {
+	if !strings.Contains(err.Error(), "unknown identifier \"other.nodeRole\"; supported prefixes are context., vars., and runtime") {
 		t.Fatalf("expected namespace restriction message, got %v", err)
 	}
 }

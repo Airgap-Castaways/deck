@@ -20,12 +20,14 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
 	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
+	"github.com/Airgap-Castaways/deck/internal/workflowcontext"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type RunOptions struct {
 	BundleRoot       string
+	Context          workflowcontext.Context
 	CommandRunner    CommandRunner
 	ForceRedownload  bool
 	EventSink        StepEventSink
@@ -127,7 +129,10 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 		packCachePlan = ComputePackCachePlan(prevPackCacheState, workflowBytesForPlan, wf.Vars, prepareSteps)
 		packCachePlan.WorkflowSHA256 = workflowSHA
 	}
-	ctxData := map[string]any{"bundleRoot": bundleRoot, "stateFile": ""}
+	ctxData := opts.Context.RenderMap()
+	if strings.TrimSpace(opts.Context.Command) == "" {
+		ctxData = map[string]any{"bundleRoot": bundleRoot, "stateFile": ""}
+	}
 
 	for _, phase := range phases {
 		for _, batch := range workflowexec.BuildPhaseBatches(phase) {
@@ -213,7 +218,7 @@ func executePrepareBatch(ctx context.Context, runner CommandRunner, bundleRoot s
 }
 
 func executePrepareStep(ctx context.Context, runner CommandRunner, bundleRoot string, wf *config.Workflow, runtimeSnapshot map[string]any, ctxData map[string]any, phaseName string, batchCtx batchEventContext, step config.Step, opts RunOptions) (prepareBatchResult, error) {
-	ok, err := evaluateWhen(step.When, wf.Vars, runtimeSnapshot)
+	ok, err := evaluateWhenWithContext(step.When, wf.Vars, runtimeSnapshot, ctxData)
 	if err != nil {
 		return prepareBatchResult{}, fmt.Errorf("step %s (%s): %w", step.ID, step.Kind, err)
 	}
@@ -297,11 +302,19 @@ func applyRegister(step config.Step, rendered map[string]any, outputs map[string
 }
 
 func evaluateWhen(expr string, vars map[string]any, runtime map[string]any) (bool, error) {
-	return workflowexec.EvaluateWhen(expr, vars, runtime, errCodePrepareConditionEval)
+	return evaluateWhenWithContext(expr, vars, runtime, nil)
+}
+
+func evaluateWhenWithContext(expr string, vars map[string]any, runtime map[string]any, context map[string]any) (bool, error) {
+	return workflowexec.EvaluateWhenWithContext(expr, vars, runtime, context, errCodePrepareConditionEval)
 }
 
 func EvaluateWhen(expr string, vars map[string]any, runtime map[string]any) (bool, error) {
 	return evaluateWhen(expr, vars, runtime)
+}
+
+func EvaluateWhenWithContext(expr string, vars map[string]any, runtime map[string]any, context map[string]any) (bool, error) {
+	return evaluateWhenWithContext(expr, vars, runtime, context)
 }
 
 func fileManifestEntry(bundleRoot, rel string) (manifestEntry, error) {

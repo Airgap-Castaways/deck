@@ -14,6 +14,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/hostfs"
 	"github.com/Airgap-Castaways/deck/internal/logs"
 	"github.com/Airgap-Castaways/deck/internal/prepare"
+	"github.com/Airgap-Castaways/deck/internal/workflowcontext"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
@@ -93,6 +94,14 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	execContext := workflowcontext.Context{
+		Command: workflowcontext.CommandPrepare,
+		Workflow: workflowcontext.Workflow{
+			Source: workflowcontext.SourceFilesystem,
+			Path:   prepareWorkflowPath,
+		},
+		Paths: workflowcontext.Paths{BundleRoot: preparedRoot.Abs(), OutputRoot: preparedRoot.Abs()},
+	}
 	prepareWorkflow, err := config.LoadWithOptions(ctx, prepareWorkflowPath, config.LoadOptions{VarOverrides: opts.VarOverrides, NodeScopedVars: true})
 	if err != nil {
 		return err
@@ -100,7 +109,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err := emitDiagnosticEvent(opts, 1, logs.CLIEvent{Component: "prepare", Event: "run_config", Attrs: map[string]any{"refresh": opts.Refresh, "clean": opts.Clean}}); err != nil {
 		return err
 	}
-	planDiagnostics, err := prepare.InspectPlan(prepareWorkflow, preparedRoot.Abs(), prepare.RunOptions{BundleRoot: preparedRoot.Abs(), ForceRedownload: opts.Refresh})
+	planDiagnostics, err := prepare.InspectPlan(prepareWorkflow, preparedRoot.Abs(), prepare.RunOptions{BundleRoot: preparedRoot.Abs(), Context: execContext, ForceRedownload: opts.Refresh})
 	if err != nil {
 		return err
 	}
@@ -178,7 +187,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("create prepared root: %w", err)
 	}
 
-	if err := prepare.Run(ctx, prepareWorkflow, prepare.RunOptions{BundleRoot: preparedRoot.Abs(), ForceRedownload: opts.Refresh, EventSink: opts.EventSink}); err != nil {
+	if err := prepare.Run(ctx, prepareWorkflow, prepare.RunOptions{BundleRoot: preparedRoot.Abs(), Context: execContext, ForceRedownload: opts.Refresh, EventSink: opts.EventSink}); err != nil {
 		return err
 	}
 	if err := emitDiagnosticEvent(opts, 2, logs.CLIEvent{Level: "debug", Component: "prepare", Event: "bundle_root", Attrs: map[string]any{"bundle_root": filepath.ToSlash(preparedRoot.Abs())}}); err != nil {

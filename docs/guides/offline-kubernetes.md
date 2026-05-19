@@ -61,14 +61,16 @@ The bundle includes the canonical workspace inputs: `outputs/packages/`, `output
 
 ## 5. Move the bundle into the offline site
 
-Transfer `bundle.tar` through the approved path for your environment - removable media, controlled gateway, or another site-approved handoff. `deck` does not require a remote control service for this step.
+Transfer `bundle.tar` through the approved path for your environment - removable media, controlled gateway, or another site-approved handoff. Unpack it on the target side before running apply. `deck` does not require a remote control service for this step.
 
 ## 6. Run workflows locally on the target nodes
 
 At the offline site, execute on the target machine itself:
 
 ```bash
-deck apply
+tar -xf bundle.tar
+cd bundle
+./deck apply
 ```
 
 Use the control-plane and worker workflows in your workspace as starting points for kubeadm-based bootstrap and follow-on maintenance.

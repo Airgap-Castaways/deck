@@ -4,13 +4,13 @@ import "strings"
 
 const (
 	WhenLanguage    = "CEL"
-	whenDescription = "CEL expression evaluated at runtime. The step is skipped when it evaluates to false. Use `vars.` for input variables and `runtime.` for registered outputs and host facts."
+	whenDescription = "CEL expression evaluated at runtime. The step is skipped when it evaluates to false. Use `vars.` for input variables, `runtime.` for registered outputs and host facts, and `context.` for execution metadata."
 	whenExample     = `vars.skipKubeadm != "true"`
 	registerDesc    = "Map of runtime variable names to step output keys. Exported values are available to later steps, or to later batches when the step runs inside a parallel group, via `runtime.` in `when` expressions and `.runtime` in templates."
 	registerExample = "{outputPath:path}"
 )
 
-var whenNamespaces = []string{"runtime", "vars"}
+var whenNamespaces = []string{"context", "runtime", "vars"}
 
 func WhenNamespaces() []string {
 	out := make([]string, len(whenNamespaces))

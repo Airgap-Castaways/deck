@@ -8,6 +8,7 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/install"
 	"github.com/Airgap-Castaways/deck/internal/logs"
+	"github.com/Airgap-Castaways/deck/internal/workflowcontext"
 )
 
 type RunLogger interface {
@@ -19,6 +20,7 @@ type RunLogger interface {
 type ExecuteOptions struct {
 	Request        ExecutionRequest
 	BundleRoot     string
+	Context        workflowcontext.Context
 	WorkflowSource string
 	Scenario       string
 	DryRun         bool
@@ -44,7 +46,7 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 		return err
 	}
 	if opts.DryRun {
-		return writeApplyDryRun(opts.StdoutPrintf, request)
+		return writeApplyDryRun(opts.StdoutPrintf, request, opts.Context.RenderMap())
 	}
 	if opts.NewRunLogger == nil {
 		return fmt.Errorf("run logger factory is nil")
@@ -68,7 +70,7 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 		}
 	}()
 
-	if err := install.Run(ctx, request.ExecutionWorkflow, install.RunOptions{BundleRoot: opts.BundleRoot, StatePath: request.StatePath, EventSink: eventSink, Fresh: request.Fresh}); err != nil {
+	if err := install.Run(ctx, request.ExecutionWorkflow, install.RunOptions{BundleRoot: opts.BundleRoot, StatePath: request.StatePath, Context: opts.Context, EventSink: eventSink, Fresh: request.Fresh}); err != nil {
 		return err
 	}
 	if opts.StdoutPrintln == nil {
@@ -77,7 +79,7 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 	return opts.StdoutPrintln("apply: ok")
 }
 
-func writeApplyDryRun(stdoutPrintf func(format string, args ...any) error, request ExecutionRequest) error {
+func writeApplyDryRun(stdoutPrintf func(format string, args ...any) error, request ExecutionRequest, context map[string]any) error {
 	if stdoutPrintf == nil {
 		return fmt.Errorf("stdout printf is nil")
 	}
@@ -117,7 +119,7 @@ func writeApplyDryRun(stdoutPrintf func(format string, args ...any) error, reque
 			continue
 		}
 		for _, step := range phase.Steps {
-			ok, evalErr := install.EvaluateWhen(step.When, wf.Vars, runtimeVars)
+			ok, evalErr := install.EvaluateWhenWithContext(step.When, wf.Vars, runtimeVars, context)
 			if evalErr != nil {
 				return fmt.Errorf("WHEN_EVAL_ERROR: step %s (%s): %w", step.ID, step.Kind, evalErr)
 			}

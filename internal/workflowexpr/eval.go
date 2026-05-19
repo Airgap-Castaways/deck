@@ -15,6 +15,7 @@ import (
 type Inputs struct {
 	Vars    map[string]any
 	Runtime map[string]any
+	Context map[string]any
 }
 
 type Program struct {
@@ -71,6 +72,7 @@ func (p Program) Eval(in Inputs) (bool, error) {
 	out, _, err := p.program.Eval(map[string]any{
 		"vars":    cloneMap(in.Vars),
 		"runtime": cloneMap(in.Runtime),
+		"context": cloneMap(in.Context),
 	})
 	if err != nil {
 		return false, fmt.Errorf("evaluate CEL expression: %w", err)
@@ -90,6 +92,7 @@ func (p Program) Eval(in Inputs) (bool, error) {
 func env() (*cel.Env, error) {
 	envOnce.Do(func() {
 		envInst, errEnv = cel.NewEnv(
+			cel.Variable("context", cel.MapType(cel.StringType, cel.DynType)),
 			cel.Variable("vars", cel.MapType(cel.StringType, cel.DynType)),
 			cel.Variable("runtime", cel.MapType(cel.StringType, cel.DynType)),
 		)
@@ -172,7 +175,7 @@ func maskStringLiterals(expr string) string {
 
 func unknownIdentifierError(id string) error {
 	if strings.Contains(id, ".") {
-		return fmt.Errorf("unknown identifier %q; supported prefixes are vars. and runtime", id)
+		return fmt.Errorf("unknown identifier %q; supported prefixes are context., vars., and runtime", id)
 	}
 	return fmt.Errorf("unknown identifier %q; use vars.%s", id, id)
 }

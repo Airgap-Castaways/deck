@@ -73,7 +73,7 @@ deck bundle build --out ./bundle.tar
 deck apply
 ```
 
-`apply` executes the workflow locally on the machine that needs the change. No SSH, no controller, no external reach-back required.
+`apply` executes the workflow locally on the machine that needs the change. Run it from a workspace or unpacked bundle root that contains `workflows/`. No SSH, no controller, no external reach-back required.
 
 ## 6. Optional: add site assistance
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/Airgap-Castaways/deck/internal/applycli"
 	"github.com/Airgap-Castaways/deck/internal/config"
-	"github.com/Airgap-Castaways/deck/internal/install"
 )
 
 func TestResolveInstallStatePathUsesHomeAndStateKey(t *testing.T) {
@@ -34,6 +32,21 @@ func TestResolveInstallStatePathUsesHomeAndStateKey(t *testing.T) {
 	if statePath != expected {
 		t.Fatalf("state path mismatch: got %q want %q", statePath, expected)
 	}
+}
+
+func statePathFromVerboseApply(t *testing.T, args []string) string {
+	t.Helper()
+	res := execute(append(args, "--v=1"))
+	if res.err != nil {
+		t.Fatalf("apply for state path: %v", res.err)
+	}
+	for _, field := range strings.Fields(res.stderr) {
+		if strings.HasPrefix(field, "state=") {
+			return strings.TrimPrefix(field, "state=")
+		}
+	}
+	t.Fatalf("expected state in stderr, got %q", res.stderr)
+	return ""
 }
 
 func TestApplyWritesRunRecordUnderXDGStateHome(t *testing.T) {
@@ -169,6 +182,41 @@ phases:
 	}
 	if !strings.Contains(applyOut, "host-match Command PLAN") || !strings.Contains(applyOut, "host-miss Command SKIP") {
 		t.Fatalf("expected apply dry-run to select hostname-scoped vars, got %q", applyOut)
+	}
+}
+
+func TestApplyContextFieldsFromInferredBundleRoot(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	root := t.TempDir()
+	createValidBundleManifest(t, root)
+	workflowDir := filepath.Join(root, "workflows", "scenarios")
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatalf("mkdir workflow dir: %v", err)
+	}
+	outPath := filepath.Join(t.TempDir(), "context.txt")
+	wfPath := filepath.Join(workflowDir, "apply.yaml")
+	writeWorkflowYAML(t, wfPath, fmt.Sprintf(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: context-write
+        kind: Command
+        when: context.command == "apply" && context.workflow.source == "filesystem" && context.workflow.isServer == false && context.paths.bundleRoot == %q
+        spec:
+          command: ["sh", "-c", "printf 'source={{ .context.workflow.source }} server={{ .context.workflow.isServer }} bundle={{ .context.paths.bundleRoot }} legacy={{ .context.bundleRoot }}' > %s"]
+`, root, outPath))
+
+	if _, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath}); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	raw, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read context output: %v", err)
+	}
+	for _, want := range []string{"source=filesystem", "server=false", "bundle=" + root, "legacy=" + root} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("expected %q in context output, got %q", want, string(raw))
+		}
 	}
 }
 
@@ -326,18 +374,7 @@ phases:
 		defer ts.Close()
 
 		workflowURL := ts.URL + "/workflows/scenarios/apply.yaml"
-		if _, err := runWithCapturedStdout([]string{"apply", "--workflow", workflowURL}); err != nil {
-			t.Fatalf("remote apply(1) failed: %v", err)
-		}
-
-		wf1, err := config.Load(context.Background(), workflowURL)
-		if err != nil {
-			t.Fatalf("load remote workflow(1): %v", err)
-		}
-		statePath1, err := applycli.ResolveInstallStatePath(wf1)
-		if err != nil {
-			t.Fatalf("resolve state path(1): %v", err)
-		}
+		statePath1 := statePathFromVerboseApply(t, []string{"apply", "--workflow", workflowURL})
 		if _, err := os.Stat(statePath1); err != nil {
 			t.Fatalf("expected first state file: %v", err)
 		}
@@ -346,18 +383,7 @@ phases:
 		varsBody = "mode: beta\n"
 		mu.Unlock()
 
-		if _, err := runWithCapturedStdout([]string{"apply", "--workflow", workflowURL}); err != nil {
-			t.Fatalf("remote apply(2) failed: %v", err)
-		}
-
-		wf2, err := config.Load(context.Background(), workflowURL)
-		if err != nil {
-			t.Fatalf("load remote workflow(2): %v", err)
-		}
-		statePath2, err := applycli.ResolveInstallStatePath(wf2)
-		if err != nil {
-			t.Fatalf("resolve state path(2): %v", err)
-		}
+		statePath2 := statePathFromVerboseApply(t, []string{"apply", "--workflow", workflowURL})
 		if statePath1 == statePath2 {
 			t.Fatalf("expected state path to change when vars.yaml changes")
 		}
@@ -456,16 +482,8 @@ func TestPlan(t *testing.T) {
 		t.Fatalf("expected RUN in plan output, got %q", before)
 	}
 
-	wf, err := config.Load(context.Background(), wfPath)
-	if err != nil {
-		t.Fatalf("load workflow: %v", err)
-	}
-	execWf, err := applycli.BuildExecutionWorkflow(wf, "install")
-	if err != nil {
-		t.Fatalf("build execution workflow: %v", err)
-	}
-	if err := install.Run(context.Background(), execWf, install.RunOptions{BundleRoot: ""}); err != nil {
-		t.Fatalf("install run: %v", err)
+	if _, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--phase", "install"}); err != nil {
+		t.Fatalf("apply run: %v", err)
 	}
 
 	after, err := runWithCapturedStdout([]string{"plan", "--workflow", wfPath})
@@ -719,18 +737,15 @@ func TestResolveApplyBundleRootPrecedence(t *testing.T) {
 		t.Fatalf("expected positional bundle, got %s", resolved)
 	}
 
-	resolved, err = applycli.ResolveBundleRoot("")
+	resolved, err = applycli.ResolveBundleRoot(archivePath)
 	if err != nil {
-		t.Fatalf("resolve default bundle candidate: %v", err)
+		t.Fatalf("resolve explicit bundle archive: %v", err)
 	}
 	resolvedSlash := filepath.ToSlash(resolved)
 	if !strings.Contains(resolvedSlash, "/.cache/deck/extract/") || !strings.HasSuffix(resolvedSlash, "/bundle") {
 		t.Fatalf("expected extracted bundle root, got %s", resolved)
 	}
 
-	if err := os.Remove(archivePath); err != nil {
-		t.Fatalf("remove bundle.tar: %v", err)
-	}
 	resolved, err = applycli.ResolveBundleRoot("")
 	if err != nil {
 		t.Fatalf("resolve cwd candidate: %v", err)
