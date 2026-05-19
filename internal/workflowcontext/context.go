@@ -4,9 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"path/filepath"
 	"strings"
+
+	"github.com/Airgap-Castaways/deck/internal/maputil"
 )
 
 const (
@@ -95,7 +95,7 @@ func FieldDefinitions() []FieldDefinition {
 func (c Context) RenderMap() map[string]any {
 	out := map[string]any{}
 	for _, def := range contextFieldDefinitions {
-		setDottedPath(out, strings.TrimPrefix(def.Path, "context."), def.Value(c))
+		maputil.SetDottedPath(out, strings.TrimPrefix(def.Path, "context."), def.Value(c))
 	}
 	out["bundleRoot"] = strings.TrimSpace(c.Paths.BundleRoot)
 	out["stateFile"] = strings.TrimSpace(c.Paths.StateFile)
@@ -104,10 +104,7 @@ func (c Context) RenderMap() map[string]any {
 
 func (c Context) StateFingerprint() string {
 	payload := c.stateFingerprintPayload()
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Sprintf("%v", payload)
-	}
+	raw, _ := json.Marshal(payload)
 	h := sha256.Sum256(raw)
 	return hex.EncodeToString(h[:])
 }
@@ -118,31 +115,9 @@ func (c Context) stateFingerprintPayload() map[string]any {
 		if !def.IncludeInStateFingerprint {
 			continue
 		}
-		setDottedPath(payload, strings.TrimPrefix(def.Path, "context."), def.Value(c))
+		maputil.SetDottedPath(payload, strings.TrimPrefix(def.Path, "context."), def.Value(c))
 	}
 	return payload
-}
-
-func setDottedPath(root map[string]any, path string, value any) {
-	parts := strings.Split(strings.TrimSpace(path), ".")
-	if len(parts) == 0 {
-		return
-	}
-	current := root
-	for _, part := range parts[:len(parts)-1] {
-		if part == "" {
-			return
-		}
-		next, _ := current[part].(map[string]any)
-		if next == nil {
-			next = map[string]any{}
-			current[part] = next
-		}
-		current = next
-	}
-	if last := parts[len(parts)-1]; last != "" {
-		current[last] = value
-	}
 }
 
 func SourceForWorkflowPath(workflowPath string) string {
@@ -151,16 +126,4 @@ func SourceForWorkflowPath(workflowPath string) string {
 		return SourceServer
 	}
 	return SourceFilesystem
-}
-
-func AbsolutePath(path string) string {
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" || strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
-		return trimmed
-	}
-	abs, err := filepath.Abs(trimmed)
-	if err != nil {
-		return trimmed
-	}
-	return abs
 }

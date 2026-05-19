@@ -1,6 +1,10 @@
 package workflowexec
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/Airgap-Castaways/deck/internal/maputil"
+)
 
 type HostFactsReader func(string) ([]byte, error)
 
@@ -96,31 +100,9 @@ func DetectHostFacts(goos string, goarch string, readFile HostFactsReader) map[s
 	}
 	out := map[string]any{}
 	for _, def := range runtimeHostFieldDefinitions {
-		setDottedPath(out, strings.TrimPrefix(def.Path, "runtime.host."), def.Value(source))
+		maputil.SetDottedPath(out, strings.TrimPrefix(def.Path, "runtime.host."), def.Value(source))
 	}
 	return out
-}
-
-func setDottedPath(root map[string]any, path string, value any) {
-	parts := strings.Split(strings.TrimSpace(path), ".")
-	if len(parts) == 0 {
-		return
-	}
-	current := root
-	for _, part := range parts[:len(parts)-1] {
-		if part == "" {
-			return
-		}
-		next, _ := current[part].(map[string]any)
-		if next == nil {
-			next = map[string]any{}
-			current[part] = next
-		}
-		current = next
-	}
-	if last := parts[len(parts)-1]; last != "" {
-		current[last] = value
-	}
 }
 
 func normalizeHostArch(v string) string {
