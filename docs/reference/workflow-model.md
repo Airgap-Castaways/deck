@@ -65,7 +65,7 @@ steps:
 
 ## Variables
 
-Variables and runtime values come from distinct sources:
+Variables, runtime values, and execution context come from distinct sources:
 
 Static `vars` flow from three sources, in order of precedence:
 
@@ -102,7 +102,7 @@ For `deck lint`, `deck prepare`, `deck plan`, and `deck apply`, the effective va
 
 Hostname matching tries the detected hostname first, then the short hostname before the first `.`. Missing host entries are not fatal. Workflows that branch on host-specific fields should provide safe defaults in `all:`, such as `role: ""`, then use conditions such as `vars.role == "control-plane"`.
 
-Runtime values flow separately through `register` outputs and built-in runtime facts such as `runtime.host`.
+Runtime values flow separately through `register` outputs and built-in runtime facts such as `runtime.host`. Execution context values under `context.*` are deck-supplied metadata resolved at command runtime, such as the command name, workflow source, workflow path, bundle root, output root, and state file.
 
 **`workflows/vars.yaml`** — define shared defaults once:
 
@@ -128,7 +128,7 @@ vars:
     content: "{{ .vars.clusterName }}\n"
 ```
 
-**CEL expressions** — use `vars.NAME` and `runtime.NAME` (no braces) in `when:` conditions:
+**CEL expressions** — use `vars.NAME`, `runtime.NAME`, and `context.NAME` (no braces) in `when:` conditions:
 
 ```yaml
 - id: install-rhel-packages
@@ -140,7 +140,42 @@ vars:
 
 Node-scoped vars are static inputs selected before planning and state hashing; `runtime.host` remains the runtime fact namespace for detected OS, architecture, and kernel data.
 
+<!-- BEGIN GENERATED:SYSTEM_VARIABLES -->
+### Built-In Runtime Fields
+
 `runtime.host` is a built-in reserved runtime namespace in both prepare and apply. Use it for detected host facts such as OS family, distro ID, version, architecture, and kernel release. Do not model detected local host facts as static `vars` values.
+
+| Field | Type | Description |
+|---|---|---|
+| `runtime.host.os.name` | `string` | Operating system name reported by the Go runtime. |
+| `runtime.host.os.id` | `string` | Distribution ID from `/etc/os-release` `ID`, lowercased. |
+| `runtime.host.os.family` | `string` | Inferred distribution family such as `debian` or `rhel`, or empty when unknown. |
+| `runtime.host.os.version` | `string` | Distribution version from `/etc/os-release` `VERSION`. |
+| `runtime.host.os.versionId` | `string` | Distribution version ID from `/etc/os-release` `VERSION_ID`. |
+| `runtime.host.os.release` | `string` | Alias of `runtime.host.os.versionId` retained for existing workflows. |
+| `runtime.host.os.idLike` | `string` | Distribution compatibility IDs from `/etc/os-release` `ID_LIKE`, lowercased. |
+| `runtime.host.arch` | `string` | Normalized host architecture such as `amd64` or `arm64`. |
+| `runtime.host.kernel.release` | `string` | Kernel release from `/proc/sys/kernel/osrelease`. |
+
+### Execution Context Fields
+
+`context` is available in both `when` expressions and templates. Canonical fields are:
+
+| Field | Type | Prepare | Apply | Description |
+|---|---|---:|---:|---|
+| `context.command` | `string` | yes | yes | Current command, `prepare` or `apply`. |
+| `context.workflow.source` | `string` | yes | yes | Workflow source, `filesystem` or `server`. |
+| `context.workflow.isServer` | `boolean` | yes | yes | Boolean convenience value derived from `context.workflow.source == "server"`. |
+| `context.workflow.path` | `string` | yes | yes | Resolved workflow file path or URL. |
+| `context.workflow.scenario` | `string` | no | yes | Scenario name when apply resolved a scenario. |
+| `context.paths.bundleRoot` | `string` | yes | yes | Prepared output root during prepare; selected bundle root during apply. |
+| `context.paths.outputRoot` | `string` | yes | no | Prepared output root. |
+| `context.paths.stateFile` | `string` | no | yes | Apply state file path. |
+
+Legacy aliases remain available for existing templates: `context.bundleRoot` maps to `context.paths.bundleRoot`, and `context.stateFile` maps to `context.paths.stateFile`.
+
+When apply state keys are computed, deck includes a fingerprint of the execution context except fields derived from other context values, such as `context.workflow.isServer`, and `context.paths.stateFile`, which is derived from the state key itself.
+<!-- END GENERATED:SYSTEM_VARIABLES -->
 
 ## Minimal workflow
 
@@ -201,7 +236,7 @@ Shared envelope rules:
 
 ### `when` — conditional execution
 
-`when` takes a CEL expression. Use `vars.` to reference input variables defined in `vars:` or `vars.yaml`, and `runtime.` to reference step outputs registered earlier in the run plus built-in host facts under `runtime.host`.
+`when` takes a CEL expression. Use `vars.` to reference input variables defined in `vars:` or `vars.yaml`, `runtime.` to reference step outputs registered earlier in the run plus built-in host facts under `runtime.host`, and `context.` to reference deck-supplied execution metadata.
 
 ```yaml
 steps:

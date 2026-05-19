@@ -182,7 +182,7 @@ func ResolveBundleRoot(positionalBundle string) (string, error) {
 	if strings.TrimSpace(positionalBundle) != "" {
 		return resolveBundleCandidate(positionalBundle, true)
 	}
-	for _, candidate := range []string{"./bundle.tar", "."} {
+	for _, candidate := range []string{"."} {
 		resolved, err := resolveBundleCandidate(candidate, false)
 		if err != nil {
 			return "", err
@@ -191,7 +191,7 @@ func ResolveBundleRoot(positionalBundle string) (string, error) {
 			return resolved, nil
 		}
 	}
-	return "", fmt.Errorf("bundle not found: expected positional bundle path, ./bundle.tar, ./bundle, or current directory with workflows/")
+	return "", fmt.Errorf("bundle not found: expected positional bundle path or current directory with workflows/")
 }
 
 func BundleSHA256Hex(path string) (string, error) {

@@ -117,6 +117,9 @@ func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSche
 	if err := syncGeneratedBlock(filepath.Join(root, "docs", "reference", "workflow-model.md"), workflowSchemaBlockBegin, workflowSchemaBlockEnd, schemadoc.RenderWorkflowSchemaPartial("../../schemas/deck-workflow.schema.json", workflowSchema, schemadoc.WorkflowMeta())); err != nil {
 		return err
 	}
+	if err := syncGeneratedBlock(filepath.Join(root, "docs", "reference", "workflow-model.md"), systemVariablesBlockBegin, systemVariablesBlockEnd, schemadoc.RenderSystemVariablesPartial()); err != nil {
+		return err
+	}
 	if err := syncGeneratedBlock(filepath.Join(root, "docs", "reference", "workspace-layout.md"), componentFragmentBlockBegin, componentFragmentBlockEnd, schemadoc.RenderComponentFragmentSchemaPartial("../../schemas/deck-component-fragment.schema.json", componentFragmentSchema, schemadoc.ComponentFragmentMeta())); err != nil {
 		return err
 	}

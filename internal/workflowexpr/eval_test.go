@@ -33,6 +33,7 @@ func TestEvaluateWhen_NamespaceEnforced(t *testing.T) {
 	inputs := Inputs{
 		Vars:    map[string]any{"nodeRole": "worker"},
 		Runtime: map[string]any{"hostPassed": true},
+		Context: map[string]any{"nodeRole": "worker"},
 	}
 
 	ok, err := EvaluateWhen(`vars.nodeRole == "worker"`, inputs)
@@ -51,19 +52,19 @@ func TestEvaluateWhen_NamespaceEnforced(t *testing.T) {
 		t.Fatalf("expected bare identifier guidance, got %v", err)
 	}
 
-	_, err = EvaluateWhen(`context.nodeRole == "worker"`, inputs)
-	if err == nil {
-		t.Fatalf("expected context namespace to fail")
+	ok, err = EvaluateWhen(`context.nodeRole == "worker"`, inputs)
+	if err != nil {
+		t.Fatalf("expected context namespace expression to pass, got %v", err)
 	}
-	if !strings.Contains(err.Error(), `unknown identifier "context.nodeRole"; supported prefixes are vars. and runtime`) {
-		t.Fatalf("expected namespace restriction message, got %v", err)
+	if !ok {
+		t.Fatalf("expected context namespace expression to be true")
 	}
 
 	_, err = EvaluateWhen(`other.nodeRole == "worker"`, inputs)
 	if err == nil {
 		t.Fatalf("expected unknown dotted namespace to fail")
 	}
-	if !strings.Contains(err.Error(), `unknown identifier "other.nodeRole"; supported prefixes are vars. and runtime`) {
+	if !strings.Contains(err.Error(), `unknown identifier "other.nodeRole"; supported prefixes are context., vars., and runtime`) {
 		t.Fatalf("expected namespace restriction message, got %v", err)
 	}
 }

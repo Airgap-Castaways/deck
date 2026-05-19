@@ -82,12 +82,13 @@ func runDiffWithOptions(env *cliEnv, ctx context.Context, opts diffOptions) erro
 		return err
 	}
 	selectedPhase := strings.TrimSpace(opts.selectedPhase)
-	return executeDiff(env, ctx, workflowPath, selectedPhase, opts.output, opts.fresh, varsAsAnyMap(opts.varOverrides))
+	return executeDiff(env, ctx, workflowPath, strings.TrimSpace(opts.scenario), selectedPhase, opts.output, opts.fresh, varsAsAnyMap(opts.varOverrides))
 }
 
-func executeDiff(env *cliEnv, ctx context.Context, workflowPath, selectedPhase, output string, fresh bool, varOverrides map[string]any) error {
+func executeDiff(env *cliEnv, ctx context.Context, workflowPath, scenario, selectedPhase, output string, fresh bool, varOverrides map[string]any) error {
 	return applycli.RunPlanCommand(ctx, applycli.PlanCommandOptions{
 		WorkflowPath:    workflowPath,
+		Scenario:        scenario,
 		SelectedPhase:   selectedPhase,
 		Output:          output,
 		Fresh:           fresh,

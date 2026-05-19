@@ -10,12 +10,14 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/batchrun"
 	"github.com/Airgap-Castaways/deck/internal/bundle"
 	"github.com/Airgap-Castaways/deck/internal/config"
+	"github.com/Airgap-Castaways/deck/internal/workflowcontext"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
 type RunOptions struct {
 	BundleRoot string
 	StatePath  string
+	Context    workflowcontext.Context
 	EventSink  StepEventSink
 	Fresh      bool
 	kubeadm    kubeadmExecutor
@@ -135,7 +137,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 		runtimeVars[k] = v
 	}
 	runtimeVars["host"] = detectHostFacts()
-	execCtx := ExecutionContext{BundleRoot: bundleRoot, StatePath: statePath, kubeadm: withKubeadmExecutor(opts.kubeadm)}
+	execCtx := ExecutionContext{BundleRoot: bundleRoot, StatePath: statePath, Context: opts.Context, kubeadm: withKubeadmExecutor(opts.kubeadm)}
 	ctxData := execCtx.RenderContext()
 	for _, phase := range phases {
 		st.Phase = phase.Name
@@ -214,7 +216,7 @@ func executeInstallBatch(ctx context.Context, wf *config.Workflow, runtimeVars m
 }
 
 func executeInstallStep(ctx context.Context, wf *config.Workflow, runtimeSnapshot map[string]any, ctxData map[string]any, execCtx ExecutionContext, phaseName string, batchCtx batchEventContext, step config.Step, sink StepEventSink) (installBatchResult, error) {
-	ok, err := evaluateWhen(step.When, wf.Vars, runtimeSnapshot)
+	ok, err := evaluateWhenWithContext(step.When, wf.Vars, runtimeSnapshot, ctxData)
 	if err != nil {
 		return installBatchResult{}, fmt.Errorf("step %s (%s): %w", step.ID, step.Kind, err)
 	}

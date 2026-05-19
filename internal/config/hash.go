@@ -20,6 +20,19 @@ func computeStateKey(workflowBytes []byte, effectiveVars map[string]any) string 
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+func StateKeyWithContext(baseStateKey string, contextFingerprint string) string {
+	base := strings.TrimSpace(baseStateKey)
+	fingerprint := strings.TrimSpace(contextFingerprint)
+	if base == "" || fingerprint == "" {
+		return base
+	}
+	h := sha256.New()
+	_, _ = h.Write([]byte(base))
+	_, _ = h.Write([]byte("\n--context--\n"))
+	_, _ = h.Write([]byte(fingerprint))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 func normalizeWorkflowBytes(workflowBytes []byte) []byte {
 	if len(workflowBytes) == 0 {
 		return nil

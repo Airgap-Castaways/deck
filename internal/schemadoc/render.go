@@ -9,6 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/Airgap-Castaways/deck/internal/schemafacts"
+	"github.com/Airgap-Castaways/deck/internal/workflowcontext"
+	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
 type PageInput struct {
@@ -164,6 +166,52 @@ func RenderToolDefinitionSchemaPartial(schemaPath string, schema map[string]any,
 
 func RenderComponentFragmentSchemaPartial(schemaPath string, schema map[string]any, meta PageMetadata) []byte {
 	return renderCoreSchemaSection("#### Component Fragment Contract", schemaPath, schema, meta, false)
+}
+
+func RenderSystemVariablesPartial() []byte {
+	var buf bytes.Buffer
+	buf.WriteString("### Built-In Runtime Fields\n\n")
+	buf.WriteString("`runtime.host` is a built-in reserved runtime namespace in both prepare and apply. Use it for detected host facts such as OS family, distro ID, version, architecture, and kernel release. Do not model detected local host facts as static `vars` values.\n\n")
+	buf.WriteString(renderRuntimeFieldTable(workflowexec.RuntimeHostFieldDefinitions()))
+	buf.WriteString("\n### Execution Context Fields\n\n")
+	buf.WriteString("`context` is available in both `when` expressions and templates. Canonical fields are:\n\n")
+	buf.WriteString(renderContextFieldTable(workflowcontext.FieldDefinitions()))
+	buf.WriteString("\nLegacy aliases remain available for existing templates: `context.bundleRoot` maps to `context.paths.bundleRoot`, and `context.stateFile` maps to `context.paths.stateFile`.\n\n")
+	buf.WriteString("When apply state keys are computed, deck includes a fingerprint of the execution context except fields derived from other context values, such as `context.workflow.isServer`, and `context.paths.stateFile`, which is derived from the state key itself.\n")
+	return buf.Bytes()
+}
+
+func renderRuntimeFieldTable(fields []workflowexec.RuntimeFieldDefinition) string {
+	if len(fields) == 0 {
+		return "No documented runtime fields.\n"
+	}
+	var buf bytes.Buffer
+	buf.WriteString("| Field | Type | Description |\n")
+	buf.WriteString("|---|---|---|\n")
+	for _, field := range fields {
+		buf.WriteString("| `" + escapePipe(field.Path) + "` | `" + escapePipe(field.Type) + "` | " + escapeMarkdownTableCell(field.Description) + " |\n")
+	}
+	return buf.String()
+}
+
+func renderContextFieldTable(fields []workflowcontext.FieldDefinition) string {
+	if len(fields) == 0 {
+		return "No documented context fields.\n"
+	}
+	var buf bytes.Buffer
+	buf.WriteString("| Field | Type | Prepare | Apply | Description |\n")
+	buf.WriteString("|---|---|---:|---:|---|\n")
+	for _, field := range fields {
+		buf.WriteString("| `" + escapePipe(field.Path) + "` | `" + escapePipe(field.Type) + "` | " + yesNo(field.Prepare) + " | " + yesNo(field.Apply) + " | " + escapeMarkdownTableCell(field.Description) + " |\n")
+	}
+	return buf.String()
+}
+
+func yesNo(value bool) string {
+	if value {
+		return "yes"
+	}
+	return "no"
 }
 
 func renderCoreSchemaSection(heading string, schemaPath string, schema map[string]any, meta PageMetadata, includeValidation bool) []byte {

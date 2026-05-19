@@ -13,6 +13,7 @@ import (
 
 type PlanOptions struct {
 	Request         ExecutionRequest
+	Context         map[string]any
 	Output          string
 	Verbosef        func(level int, format string, args ...any) error
 	StdoutPrintf    func(format string, args ...any) error
@@ -44,12 +45,13 @@ type PlanSummary struct {
 }
 
 type PlanReport struct {
-	WorkflowPath   string      `json:"workflowPath"`
-	SelectedPhase  string      `json:"selectedPhase,omitempty"`
-	StatePath      string      `json:"statePath"`
-	RuntimeVarKeys []string    `json:"runtimeVarKeys,omitempty"`
-	Summary        PlanSummary `json:"summary"`
-	Steps          []PlanStep  `json:"steps"`
+	WorkflowPath   string         `json:"workflowPath"`
+	SelectedPhase  string         `json:"selectedPhase,omitempty"`
+	StatePath      string         `json:"statePath"`
+	RuntimeVarKeys []string       `json:"runtimeVarKeys,omitempty"`
+	Context        map[string]any `json:"context,omitempty"`
+	Summary        PlanSummary    `json:"summary"`
+	Steps          []PlanStep     `json:"steps"`
 }
 
 func ExecutePlan(ctx context.Context, opts PlanOptions) error {
@@ -59,7 +61,7 @@ func ExecutePlan(ctx context.Context, opts PlanOptions) error {
 	if opts.StdoutPrintf == nil {
 		return fmt.Errorf("stdout printf is nil")
 	}
-	report, err := BuildPlanReport(opts.Request)
+	report, err := BuildPlanReportWithContext(opts.Request, opts.Context)
 	if err != nil {
 		return err
 	}
@@ -89,6 +91,10 @@ func ExecutePlan(ctx context.Context, opts PlanOptions) error {
 }
 
 func BuildPlanReport(request ExecutionRequest) (PlanReport, error) {
+	return BuildPlanReportWithContext(request, nil)
+}
+
+func BuildPlanReportWithContext(request ExecutionRequest, context map[string]any) (PlanReport, error) {
 	if request.ExecutionWorkflow == nil {
 		return PlanReport{}, fmt.Errorf("execution workflow is nil")
 	}
@@ -126,7 +132,7 @@ func BuildPlanReport(request ExecutionRequest) (PlanReport, error) {
 				steps = append(steps, entry)
 				continue
 			}
-			ok, evalErr := install.EvaluateWhen(step.When, request.ExecutionWorkflow.Vars, runtimeVars)
+			ok, evalErr := install.EvaluateWhenWithContext(step.When, request.ExecutionWorkflow.Vars, runtimeVars, context)
 			if evalErr != nil {
 				return PlanReport{}, fmt.Errorf("WHEN_EVAL_ERROR: step %s (%s): %w", step.ID, step.Kind, evalErr)
 			}
@@ -149,7 +155,7 @@ func BuildPlanReport(request ExecutionRequest) (PlanReport, error) {
 		runtimeVarKeys = append(runtimeVarKeys, key)
 	}
 	slices.Sort(runtimeVarKeys)
-	return PlanReport{WorkflowPath: request.WorkflowPath, SelectedPhase: request.SelectedPhase, StatePath: request.StatePath, RuntimeVarKeys: runtimeVarKeys, Summary: summary, Steps: steps}, nil
+	return PlanReport{WorkflowPath: request.WorkflowPath, SelectedPhase: request.SelectedPhase, StatePath: request.StatePath, RuntimeVarKeys: runtimeVarKeys, Context: context, Summary: summary, Steps: steps}, nil
 }
 
 func writePlanText(stdoutPrintf func(format string, args ...any) error, report PlanReport) error {
