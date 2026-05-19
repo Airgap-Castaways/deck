@@ -108,7 +108,7 @@ func buildApplyReport(ctx context.Context, opts Options) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	execContext, err := buildApplyContext(&request, strings.TrimSpace(opts.Scenario))
+	execContext, err := buildApplyContext(request, strings.TrimSpace(opts.Scenario))
 	if err != nil {
 		return Report{}, err
 	}
@@ -177,10 +177,7 @@ func buildPrepareReport(ctx context.Context, opts Options) (Report, error) {
 	}, nil
 }
 
-func buildApplyContext(request *applycli.ExecutionRequest, scenario string) (workflowcontext.Context, error) {
-	if request == nil {
-		return workflowcontext.Context{}, fmt.Errorf("execution request is nil")
-	}
+func buildApplyContext(request applycli.ExecutionRequest, scenario string) (workflowcontext.Context, error) {
 	bundleRoot := ""
 	if !applycli.IsHTTPWorkflowPath(request.WorkflowPath) {
 		inferred, err := inferBundleRootFromWorkflowPath(request.WorkflowPath)

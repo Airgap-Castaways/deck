@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -250,8 +251,14 @@ phases:
 	if _, ok := payload.Runtime.Initial["host"]; !ok {
 		t.Fatalf("expected runtime.host in initial runtime: %+v", payload.Runtime.Initial)
 	}
-	if len(payload.Runtime.Planned) != 1 || payload.Runtime.Planned[0].Key != "captured" || payload.Runtime.Planned[0].Step != "capture" || payload.Runtime.Planned[0].Output != "passed" || payload.Runtime.Planned[0].Phase != "install" {
-		t.Fatalf("unexpected planned runtime: %+v", payload.Runtime.Planned)
+	expectedPlanned := []struct {
+		Key    string `json:"key"`
+		Step   string `json:"step"`
+		Output string `json:"output"`
+		Phase  string `json:"phase"`
+	}{{Key: "captured", Step: "capture", Output: "passed", Phase: "install"}}
+	if !reflect.DeepEqual(payload.Runtime.Planned, expectedPlanned) {
+		t.Fatalf("unexpected planned runtime:\ngot:  %+v\nwant: %+v", payload.Runtime.Planned, expectedPlanned)
 	}
 }
 
@@ -317,8 +324,13 @@ phases:
 	if _, ok := payload.Runtime.Initial["host"]; !ok {
 		t.Fatalf("expected runtime.host in initial runtime: %+v", payload.Runtime.Initial)
 	}
-	if len(payload.Runtime.Planned) != 1 || payload.Runtime.Planned[0].Key != "hostPassed" || payload.Runtime.Planned[0].Step != "check-host" || payload.Runtime.Planned[0].Output != "passed" {
-		t.Fatalf("unexpected planned runtime: %+v", payload.Runtime.Planned)
+	expectedPlanned := []struct {
+		Key    string `json:"key"`
+		Step   string `json:"step"`
+		Output string `json:"output"`
+	}{{Key: "hostPassed", Step: "check-host", Output: "passed"}}
+	if !reflect.DeepEqual(payload.Runtime.Planned, expectedPlanned) {
+		t.Fatalf("unexpected planned runtime:\ngot:  %+v\nwant: %+v", payload.Runtime.Planned, expectedPlanned)
 	}
 }
 
