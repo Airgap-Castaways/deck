@@ -46,6 +46,12 @@ func TestServe_StaticReadOnly(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "outputs", "files", "a.txt"), originalBody, 0o644); err != nil {
 		t.Fatalf("write seed file: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(root, "outputs", "files", ".secret"), []byte("hidden\n"), 0o644); err != nil {
+		t.Fatalf("write hidden seed file: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "outputs", "files", ".cache"), 0o755); err != nil {
+		t.Fatalf("mkdir hidden files dir: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "deck"), launcherBody, 0o755); err != nil {
 		t.Fatalf("write deck launcher: %v", err)
 	}
@@ -192,6 +198,17 @@ func TestServe_StaticReadOnly(t *testing.T) {
 		}
 		if strings.Contains(rootBody, `href="/browse/images/calico/node-driver-registrar/"`) {
 			t.Fatalf("expected alias repo to be hidden from browse root, got %q", rootBody)
+		}
+
+		filesReq := httptest.NewRequest(http.MethodGet, "/browse/files/", nil)
+		filesRR := httptest.NewRecorder()
+		h.ServeHTTP(filesRR, filesReq)
+		if filesRR.Code != http.StatusOK {
+			t.Fatalf("expected /browse/files/ 200, got %d", filesRR.Code)
+		}
+		filesBody := filesRR.Body.String()
+		if strings.Contains(filesBody, ".secret") || strings.Contains(filesBody, ".cache") {
+			t.Fatalf("expected dot-prefixed entries to be hidden from files browse, got %q", filesBody)
 		}
 	})
 
