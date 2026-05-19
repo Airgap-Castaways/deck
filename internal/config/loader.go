@@ -52,16 +52,16 @@ func LoadWithOptions(ctx context.Context, source string, opts LoadOptions) (*Wor
 	if err != nil {
 		return nil, err
 	}
-	varsFileOverlays, err := loadVarsFileOverlays(ctx, origin, opts)
+	sharedVars, err := loadSharedVars(ctx, origin, baseVars, opts)
 	if err != nil {
 		return nil, err
 	}
-	baseVarsForMerge := baseVars
+	baseVarsForMerge := sharedVars
 	allVars := map[string]any(nil)
 	hostVars := map[string]any(nil)
 	if opts.NodeScopedVars {
 		var scoped bool
-		baseVarsForMerge, allVars, hostVars, scoped, err = resolveNodeScopedVars(baseVars, opts)
+		baseVarsForMerge, allVars, hostVars, scoped, err = resolveNodeScopedVars(sharedVars, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -76,9 +76,6 @@ func LoadWithOptions(ctx context.Context, source string, opts LoadOptions) (*Wor
 	mergeVars(effectiveVars, allVars)
 	mergeVars(effectiveVars, hostVars)
 	mergeVars(effectiveVars, resolved.Vars)
-	for _, overlay := range varsFileOverlays {
-		mergeVars(effectiveVars, overlay)
-	}
 	mergeVars(effectiveVars, opts.VarOverrides)
 
 	resolved.Vars = effectiveVars

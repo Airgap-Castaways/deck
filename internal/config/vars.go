@@ -48,33 +48,16 @@ func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, e
 	return map[string]any{}, nil
 }
 
-func loadVarsFileOverlays(ctx context.Context, origin workflowOrigin, opts LoadOptions) ([]map[string]any, error) {
-	if len(opts.VarsFiles) == 0 {
-		return nil, nil
-	}
-	overlays := make([]map[string]any, 0, len(opts.VarsFiles))
+func loadSharedVars(ctx context.Context, origin workflowOrigin, baseVars map[string]any, opts LoadOptions) (map[string]any, error) {
+	sharedVars := cloneVars(baseVars)
 	for _, rawPath := range opts.VarsFiles {
 		vars, err := loadVarsFile(ctx, origin, rawPath)
 		if err != nil {
 			return nil, err
 		}
-		if opts.NodeScopedVars {
-			ordinary, allVars, hostVars, scoped, err := resolveNodeScopedVars(vars, opts)
-			if err != nil {
-				return nil, err
-			}
-			if scoped {
-				merged := map[string]any{}
-				mergeVars(merged, ordinary)
-				mergeVars(merged, allVars)
-				mergeVars(merged, hostVars)
-				overlays = append(overlays, merged)
-				continue
-			}
-		}
-		overlays = append(overlays, vars)
+		mergeVars(sharedVars, vars)
 	}
-	return overlays, nil
+	return sharedVars, nil
 }
 
 func loadVarsFile(ctx context.Context, origin workflowOrigin, rawPath string) (map[string]any, error) {

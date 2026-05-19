@@ -160,7 +160,7 @@ hosts:
 `), 0o644); err != nil {
 		t.Fatalf("write site vars: %v", err)
 	}
-	if err := os.WriteFile(workflowPath, []byte("version: v1alpha1\nvars:\n  role: workflow\nphases: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(workflowPath, []byte("version: v1alpha1\nvars:\n  workflowOnly: present\nphases: []\n"), 0o644); err != nil {
 		t.Fatalf("write workflow: %v", err)
 	}
 
@@ -170,6 +170,9 @@ hosts:
 	}
 	if got := wf.Vars["role"]; got != "worker" {
 		t.Fatalf("expected vars-file host overlay to win, got %#v", got)
+	}
+	if got := wf.Vars["workflowOnly"]; got != "present" {
+		t.Fatalf("expected workflow var to survive, got %#v", got)
 	}
 	if got := wf.Vars["site"]; got != "lab-a" {
 		t.Fatalf("expected vars-file all overlay, got %#v", got)
@@ -452,8 +455,8 @@ func TestVarsURLFetch(t *testing.T) {
 		if err != nil {
 			t.Fatalf("LoadWithOptions failed: %v", err)
 		}
-		if got := wf.Vars["mode"]; got != "site" {
-			t.Fatalf("expected remote vars-file overlay, got %#v", got)
+		if got := wf.Vars["mode"]; got != "workflow" {
+			t.Fatalf("expected workflow vars to override remote vars-file overlay, got %#v", got)
 		}
 		if got := wf.Vars["region"]; got != "lab" {
 			t.Fatalf("expected base vars.yaml value, got %#v", got)

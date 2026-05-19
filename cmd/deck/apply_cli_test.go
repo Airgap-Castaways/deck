@@ -153,7 +153,7 @@ func TestPlanAndApplyVarsFileOverlays(t *testing.T) {
 	workflowPath := filepath.Join(scenarioDir, "apply.yaml")
 	writeWorkflowYAML(t, workflowPath, `version: v1alpha1
 vars:
-  role: workflow
+  workflowOnly: present
 phases:
   - name: install
     steps:

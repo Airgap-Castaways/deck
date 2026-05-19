@@ -159,7 +159,7 @@ To enable completion for all future shell sessions, add the sourcing command to 
 
 `prepare`, `plan`, and `apply` support repeatable `-f, --vars-file` YAML overlays and repeatable `--var key=value` overrides for one invocation.
 
-Use these when you want to test a different site value without editing `workflows/vars.yaml` or the scenario file itself. Vars files are merged on top of `workflows/vars.yaml` in the order provided, then `--var` overrides are applied last.
+Use these when you want to test a different site value without editing `workflows/vars.yaml` or the scenario file itself. Vars files are merged on top of `workflows/vars.yaml` in the order provided before node-scoped `all:` and `hosts:` values are selected, then workflow `vars:` and final `--var` overrides are applied.
 
 ```bash
 deck prepare -f vars/site.yaml --var registryHost=mirror.local --var kubernetesVersion=v1.30.1
@@ -185,7 +185,7 @@ hosts:
 
 If the hostname is not listed, these commands still run with ordinary `vars.yaml` values and `all:` values. Workflows that branch on host-specific fields should provide safe defaults in `all:`, such as `role: ""`, then use conditions such as `vars.role == "control-plane"`.
 
-CLI vars files are merged after the selected node-scoped values, and `--var` overrides remain highest precedence. For example, `--var kubernetesVersion=v1.35.6` overrides a value from `all:` or any `-f` file.
+CLI vars files are merged into shared vars before the selected node-scoped values, and `--var` overrides remain highest precedence. For example, `--var kubernetesVersion=v1.35.6` overrides a value from `all:` or any `-f` file.
 
 ### `server up` operational flags
 
