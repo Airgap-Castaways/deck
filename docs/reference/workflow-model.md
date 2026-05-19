@@ -105,6 +105,8 @@ Hostname matching tries the detected hostname first, then the short hostname bef
 
 Runtime values flow separately through `register` outputs and built-in runtime facts such as `runtime.host`. Execution context values under `context.*` are deck-supplied metadata resolved at command runtime, such as the command name, workflow source, workflow path, bundle root, output root, and state file.
 
+Use `deck plan vars` to inspect the input snapshot before running `prepare` or `apply`. It prints effective `vars`, resolved `context`, initial `runtime` values known before execution, and planned runtime keys that may be registered by workflow steps. Registered runtime values are not predicted before their producing step runs.
+
 **`workflows/vars.yaml`** — define shared defaults once:
 
 ```yaml

@@ -186,6 +186,142 @@ phases:
 	}
 }
 
+func TestPlanVarsApplyShowsEffectiveInputs(t *testing.T) {
+	root := t.TempDir()
+	workflowDir := filepath.Join(root, "workflows")
+	scenarioDir := filepath.Join(workflowDir, "scenarios")
+	varsDir := filepath.Join(workflowDir, "vars")
+	if err := os.MkdirAll(scenarioDir, 0o755); err != nil {
+		t.Fatalf("mkdir scenarios: %v", err)
+	}
+	if err := os.MkdirAll(varsDir, 0o755); err != nil {
+		t.Fatalf("mkdir vars dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "vars.yaml"), []byte("cluster: base\nmode: base\n"), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(varsDir, "site.yaml"), []byte("mode: site\nrole: worker\n"), 0o644); err != nil {
+		t.Fatalf("write site vars: %v", err)
+	}
+	workflowPath := filepath.Join(scenarioDir, "apply.yaml")
+	writeWorkflowYAML(t, workflowPath, `version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: capture
+        kind: CheckHost
+        register:
+          captured: passed
+        spec:
+          checks: [os]
+`)
+
+	res := execute([]string{"plan", "vars", "--workflow", workflowPath, "-f", "vars/site.yaml", "--var", "mode=cli", "-o", "json"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	var payload struct {
+		Command      string         `json:"command"`
+		WorkflowPath string         `json:"workflowPath"`
+		Vars         map[string]any `json:"vars"`
+		Context      map[string]any `json:"context"`
+		Runtime      struct {
+			Initial map[string]any `json:"initial"`
+			Planned []struct {
+				Key    string `json:"key"`
+				Step   string `json:"step"`
+				Output string `json:"output"`
+				Phase  string `json:"phase"`
+			} `json:"planned"`
+		} `json:"runtime"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &payload); err != nil {
+		t.Fatalf("parse json: %v stdout=%q", err, res.stdout)
+	}
+	if payload.Command != "apply" || payload.WorkflowPath != workflowPath {
+		t.Fatalf("unexpected command/workflow: %+v", payload)
+	}
+	if payload.Vars["cluster"] != "base" || payload.Vars["role"] != "worker" || payload.Vars["mode"] != "cli" {
+		t.Fatalf("unexpected vars: %+v", payload.Vars)
+	}
+	if payload.Context["command"] != "apply" {
+		t.Fatalf("unexpected context: %+v", payload.Context)
+	}
+	if _, ok := payload.Runtime.Initial["host"]; !ok {
+		t.Fatalf("expected runtime.host in initial runtime: %+v", payload.Runtime.Initial)
+	}
+	if len(payload.Runtime.Planned) != 1 || payload.Runtime.Planned[0].Key != "captured" || payload.Runtime.Planned[0].Step != "capture" || payload.Runtime.Planned[0].Output != "passed" || payload.Runtime.Planned[0].Phase != "install" {
+		t.Fatalf("unexpected planned runtime: %+v", payload.Runtime.Planned)
+	}
+}
+
+func TestPlanVarsPrepareShowsEffectiveInputs(t *testing.T) {
+	root := t.TempDir()
+	workflowDir := filepath.Join(root, "workflows")
+	varsDir := filepath.Join(workflowDir, "vars")
+	if err := os.MkdirAll(varsDir, 0o755); err != nil {
+		t.Fatalf("mkdir vars dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "vars.yaml"), []byte("mode: base\n"), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(varsDir, "prepare.yaml"), []byte("mode: file\n"), 0o644); err != nil {
+		t.Fatalf("write prepare vars: %v", err)
+	}
+	writeWorkflowYAML(t, filepath.Join(workflowDir, "prepare.yaml"), `version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: check-host
+        kind: CheckHost
+        register:
+          hostPassed: passed
+        spec:
+          checks: [os]
+`)
+	originalCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(originalCWD) }()
+
+	res := execute([]string{"plan", "vars", "--command", "prepare", "-f", "vars/prepare.yaml", "--var", "mode=cli", "-o", "json"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	var payload struct {
+		Command string         `json:"command"`
+		Vars    map[string]any `json:"vars"`
+		Context map[string]any `json:"context"`
+		Runtime struct {
+			Initial map[string]any `json:"initial"`
+			Planned []struct {
+				Key    string `json:"key"`
+				Step   string `json:"step"`
+				Output string `json:"output"`
+			} `json:"planned"`
+		} `json:"runtime"`
+	}
+	if err := json.Unmarshal([]byte(res.stdout), &payload); err != nil {
+		t.Fatalf("parse json: %v stdout=%q", err, res.stdout)
+	}
+	if payload.Command != "prepare" || payload.Vars["mode"] != "cli" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+	if payload.Context["command"] != "prepare" {
+		t.Fatalf("unexpected context: %+v", payload.Context)
+	}
+	if _, ok := payload.Runtime.Initial["host"]; !ok {
+		t.Fatalf("expected runtime.host in initial runtime: %+v", payload.Runtime.Initial)
+	}
+	if len(payload.Runtime.Planned) != 1 || payload.Runtime.Planned[0].Key != "hostPassed" || payload.Runtime.Planned[0].Step != "check-host" || payload.Runtime.Planned[0].Output != "passed" {
+		t.Fatalf("unexpected planned runtime: %+v", payload.Runtime.Planned)
+	}
+}
+
 func TestPlanAndApplySelectNodeScopedVarsByHostname(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	hostname, err := os.Hostname()

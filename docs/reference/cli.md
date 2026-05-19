@@ -81,6 +81,8 @@ These commands are additive. They do not replace the default local execution pat
 
 `deck plan -o json` returns the resolved workflow path, state path, runtime var keys, per-step actions, and a summary section.
 
+`deck plan vars -o json` returns the execution input snapshot: effective `vars`, resolved `context`, initial `runtime` values known before execution, and planned `runtime` keys that later steps may register.
+
 `deck server health -o json` returns the resolved server URL, `/healthz` URL, and HTTP status.
 
 `deck server up` writes structured audit records under `.deck/logs/server-audit.log`. The current audit schema is version 2 and uses top-level fields such as `component`, `event`, `method`, `path`, `status`, and `duration_ms`. Raw consumers that read the log file directly should expect this version-2 shape going forward.
@@ -237,10 +239,12 @@ deck prepare --bundle-binary-source local --bundle-binary-dir ../test/artifacts/
 deck prepare --bundle-binary-source release --bundle-binary-exclude darwin/amd64 --bundle-binary-exclude darwin/arm64
 deck prepare --bundle-binary-source release --bundle-binary-version v0.1.0 --bundle-binary linux/amd64
 deck prepare -f vars/site.yaml --var registryHost=mirror.local --var kubernetesVersion=v1.30.1
+deck plan vars --command prepare -f vars/site.yaml --var registryHost=mirror.local
 deck bundle build --out ./bundle.tar
 deck plan --scenario apply --source local
 deck plan --scenario apply --source local -o json
 deck plan --scenario apply --source local -f vars/worker.yaml --var role=worker
+deck plan vars --scenario apply --source local -f vars/worker.yaml --var role=worker
 deck apply --scenario apply --source local
 deck apply --scenario apply --source local -f vars/cp1.yaml --var role=control-plane --var nodeIP=10.0.0.10
 deck cache clean --older-than 30d --dry-run

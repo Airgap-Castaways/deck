@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Airgap-Castaways/deck/internal/applycli"
+	"github.com/Airgap-Castaways/deck/internal/planvars"
+	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
 )
 
 type diffOptions struct {
@@ -17,6 +19,19 @@ type diffOptions struct {
 	source        string
 	fresh         bool
 	selectedPhase string
+	output        string
+	varOverrides  map[string]string
+	varsFiles     []string
+}
+
+type planVarsOptions struct {
+	command       string
+	workflowPath  string
+	scenario      string
+	source        string
+	selectedPhase string
+	preparedRoot  string
+	fresh         bool
 	output        string
 	varOverrides  map[string]string
 	varsFiles     []string
@@ -77,7 +92,108 @@ func newPlanCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	registerScenarioSourceCompletion(cmd, "source", false)
 	registerScenarioNameCompletion(cmd, "scenario", "source", "", false)
+	cmd.AddCommand(newPlanVarsCommand(env))
 	return cmd
+}
+
+func newPlanVarsCommand(env *cliEnv) *cobra.Command {
+	vars := &varFlag{}
+	varsFiles := &stringSliceFlag{}
+	cmd := &cobra.Command{
+		Use:   "vars",
+		Short: "Show effective vars, context, and initial runtime values",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			command, err := cmdFlagValue(cmd, "command")
+			if err != nil {
+				return err
+			}
+			workflowPath, err := cmdFlagValue(cmd, "workflow")
+			if err != nil {
+				return err
+			}
+			scenario, err := cmdFlagValue(cmd, "scenario")
+			if err != nil {
+				return err
+			}
+			source, err := cmdFlagValue(cmd, "source")
+			if err != nil {
+				return err
+			}
+			selectedPhase, err := cmdFlagValue(cmd, "phase")
+			if err != nil {
+				return err
+			}
+			preparedRoot, err := cmdFlagValue(cmd, "root")
+			if err != nil {
+				return err
+			}
+			fresh, err := cmdFlagBoolValue(cmd, "fresh")
+			if err != nil {
+				return err
+			}
+			output, err := cmdFlagValue(cmd, "output")
+			if err != nil {
+				return err
+			}
+			return runPlanVarsWithOptions(env, cmd.Context(), planVarsOptions{
+				command:       command,
+				workflowPath:  workflowPath,
+				scenario:      scenario,
+				source:        source,
+				selectedPhase: selectedPhase,
+				preparedRoot:  preparedRoot,
+				fresh:         fresh,
+				output:        output,
+				varOverrides:  vars.AsMap(),
+				varsFiles:     varsFiles.Values(),
+			})
+		},
+	}
+	cmd.Flags().String("command", planvars.CommandApply, "execution command to inspect (apply|prepare)")
+	cmd.Flags().String("workflow", "", "path or URL to apply workflow file")
+	cmd.Flags().String("scenario", "", "scenario name to inspect for apply")
+	cmd.Flags().String("source", scenarioSourceLocal, "scenario source for apply (local|server)")
+	cmd.Flags().String("phase", "", "phase name to inspect (defaults to all phases)")
+	cmd.Flags().String("root", workspacepaths.DefaultPreparedRoot("."), "prepared bundle output directory for --command prepare")
+	cmd.Flags().Bool("fresh", false, "ignore saved apply state for this invocation")
+	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
+	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
+	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
+	registerScenarioSourceCompletion(cmd, "source", false)
+	registerScenarioNameCompletion(cmd, "scenario", "source", "", false)
+	return cmd
+}
+
+func runPlanVarsWithOptions(env *cliEnv, ctx context.Context, opts planVarsOptions) error {
+	resolvedOutput, err := resolveOutputFormat(opts.output)
+	if err != nil {
+		return err
+	}
+	command := strings.TrimSpace(opts.command)
+	if command == "" {
+		command = planvars.CommandApply
+	}
+	workflowPath := strings.TrimSpace(opts.workflowPath)
+	if command == planvars.CommandApply {
+		workflowPath, err = resolvePlanWorkflowPath(ctx, workflowPath, strings.TrimSpace(opts.scenario), strings.TrimSpace(opts.source))
+		if err != nil {
+			return err
+		}
+	}
+	return planvars.Execute(ctx, planvars.Options{
+		Command:         command,
+		WorkflowPath:    workflowPath,
+		Scenario:        strings.TrimSpace(opts.scenario),
+		SelectedPhase:   strings.TrimSpace(opts.selectedPhase),
+		PreparedRoot:    strings.TrimSpace(opts.preparedRoot),
+		Fresh:           opts.fresh,
+		VarOverrides:    varsAsAnyMap(opts.varOverrides),
+		VarsFiles:       append([]string(nil), opts.varsFiles...),
+		Output:          resolvedOutput,
+		StdoutPrintf:    env.stdoutPrintf,
+		JSONEncoderFunc: env.stdoutJSONEncoder,
+	})
 }
 
 func runDiffWithOptions(env *cliEnv, ctx context.Context, opts diffOptions) error {
