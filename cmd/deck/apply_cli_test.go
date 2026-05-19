@@ -130,6 +130,62 @@ phases:
 	}
 }
 
+func TestPlanAndApplyVarsFileOverlays(t *testing.T) {
+	root := t.TempDir()
+	workflowDir := filepath.Join(root, "workflows")
+	scenarioDir := filepath.Join(workflowDir, "scenarios")
+	varsDir := filepath.Join(workflowDir, "vars")
+	if err := os.MkdirAll(scenarioDir, 0o755); err != nil {
+		t.Fatalf("mkdir scenarios: %v", err)
+	}
+	if err := os.MkdirAll(varsDir, 0o755); err != nil {
+		t.Fatalf("mkdir vars dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "vars.yaml"), []byte("cluster: base\nrole: base\nmode: base\n"), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(varsDir, "site.yaml"), []byte("role: worker\nmode: site\n"), 0o644); err != nil {
+		t.Fatalf("write site vars: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(varsDir, "node.yaml"), []byte("mode: node\n"), 0o644); err != nil {
+		t.Fatalf("write node vars: %v", err)
+	}
+	workflowPath := filepath.Join(scenarioDir, "apply.yaml")
+	writeWorkflowYAML(t, workflowPath, `version: v1alpha1
+vars:
+  role: workflow
+phases:
+  - name: install
+    steps:
+      - id: vars-file-match
+        kind: Command
+        when: vars.cluster == "base" && vars.role == "worker" && vars.mode == "node"
+        spec:
+          command: ["true"]
+      - id: vars-file-miss
+        kind: Command
+        when: vars.role == "workflow"
+        spec:
+          command: ["true"]
+`)
+
+	planOut, err := runWithCapturedStdout([]string{"plan", "--workflow", workflowPath, "-f", "vars/site.yaml", "--vars-file", "vars/node.yaml"})
+	if err != nil {
+		t.Fatalf("plan failed: %v", err)
+	}
+	if !strings.Contains(planOut, "vars-file-match Command RUN") || !strings.Contains(planOut, "vars-file-miss Command SKIP") {
+		t.Fatalf("expected plan to use vars-file overlays, got %q", planOut)
+	}
+
+	applyOut, err := runWithCapturedStdout([]string{"apply", "--workflow", workflowPath, "--dry-run", "-f", "vars/site.yaml", "--vars-file", "vars/node.yaml", root})
+	if err != nil {
+		t.Fatalf("apply dry-run failed: %v", err)
+	}
+	if !strings.Contains(applyOut, "vars-file-match Command PLAN") || !strings.Contains(applyOut, "vars-file-miss Command SKIP") {
+		t.Fatalf("expected apply to use vars-file overlays, got %q", applyOut)
+	}
+}
+
 func TestPlanAndApplySelectNodeScopedVarsByHostname(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	hostname, err := os.Hostname()

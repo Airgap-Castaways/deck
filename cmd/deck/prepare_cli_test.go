@@ -108,6 +108,69 @@ func TestRunPrepareDryRunDoesNotWrite(t *testing.T) {
 	}
 }
 
+func TestRunPrepareVarsFileOverlay(t *testing.T) {
+	root := t.TempDir()
+	workflowsDir := filepath.Join(root, "workflows")
+	varsDir := filepath.Join(workflowsDir, "vars")
+	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir scenarios: %v", err)
+	}
+	if err := os.MkdirAll(varsDir, 0o755); err != nil {
+		t.Fatalf("mkdir vars dir: %v", err)
+	}
+	seedDir := filepath.Join(root, "seed", "files")
+	if err := os.MkdirAll(seedDir, 0o755); err != nil {
+		t.Fatalf("mkdir seed dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(seedDir, "source.bin"), []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("write seed source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowsDir, "vars.yaml"), []byte("prepareEnabled: false\n"), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(varsDir, "prepare.yaml"), []byte("prepareEnabled: true\n"), 0o644); err != nil {
+		t.Fatalf("write prepare vars: %v", err)
+	}
+	writeWorkflowYAML(t, filepath.Join(workflowsDir, "prepare.yaml"), fmt.Sprintf(`version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: overlay-seed
+        kind: DownloadFile
+        when: vars.prepareEnabled == true
+        spec:
+          source:
+            path: files/source.bin
+          fetch:
+            sources:
+              - type: local
+                path: %q
+          outputPath: files/overlay.bin
+`, filepath.Join(root, "seed")))
+	if err := os.WriteFile(filepath.Join(workflowsDir, "scenarios", "apply.yaml"), []byte("version: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+		t.Fatalf("write apply workflow: %v", err)
+	}
+
+	originalCWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(originalCWD) })
+
+	res := execute([]string{"prepare", "--dry-run", "--v=2", "--bundle-binary-source", "local", "-f", "vars/prepare.yaml"})
+	if res.err != nil {
+		t.Fatalf("prepare dry-run failed: %v", res.err)
+	}
+	for _, want := range []string{"component=prepare", "event=cache_artifact", "step=overlay-seed", "action=FETCH"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+		}
+	}
+}
+
 func TestRunPrepareVerboseDiagnostics(t *testing.T) {
 	root := t.TempDir()
 	workflowsDir := filepath.Join(root, "workflows")

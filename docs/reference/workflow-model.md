@@ -67,11 +67,12 @@ steps:
 
 Variables, runtime values, and execution context come from distinct sources:
 
-Static `vars` flow from three sources, in order of precedence:
+Static `vars` flow from four sources, in order of precedence:
 
 1. CLI `--var` overrides
-2. `vars:` block in the scenario file
-3. `workflows/vars.yaml` shared defaults
+2. CLI `-f, --vars-file` overlays
+3. `vars:` block in the scenario file
+4. `workflows/vars.yaml` shared defaults
 
 `deck lint`, `deck prepare`, `deck plan`, and `deck apply` also support node-scoped shared variables in `workflows/vars.yaml`. When `hosts:` is present, deck detects the local hostname at execution time, applies optional `all:` values as shared defaults, and merges the matching host entry into top-level `vars`. If the hostname is not listed, execution continues with ordinary `vars.yaml` values and `all:` values.
 
@@ -98,7 +99,8 @@ For `deck lint`, `deck prepare`, `deck plan`, and `deck apply`, the effective va
 2. `workflows/vars.yaml` `all:` values
 3. selected host values from `hosts.<hostname>`
 4. selected workflow or scenario `vars:` values
-5. CLI `--var` overrides
+5. CLI `-f, --vars-file` overlays for `prepare`, `plan`, and `apply`, in the order provided
+6. CLI `--var` overrides
 
 Hostname matching tries the detected hostname first, then the short hostname before the first `.`. Missing host entries are not fatal. Workflows that branch on host-specific fields should provide safe defaults in `all:`, such as `role: ""`, then use conditions such as `vars.role == "control-plane"`.
 
@@ -117,6 +119,14 @@ version: v1alpha1
 vars:
   clusterName: staging-k8s   # overrides vars.yaml
 ```
+
+**CLI vars files** — overlay site or node values without editing `workflows/vars.yaml`:
+
+```bash
+deck apply --scenario apply -f vars/site.yaml -f vars/cp1.yaml
+```
+
+Vars file paths are relative to the same `workflows/` location that contains `vars.yaml`. Local `-f vars/site.yaml` resolves to `workflows/vars/site.yaml`; remote workflows resolve the same relative path from the remote `workflows/` URL. Later files override earlier files with the same deep-merge behavior as `vars.yaml`, and `--var` remains the final override.
 
 **Template interpolation** — use `{{ .vars.NAME }}` inside string fields:
 

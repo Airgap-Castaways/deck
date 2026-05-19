@@ -20,6 +20,7 @@ type PlanCommandOptions struct {
 	Output          string
 	Fresh           bool
 	VarOverrides    map[string]any
+	VarsFiles       []string
 	Hostname        string
 	DetectHostname  func() (string, error)
 	Verbosef        func(level int, format string, args ...any) error
@@ -37,6 +38,7 @@ type ApplyCommandOptions struct {
 	Fresh          bool
 	DryRun         bool
 	VarOverrides   map[string]any
+	VarsFiles      []string
 	Hostname       string
 	DetectHostname func() (string, error)
 	Verbosef       func(level int, format string, args ...any) error
@@ -61,6 +63,7 @@ func RunPlanCommand(ctx context.Context, opts PlanCommandOptions) error {
 		CommandName:                  "diff",
 		WorkflowPath:                 strings.TrimSpace(opts.WorkflowPath),
 		VarOverrides:                 opts.VarOverrides,
+		VarsFiles:                    append([]string(nil), opts.VarsFiles...),
 		NodeScopedVars:               true,
 		Hostname:                     opts.Hostname,
 		DetectHostname:               opts.DetectHostname,
@@ -101,6 +104,7 @@ func RunApplyCommand(ctx context.Context, opts ApplyCommandOptions) error {
 		WorkflowPath:                 strings.TrimSpace(opts.WorkflowPath),
 		AllowRemoteWorkflow:          true,
 		VarOverrides:                 opts.VarOverrides,
+		VarsFiles:                    append([]string(nil), opts.VarsFiles...),
 		NodeScopedVars:               true,
 		Hostname:                     opts.Hostname,
 		DetectHostname:               opts.DetectHostname,

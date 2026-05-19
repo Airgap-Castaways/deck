@@ -3,9 +3,11 @@ package config
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -16,13 +18,7 @@ import (
 
 func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, error) {
 	if origin.localPath != "" {
-		workflowRoot, err := WorkflowRootForPath(origin.localPath)
-		varsPath := ""
-		if err == nil {
-			varsPath = filepath.Join(workflowRoot, workspacepaths.WorkflowVarsRel)
-		} else {
-			varsPath = filepath.Join(filepath.Dir(origin.localPath), workspacepaths.WorkflowVarsRel)
-		}
+		varsPath := localVarsPath(origin)
 		root, err := fsutil.NewRoot(filepath.Dir(varsPath))
 		if err != nil {
 			return nil, err
@@ -38,12 +34,7 @@ func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, e
 	}
 
 	if origin.remoteURL != nil {
-		workflowRoot, err := remoteWorkflowRoot(origin.remoteURL)
-		varsURL := *siblingURL(origin.remoteURL, workspacepaths.WorkflowVarsRel)
-		if err == nil {
-			varsURL = *workflowRoot
-			varsURL.Path = path.Join(varsURL.Path, workspacepaths.WorkflowVarsRel)
-		}
+		varsURL := remoteVarsURL(origin)
 		b, ok, err := getOptionalHTTP(ctx, varsURL.String())
 		if err != nil {
 			return nil, err
@@ -55,6 +46,97 @@ func loadBaseVars(ctx context.Context, origin workflowOrigin) (map[string]any, e
 	}
 
 	return map[string]any{}, nil
+}
+
+func loadVarsFileOverlays(ctx context.Context, origin workflowOrigin, opts LoadOptions) ([]map[string]any, error) {
+	if len(opts.VarsFiles) == 0 {
+		return nil, nil
+	}
+	overlays := make([]map[string]any, 0, len(opts.VarsFiles))
+	for _, rawPath := range opts.VarsFiles {
+		vars, err := loadVarsFile(ctx, origin, rawPath)
+		if err != nil {
+			return nil, err
+		}
+		if opts.NodeScopedVars {
+			ordinary, allVars, hostVars, scoped, err := resolveNodeScopedVars(vars, opts)
+			if err != nil {
+				return nil, err
+			}
+			if scoped {
+				merged := map[string]any{}
+				mergeVars(merged, ordinary)
+				mergeVars(merged, allVars)
+				mergeVars(merged, hostVars)
+				overlays = append(overlays, merged)
+				continue
+			}
+		}
+		overlays = append(overlays, vars)
+	}
+	return overlays, nil
+}
+
+func loadVarsFile(ctx context.Context, origin workflowOrigin, rawPath string) (map[string]any, error) {
+	varsFile, err := normalizeVarsFileRef(rawPath)
+	if err != nil {
+		return nil, err
+	}
+	if origin.localPath != "" {
+		varsPath := localVarsPath(origin)
+		root, err := fsutil.NewRoot(filepath.Dir(varsPath))
+		if err != nil {
+			return nil, err
+		}
+		b, _, err := root.ReadFile(filepath.FromSlash(varsFile))
+		if err != nil {
+			return nil, fmt.Errorf("read vars file %q: %w", rawPath, err)
+		}
+		return parseVarsYAML(b)
+	}
+	if origin.remoteURL != nil {
+		varsURL := remoteVarsURL(origin)
+		varsURL.Path = path.Join(path.Dir(varsURL.Path), varsFile)
+		b, err := getRequiredHTTP(ctx, varsURL.String())
+		if err != nil {
+			return nil, fmt.Errorf("read vars file %q: %w", rawPath, err)
+		}
+		return parseVarsYAML(b)
+	}
+	return map[string]any{}, nil
+}
+
+func localVarsPath(origin workflowOrigin) string {
+	workflowRoot, err := WorkflowRootForPath(origin.localPath)
+	if err == nil {
+		return filepath.Join(workflowRoot, workspacepaths.WorkflowVarsRel)
+	}
+	return filepath.Join(filepath.Dir(origin.localPath), workspacepaths.WorkflowVarsRel)
+}
+
+func remoteVarsURL(origin workflowOrigin) url.URL {
+	workflowRoot, err := remoteWorkflowRoot(origin.remoteURL)
+	varsURL := *siblingURL(origin.remoteURL, workspacepaths.WorkflowVarsRel)
+	if err == nil {
+		varsURL = *workflowRoot
+		varsURL.Path = path.Join(varsURL.Path, workspacepaths.WorkflowVarsRel)
+	}
+	return varsURL
+}
+
+func normalizeVarsFileRef(rawPath string) (string, error) {
+	trimmed := strings.TrimSpace(strings.ReplaceAll(rawPath, "\\", "/"))
+	if trimmed == "" {
+		return "", fmt.Errorf("vars file path is empty")
+	}
+	if strings.HasPrefix(trimmed, "/") || strings.Contains(trimmed, "://") {
+		return "", fmt.Errorf("vars file path must be relative to %s/: %s", workspacepaths.WorkflowRootDir, rawPath)
+	}
+	cleaned := path.Clean(trimmed)
+	if cleaned == "." || cleaned == "" || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return "", fmt.Errorf("vars file path must stay under %s/: %s", workspacepaths.WorkflowRootDir, rawPath)
+	}
+	return cleaned, nil
 }
 
 func parseVarsYAML(content []byte) (map[string]any, error) {

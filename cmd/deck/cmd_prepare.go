@@ -19,10 +19,12 @@ type prepareOptions struct {
 	binaries       []string
 	binaryExcludes []string
 	varOverrides   map[string]string
+	varsFiles      []string
 }
 
 func newPrepareCommand(env *cliEnv) *cobra.Command {
 	vars := &varFlag{}
+	varsFiles := &stringSliceFlag{}
 	binaries := &stringSliceFlag{}
 	excludes := &stringSliceFlag{}
 	cmd := &cobra.Command{
@@ -69,6 +71,7 @@ func newPrepareCommand(env *cliEnv) *cobra.Command {
 				binaries:       binaries.Values(),
 				binaryExcludes: excludes.Values(),
 				varOverrides:   vars.AsMap(),
+				varsFiles:      varsFiles.Values(),
 			})
 		},
 	}
@@ -81,6 +84,7 @@ func newPrepareCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("bundle-binary-version", "", "release version override for --bundle-binary-source=release")
 	cmd.Flags().Var(binaries, "bundle-binary", "runtime binary target tuple (os/arch), repeatable")
 	cmd.Flags().Var(excludes, "bundle-binary-exclude", "runtime binary target tuple (os/arch) to exclude, repeatable")
+	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	return cmd
 }
@@ -100,6 +104,7 @@ func runPrepareWithOptions(env *cliEnv, cmd *cobra.Command, opts prepareOptions)
 		Binaries:       opts.binaries,
 		BinaryExcludes: opts.binaryExcludes,
 		VarOverrides:   varsAsAnyMap(opts.varOverrides),
+		VarsFiles:      append([]string(nil), opts.varsFiles...),
 		Stdout:         env.stdoutWriter(),
 		Diagnosticf:    env.verbosef,
 		EventSink:      verbosePrepareStepSink(env),
