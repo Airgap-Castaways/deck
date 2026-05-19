@@ -167,6 +167,9 @@ func (h *serverHandler) listBrowseEntries(category, relPath string) ([]browseEnt
 	}
 	for _, entry := range list {
 		name := entry.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
 		childRel := filepath.ToSlash(path.Join(relPath, name))
 		ignoreRel := filepath.ToSlash(path.Join(baseDir, childRel))
 		if ignore.Matches(ignoreRel, entry.IsDir()) {
