@@ -43,7 +43,7 @@ func resolveApplyWorkflowAndBundle(ctx context.Context, opts applyOptions, posit
 	})
 }
 
-func executeLint(env *cliEnv, ctx context.Context, root string, file string, scenario string, output string) error {
+func executeLint(env *cliEnv, ctx context.Context, root string, file string, scenario string, output string, varsFiles []string) error {
 	resolvedOutput, err := resolveOutputFormat(output)
 	if err != nil {
 		return err
@@ -53,6 +53,7 @@ func executeLint(env *cliEnv, ctx context.Context, root string, file string, sce
 		File:            file,
 		Scenario:        scenario,
 		Output:          resolvedOutput,
+		VarsFiles:       append([]string(nil), varsFiles...),
 		Verbosef:        env.verbosef,
 		StdoutPrintf:    env.stdoutPrintf,
 		JSONEncoderFunc: env.stdoutJSONEncoder,

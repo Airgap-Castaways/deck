@@ -495,8 +495,8 @@ func TestSourceCommandRemoved(t *testing.T) {
 func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 	wf := writeValidateWorkflowFixture(t)
 
-	t.Run("lint with -f", func(t *testing.T) {
-		out, err := runWithCapturedStdout([]string{"lint", "-f", wf})
+	t.Run("lint with --workflow", func(t *testing.T) {
+		out, err := runWithCapturedStdout([]string{"lint", "--workflow", wf})
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
@@ -505,18 +505,34 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		}
 	})
 
-	t.Run("lint with --file", func(t *testing.T) {
-		out, err := runWithCapturedStdout([]string{"lint", "--file", wf})
+	t.Run("lint with vars-file", func(t *testing.T) {
+		root := t.TempDir()
+		workflowPath := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+		varsPath := filepath.Join(root, "workflows", "vars", "site.yaml")
+		if err := os.MkdirAll(filepath.Dir(workflowPath), 0o755); err != nil {
+			t.Fatalf("mkdir workflow dir: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(varsPath), 0o755); err != nil {
+			t.Fatalf("mkdir vars dir: %v", err)
+		}
+		if err := os.WriteFile(varsPath, []byte("command:\n  - \"true\"\n"), 0o644); err != nil {
+			t.Fatalf("write vars file: %v", err)
+		}
+		if err := os.WriteFile(workflowPath, []byte("version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: rendered-command\n        kind: Command\n        spec:\n          command: '{{ .vars.command }}'\n"), 0o644); err != nil {
+			t.Fatalf("write workflow: %v", err)
+		}
+
+		out, err := runWithCapturedStdout([]string{"lint", "--workflow", workflowPath, "-f", "vars/site.yaml"})
 		if err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
-		if out != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 modes=prepare,apply topLevelModes=phases,steps\n", wf) {
+		if out != "lint: ok (1 workflows)\nSUMMARY mode=entrypoint workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 modes=prepare,apply topLevelModes=phases,steps\n" {
 			t.Fatalf("unexpected output: %q", out)
 		}
 	})
 
 	t.Run("lint json output", func(t *testing.T) {
-		res := execute([]string{"lint", "--file", wf, "-o", "json"})
+		res := execute([]string{"lint", "--workflow", wf, "-o", "json"})
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
@@ -570,14 +586,14 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 	})
 
 	t.Run("lint verbose diagnostics stay on stderr", func(t *testing.T) {
-		res := execute([]string{"lint", "--file", wf, "--v=2"})
+		res := execute([]string{"lint", "--workflow", wf, "--v=2"})
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
 		if res.stdout != fmt.Sprintf("lint: ok (%s)\nSUMMARY mode=file workflows=1 warnings=1 errors=0 supportedVersion=v1alpha1 modes=prepare,apply topLevelModes=phases,steps\n", wf) {
 			t.Fatalf("unexpected stdout: %q", res.stdout)
 		}
-		for _, want := range []string{"component=lint", "event=lint_requested", "file=" + wf, fmt.Sprintf("workflow=%s", wf), "event=workflow", "event=finding", "code=W_COMMAND_OPAQUE", "severity=warning"} {
+		for _, want := range []string{"component=lint", "event=lint_requested", fmt.Sprintf("workflow=%s", wf), "event=workflow", "event=finding", "code=W_COMMAND_OPAQUE", "severity=warning"} {
 			if !strings.Contains(res.stderr, want) {
 				t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 			}
@@ -616,7 +632,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		}
 		defer func() { _ = os.Chdir(oldWD) }()
 
-		res := execute([]string{"lint", "--file", applyPath, "--root", root, "--v=2"})
+		res := execute([]string{"lint", "--workflow", applyPath, "--root", root, "--v=2"})
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
@@ -689,7 +705,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "prepare.yaml")
 		writeWorkflowYAML(t, path, "version: v1alpha1\nphases:\n  - name: prepare\n    steps:\n      - id: rpm\n        kind: DownloadFile\n        spec:\n          source:\n            url: https://example.com/pkg.rpm\n          outputPath: files/pkg.rpm\n")
 
-		res := execute([]string{"lint", "--file", path, "-o", "json"})
+		res := execute([]string{"lint", "--workflow", path, "-o", "json"})
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
@@ -719,7 +735,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 		if err := os.WriteFile(componentPath, []byte("version: v1alpha1\nsteps: []\n"), 0o644); err != nil {
 			t.Fatalf("write component: %v", err)
 		}
-		_, err := runWithCapturedStdout([]string{"lint", "--file", componentPath})
+		_, err := runWithCapturedStdout([]string{"lint", "--workflow", componentPath})
 		if err == nil {
 			t.Fatalf("expected component entrypoint error")
 		}
@@ -729,7 +745,7 @@ func TestRunWorkflowLintAndLegacyValidateMigration(t *testing.T) {
 	})
 
 	t.Run("legacy workflow namespace is removed", func(t *testing.T) {
-		err := run([]string{"workflow", "lint", "-f", wf})
+		err := run([]string{"workflow", "lint", "--workflow", wf})
 		if err == nil {
 			t.Fatalf("expected unknown command error")
 		}

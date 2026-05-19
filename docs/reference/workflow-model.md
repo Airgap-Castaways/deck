@@ -67,11 +67,12 @@ steps:
 
 Variables, runtime values, and execution context come from distinct sources:
 
-Static `vars` flow from three sources, in order of precedence:
+Static `vars` flow from four sources, in order of precedence:
 
 1. CLI `--var` overrides
 2. `vars:` block in the scenario file
-3. `workflows/vars.yaml` shared defaults
+3. CLI `-f, --vars-file` overlays merged into shared vars before node-scoped selection
+4. `workflows/vars.yaml` shared defaults
 
 `deck lint`, `deck prepare`, `deck plan`, and `deck apply` also support node-scoped shared variables in `workflows/vars.yaml`. When `hosts:` is present, deck detects the local hostname at execution time, applies optional `all:` values as shared defaults, and merges the matching host entry into top-level `vars`. If the hostname is not listed, execution continues with ordinary `vars.yaml` values and `all:` values.
 
@@ -92,11 +93,11 @@ hosts:
     role: worker
 ```
 
-For `deck lint`, `deck prepare`, `deck plan`, and `deck apply`, the effective variable precedence is:
+For `deck lint`, `deck prepare`, `deck plan`, and `deck apply`, deck first builds the shared vars document from `workflows/vars.yaml` plus any `-f, --vars-file` overlays supplied to `prepare`, `plan`, or `apply`. Later vars files override earlier files with the same deep-merge behavior as `vars.yaml`. The effective variable precedence is:
 
-1. ordinary `workflows/vars.yaml` values, excluding `all` and `hosts` when `hosts:` is present
-2. `workflows/vars.yaml` `all:` values
-3. selected host values from `hosts.<hostname>`
+1. ordinary shared vars values, excluding `all` and `hosts` when `hosts:` is present
+2. shared vars `all:` values
+3. selected host values from shared vars `hosts.<hostname>`
 4. selected workflow or scenario `vars:` values
 5. CLI `--var` overrides
 
@@ -117,6 +118,20 @@ version: v1alpha1
 vars:
   clusterName: staging-k8s   # overrides vars.yaml
 ```
+
+**CLI vars files** — overlay site or node values without editing `workflows/vars.yaml`:
+
+```bash
+deck apply --scenario apply -f vars/site.yaml -f vars/cp1.yaml
+```
+
+Vars file paths are relative to the same `workflows/` location that contains `vars.yaml`.
+
+- For local workflows, `-f vars/site.yaml` resolves to `workflows/vars/site.yaml`.
+- For remote workflows, the same relative path is resolved from the remote `workflows/` URL.
+- Later files override earlier files with the same deep-merge behavior as `vars.yaml`.
+- Deck extracts `all:` and `hosts:` node-scoped values after vars-file overlays are merged.
+- `--var` remains the final override with the highest precedence.
 
 **Template interpolation** — use `{{ .vars.NAME }}` inside string fields:
 

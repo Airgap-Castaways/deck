@@ -51,10 +51,10 @@ deck prepare
 deck bundle build --out ./bundle.tar
 ```
 
-During local testing, use repeatable `--var key=value` overrides instead of editing shared vars files for every site-specific change:
+During local testing, use repeatable `-f, --vars-file` overlays or `--var key=value` overrides instead of editing shared vars files for every site-specific change:
 
 ```bash
-deck prepare --var kubernetesVersion=v1.30.1 --var registryHost=mirror.local
+deck prepare -f vars/lab.yaml --var kubernetesVersion=v1.30.1 --var registryHost=mirror.local
 ```
 
 The bundle includes the canonical workspace inputs: `outputs/packages/`, `outputs/images/`, `outputs/files/`, `outputs/bin/`, `workflows/`, the root `deck` launcher, and `.deck/manifest.json` checksums.
@@ -93,7 +93,7 @@ Keep that choice explicit and secondary. The core workflow centers on local `dec
 
 ```bash
 deck lint
-deck lint --file ./workflows/scenarios/apply.yaml
+deck lint --workflow ./workflows/scenarios/apply.yaml
 ```
 
 For planning and diagnostics, also review:

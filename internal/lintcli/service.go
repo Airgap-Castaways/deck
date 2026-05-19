@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Airgap-Castaways/deck/internal/config"
 	"github.com/Airgap-Castaways/deck/internal/logs"
 	"github.com/Airgap-Castaways/deck/internal/validate"
 	"github.com/Airgap-Castaways/deck/internal/workspacepaths"
@@ -56,6 +55,7 @@ type Options struct {
 	File            string
 	Scenario        string
 	Output          string
+	VarsFiles       []string
 	Verbosef        func(level int, format string, args ...any) error
 	StdoutPrintf    func(format string, args ...any) error
 	JSONEncoderFunc func() *json.Encoder
@@ -102,12 +102,12 @@ func BuildReport(ctx context.Context, opts Options) (Report, error) {
 	if resolvedRoot == "" {
 		resolvedRoot = "."
 	}
-	if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "lint", Event: "lint_requested", Attrs: map[string]any{"root": resolvedRoot, "file": resolvedFile, "scenario": resolvedScenario}}); err != nil {
+	if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "lint", Event: "lint_requested", Attrs: map[string]any{"root": resolvedRoot, "workflow": resolvedFile, "scenario": resolvedScenario}}); err != nil {
 		return Report{}, err
 	}
 	if resolvedScenario != "" {
 		if resolvedFile != "" {
-			return Report{}, fmt.Errorf("lint accepts either --file or a scenario name, not both")
+			return Report{}, fmt.Errorf("lint accepts either --workflow or a scenario name, not both")
 		}
 		resolvedPath, err := resolveScenarioPath(resolvedRoot, resolvedScenario, opts.WorkflowRootDir, opts.ScenarioDirName)
 		if err != nil {
@@ -116,7 +116,7 @@ func BuildReport(ctx context.Context, opts Options) (Report, error) {
 		if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "lint", Event: "entrypoint_selected", Attrs: map[string]any{"entrypoint": resolvedPath}}); err != nil {
 			return Report{}, err
 		}
-		files, err := validate.EntrypointWithContext(ctx, resolvedPath)
+		files, err := validate.EntrypointWithOptions(ctx, resolvedPath, validate.Options{VarsFiles: opts.VarsFiles})
 		if err != nil {
 			return Report{}, err
 		}
@@ -130,25 +130,18 @@ func BuildReport(ctx context.Context, opts Options) (Report, error) {
 			if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "lint", Event: "entrypoint_selected", Attrs: map[string]any{"entrypoint": resolvedFile}}); err != nil {
 				return Report{}, err
 			}
-			files, err := validate.EntrypointWithContext(ctx, resolvedFile)
+			files, err := validate.EntrypointWithOptions(ctx, resolvedFile, validate.Options{VarsFiles: opts.VarsFiles})
 			if err != nil {
 				return Report{}, err
 			}
 			return finalizeReport(ctx, Report{Mode: "entrypoint", Entrypoint: resolvedFile, Workflows: files, Summary: Summary{WorkflowCount: len(files)}})
 		}
-		if err := validate.FileWithContext(ctx, resolvedFile); err != nil {
-			return Report{}, err
-		}
-		wf, err := config.Load(ctx, resolvedFile)
-		if err != nil {
-			return Report{}, err
-		}
-		if err := validate.Workflow(resolvedFile, wf); err != nil {
+		if err := validate.FileWithOptions(ctx, resolvedFile, validate.Options{VarsFiles: opts.VarsFiles}); err != nil {
 			return Report{}, err
 		}
 		return finalizeReport(ctx, Report{Mode: "file", Entrypoint: resolvedFile, Workflows: []string{resolvedFile}, Summary: Summary{WorkflowCount: 1}})
 	}
-	files, err := validate.WorkspaceWithContext(ctx, resolvedRoot)
+	files, err := validate.WorkspaceWithOptions(ctx, resolvedRoot, validate.Options{VarsFiles: opts.VarsFiles})
 	if err != nil {
 		return Report{}, err
 	}

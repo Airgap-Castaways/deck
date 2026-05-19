@@ -92,6 +92,96 @@ func TestVarsDeepMerge(t *testing.T) {
 	}
 }
 
+func TestVarsFilesOverlayBaseWorkflowAndCLI(t *testing.T) {
+	root := t.TempDir()
+	workflowDir := filepath.Join(root, "workflows", "scenarios")
+	if err := os.MkdirAll(filepath.Join(root, "workflows", "vars"), 0o755); err != nil {
+		t.Fatalf("mkdir vars dir: %v", err)
+	}
+	workflowPath := filepath.Join(workflowDir, "apply.yaml")
+	if err := os.MkdirAll(filepath.Dir(workflowPath), 0o755); err != nil {
+		t.Fatalf("mkdir workflow dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "workflows", "vars.yaml"), []byte("registry:\n  host: base.example.invalid\n  port: 5000\nmode: base\n"), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "workflows", "vars", "site.yaml"), []byte("registry:\n  host: site.example.invalid\nsiteOnly: site\n"), 0o644); err != nil {
+		t.Fatalf("write site vars: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "workflows", "vars", "node.yaml"), []byte("registry:\n  port: 5443\nmode: node\n"), 0o644); err != nil {
+		t.Fatalf("write node vars: %v", err)
+	}
+	if err := os.WriteFile(workflowPath, []byte("version: v1alpha1\nvars:\n  mode: workflow\n  workflowOnly: present\nphases: []\n"), 0o644); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	wf, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{
+		VarsFiles:    []string{"vars/site.yaml", "vars/node.yaml"},
+		VarOverrides: map[string]any{"mode": "cli"},
+	})
+	if err != nil {
+		t.Fatalf("LoadWithOptions failed: %v", err)
+	}
+
+	registry, ok := wf.Vars["registry"].(map[string]any)
+	if !ok {
+		t.Fatalf("registry should be a map, got %#v", wf.Vars["registry"])
+	}
+	if got := registry["host"]; got != "site.example.invalid" {
+		t.Fatalf("expected vars-file host override, got %#v", got)
+	}
+	if got := registry["port"]; got != 5443 {
+		t.Fatalf("expected later vars-file port override, got %#v", got)
+	}
+	if got := wf.Vars["mode"]; got != "cli" {
+		t.Fatalf("expected CLI override to win, got %#v", got)
+	}
+	if got := wf.Vars["workflowOnly"]; got != "present" {
+		t.Fatalf("expected workflow var to survive, got %#v", got)
+	}
+	if got := wf.Vars["siteOnly"]; got != "site" {
+		t.Fatalf("expected vars-file-only value, got %#v", got)
+	}
+}
+
+func TestVarsFileOverlaySupportsNodeScopedVars(t *testing.T) {
+	dir := t.TempDir()
+	workflowPath := filepath.Join(dir, "apply.yaml")
+	if err := os.WriteFile(filepath.Join(dir, "vars.yaml"), []byte("role: base\n"), 0o644); err != nil {
+		t.Fatalf("write vars.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "site.yaml"), []byte(`all:
+  site: lab-a
+hosts:
+  node-a:
+    role: worker
+  node-b:
+    role: control-plane
+`), 0o644); err != nil {
+		t.Fatalf("write site vars: %v", err)
+	}
+	if err := os.WriteFile(workflowPath, []byte("version: v1alpha1\nvars:\n  workflowOnly: present\nphases: []\n"), 0o644); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	wf, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{NodeScopedVars: true, Hostname: "node-a", VarsFiles: []string{"site.yaml"}})
+	if err != nil {
+		t.Fatalf("LoadWithOptions failed: %v", err)
+	}
+	if got := wf.Vars["role"]; got != "worker" {
+		t.Fatalf("expected vars-file host overlay to win, got %#v", got)
+	}
+	if got := wf.Vars["workflowOnly"]; got != "present" {
+		t.Fatalf("expected workflow var to survive, got %#v", got)
+	}
+	if got := wf.Vars["site"]; got != "lab-a" {
+		t.Fatalf("expected vars-file all overlay, got %#v", got)
+	}
+	if _, ok := wf.Vars["hosts"]; ok {
+		t.Fatalf("did not expect hosts key to leak into effective vars: %#v", wf.Vars)
+	}
+}
+
 func TestVarsOverridesDeepMerge(t *testing.T) {
 	dir := t.TempDir()
 	workflowPath := filepath.Join(dir, "apply.yaml")
@@ -345,6 +435,33 @@ func TestVarsURLFetch(t *testing.T) {
 			t.Fatalf("workflow vars missing, got %v", got)
 		}
 	})
+
+	t.Run("loads vars file overlays relative to remote workflows root", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/workflows/scenarios/apply.yaml":
+				_, _ = w.Write([]byte("version: v1alpha1\nvars:\n  mode: workflow\nphases: []\n"))
+			case "/workflows/vars.yaml":
+				_, _ = w.Write([]byte("mode: base\nregion: lab\n"))
+			case "/workflows/vars/site.yaml":
+				_, _ = w.Write([]byte("mode: site\n"))
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		defer ts.Close()
+
+		wf, err := LoadWithOptions(context.Background(), ts.URL+"/workflows/scenarios/apply.yaml", LoadOptions{VarsFiles: []string{"vars/site.yaml"}})
+		if err != nil {
+			t.Fatalf("LoadWithOptions failed: %v", err)
+		}
+		if got := wf.Vars["mode"]; got != "workflow" {
+			t.Fatalf("expected workflow vars to override remote vars-file overlay, got %#v", got)
+		}
+		if got := wf.Vars["region"]; got != "lab" {
+			t.Fatalf("expected base vars.yaml value, got %#v", got)
+		}
+	})
 }
 
 func TestLoadRejectsBothPhasesAndSteps(t *testing.T) {
@@ -420,6 +537,36 @@ func TestStateKey(t *testing.T) {
 
 		if wf1.StateKey == wf2.StateKey {
 			t.Fatalf("expected state key to change when --var override changes")
+		}
+	})
+
+	t.Run("changes when vars file overlay changes", func(t *testing.T) {
+		dir := t.TempDir()
+		workflowPath := filepath.Join(dir, "apply.yaml")
+		workflowContent := []byte("version: v1alpha1\nphases: []\n")
+		if err := os.WriteFile(workflowPath, workflowContent, 0o644); err != nil {
+			t.Fatalf("write workflow: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "vars.yaml"), []byte("name: base\n"), 0o644); err != nil {
+			t.Fatalf("write vars.yaml: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "overlay-a.yaml"), []byte("name: overlay-a\n"), 0o644); err != nil {
+			t.Fatalf("write overlay-a: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "overlay-b.yaml"), []byte("name: overlay-b\n"), 0o644); err != nil {
+			t.Fatalf("write overlay-b: %v", err)
+		}
+
+		wf1, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{VarsFiles: []string{"overlay-a.yaml"}})
+		if err != nil {
+			t.Fatalf("LoadWithOptions(context.Background(), overlay-a) failed: %v", err)
+		}
+		wf2, err := LoadWithOptions(context.Background(), workflowPath, LoadOptions{VarsFiles: []string{"overlay-b.yaml"}})
+		if err != nil {
+			t.Fatalf("LoadWithOptions(context.Background(), overlay-b) failed: %v", err)
+		}
+		if wf1.StateKey == wf2.StateKey {
+			t.Fatalf("expected state key to change when vars file overlay changes")
 		}
 	})
 

@@ -16,6 +16,7 @@ import (
 
 type LoadOptions struct {
 	VarOverrides   map[string]any
+	VarsFiles      []string
 	NodeScopedVars bool
 	Hostname       string
 	DetectHostname func() (string, error)
@@ -51,12 +52,16 @@ func LoadWithOptions(ctx context.Context, source string, opts LoadOptions) (*Wor
 	if err != nil {
 		return nil, err
 	}
-	baseVarsForMerge := baseVars
+	sharedVars, err := loadSharedVars(ctx, origin, baseVars, opts)
+	if err != nil {
+		return nil, err
+	}
+	baseVarsForMerge := sharedVars
 	allVars := map[string]any(nil)
 	hostVars := map[string]any(nil)
 	if opts.NodeScopedVars {
 		var scoped bool
-		baseVarsForMerge, allVars, hostVars, scoped, err = resolveNodeScopedVars(baseVars, opts)
+		baseVarsForMerge, allVars, hostVars, scoped, err = resolveNodeScopedVars(sharedVars, opts)
 		if err != nil {
 			return nil, err
 		}

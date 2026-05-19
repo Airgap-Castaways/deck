@@ -157,15 +157,22 @@ To enable completion for all future shell sessions, add the sourcing command to 
 
 ### Variable overrides
 
-`prepare`, `plan`, and `apply` support repeatable `--var key=value` overrides for one invocation.
+`lint`, `prepare`, `plan`, and `apply` support repeatable `-f, --vars-file` YAML overlays. `prepare`, `plan`, and `apply` also support repeatable `--var key=value` overrides for one invocation.
 
-Use this when you want to test a different site value without editing `workflows/vars.yaml` or the scenario file itself.
+Use these when you want to test a different site value without editing `workflows/vars.yaml` or the scenario file itself.
+
+- Vars files are merged on top of `workflows/vars.yaml` in the order provided.
+- Node-scoped `all:` and `hosts:` values are selected after vars-file overlays are merged.
+- Workflow `vars:` are applied after node-scoped selection.
+- `--var` overrides are applied last and have the highest precedence.
 
 ```bash
-deck prepare --var registryHost=mirror.local --var kubernetesVersion=v1.30.1
-deck plan --scenario apply --var role=worker
-deck apply --scenario apply --var role=control-plane --var nodeIP=10.0.0.10
+deck prepare -f vars/site.yaml --var registryHost=mirror.local --var kubernetesVersion=v1.30.1
+deck plan --scenario apply -f vars/site.yaml -f vars/worker.yaml --var role=worker
+deck apply --scenario apply -f vars/site.yaml -f vars/cp1.yaml --var role=control-plane --var nodeIP=10.0.0.10
 ```
+
+Vars file paths are relative to the same `workflows/` location that contains `vars.yaml`. For example, `-f vars/site.yaml` reads `workflows/vars/site.yaml` for a local workflow tree.
 
 ### Node-scoped workflow variables
 
@@ -183,7 +190,7 @@ hosts:
 
 If the hostname is not listed, these commands still run with ordinary `vars.yaml` values and `all:` values. Workflows that branch on host-specific fields should provide safe defaults in `all:`, such as `role: ""`, then use conditions such as `vars.role == "control-plane"`.
 
-CLI `--var` overrides remain highest precedence. For example, `--var kubernetesVersion=v1.35.6` overrides a value from `all:`.
+CLI vars files are merged into shared vars before the selected node-scoped values, and `--var` overrides remain highest precedence. For example, `--var kubernetesVersion=v1.35.6` overrides a value from `all:` or any `-f` file.
 
 ### `server up` operational flags
 
@@ -220,22 +227,22 @@ deck version
 deck version -o json
 deck list --source local
 deck completion bash > ./deck.bash
-deck lint --file ./demo/workflows/scenarios/apply.yaml
-deck lint --file ./demo/workflows/scenarios/apply.yaml -o json
-deck lint --file ./demo/workflows/prepare.yaml
+deck lint --workflow ./demo/workflows/scenarios/apply.yaml
+deck lint --workflow ./demo/workflows/scenarios/apply.yaml -o json
+deck lint --workflow ./demo/workflows/prepare.yaml
 
 cd ./demo
 deck prepare
 deck prepare --bundle-binary-source local --bundle-binary-dir ../test/artifacts/bin --bundle-binary linux/amd64 --bundle-binary linux/arm64
 deck prepare --bundle-binary-source release --bundle-binary-exclude darwin/amd64 --bundle-binary-exclude darwin/arm64
 deck prepare --bundle-binary-source release --bundle-binary-version v0.1.0 --bundle-binary linux/amd64
-deck prepare --var registryHost=mirror.local --var kubernetesVersion=v1.30.1
+deck prepare -f vars/site.yaml --var registryHost=mirror.local --var kubernetesVersion=v1.30.1
 deck bundle build --out ./bundle.tar
 deck plan --scenario apply --source local
 deck plan --scenario apply --source local -o json
-deck plan --scenario apply --source local --var role=worker
+deck plan --scenario apply --source local -f vars/worker.yaml --var role=worker
 deck apply --scenario apply --source local
-deck apply --scenario apply --source local --var role=control-plane --var nodeIP=10.0.0.10
+deck apply --scenario apply --source local -f vars/cp1.yaml --var role=control-plane --var nodeIP=10.0.0.10
 deck cache clean --older-than 30d --dry-run
 ```
 

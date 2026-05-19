@@ -29,6 +29,7 @@ type Options struct {
 	Binaries          []string
 	BinaryExcludes    []string
 	VarOverrides      map[string]any
+	VarsFiles         []string
 	Stdout            io.Writer
 	Diagnosticf       func(level int, format string, args ...any) error
 	EventSink         prepare.StepEventSink
@@ -102,7 +103,7 @@ func Run(ctx context.Context, opts Options) error {
 		},
 		Paths: workflowcontext.Paths{BundleRoot: preparedRoot.Abs(), OutputRoot: preparedRoot.Abs()},
 	}
-	prepareWorkflow, err := config.LoadWithOptions(ctx, prepareWorkflowPath, config.LoadOptions{VarOverrides: opts.VarOverrides, NodeScopedVars: true})
+	prepareWorkflow, err := config.LoadWithOptions(ctx, prepareWorkflowPath, config.LoadOptions{VarOverrides: opts.VarOverrides, VarsFiles: opts.VarsFiles, NodeScopedVars: true})
 	if err != nil {
 		return err
 	}

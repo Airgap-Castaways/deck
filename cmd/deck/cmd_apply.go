@@ -19,10 +19,12 @@ type diffOptions struct {
 	selectedPhase string
 	output        string
 	varOverrides  map[string]string
+	varsFiles     []string
 }
 
 func newPlanCommand(env *cliEnv) *cobra.Command {
 	vars := &varFlag{}
+	varsFiles := &stringSliceFlag{}
 	cmd := &cobra.Command{
 		Use:     "plan",
 		Aliases: []string{"diff"},
@@ -60,6 +62,7 @@ func newPlanCommand(env *cliEnv) *cobra.Command {
 				selectedPhase: selectedPhase,
 				output:        output,
 				varOverrides:  vars.AsMap(),
+				varsFiles:     varsFiles.Values(),
 			})
 		},
 	}
@@ -70,6 +73,7 @@ func newPlanCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("phase", "", "phase name to plan (defaults to all phases)")
 	cmd.Flags().Bool("fresh", false, "ignore saved apply state for this invocation")
 	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
+	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	registerScenarioSourceCompletion(cmd, "source", false)
 	registerScenarioNameCompletion(cmd, "scenario", "source", "", false)
@@ -82,10 +86,10 @@ func runDiffWithOptions(env *cliEnv, ctx context.Context, opts diffOptions) erro
 		return err
 	}
 	selectedPhase := strings.TrimSpace(opts.selectedPhase)
-	return executeDiff(env, ctx, workflowPath, strings.TrimSpace(opts.scenario), selectedPhase, opts.output, opts.fresh, varsAsAnyMap(opts.varOverrides))
+	return executeDiff(env, ctx, workflowPath, strings.TrimSpace(opts.scenario), selectedPhase, opts.output, opts.fresh, opts.varsFiles, varsAsAnyMap(opts.varOverrides))
 }
 
-func executeDiff(env *cliEnv, ctx context.Context, workflowPath, scenario, selectedPhase, output string, fresh bool, varOverrides map[string]any) error {
+func executeDiff(env *cliEnv, ctx context.Context, workflowPath, scenario, selectedPhase, output string, fresh bool, varsFiles []string, varOverrides map[string]any) error {
 	return applycli.RunPlanCommand(ctx, applycli.PlanCommandOptions{
 		WorkflowPath:    workflowPath,
 		Scenario:        scenario,
@@ -93,6 +97,7 @@ func executeDiff(env *cliEnv, ctx context.Context, workflowPath, scenario, selec
 		Output:          output,
 		Fresh:           fresh,
 		VarOverrides:    varOverrides,
+		VarsFiles:       append([]string(nil), varsFiles...),
 		Verbosef:        env.verbosef,
 		StdoutPrintf:    env.stdoutPrintf,
 		JSONEncoderFunc: env.stdoutJSONEncoder,
@@ -108,11 +113,13 @@ type applyOptions struct {
 	fresh         bool
 	dryRun        bool
 	varOverrides  map[string]string
+	varsFiles     []string
 	positional    []string
 }
 
 func newApplyCommand(env *cliEnv) *cobra.Command {
 	vars := &varFlag{}
+	varsFiles := &stringSliceFlag{}
 	cmd := &cobra.Command{
 		Use:   "apply [workflow] [bundle]",
 		Short: "Execute an apply file against a bundle",
@@ -155,6 +162,7 @@ func newApplyCommand(env *cliEnv) *cobra.Command {
 				fresh:         fresh,
 				dryRun:        dryRun,
 				varOverrides:  vars.AsMap(),
+				varsFiles:     varsFiles.Values(),
 				positional:    args,
 			})
 		},
@@ -166,6 +174,7 @@ func newApplyCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("phase", "", "phase name to execute (defaults to all phases)")
 	cmd.Flags().Bool("fresh", false, "ignore saved apply state for this invocation")
 	cmd.Flags().Bool("dry-run", false, "print apply plan without executing steps")
+	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	registerScenarioSourceCompletion(cmd, "source", false)
 	registerScenarioNameCompletion(cmd, "scenario", "source", "", false)
@@ -197,6 +206,7 @@ func runApplyWithOptions(env *cliEnv, ctx context.Context, opts applyOptions) er
 		Fresh:          opts.fresh,
 		DryRun:         opts.dryRun,
 		VarOverrides:   varsAsAnyMap(opts.varOverrides),
+		VarsFiles:      append([]string(nil), opts.varsFiles...),
 		Verbosef:       env.verbosef,
 		StdoutPrintf:   env.stdoutPrintf,
 		StdoutPrintln:  env.stdoutPrintln,
