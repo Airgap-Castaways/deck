@@ -9,6 +9,8 @@ import (
 const (
 	workflowSchemaBlockBegin    = "<!-- BEGIN GENERATED:WORKFLOW_SCHEMA_CONTRACT -->"
 	workflowSchemaBlockEnd      = "<!-- END GENERATED:WORKFLOW_SCHEMA_CONTRACT -->"
+	systemVariablesBlockBegin   = "<!-- BEGIN GENERATED:SYSTEM_VARIABLES -->"
+	systemVariablesBlockEnd     = "<!-- END GENERATED:SYSTEM_VARIABLES -->"
 	componentFragmentBlockBegin = "<!-- BEGIN GENERATED:COMPONENT_FRAGMENT_CONTRACT -->"
 	componentFragmentBlockEnd   = "<!-- END GENERATED:COMPONENT_FRAGMENT_CONTRACT -->"
 	toolDefinitionBlockBegin    = "<!-- BEGIN GENERATED:TOOL_DEFINITION_SCHEMA -->"

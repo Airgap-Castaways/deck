@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Airgap-Castaways/deck/internal/workflowcontext"
 	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
+	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 	"github.com/Airgap-Castaways/deck/schemas"
 )
 
@@ -106,6 +108,20 @@ func TestRenderWorkflowSchemaPartialUsesNestedHeadings(t *testing.T) {
 	for _, want := range []string{"## Workflow Schema Contract", "### Example", "### Validation Rules", "- schema: `../../schemas/deck-workflow.schema.json`"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("expected %q in workflow schema partial:\n%s", want, rendered)
+		}
+	}
+}
+
+func TestRenderSystemVariablesPartialUsesFieldDefinitions(t *testing.T) {
+	rendered := string(RenderSystemVariablesPartial())
+	for _, def := range workflowcontext.FieldDefinitions() {
+		if !strings.Contains(rendered, "`"+def.Path+"`") {
+			t.Fatalf("expected context field %s in system variable docs:\n%s", def.Path, rendered)
+		}
+	}
+	for _, def := range workflowexec.RuntimeHostFieldDefinitions() {
+		if !strings.Contains(rendered, "`"+def.Path+"`") {
+			t.Fatalf("expected runtime field %s in system variable docs:\n%s", def.Path, rendered)
 		}
 	}
 }
