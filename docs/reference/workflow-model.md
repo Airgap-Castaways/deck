@@ -125,7 +125,13 @@ vars:
 deck apply --scenario apply -f vars/site.yaml -f vars/cp1.yaml
 ```
 
-Vars file paths are relative to the same `workflows/` location that contains `vars.yaml`. Local `-f vars/site.yaml` resolves to `workflows/vars/site.yaml`; remote workflows resolve the same relative path from the remote `workflows/` URL. Deck deep-merges these files into `workflows/vars.yaml` before extracting `all:` and `hosts:` node-scoped values. `--var` remains the final override.
+Vars file paths are relative to the same `workflows/` location that contains `vars.yaml`.
+
+- For local workflows, `-f vars/site.yaml` resolves to `workflows/vars/site.yaml`.
+- For remote workflows, the same relative path is resolved from the remote `workflows/` URL.
+- Later files override earlier files with the same deep-merge behavior as `vars.yaml`.
+- Deck extracts `all:` and `hosts:` node-scoped values after vars-file overlays are merged.
+- `--var` remains the final override with the highest precedence.
 
 **Template interpolation** — use `{{ .vars.NAME }}` inside string fields:
 
