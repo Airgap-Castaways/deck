@@ -22,10 +22,15 @@ import (
 )
 
 type registryCatalogEntry struct {
-	repoTag string
-	repo    string
-	tag     string
-	tarPath string
+	repoTag       string
+	repo          string
+	canonicalRepo string
+	tag           string
+	tarPath       string
+}
+
+func (e registryCatalogEntry) isCanonical() bool {
+	return e.canonicalRepo == "" || e.repo == e.canonicalRepo
 }
 
 type registryResolvedImage struct {
@@ -322,13 +327,15 @@ func (h *serverHandler) scanRegistryCatalog() ([]registryCatalogEntry, error) {
 					if err != nil {
 						continue
 					}
-					aliases := registryRepositoryAliases(tag.Repository.Name())
+					canonicalRepo := tag.Repository.Name()
+					aliases := registryRepositoryAliases(canonicalRepo)
 					for _, alias := range aliases {
 						entries = append(entries, registryCatalogEntry{
-							repoTag: repoTag,
-							repo:    alias,
-							tag:     tag.TagStr(),
-							tarPath: path,
+							repoTag:       repoTag,
+							repo:          alias,
+							canonicalRepo: canonicalRepo,
+							tag:           tag.TagStr(),
+							tarPath:       path,
 						})
 					}
 				}
