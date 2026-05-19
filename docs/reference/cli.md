@@ -91,7 +91,7 @@ Use [Server Audit Log](server-audit-log.md) for the current emitted record shape
 
 `deck cache list -o json` and `deck server logs -o json` keep machine-readable output on stdout while `--v=<n>` sends path and count diagnostics to stderr.
 
-Global `--v=<n>` writes diagnostics to stderr without changing stdout result contracts. Current levels follow this pattern:
+Global `--v=<n>` writes diagnostics to stderr without changing stdout result contracts. Supported levels are 0-3:
 
 - `--v=0`: result only
 - `--v=1`: workflow/source/path decisions and high-level execution context

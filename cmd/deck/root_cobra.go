@@ -32,7 +32,7 @@ func newRootCommand(env *cliEnv) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.PersistentFlags().IntVar(&env.verbosity, "v", 0, "diagnostic verbosity level")
+	cmd.PersistentFlags().IntVar(&env.verbosity, "v", 0, "diagnostic verbosity level (0-3; higher is more detailed)")
 	cmd.PersistentFlags().StringVar(&env.logFormat, "log-format", "text", "diagnostic log format (text|json)")
 
 	cmd.CompletionOptions.DisableDefaultCmd = true

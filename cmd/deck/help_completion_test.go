@@ -27,6 +27,9 @@ func TestRunUsageShowsTopLevelAxes(t *testing.T) {
 			t.Fatalf("usage must include %q, got %q", section, msg)
 		}
 	}
+	if !strings.Contains(msg, "diagnostic verbosity level (0-3; higher is more detailed)") {
+		t.Fatalf("usage must include verbosity range, got %q", msg)
+	}
 	if strings.Index(msg, "Core Commands:\n") > strings.Index(msg, "Additional Commands:\n") {
 		t.Fatalf("core commands section must appear before additional commands: %q", msg)
 	}
