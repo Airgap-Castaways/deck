@@ -38,6 +38,10 @@ type componentFragment struct {
 	Steps []config.Step `yaml:"steps"`
 }
 
+type Options struct {
+	VarsFiles []string
+}
+
 // File validates workflow structure and semantic rules.
 // It is a convenience wrapper for CLI-style callers that do not own a request context.
 func File(path string) error {
@@ -58,6 +62,38 @@ func FileWithContext(ctx context.Context, path string) error {
 	return withWorkflowName(path, Bytes(path, content))
 }
 
+func FileWithOptions(ctx context.Context, path string, opts Options) error {
+	if ctx == nil {
+		return fmt.Errorf("context is nil")
+	}
+	if path == "" {
+		return fmt.Errorf("file path is empty")
+	}
+	content, err := fsutil.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read workflow file: %w", err)
+	}
+	if err := validateSingleBraceTemplates(path, content); err != nil {
+		return withWorkflowName(path, err)
+	}
+	kind := detectDocumentKind(path)
+	if err := validateSchema(path, content, kind); err != nil {
+		return withWorkflowName(path, err)
+	}
+	if kind == documentKindComponentFragment {
+		fragment, err := parseComponentFragment(content)
+		if err != nil {
+			return withWorkflowName(path, err)
+		}
+		return withWorkflowName(path, validateComponentFragment(path, fragment))
+	}
+	wf, err := config.LoadWithOptions(ctx, path, config.LoadOptions{VarsFiles: append([]string(nil), opts.VarsFiles...), NodeScopedVars: true})
+	if err != nil {
+		return withWorkflowName(path, err)
+	}
+	return Workflow(path, wf)
+}
+
 // Workspace validates every scenario entrypoint under a workflow root.
 // It is a convenience wrapper for callers that do not own a request context.
 func Workspace(root string) ([]string, error) {
@@ -65,6 +101,10 @@ func Workspace(root string) ([]string, error) {
 }
 
 func WorkspaceWithContext(ctx context.Context, root string) ([]string, error) {
+	return WorkspaceWithOptions(ctx, root, Options{})
+}
+
+func WorkspaceWithOptions(ctx context.Context, root string, opts Options) ([]string, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("context is nil")
 	}
@@ -123,7 +163,7 @@ func WorkspaceWithContext(ctx context.Context, root string) ([]string, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		validatedFiles, err := lintLocalEntrypoint(ctx, path, nil, workflowSupportedVersion, visited)
+		validatedFiles, err := lintLocalEntrypoint(ctx, path, nil, workflowSupportedVersion, visited, opts.VarsFiles)
 		if err != nil {
 			return nil, err
 		}
@@ -139,6 +179,10 @@ func Entrypoint(path string) ([]string, error) {
 }
 
 func EntrypointWithContext(ctx context.Context, path string) ([]string, error) {
+	return EntrypointWithOptions(ctx, path, Options{})
+}
+
+func EntrypointWithOptions(ctx context.Context, path string, opts Options) ([]string, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("context is nil")
 	}
@@ -149,7 +193,7 @@ func EntrypointWithContext(ctx context.Context, path string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve workflow path: %w", err)
 	}
-	return lintLocalEntrypoint(ctx, absPath, nil, workflowSupportedVersion, map[string]bool{})
+	return lintLocalEntrypoint(ctx, absPath, nil, workflowSupportedVersion, map[string]bool{}, opts.VarsFiles)
 }
 
 func Workflow(name string, wf *config.Workflow) error {
@@ -205,7 +249,7 @@ func withWorkflowName(name string, err error) error {
 	return fmt.Errorf("%s%w", prefix, err)
 }
 
-func lintLocalEntrypoint(ctx context.Context, path string, inheritedVars map[string]any, workflowVersion string, visiting map[string]bool) ([]string, error) {
+func lintLocalEntrypoint(ctx context.Context, path string, inheritedVars map[string]any, workflowVersion string, visiting map[string]bool, varsFiles []string) ([]string, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolve workflow path: %w", err)
@@ -243,7 +287,7 @@ func lintLocalEntrypoint(ctx context.Context, path string, inheritedVars map[str
 		return nil, withWorkflowName(absPath, fmt.Errorf("parse yaml: %w", err))
 	}
 
-	loadOpts := config.LoadOptions{VarOverrides: cloneAnyMap(inheritedVars), NodeScopedVars: true}
+	loadOpts := config.LoadOptions{VarOverrides: cloneAnyMap(inheritedVars), VarsFiles: append([]string(nil), varsFiles...), NodeScopedVars: true}
 	wf, err := config.LoadWithOptions(ctx, absPath, loadOpts)
 	if err != nil {
 		return nil, withWorkflowName(absPath, err)
@@ -256,7 +300,7 @@ func lintLocalEntrypoint(ctx context.Context, path string, inheritedVars map[str
 			if err != nil {
 				return nil, withWorkflowName(absPath, err)
 			}
-			files, err := lintLocalEntrypoint(ctx, child, wf.Vars, wf.Version, visiting)
+			files, err := lintLocalEntrypoint(ctx, child, wf.Vars, wf.Version, visiting, varsFiles)
 			if err != nil {
 				return nil, err
 			}

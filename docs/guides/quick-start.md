@@ -50,7 +50,7 @@ Use `vars.yaml` or inline `vars` to keep site-specific values out of the step de
 
 ```bash
 deck lint
-deck lint --file ./demo/workflows/scenarios/apply.yaml
+deck lint --workflow ./demo/workflows/scenarios/apply.yaml
 ```
 
 `deck lint` checks the workflow structure and the schema for each typed step. Catching mistakes here is cheaper than discovering them inside the air gap.

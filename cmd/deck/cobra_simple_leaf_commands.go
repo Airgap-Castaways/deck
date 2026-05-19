@@ -8,6 +8,7 @@ import (
 )
 
 func newLintCommand(env *cliEnv) *cobra.Command {
+	varsFiles := &stringSliceFlag{}
 	cmd := &cobra.Command{
 		Use:   "lint [scenario]",
 		Short: "Lint the workflow tree or a single workflow file",
@@ -21,7 +22,7 @@ func newLintCommand(env *cliEnv) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			file, err := cmdFlagValue(cmd, "file")
+			workflow, err := cmdFlagValue(cmd, "workflow")
 			if err != nil {
 				return err
 			}
@@ -29,11 +30,12 @@ func newLintCommand(env *cliEnv) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return executeLint(env, cmd.Context(), root, file, scenario, output)
+			return executeLint(env, cmd.Context(), root, workflow, scenario, output, varsFiles.Values())
 		},
 	}
 	cmd.Flags().String("root", ".", "workspace root containing workflows/")
-	cmd.Flags().StringP("file", "f", "", "path or URL to workflow file")
+	cmd.Flags().String("workflow", "", "path or URL to workflow file")
+	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
 	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
 	return cmd
 }

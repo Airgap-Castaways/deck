@@ -157,7 +157,7 @@ To enable completion for all future shell sessions, add the sourcing command to 
 
 ### Variable overrides
 
-`prepare`, `plan`, and `apply` support repeatable `-f, --vars-file` YAML overlays and repeatable `--var key=value` overrides for one invocation.
+`lint`, `prepare`, `plan`, and `apply` support repeatable `-f, --vars-file` YAML overlays. `prepare`, `plan`, and `apply` also support repeatable `--var key=value` overrides for one invocation.
 
 Use these when you want to test a different site value without editing `workflows/vars.yaml` or the scenario file itself. Vars files are merged on top of `workflows/vars.yaml` in the order provided before node-scoped `all:` and `hosts:` values are selected, then workflow `vars:` and final `--var` overrides are applied.
 
@@ -222,9 +222,9 @@ deck version
 deck version -o json
 deck list --source local
 deck completion bash > ./deck.bash
-deck lint --file ./demo/workflows/scenarios/apply.yaml
-deck lint --file ./demo/workflows/scenarios/apply.yaml -o json
-deck lint --file ./demo/workflows/prepare.yaml
+deck lint --workflow ./demo/workflows/scenarios/apply.yaml
+deck lint --workflow ./demo/workflows/scenarios/apply.yaml -o json
+deck lint --workflow ./demo/workflows/prepare.yaml
 
 cd ./demo
 deck prepare

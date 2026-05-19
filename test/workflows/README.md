@@ -13,7 +13,7 @@
 
 Each canonical scenario keeps scenario meaning in explicit entry workflow files instead of spreading it across harness scripts or per-scenario subdirectories:
 
-- `scenarios/<name>.yaml`, the scenario entry workflow passed to `deck lint --file` and the scenario runner
+- `scenarios/<name>.yaml`, the scenario entry workflow passed to `deck lint --workflow` and the scenario runner
 - `scenarios/<name>-verify.yaml`, explicit verification entrypoints when a scenario needs a separate verify workflow
 - `components/...`, reusable step fragments imported by the scenario entrypoints
 - `vars.yaml`, shared workflow defaults loaded automatically and overridden by scenario `vars:` blocks when needed

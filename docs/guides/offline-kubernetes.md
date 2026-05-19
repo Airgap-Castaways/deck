@@ -93,7 +93,7 @@ Keep that choice explicit and secondary. The core workflow centers on local `dec
 
 ```bash
 deck lint
-deck lint --file ./workflows/scenarios/apply.yaml
+deck lint --workflow ./workflows/scenarios/apply.yaml
 ```
 
 For planning and diagnostics, also review:
