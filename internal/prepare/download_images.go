@@ -29,6 +29,10 @@ type imageArtifactMeta struct {
 	SourceDigests map[string]string `json:"sourceDigests,omitempty"`
 }
 
+type imageArtifactMetaFile struct {
+	Artifacts []imageArtifactMeta `json:"artifacts,omitempty"`
+}
+
 type imageDownloadOps struct {
 	parseReference func(string) (name.Reference, error)
 	fetchImage     func(name.Reference, *v1.Platform, ...remote.Option) (v1.Image, error)
@@ -112,20 +116,27 @@ type imagePlatformSelection struct {
 func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string, images []string, platforms []imagePlatformSelection, auth imageRegistryAuthMap, opts RunOptions) ([]string, error) {
 	deps := resolveDownloadImageOps(opts)
 	platformKeys := imagePlatformKeys(platforms)
-	if files, reused, err := tryReuseImageArtifact(bundleRoot, dir, images, platformKeys, opts); err != nil {
-		return nil, err
-	} else if reused {
-		return files, nil
-	}
 	fetchTargets := imageFetchTargets(platforms)
+	metas, _, err := loadImageArtifactMetas(bundleRoot, dir)
+	if err != nil {
+		return nil, err
+	}
 	files := make([]string, 0, len(images)*len(fetchTargets))
-	sourceDigests := map[string]string{}
 	for _, img := range images {
+		if reusedFiles, reused, err := tryReuseImageArtifactFromMetas(bundleRoot, dir, metas, []string{img}, platformKeys, opts); err != nil {
+			return nil, err
+		} else if reused {
+			files = append(files, reusedFiles...)
+			continue
+		}
+
 		ref, err := deps.parseReference(img)
 		if err != nil {
 			return nil, fmt.Errorf("parse image reference %s: %w", img, err)
 		}
 		registry := ref.Context().RegistryStr()
+		imageFiles := make([]string, 0, len(fetchTargets))
+		sourceDigests := map[string]string{}
 
 		for _, fetchTarget := range fetchTargets {
 			rel := imageArchiveRel(dir, img, fetchTarget.raw)
@@ -163,11 +174,17 @@ func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string
 				return nil, fmt.Errorf("write image archive %s%s: empty archive", img, imagePlatformErrorSuffix(fetchTarget.raw))
 			}
 
-			files = append(files, rel)
+			imageFiles = append(imageFiles, rel)
 		}
-	}
-	if err := writeImageArtifactMeta(bundleRoot, dir, images, platformKeys, files, sourceDigests); err != nil {
-		return nil, err
+		meta, err := buildImageArtifactMeta(bundleRoot, []string{img}, platformKeys, imageFiles, sourceDigests)
+		if err != nil {
+			return nil, err
+		}
+		metas, err = writeImageArtifactMetas(bundleRoot, dir, metas, meta)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, imageFiles...)
 	}
 	return files, nil
 }
@@ -224,11 +241,33 @@ func readImageArtifactMetaFile(path string) ([]byte, bool) {
 	return raw, true
 }
 
-func parseImageArtifactMeta(raw []byte) (imageArtifactMeta, bool) {
+func parseImageArtifactMetas(raw []byte) ([]imageArtifactMeta, bool) {
+	var file imageArtifactMetaFile
+	if err := json.Unmarshal(raw, &file); err == nil && len(file.Artifacts) > 0 {
+		metas := make([]imageArtifactMeta, 0, len(file.Artifacts))
+		for _, meta := range file.Artifacts {
+			if normalized, ok := normalizeImageArtifactMeta(meta); ok {
+				metas = append(metas, normalized)
+			}
+		}
+		if len(metas) == 0 {
+			return nil, false
+		}
+		return metas, true
+	}
+
 	var meta imageArtifactMeta
 	if err := json.Unmarshal(raw, &meta); err != nil {
-		return imageArtifactMeta{}, false
+		return nil, false
 	}
+	meta, ok := normalizeImageArtifactMeta(meta)
+	if !ok {
+		return nil, false
+	}
+	return []imageArtifactMeta{meta}, true
+}
+
+func normalizeImageArtifactMeta(meta imageArtifactMeta) (imageArtifactMeta, bool) {
 	meta.Images = normalizeStrings(meta.Images)
 	meta.Platforms = normalizeStrings(meta.Platforms)
 	meta.Files = normalizeStrings(meta.Files)
@@ -240,69 +279,149 @@ func parseImageArtifactMeta(raw []byte) (imageArtifactMeta, bool) {
 	return meta, true
 }
 
-func loadImageArtifactMeta(bundleRoot, dir string) (imageArtifactMeta, bool, error) {
+func loadImageArtifactMetas(bundleRoot, dir string) ([]imageArtifactMeta, bool, error) {
 	raw, ok := readImageArtifactMetaFile(imageMetaFileAbs(bundleRoot, dir))
 	if !ok {
-		return imageArtifactMeta{}, false, nil
+		return nil, false, nil
 	}
-	meta, ok := parseImageArtifactMeta(raw)
+	metas, ok := parseImageArtifactMetas(raw)
+	if !ok {
+		return nil, false, nil
+	}
+	return metas, true, nil
+}
+
+func loadImageArtifactMeta(bundleRoot, dir string) (imageArtifactMeta, bool, error) {
+	metas, ok, err := loadImageArtifactMetas(bundleRoot, dir)
+	if err != nil {
+		return imageArtifactMeta{}, false, err
+	}
 	if !ok {
 		return imageArtifactMeta{}, false, nil
 	}
-	return meta, true, nil
+	return metas[0], true, nil
 }
 
-func writeImageArtifactMeta(bundleRoot, dir string, images, platforms, files []string, sourceDigests map[string]string) error {
+func buildImageArtifactMeta(bundleRoot string, images, platforms, files []string, sourceDigests map[string]string) (imageArtifactMeta, error) {
 	checksums, err := computeArtifactChecksums(bundleRoot, files)
 	if err != nil {
-		return err
+		return imageArtifactMeta{}, err
 	}
-	meta := imageArtifactMeta{
+	return imageArtifactMeta{
 		Images:        normalizeStrings(images),
 		Platforms:     normalizeStrings(platforms),
 		Files:         normalizeStrings(files),
 		Checksums:     checksums,
 		SourceDigests: normalizeChecksumMap(sourceDigests),
-	}
-	raw, err := json.Marshal(meta)
+	}, nil
+}
+
+func writeImageArtifactMetas(bundleRoot, dir string, metas []imageArtifactMeta, meta imageArtifactMeta) ([]imageArtifactMeta, error) {
+	merged := mergeImageArtifactMetas(metas, meta)
+	raw, err := json.Marshal(imageArtifactMetaFile{Artifacts: merged})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	path := imageMetaFileAbs(bundleRoot, dir)
 	if err := filemode.EnsureParentArtifactDir(path); err != nil {
-		return err
+		return nil, err
 	}
-	return filemode.WriteArtifactFile(path, raw)
+	if err := filemode.WriteArtifactFile(path, raw); err != nil {
+		return nil, err
+	}
+	return merged, nil
 }
 
-func tryReuseImageArtifact(bundleRoot, dir string, images, platforms []string, opts RunOptions) ([]string, bool, error) {
+func mergeImageArtifactMetas(metas []imageArtifactMeta, meta imageArtifactMeta) []imageArtifactMeta {
+	merged := make([]imageArtifactMeta, 0, len(metas)+1)
+	replaced := false
+	for _, existing := range metas {
+		if equalStrings(existing.Images, meta.Images) && equalStrings(existing.Platforms, meta.Platforms) {
+			if !replaced {
+				merged = append(merged, meta)
+				replaced = true
+			}
+			continue
+		}
+		merged = append(merged, existing)
+	}
+	if !replaced {
+		merged = append(merged, meta)
+	}
+	return merged
+}
+
+func imageArtifactReuseCandidate(meta imageArtifactMeta, dir string, images, platforms []string) ([]string, bool) {
+	if !containsAllStrings(meta.Platforms, platforms) {
+		return nil, false
+	}
+	if equalStrings(meta.Images, images) && equalStrings(meta.Platforms, platforms) {
+		return meta.Files, true
+	}
+	if !containsAllStrings(meta.Images, images) {
+		return nil, false
+	}
+	expected := imageArtifactExpectedFiles(dir, images, platforms)
+	if !containsAllStrings(meta.Files, expected) {
+		return nil, false
+	}
+	return expected, true
+}
+
+func imageArtifactExpectedFiles(dir string, images, platforms []string) []string {
+	if len(platforms) == 0 {
+		files := make([]string, 0, len(images))
+		for _, img := range images {
+			files = append(files, imageArchiveRel(dir, img, ""))
+		}
+		return normalizeStrings(files)
+	}
+	files := make([]string, 0, len(images)*len(platforms))
+	for _, img := range images {
+		for _, platform := range platforms {
+			files = append(files, imageArchiveRel(dir, img, platform))
+		}
+	}
+	return normalizeStrings(files)
+}
+
+func containsAllStrings(haystack, needles []string) bool {
+	seen := make(map[string]struct{}, len(haystack))
+	for _, value := range haystack {
+		seen[value] = struct{}{}
+	}
+	for _, value := range needles {
+		if _, ok := seen[value]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func tryReuseImageArtifactFromMetas(bundleRoot, dir string, metas []imageArtifactMeta, images, platforms []string, opts RunOptions) ([]string, bool, error) {
 	if opts.ForceRedownload {
 		return nil, false, nil
 	}
-	meta, ok, err := loadImageArtifactMeta(bundleRoot, dir)
-	if err != nil {
-		return nil, false, err
-	}
-	if !ok {
-		return nil, false, nil
-	}
-	if !equalStrings(normalizeStrings(images), meta.Images) {
-		return nil, false, nil
-	}
-	if !equalStrings(normalizeStrings(platforms), meta.Platforms) {
-		return nil, false, nil
-	}
-	checksumsOK, err := verifyArtifactChecksums(bundleRoot, meta.Files, meta.Checksums)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, false, nil
+	wantImages := normalizeStrings(images)
+	wantPlatforms := normalizeStrings(platforms)
+	for _, meta := range metas {
+		candidateFiles, ok := imageArtifactReuseCandidate(meta, dir, wantImages, wantPlatforms)
+		if !ok {
+			continue
 		}
-		return nil, false, err
+		checksumsOK, err := verifyArtifactChecksums(bundleRoot, candidateFiles, meta.Checksums)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, false, err
+		}
+		if !checksumsOK {
+			continue
+		}
+		return candidateFiles, true, nil
 	}
-	if !checksumsOK {
-		return nil, false, nil
-	}
-	return meta.Files, true, nil
+	return nil, false, nil
 }
 
 type imageRegistryAuth struct {

@@ -2,6 +2,7 @@ package prepare
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -139,6 +140,380 @@ func TestRunDownloadImageUsesExplicitPlatforms(t *testing.T) {
 	}
 	if strings.Join(meta.Platforms, ",") != "linux/amd64,linux/arm64" {
 		t.Fatalf("expected platforms in metadata, got %#v", meta.Platforms)
+	}
+}
+
+func TestRunDownloadImageReusesPlatformSubset(t *testing.T) {
+	bundle := t.TempDir()
+	fetches := 0
+	imageOps := imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ *v1.Platform, _ ...remote.Option) (v1.Image, error) {
+			fetches++
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte(filepath.Base(path)), 0o644)
+		},
+	}
+	allPlatforms := map[string]any{
+		"images":    []any{"registry.k8s.io/pause:3.9"},
+		"platforms": []any{"linux/amd64", "linux/arm64"},
+	}
+	amd64Only := map[string]any{
+		"images":    []any{"registry.k8s.io/pause:3.9"},
+		"platforms": []any{"linux/amd64"},
+	}
+
+	if _, err := runDownloadImage(context.Background(), nil, bundle, allPlatforms, RunOptions{imageDownloadOps: imageOps}); err != nil {
+		t.Fatalf("first runDownloadImage failed: %v", err)
+	}
+	files, err := runDownloadImage(context.Background(), nil, bundle, amd64Only, RunOptions{imageDownloadOps: imageOps})
+	if err != nil {
+		t.Fatalf("second runDownloadImage failed: %v", err)
+	}
+
+	if fetches != 2 {
+		t.Fatalf("expected platform subset reuse to skip second fetch, got %d fetches", fetches)
+	}
+	wantFiles := []string{"images/registry.k8s.io_pause_3.9_linux_amd64.tar"}
+	if strings.Join(files, "\n") != strings.Join(wantFiles, "\n") {
+		t.Fatalf("unexpected reused files: got %#v want %#v", files, wantFiles)
+	}
+}
+
+func TestRunDownloadImageReusesExistingArtifact(t *testing.T) {
+	bundle := t.TempDir()
+	fetches := 0
+	imageOps := imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ *v1.Platform, _ ...remote.Option) (v1.Image, error) {
+			fetches++
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte(filepath.Base(path)), 0o644)
+		},
+	}
+	spec := map[string]any{"images": []any{"registry.k8s.io/pause:3.9"}}
+
+	if _, err := runDownloadImage(context.Background(), nil, bundle, spec, RunOptions{imageDownloadOps: imageOps}); err != nil {
+		t.Fatalf("first runDownloadImage failed: %v", err)
+	}
+	files, err := runDownloadImage(context.Background(), nil, bundle, spec, RunOptions{imageDownloadOps: imageOps})
+	if err != nil {
+		t.Fatalf("second runDownloadImage failed: %v", err)
+	}
+
+	if fetches != 1 {
+		t.Fatalf("expected image artifact reuse to skip second fetch, got %d fetches", fetches)
+	}
+	if len(files) != 1 || files[0] != "images/registry.k8s.io_pause_3.9.tar" {
+		t.Fatalf("unexpected reused files: %#v", files)
+	}
+}
+
+func TestRunDownloadImageForceRedownloadBypassesReuse(t *testing.T) {
+	bundle := t.TempDir()
+	fetches := 0
+	imageOps := imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ *v1.Platform, _ ...remote.Option) (v1.Image, error) {
+			fetches++
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte(filepath.Base(path)), 0o644)
+		},
+	}
+	spec := map[string]any{"images": []any{"registry.k8s.io/pause:3.9"}}
+
+	if _, err := runDownloadImage(context.Background(), nil, bundle, spec, RunOptions{imageDownloadOps: imageOps}); err != nil {
+		t.Fatalf("first runDownloadImage failed: %v", err)
+	}
+	if _, err := runDownloadImage(context.Background(), nil, bundle, spec, RunOptions{ForceRedownload: true, imageDownloadOps: imageOps}); err != nil {
+		t.Fatalf("forced runDownloadImage failed: %v", err)
+	}
+
+	if fetches != 2 {
+		t.Fatalf("expected forced redownload to fetch again, got %d fetches", fetches)
+	}
+}
+
+func TestRunDownloadImageReusesMultipleArtifactsInSameOutputDir(t *testing.T) {
+	bundle := t.TempDir()
+	fetches := 0
+	imageOps := imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ *v1.Platform, _ ...remote.Option) (v1.Image, error) {
+			fetches++
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte(filepath.Base(path)), 0o644)
+		},
+	}
+	specA := map[string]any{"images": []any{"registry.k8s.io/pause:3.9"}}
+	specB := map[string]any{"images": []any{"registry.k8s.io/coredns/coredns:v1.11.1"}}
+
+	for _, spec := range []map[string]any{specA, specB, specA, specB} {
+		if _, err := runDownloadImage(context.Background(), nil, bundle, spec, RunOptions{imageDownloadOps: imageOps}); err != nil {
+			t.Fatalf("runDownloadImage failed: %v", err)
+		}
+	}
+
+	if fetches != 2 {
+		t.Fatalf("expected each image artifact to be fetched once, got %d fetches", fetches)
+	}
+}
+
+func TestRunDownloadImageReusesArtifactsAcrossDifferentOutputDirs(t *testing.T) {
+	bundle := t.TempDir()
+	fetches := 0
+	imageOps := imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ *v1.Platform, _ ...remote.Option) (v1.Image, error) {
+			fetches++
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte(filepath.Base(path)), 0o644)
+		},
+	}
+	specA := map[string]any{"images": []any{"registry.k8s.io/pause:3.9"}, "outputDir": "images/pause"}
+	specB := map[string]any{"images": []any{"registry.k8s.io/coredns/coredns:v1.11.1"}, "outputDir": "images/coredns"}
+
+	for _, spec := range []map[string]any{specA, specB, specA, specB} {
+		if _, err := runDownloadImage(context.Background(), nil, bundle, spec, RunOptions{imageDownloadOps: imageOps}); err != nil {
+			t.Fatalf("runDownloadImage failed: %v", err)
+		}
+	}
+
+	if fetches != 2 {
+		t.Fatalf("expected artifacts in different output dirs to be fetched once each, got %d fetches", fetches)
+	}
+}
+
+func TestRunDownloadImageRefetchesOnlyCorruptedImageInMultiImageStep(t *testing.T) {
+	bundle := t.TempDir()
+	fetches := 0
+	imageOps := imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ *v1.Platform, _ ...remote.Option) (v1.Image, error) {
+			fetches++
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte(filepath.Base(path)), 0o644)
+		},
+	}
+	spec := map[string]any{"images": []any{"registry.k8s.io/pause:3.9", "registry.k8s.io/coredns/coredns:v1.11.1"}}
+
+	if _, err := runDownloadImage(context.Background(), nil, bundle, spec, RunOptions{imageDownloadOps: imageOps}); err != nil {
+		t.Fatalf("first runDownloadImage failed: %v", err)
+	}
+	corrupted := filepath.Join(bundle, filepath.FromSlash("images/registry.k8s.io_pause_3.9.tar"))
+	if err := os.WriteFile(corrupted, []byte("corrupted"), 0o644); err != nil {
+		t.Fatalf("corrupt image archive: %v", err)
+	}
+	if _, err := runDownloadImage(context.Background(), nil, bundle, spec, RunOptions{imageDownloadOps: imageOps}); err != nil {
+		t.Fatalf("second runDownloadImage failed: %v", err)
+	}
+
+	if fetches != 3 {
+		t.Fatalf("expected only corrupted image to be fetched again, got %d fetches", fetches)
+	}
+}
+
+func TestRunDownloadImageReusesLegacySingleArtifactMeta(t *testing.T) {
+	bundle := t.TempDir()
+	rel := "images/registry.k8s.io_pause_3.9.tar"
+	path := filepath.Join(bundle, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir image dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(filepath.Base(path)), 0o644); err != nil {
+		t.Fatalf("write image archive: %v", err)
+	}
+	checksums, err := computeArtifactChecksums(bundle, []string{rel})
+	if err != nil {
+		t.Fatalf("computeArtifactChecksums: %v", err)
+	}
+	raw, err := json.Marshal(imageArtifactMeta{
+		Images:    []string{"registry.k8s.io/pause:3.9"},
+		Files:     []string{rel},
+		Checksums: checksums,
+	})
+	if err != nil {
+		t.Fatalf("marshal legacy metadata: %v", err)
+	}
+	if err := os.WriteFile(imageMetaFileAbs(bundle, "images"), raw, 0o644); err != nil {
+		t.Fatalf("write legacy metadata: %v", err)
+	}
+
+	fetches := 0
+	imageOps := imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ *v1.Platform, _ ...remote.Option) (v1.Image, error) {
+			fetches++
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte(filepath.Base(path)), 0o644)
+		},
+	}
+	files, err := runDownloadImage(context.Background(), nil, bundle, map[string]any{"images": []any{"registry.k8s.io/pause:3.9"}}, RunOptions{imageDownloadOps: imageOps})
+	if err != nil {
+		t.Fatalf("runDownloadImage failed: %v", err)
+	}
+
+	if fetches != 0 {
+		t.Fatalf("expected legacy image metadata to be reused, got %d fetches", fetches)
+	}
+	if len(files) != 1 || files[0] != rel {
+		t.Fatalf("unexpected reused files: %#v", files)
+	}
+}
+
+func TestRunDownloadImagePartiallyReusesLegacyGroupedArtifactMeta(t *testing.T) {
+	bundle := t.TempDir()
+	rels := []string{
+		"images/registry.k8s.io_pause_3.9.tar",
+		"images/registry.k8s.io_coredns_coredns_v1.11.1.tar",
+	}
+	for _, rel := range rels {
+		path := filepath.Join(bundle, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir image dir: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(filepath.Base(path)), 0o644); err != nil {
+			t.Fatalf("write image archive: %v", err)
+		}
+	}
+	checksums, err := computeArtifactChecksums(bundle, rels)
+	if err != nil {
+		t.Fatalf("computeArtifactChecksums: %v", err)
+	}
+	raw, err := json.Marshal(imageArtifactMeta{
+		Images:    []string{"registry.k8s.io/pause:3.9", "registry.k8s.io/coredns/coredns:v1.11.1"},
+		Files:     rels,
+		Checksums: checksums,
+	})
+	if err != nil {
+		t.Fatalf("marshal legacy metadata: %v", err)
+	}
+	if err := os.WriteFile(imageMetaFileAbs(bundle, "images"), raw, 0o644); err != nil {
+		t.Fatalf("write legacy metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundle, filepath.FromSlash(rels[0])), []byte("corrupted"), 0o644); err != nil {
+		t.Fatalf("corrupt image archive: %v", err)
+	}
+
+	fetches := 0
+	imageOps := imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ *v1.Platform, _ ...remote.Option) (v1.Image, error) {
+			fetches++
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte(filepath.Base(path)), 0o644)
+		},
+	}
+	spec := map[string]any{"images": []any{"registry.k8s.io/pause:3.9", "registry.k8s.io/coredns/coredns:v1.11.1"}}
+	if _, err := runDownloadImage(context.Background(), nil, bundle, spec, RunOptions{imageDownloadOps: imageOps}); err != nil {
+		t.Fatalf("runDownloadImage failed: %v", err)
+	}
+
+	if fetches != 1 {
+		t.Fatalf("expected only corrupted legacy grouped image to be fetched, got %d fetches", fetches)
+	}
+}
+
+func TestRunDownloadImageUsesFreshPerImageMetaAfterStaleGroupedMeta(t *testing.T) {
+	bundle := t.TempDir()
+	rels := []string{
+		"images/registry.k8s.io_pause_3.9.tar",
+		"images/registry.k8s.io_coredns_coredns_v1.11.1.tar",
+	}
+	for _, rel := range rels {
+		path := filepath.Join(bundle, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir image dir: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(filepath.Base(path)), 0o644); err != nil {
+			t.Fatalf("write image archive: %v", err)
+		}
+	}
+	staleChecksums, err := computeArtifactChecksums(bundle, rels)
+	if err != nil {
+		t.Fatalf("compute stale checksums: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundle, filepath.FromSlash(rels[0])), []byte("fresh-pause"), 0o644); err != nil {
+		t.Fatalf("write fresh pause archive: %v", err)
+	}
+	freshChecksums, err := computeArtifactChecksums(bundle, []string{rels[0]})
+	if err != nil {
+		t.Fatalf("compute fresh checksums: %v", err)
+	}
+	raw, err := json.Marshal(imageArtifactMetaFile{Artifacts: []imageArtifactMeta{
+		{
+			Images:    []string{"registry.k8s.io/pause:3.9", "registry.k8s.io/coredns/coredns:v1.11.1"},
+			Files:     rels,
+			Checksums: staleChecksums,
+		},
+		{
+			Images:    []string{"registry.k8s.io/pause:3.9"},
+			Files:     []string{rels[0]},
+			Checksums: freshChecksums,
+		},
+	}})
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	if err := os.WriteFile(imageMetaFileAbs(bundle, "images"), raw, 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+
+	fetches := 0
+	imageOps := imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ *v1.Platform, _ ...remote.Option) (v1.Image, error) {
+			fetches++
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte(filepath.Base(path)), 0o644)
+		},
+	}
+	files, err := runDownloadImage(context.Background(), nil, bundle, map[string]any{"images": []any{"registry.k8s.io/pause:3.9"}}, RunOptions{imageDownloadOps: imageOps})
+	if err != nil {
+		t.Fatalf("runDownloadImage failed: %v", err)
+	}
+
+	if fetches != 0 {
+		t.Fatalf("expected fresh per-image metadata to be reused after stale grouped metadata, got %d fetches", fetches)
+	}
+	if len(files) != 1 || files[0] != rels[0] {
+		t.Fatalf("unexpected reused files: %#v", files)
 	}
 }
 

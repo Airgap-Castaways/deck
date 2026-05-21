@@ -45,6 +45,8 @@ The operator unpacks this on the target node, then runs `./deck apply`. The laun
 - `DownloadPackage` now records SHA256 metadata for published package outputs and exported package cache payloads, then revalidates those checksums before reuse.
 - `DownloadImage` now records SHA256 metadata for saved image archives and revalidates those checksums before reuse.
 
+`DownloadImage` reuse requires the saved tar files and the `outputs/images/.deck-cache-images.json` metadata written by a previous successful `prepare` run. The metadata can track multiple image/platform sets in the same output directory. A matching tar file without that metadata is treated as a cache miss. `deck prepare --refresh` bypasses image reuse and downloads the archives again.
+
 Remaining drift gap:
 
 - package reuse still does not detect upstream repository drift on its own; closing that gap likely requires repository snapshot metadata such as repodata/release fingerprints or explicit mirror version contracts.
