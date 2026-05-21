@@ -143,6 +143,47 @@ func TestRunDownloadImageUsesExplicitPlatforms(t *testing.T) {
 	}
 }
 
+func TestRunDownloadImageReusesPlatformSubset(t *testing.T) {
+	bundle := t.TempDir()
+	fetches := 0
+	imageOps := imageDownloadOps{
+		parseReference: func(v string) (name.Reference, error) {
+			return name.ParseReference(v, name.WeakValidation)
+		},
+		fetchImage: func(_ name.Reference, _ *v1.Platform, _ ...remote.Option) (v1.Image, error) {
+			fetches++
+			return empty.Image, nil
+		},
+		writeArchive: func(path string, _ name.Reference, _ v1.Image, _ ...tarball.WriteOption) error {
+			return os.WriteFile(path, []byte(filepath.Base(path)), 0o644)
+		},
+	}
+	allPlatforms := map[string]any{
+		"images":    []any{"registry.k8s.io/pause:3.9"},
+		"platforms": []any{"linux/amd64", "linux/arm64"},
+	}
+	amd64Only := map[string]any{
+		"images":    []any{"registry.k8s.io/pause:3.9"},
+		"platforms": []any{"linux/amd64"},
+	}
+
+	if _, err := runDownloadImage(context.Background(), nil, bundle, allPlatforms, RunOptions{imageDownloadOps: imageOps}); err != nil {
+		t.Fatalf("first runDownloadImage failed: %v", err)
+	}
+	files, err := runDownloadImage(context.Background(), nil, bundle, amd64Only, RunOptions{imageDownloadOps: imageOps})
+	if err != nil {
+		t.Fatalf("second runDownloadImage failed: %v", err)
+	}
+
+	if fetches != 2 {
+		t.Fatalf("expected platform subset reuse to skip second fetch, got %d fetches", fetches)
+	}
+	wantFiles := []string{"images/registry.k8s.io_pause_3.9_linux_amd64.tar"}
+	if strings.Join(files, "\n") != strings.Join(wantFiles, "\n") {
+		t.Fatalf("unexpected reused files: got %#v want %#v", files, wantFiles)
+	}
+}
+
 func TestRunDownloadImageReusesExistingArtifact(t *testing.T) {
 	bundle := t.TempDir()
 	fetches := 0

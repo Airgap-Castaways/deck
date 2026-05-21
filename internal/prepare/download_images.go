@@ -117,9 +117,13 @@ func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string
 	deps := resolveDownloadImageOps(opts)
 	platformKeys := imagePlatformKeys(platforms)
 	fetchTargets := imageFetchTargets(platforms)
+	metas, _, err := loadImageArtifactMetas(bundleRoot, dir)
+	if err != nil {
+		return nil, err
+	}
 	files := make([]string, 0, len(images)*len(fetchTargets))
 	for _, img := range images {
-		if reusedFiles, reused, err := tryReuseImageArtifact(bundleRoot, dir, []string{img}, platformKeys, opts); err != nil {
+		if reusedFiles, reused, err := tryReuseImageArtifactFromMetas(bundleRoot, dir, metas, []string{img}, platformKeys, opts); err != nil {
 			return nil, err
 		} else if reused {
 			files = append(files, reusedFiles...)
@@ -172,7 +176,12 @@ func runGoContainerRegistryDownloads(ctx context.Context, bundleRoot, dir string
 
 			imageFiles = append(imageFiles, rel)
 		}
-		if err := writeImageArtifactMeta(bundleRoot, dir, []string{img}, platformKeys, imageFiles, sourceDigests); err != nil {
+		meta, err := buildImageArtifactMeta(bundleRoot, []string{img}, platformKeys, imageFiles, sourceDigests)
+		if err != nil {
+			return nil, err
+		}
+		metas, err = writeImageArtifactMetas(bundleRoot, dir, metas, meta)
+		if err != nil {
 			return nil, err
 		}
 		files = append(files, imageFiles...)
@@ -293,32 +302,34 @@ func loadImageArtifactMeta(bundleRoot, dir string) (imageArtifactMeta, bool, err
 	return metas[0], true, nil
 }
 
-func writeImageArtifactMeta(bundleRoot, dir string, images, platforms, files []string, sourceDigests map[string]string) error {
+func buildImageArtifactMeta(bundleRoot string, images, platforms, files []string, sourceDigests map[string]string) (imageArtifactMeta, error) {
 	checksums, err := computeArtifactChecksums(bundleRoot, files)
 	if err != nil {
-		return err
+		return imageArtifactMeta{}, err
 	}
-	meta := imageArtifactMeta{
+	return imageArtifactMeta{
 		Images:        normalizeStrings(images),
 		Platforms:     normalizeStrings(platforms),
 		Files:         normalizeStrings(files),
 		Checksums:     checksums,
 		SourceDigests: normalizeChecksumMap(sourceDigests),
-	}
-	metas, _, err := loadImageArtifactMetas(bundleRoot, dir)
-	if err != nil {
-		return err
-	}
+	}, nil
+}
+
+func writeImageArtifactMetas(bundleRoot, dir string, metas []imageArtifactMeta, meta imageArtifactMeta) ([]imageArtifactMeta, error) {
 	merged := mergeImageArtifactMetas(metas, meta)
 	raw, err := json.Marshal(imageArtifactMetaFile{Artifacts: merged})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	path := imageMetaFileAbs(bundleRoot, dir)
 	if err := filemode.EnsureParentArtifactDir(path); err != nil {
-		return err
+		return nil, err
 	}
-	return filemode.WriteArtifactFile(path, raw)
+	if err := filemode.WriteArtifactFile(path, raw); err != nil {
+		return nil, err
+	}
+	return merged, nil
 }
 
 func mergeImageArtifactMetas(metas []imageArtifactMeta, meta imageArtifactMeta) []imageArtifactMeta {
@@ -341,10 +352,10 @@ func mergeImageArtifactMetas(metas []imageArtifactMeta, meta imageArtifactMeta) 
 }
 
 func imageArtifactReuseCandidate(meta imageArtifactMeta, dir string, images, platforms []string) ([]string, bool) {
-	if !equalStrings(meta.Platforms, platforms) {
+	if !containsAllStrings(meta.Platforms, platforms) {
 		return nil, false
 	}
-	if equalStrings(meta.Images, images) {
+	if equalStrings(meta.Images, images) && equalStrings(meta.Platforms, platforms) {
 		return meta.Files, true
 	}
 	if !containsAllStrings(meta.Images, images) {
@@ -387,15 +398,8 @@ func containsAllStrings(haystack, needles []string) bool {
 	return true
 }
 
-func tryReuseImageArtifact(bundleRoot, dir string, images, platforms []string, opts RunOptions) ([]string, bool, error) {
+func tryReuseImageArtifactFromMetas(bundleRoot, dir string, metas []imageArtifactMeta, images, platforms []string, opts RunOptions) ([]string, bool, error) {
 	if opts.ForceRedownload {
-		return nil, false, nil
-	}
-	metas, ok, err := loadImageArtifactMetas(bundleRoot, dir)
-	if err != nil {
-		return nil, false, err
-	}
-	if !ok {
 		return nil, false, nil
 	}
 	wantImages := normalizeStrings(images)
