@@ -18,6 +18,7 @@ func TestRenderLauncherScriptUsesStructuredErrors(t *testing.T) {
 		`log_error runtime_binary_not_executable path "outputs/bin/$deck_os/$deck_arch/deck"`,
 		`log_error runtime_binary_missing os "$deck_os" architecture "$deck_arch" path "outputs/bin/$deck_os/$deck_arch/deck"`,
 		`script_dir_part=${script_path%/*}`,
+		`-*) script_dir_part=./$script_dir_part ;;`,
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("expected %q in launcher script", want)

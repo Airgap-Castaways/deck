@@ -13,6 +13,8 @@ log_error() {
 	shift
 	printf 'level=%s component=%s event=%s' "$level" "$component" "$event" >&2
 	while [ "$#" -gt 1 ]; do
+		# Values passed here are fixed launcher paths or uname output. Avoid external
+		# escaping utilities so the launcher works in minimal rescue environments.
 		printf ' %s="%s"' "$1" "$2" >&2
 		shift 2
 	done
@@ -49,6 +51,9 @@ case "$script_path" in
 		fi
 		;;
 	*) script_dir_part=. ;;
+esac
+case "$script_dir_part" in
+	-*) script_dir_part=./$script_dir_part ;;
 esac
 script_dir=$(CDPATH= cd "$script_dir_part" && pwd)
 runtime_bin="$script_dir/outputs/bin/$deck_os/$deck_arch/deck"
