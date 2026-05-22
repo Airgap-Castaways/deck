@@ -13,8 +13,7 @@ log_error() {
 	shift
 	printf 'level=%s component=%s event=%s' "$level" "$component" "$event" >&2
 	while [ "$#" -gt 1 ]; do
-		escaped_value=$(printf '%s' "$2" | tr '\r\n' '  ' | sed 's/["\\]/\\&/g')
-		printf ' %s="%s"' "$1" "$escaped_value" >&2
+		printf ' %s="%s"' "$1" "$2" >&2
 		shift 2
 	done
 	printf '\n' >&2
@@ -41,7 +40,17 @@ case "$arch_name" in
 		;;
 esac
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+script_path=$0
+case "$script_path" in
+	*/*)
+		script_dir_part=${script_path%/*}
+		if [ -z "$script_dir_part" ]; then
+			script_dir_part=/
+		fi
+		;;
+	*) script_dir_part=. ;;
+esac
+script_dir=$(CDPATH= cd "$script_dir_part" && pwd)
 runtime_bin="$script_dir/outputs/bin/$deck_os/$deck_arch/deck"
 
 if [ ! -x "$runtime_bin" ]; then
