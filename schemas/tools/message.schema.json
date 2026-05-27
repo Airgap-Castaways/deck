@@ -1,0 +1,96 @@
+{
+  "$id": "https://deck.local/schemas/tools/message.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Print an operator-facing message during workflow execution.",
+  "properties": {
+    "apiVersion": {
+      "const": "deck/v1alpha1",
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "kind": {
+      "const": "Message"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "parallelGroup": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "register": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "type": "object"
+    },
+    "retry": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "spec": {
+      "$id": "https://github.com/Airgap-Castaways/deck/internal/stepspec/message",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "description": "Message severity used as a human-readable prefix for warnings and errors. Defaults to `info`.",
+          "enum": [
+            "info",
+            "warn",
+            "error"
+          ],
+          "examples": [
+            "info"
+          ],
+          "type": "string"
+        },
+        "message": {
+          "description": "Message text to print. Templates are rendered before the step runs and YAML block scalars support multi-line text.",
+          "examples": [
+            "Node setup is starting."
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "stream": {
+          "description": "Output stream for the message. Defaults to `stdout`.",
+          "enum": [
+            "stdout",
+            "stderr"
+          ],
+          "examples": [
+            "stdout"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "timeout": {
+      "pattern": "^[0-9]+(ms|s|m|h)$",
+      "type": "string"
+    },
+    "when": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "spec"
+  ],
+  "title": "MessageStep",
+  "type": "object",
+  "x-deck-visibility": "public"
+}

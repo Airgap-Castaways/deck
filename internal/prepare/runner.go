@@ -19,6 +19,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/filemode"
 	"github.com/Airgap-Castaways/deck/internal/fsutil"
 	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
+	"github.com/Airgap-Castaways/deck/internal/operatorio"
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
 	"github.com/Airgap-Castaways/deck/internal/workflowcontext"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
@@ -29,6 +30,7 @@ type RunOptions struct {
 	BundleRoot       string
 	Context          workflowcontext.Context
 	CommandRunner    CommandRunner
+	Interaction      operatorio.Interface
 	ForceRedownload  bool
 	EventSink        StepEventSink
 	imageDownloadOps imageDownloadOps

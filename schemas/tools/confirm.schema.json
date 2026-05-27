@@ -1,0 +1,91 @@
+{
+  "$id": "https://deck.local/schemas/tools/confirm.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ask the local operator for a yes/no decision.",
+  "properties": {
+    "apiVersion": {
+      "const": "deck/v1alpha1",
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "kind": {
+      "const": "Confirm"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "parallelGroup": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "register": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "type": "object"
+    },
+    "retry": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "spec": {
+      "$id": "https://github.com/Airgap-Castaways/deck/internal/stepspec/confirm",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "description": "Default answer used for empty input and required in non-interactive mode.",
+          "examples": [
+            "false"
+          ],
+          "type": "boolean"
+        },
+        "message": {
+          "description": "Prompt shown to the local operator.",
+          "examples": [
+            "Continue with kubeadm init?"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "onNo": {
+          "description": "Behavior when the operator answers no. Defaults to `fail`.",
+          "enum": [
+            "fail",
+            "continue"
+          ],
+          "examples": [
+            "continue"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "timeout": {
+      "pattern": "^[0-9]+(ms|s|m|h)$",
+      "type": "string"
+    },
+    "when": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "spec"
+  ],
+  "title": "ConfirmStep",
+  "type": "object",
+  "x-deck-visibility": "public"
+}

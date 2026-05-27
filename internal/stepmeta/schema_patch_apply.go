@@ -15,6 +15,9 @@ var (
 	PatchResetKubeadmToolSchema                 = patchResetKubeadmToolSchema
 	PatchUpgradeKubeadmToolSchema               = patchUpgradeKubeadmToolSchema
 	PatchCheckKubernetesClusterToolSchema       = patchCheckKubernetesClusterToolSchema
+	PatchMessageToolSchema                      = patchMessageToolSchema
+	PatchConfirmToolSchema                      = patchConfirmToolSchema
+	PatchInputToolSchema                        = patchInputToolSchema
 )
 
 func patchCommandToolSchema(root map[string]any) {
@@ -26,6 +29,46 @@ func patchCommandToolSchema(root map[string]any) {
 	setMap(properties, "sudo", map[string]any{"type": "boolean", "default": false})
 	setMap(properties, "timeout", durationStringSchema())
 	spec["required"] = []any{"command"}
+	setMap(props, "spec", spec)
+}
+
+func patchMessageToolSchema(root map[string]any) {
+	props := propertyMap(root)
+	spec := specMap(root)
+	properties := propertyMap(spec)
+	setMap(properties, "message", minLenStringSchema())
+	setMap(properties, "level", enumStringSchema("info", "warn", "error"))
+	setMap(properties, "stream", enumStringSchema("stdout", "stderr"))
+	spec["required"] = []any{"message"}
+	setMap(props, "spec", spec)
+}
+
+func patchConfirmToolSchema(root map[string]any) {
+	props := propertyMap(root)
+	spec := specMap(root)
+	properties := propertyMap(spec)
+	setMap(properties, "message", minLenStringSchema())
+	setMap(properties, "default", map[string]any{"type": "boolean"})
+	setMap(properties, "onNo", enumStringSchema("fail", "continue"))
+	spec["required"] = []any{"message"}
+	setMap(props, "spec", spec)
+}
+
+func patchInputToolSchema(root map[string]any) {
+	props := propertyMap(root)
+	spec := specMap(root)
+	properties := propertyMap(spec)
+	setMap(properties, "message", minLenStringSchema())
+	setMap(properties, "default", map[string]any{"type": "string"})
+	setMap(properties, "required", map[string]any{"type": "boolean", "default": true})
+	setMap(properties, "secret", map[string]any{"type": "boolean", "default": false})
+	spec["required"] = []any{"message"}
+	spec["allOf"] = []any{
+		map[string]any{
+			"if":   map[string]any{"properties": map[string]any{"secret": map[string]any{"const": true}}, "required": []any{"secret"}},
+			"then": map[string]any{"not": map[string]any{"required": []any{"default"}}},
+		},
+	}
 	setMap(props, "spec", spec)
 }
 

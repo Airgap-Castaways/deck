@@ -24,6 +24,7 @@ type ExecuteOptions struct {
 	WorkflowSource string
 	Scenario       string
 	DryRun         bool
+	NonInteractive bool
 	Verbosef       func(level int, format string, args ...any) error
 	StdoutPrintf   func(format string, args ...any) error
 	StdoutPrintln  func(args ...any) error
@@ -70,7 +71,7 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 		}
 	}()
 
-	if err := install.Run(ctx, request.ExecutionWorkflow, install.RunOptions{BundleRoot: opts.BundleRoot, StatePath: request.StatePath, Context: opts.Context, EventSink: eventSink, Fresh: request.Fresh}); err != nil {
+	if err := install.Run(ctx, request.ExecutionWorkflow, install.RunOptions{BundleRoot: opts.BundleRoot, StatePath: request.StatePath, Context: opts.Context, EventSink: eventSink, Fresh: request.Fresh, NonInteractive: opts.NonInteractive}); err != nil {
 		return err
 	}
 	if opts.StdoutPrintln == nil {

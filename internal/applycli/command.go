@@ -37,6 +37,7 @@ type ApplyCommandOptions struct {
 	SelectedPhase  string
 	Fresh          bool
 	DryRun         bool
+	NonInteractive bool
 	VarOverrides   map[string]any
 	VarsFiles      []string
 	Hostname       string
@@ -133,6 +134,7 @@ func RunApplyCommand(ctx context.Context, opts ApplyCommandOptions) error {
 		WorkflowSource: strings.TrimSpace(opts.WorkflowSource),
 		Scenario:       strings.TrimSpace(opts.Scenario),
 		DryRun:         opts.DryRun,
+		NonInteractive: opts.NonInteractive,
 		Verbosef:       opts.Verbosef,
 		StdoutPrintf:   opts.StdoutPrintf,
 		StdoutPrintln:  opts.StdoutPrintln,

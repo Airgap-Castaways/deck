@@ -13,6 +13,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/errcode"
 	"github.com/Airgap-Castaways/deck/internal/executil"
 	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
+	"github.com/Airgap-Castaways/deck/internal/secretmask"
 	"github.com/Airgap-Castaways/deck/internal/stepspec"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
@@ -89,7 +90,7 @@ func runTimedCommandSpecWithContext(parent context.Context, cmdArgs []string, en
 	}
 	// #nosec G204 -- Command intentionally executes the workflow-provided command vector.
 	command := exec.CommandContext(ctx, commandArgs[0], commandArgs[1:]...)
-	decoratedStdout, decoratedStderr := ctrllogs.WrapCLISubprocessWriters(subprocessCommandName(commandArgs), stdout, stderr)
+	decoratedStdout, decoratedStderr := maskedSubprocessWriters(parent, subprocessCommandName(commandArgs), stdout, stderr)
 	command.Stdout = decoratedStdout
 	command.Stderr = decoratedStderr
 	if len(env) > 0 {
@@ -103,6 +104,7 @@ func runTimedCommandSpecWithContext(parent context.Context, cmdArgs []string, en
 		}
 	}
 	err := command.Run()
+	flushErr := flushMaskedWriters(decoratedStdout, decoratedStderr)
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		if parent.Err() != nil {
 			return parent.Err()
@@ -115,7 +117,26 @@ func runTimedCommandSpecWithContext(parent context.Context, cmdArgs []string, en
 		}
 		return context.Canceled
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return flushErr
+}
+
+func maskedSubprocessWriters(ctx context.Context, command string, stdout, stderr io.Writer) (io.Writer, io.Writer) {
+	secrets := secretValuesFromContext(ctx)
+	stdout, stderr = ctrllogs.WrapCLISubprocessWriters(command, stdout, stderr)
+	return secretmask.NewWriter(stdout, secrets), secretmask.NewWriter(stderr, secrets)
+}
+
+func flushMaskedWriters(writers ...io.Writer) error {
+	var out error
+	for _, writer := range writers {
+		if flusher, ok := writer.(interface{ Flush() error }); ok {
+			out = errors.Join(out, flusher.Flush())
+		}
+	}
+	return out
 }
 
 func subprocessCommandName(commandArgs []string) string {

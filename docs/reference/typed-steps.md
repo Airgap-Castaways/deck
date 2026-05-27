@@ -47,6 +47,12 @@ Use these pages when you are deciding which kind to author. For shared step enve
 - **When to use**: Use this group when later steps must wait on a specific local condition instead of assuming immediate convergence.
 - **Kinds**: `WaitForService`, `WaitForFile`, `WaitForMissingFile`, `WaitForCommand`, `WaitForTCPPort`, `WaitForMissingTCPPort`
 
+## [Operator Interaction](groups/operator-interaction.md)
+
+- **Summary**: Print operator-facing messages and collect explicit local operator decisions or values.
+- **When to use**: Use this group when a workflow needs a clear local checkpoint or an apply-time value that should flow through register outputs.
+- **Kinds**: `Message`, `Confirm`, `Input`
+
 ## [Advanced](groups/advanced.md)
 
 - **Summary**: Use escape-hatch steps only when no typed step clearly matches the requested action.

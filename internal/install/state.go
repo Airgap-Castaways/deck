@@ -13,22 +13,30 @@ import (
 )
 
 type State struct {
-	Phase           string         `json:"phase,omitempty"`
-	CompletedPhases []string       `json:"completedPhases,omitempty"`
-	FailedPhase     string         `json:"failedPhase,omitempty"`
-	RuntimeVars     map[string]any `json:"runtimeVars,omitempty"`
-	Error           string         `json:"error,omitempty"`
+	Phase           string                   `json:"phase,omitempty"`
+	CompletedPhases []string                 `json:"completedPhases,omitempty"`
+	FailedPhase     string                   `json:"failedPhase,omitempty"`
+	RuntimeVars     map[string]any           `json:"runtimeVars,omitempty"`
+	RuntimeSecrets  map[string]RuntimeSecret `json:"runtimeSecrets,omitempty"`
+	Error           string                   `json:"error,omitempty"`
+}
+
+type RuntimeSecret struct {
+	Phase  string `json:"phase,omitempty"`
+	StepID string `json:"stepID,omitempty"`
+	Output string `json:"output,omitempty"`
 }
 
 type legacyState struct {
-	Phase           string         `json:"phase,omitempty"`
-	CompletedPhases []string       `json:"completedPhases,omitempty"`
-	FailedPhase     string         `json:"failedPhase,omitempty"`
-	RuntimeVars     map[string]any `json:"runtimeVars,omitempty"`
-	Error           string         `json:"error,omitempty"`
-	CompletedSteps  []string       `json:"completedSteps,omitempty"`
-	SkippedSteps    []string       `json:"skippedSteps,omitempty"`
-	FailedStep      string         `json:"failedStep,omitempty"`
+	Phase           string                   `json:"phase,omitempty"`
+	CompletedPhases []string                 `json:"completedPhases,omitempty"`
+	FailedPhase     string                   `json:"failedPhase,omitempty"`
+	RuntimeVars     map[string]any           `json:"runtimeVars,omitempty"`
+	RuntimeSecrets  map[string]RuntimeSecret `json:"runtimeSecrets,omitempty"`
+	Error           string                   `json:"error,omitempty"`
+	CompletedSteps  []string                 `json:"completedSteps,omitempty"`
+	SkippedSteps    []string                 `json:"skippedSteps,omitempty"`
+	FailedStep      string                   `json:"failedStep,omitempty"`
 }
 
 func LoadState(path string) (*State, error) {
@@ -50,6 +58,7 @@ func LoadState(path string) (*State, error) {
 		CompletedPhases: legacy.CompletedPhases,
 		FailedPhase:     legacy.FailedPhase,
 		RuntimeVars:     legacy.RuntimeVars,
+		RuntimeSecrets:  legacy.RuntimeSecrets,
 		Error:           legacy.Error,
 	}
 	if len(st.CompletedPhases) == 0 && len(legacy.CompletedSteps) > 0 {
@@ -60,6 +69,9 @@ func LoadState(path string) (*State, error) {
 	}
 	if st.RuntimeVars == nil {
 		st.RuntimeVars = map[string]any{}
+	}
+	if st.RuntimeSecrets == nil {
+		st.RuntimeSecrets = map[string]RuntimeSecret{}
 	}
 	return &st, nil
 }
