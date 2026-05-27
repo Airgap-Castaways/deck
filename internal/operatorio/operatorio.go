@@ -8,8 +8,9 @@ import (
 	"math"
 	"os"
 	"strings"
+	"sync"
 
-	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 )
 
 type Interface interface {
@@ -30,13 +31,15 @@ type Terminal struct {
 	Stdout         io.Writer
 	Stderr         io.Writer
 	NonInteractive bool
+	mu             sync.Mutex
+	reader         *bufio.Reader
 }
 
 func Default() Interface {
-	return Terminal{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr}
+	return &Terminal{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr}
 }
 
-func (t Terminal) Message(level, message, stream string) error {
+func (t *Terminal) Message(level, message, stream string) error {
 	writer := t.stdout()
 	if strings.TrimSpace(stream) == "stderr" {
 		writer = t.stderr()
@@ -50,7 +53,7 @@ func (t Terminal) Message(level, message, stream string) error {
 	return err
 }
 
-func (t Terminal) Confirm(ctx context.Context, message string, defaultValue *bool) (bool, error) {
+func (t *Terminal) Confirm(ctx context.Context, message string, defaultValue *bool) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -60,7 +63,9 @@ func (t Terminal) Confirm(ctx context.Context, message string, defaultValue *boo
 		}
 		return *defaultValue, nil
 	}
-	reader := bufio.NewReader(t.stdin())
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	reader := t.bufferedReader()
 	for {
 		if err := ctx.Err(); err != nil {
 			return false, err
@@ -88,7 +93,7 @@ func (t Terminal) Confirm(ctx context.Context, message string, defaultValue *boo
 	}
 }
 
-func (t Terminal) Input(ctx context.Context, message string, opts InputOptions) (string, error) {
+func (t *Terminal) Input(ctx context.Context, message string, opts InputOptions) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -104,7 +109,9 @@ func (t Terminal) Input(ctx context.Context, message string, opts InputOptions) 
 		}
 		return "", fmt.Errorf("non-interactive input requires spec.default or required=false")
 	}
-	reader := bufio.NewReader(t.stdin())
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	reader := t.bufferedReader()
 	for {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -126,7 +133,7 @@ func (t Terminal) Input(ctx context.Context, message string, opts InputOptions) 
 	}
 }
 
-func (t Terminal) readInputLine(reader *bufio.Reader, message string, opts InputOptions) (string, error) {
+func (t *Terminal) readInputLine(reader *bufio.Reader, message string, opts InputOptions) (string, error) {
 	if _, err := fmt.Fprint(t.stdout(), strings.TrimSpace(message), inputSuffix(opts), " "); err != nil {
 		return "", err
 	}
@@ -137,48 +144,52 @@ func (t Terminal) readInputLine(reader *bufio.Reader, message string, opts Input
 	if !ok {
 		return reader.ReadString('\n')
 	}
-	fdRaw := file.Fd()
-	if fdRaw > math.MaxInt {
+	fd, ok := terminalFD(file)
+	if !ok || !term.IsTerminal(fd) {
 		return reader.ReadString('\n')
 	}
-	fd := int(fdRaw)
-	termios, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+	password, err := term.ReadPassword(fd)
 	if err != nil {
 		return reader.ReadString('\n')
 	}
-	restored := *termios
-	termios.Lflag &^= unix.ECHO
-	if err := unix.IoctlSetTermios(fd, unix.TCSETS, termios); err != nil {
-		return reader.ReadString('\n')
-	}
-	line, readErr := reader.ReadString('\n')
-	restoreErr := unix.IoctlSetTermios(fd, unix.TCSETS, &restored)
 	_, _ = fmt.Fprintln(t.stdout())
-	if readErr != nil {
-		return line, readErr
-	}
-	return line, restoreErr
+	return string(password) + "\n", nil
 }
 
-func (t Terminal) stdin() io.Reader {
+func (t *Terminal) stdin() io.Reader {
 	if t.Stdin != nil {
 		return t.Stdin
 	}
 	return os.Stdin
 }
 
-func (t Terminal) stdout() io.Writer {
+func (t *Terminal) stdout() io.Writer {
 	if t.Stdout != nil {
 		return t.Stdout
 	}
 	return os.Stdout
 }
 
-func (t Terminal) stderr() io.Writer {
+func (t *Terminal) stderr() io.Writer {
 	if t.Stderr != nil {
 		return t.Stderr
 	}
 	return os.Stderr
+}
+
+func (t *Terminal) bufferedReader() *bufio.Reader {
+	if t.reader == nil {
+		t.reader = bufio.NewReader(t.stdin())
+	}
+	return t.reader
+}
+
+func terminalFD(file *os.File) (int, bool) {
+	fdRaw := file.Fd()
+	if fdRaw > math.MaxInt {
+		return 0, false
+	}
+	return int(fdRaw), true
 }
 
 func messagePrefix(level string) string {

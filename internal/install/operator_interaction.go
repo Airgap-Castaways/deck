@@ -67,7 +67,7 @@ func runMessage(spec stepspec.Message, interaction operatorio.Interface, secretV
 
 func containsSecretValue(text string, secretValues []string) bool {
 	for _, secret := range secretValues {
-		if secret != "" && strings.Contains(text, secret) {
+		if len(strings.TrimSpace(secret)) >= 4 && strings.Contains(text, secret) {
 			return true
 		}
 	}

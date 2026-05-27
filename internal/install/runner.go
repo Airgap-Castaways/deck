@@ -146,7 +146,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	runtimeVars["host"] = detectHostFacts()
 	interaction := opts.Interaction
 	if interaction == nil {
-		interaction = operatorio.Terminal{NonInteractive: opts.NonInteractive}
+		interaction = &operatorio.Terminal{NonInteractive: opts.NonInteractive}
 	}
 	execCtx := ExecutionContext{BundleRoot: bundleRoot, StatePath: statePath, Context: opts.Context, Interaction: interaction, kubeadm: withKubeadmExecutor(opts.kubeadm)}
 	ctxData := execCtx.RenderContext()

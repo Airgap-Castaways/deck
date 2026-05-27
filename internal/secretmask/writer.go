@@ -33,7 +33,7 @@ func (w *Writer) Write(p []byte) (int, error) {
 	defer w.mu.Unlock()
 	w.buffer = append(w.buffer, p...)
 	if err := w.flushCompleteLines(); err != nil {
-		return 0, err
+		return len(p), err
 	}
 	return len(p), nil
 }

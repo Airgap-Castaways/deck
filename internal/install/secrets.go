@@ -2,7 +2,6 @@ package install
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"strings"
 
@@ -48,7 +47,26 @@ func maskError(err error, secrets []string) error {
 	if masked == err.Error() {
 		return err
 	}
-	return errors.New(masked)
+	return &maskedError{err: err, masked: masked}
+}
+
+type maskedError struct {
+	err    error
+	masked string
+}
+
+func (e *maskedError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.masked
+}
+
+func (e *maskedError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.err
 }
 
 func boolSpecValue(values map[string]any, key string) bool {
