@@ -1978,6 +1978,82 @@ phases:
 		}
 	})
 
+	t.Run("input secret valid with register", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: token
+        apiVersion: deck/v1alpha1
+        kind: Input
+        register:
+          registryToken: value
+        spec:
+          message: Registry token
+          secret: true
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected valid secret input, got %v", err)
+		}
+	})
+
+	t.Run("input secret requires register", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: token
+        apiVersion: deck/v1alpha1
+        kind: Input
+        spec:
+          message: Registry token
+          secret: true
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil || !strings.Contains(err.Error(), "spec.secret requires register") {
+			t.Fatalf("expected secret register validation error, got %v", err)
+		}
+	})
+
+	t.Run("input secret forbids default", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: token
+        apiVersion: deck/v1alpha1
+        kind: Input
+        register:
+          registryToken: value
+        spec:
+          message: Registry token
+          default: token
+          secret: true
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil || !strings.Contains(err.Error(), "E_SCHEMA_INVALID") {
+			t.Fatalf("expected secret default validation error, got %v", err)
+		}
+	})
+
 	t.Run("checkhost allowed in apply scenario", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflows", "scenarios", "apply.yaml")

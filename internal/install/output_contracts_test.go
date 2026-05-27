@@ -1,11 +1,13 @@
 package install
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/config"
 	"github.com/Airgap-Castaways/deck/internal/filemode"
+	"github.com/Airgap-Castaways/deck/internal/operatorio"
 	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
@@ -42,6 +44,8 @@ func TestStepOutputsCoverApplyContracts(t *testing.T) {
 		{name: "kernel module names", kind: "KernelModule", spec: map[string]any{"names": []any{"overlay", "br_netfilter"}}, output: []string{"names"}},
 		{name: "kubeadm join file", kind: "InitKubeadm", spec: map[string]any{"outputJoinFile": joinPath}, output: []string{"joinFile"}},
 		{name: "check host outputs", kind: "CheckHost", spec: map[string]any{"checks": []any{"os", "arch"}}, output: []string{"passed", "failedChecks"}},
+		{name: "confirm output", kind: "Confirm", spec: map[string]any{"message": "Continue?", "default": true}, output: []string{"confirmed"}},
+		{name: "input output", kind: "Input", spec: map[string]any{"message": "Value", "default": "answer"}, output: []string{"value"}},
 	}
 	covered := map[string]bool{}
 
@@ -52,10 +56,14 @@ func TestStepOutputsCoverApplyContracts(t *testing.T) {
 			if err != nil {
 				t.Fatalf("stepOutputs(%s): %v", tc.kind, err)
 			}
-			if tc.kind == "CheckHost" {
-				outputs, err = executeWorkflowStep(t.Context(), config.Step{Kind: tc.kind, Spec: tc.spec}, tc.spec, stepKey, ExecutionContext{})
+			if tc.kind == "CheckHost" || tc.kind == "Confirm" || tc.kind == "Input" {
+				execCtx := ExecutionContext{}
+				if tc.kind == "Confirm" || tc.kind == "Input" {
+					execCtx.Interaction = fakeOutputInteraction{}
+				}
+				outputs, err = executeWorkflowStep(t.Context(), config.Step{Kind: tc.kind, Spec: tc.spec}, tc.spec, stepKey, execCtx)
 				if err != nil {
-					t.Fatalf("execute CheckHost: %v", err)
+					t.Fatalf("execute %s: %v", tc.kind, err)
 				}
 			}
 			for _, outputKey := range tc.output {
@@ -88,6 +96,16 @@ func TestStepOutputsCoverApplyContracts(t *testing.T) {
 			}
 		}
 	}
+}
+
+type fakeOutputInteraction struct{}
+
+func (fakeOutputInteraction) Message(string, string, string) error { return nil }
+
+func (fakeOutputInteraction) Confirm(context.Context, string, *bool) (bool, error) { return true, nil }
+
+func (fakeOutputInteraction) Input(context.Context, string, operatorio.InputOptions) (string, error) {
+	return "answer", nil
 }
 
 func writePrivateTestFile(path string, content []byte) error {

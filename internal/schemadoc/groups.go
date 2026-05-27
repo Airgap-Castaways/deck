@@ -85,6 +85,15 @@ var groupMetadata = map[string]GroupMetadata{
 		TypicalFlows: []GroupFlow{{Title: "Wait for service readiness", Kinds: []string{"WaitForService", "WaitForTCPPort"}}, {Title: "Wait for generated files", Kinds: []string{"WaitForFile", "WaitForCommand"}}},
 		SeeAlso:      []string{"runtime-services", "kubernetes-lifecycle"},
 	},
+	"operator-interaction": {
+		Key:          "operator-interaction",
+		Title:        "Operator Interaction",
+		Summary:      "Print operator-facing messages and collect explicit local operator decisions or values.",
+		WhenToUse:    "Use this group when a workflow needs a clear local checkpoint or an apply-time value that should flow through register outputs.",
+		Order:        75,
+		TypicalFlows: []GroupFlow{{Title: "Gate a local action", Kinds: []string{"Message", "Confirm"}}, {Title: "Collect an apply-time value", Kinds: []string{"Input"}}},
+		SeeAlso:      []string{"waits-polling", "advanced"},
+	},
 	"advanced": {
 		Key:          "advanced",
 		Title:        "Advanced",
