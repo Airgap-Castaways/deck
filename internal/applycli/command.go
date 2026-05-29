@@ -45,6 +45,7 @@ type ApplyCommandOptions struct {
 	Verbosef       func(level int, format string, args ...any) error
 	StdoutPrintf   func(format string, args ...any) error
 	StdoutPrintln  func(args ...any) error
+	InvocationID   string
 	AdditionalSink install.StepEventSink
 	NewRunLogger   func(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (RunLogger, error)
 }
@@ -138,6 +139,7 @@ func RunApplyCommand(ctx context.Context, opts ApplyCommandOptions) error {
 		Verbosef:       opts.Verbosef,
 		StdoutPrintf:   opts.StdoutPrintf,
 		StdoutPrintln:  opts.StdoutPrintln,
+		InvocationID:   strings.TrimSpace(opts.InvocationID),
 		AdditionalSink: opts.AdditionalSink,
 		NewRunLogger:   opts.NewRunLogger,
 	})

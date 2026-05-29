@@ -1,6 +1,7 @@
 package install
 
 type StepEvent struct {
+	InvocationID   string
 	Event          string
 	StepID         string
 	Kind           string

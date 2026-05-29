@@ -90,7 +90,8 @@ func newPrepareCommand(env *cliEnv) *cobra.Command {
 }
 
 func runPrepareWithOptions(env *cliEnv, cmd *cobra.Command, opts prepareOptions) error {
-	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "prepare", Event: "run_requested", Attrs: map[string]any{"root": opts.preparedRoot, "dry_run": opts.dryRun, "refresh": opts.refresh, "clean": opts.clean}}); err != nil {
+	invocationID := newInvocationID("prepare")
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "prepare", Event: "run_requested", Attrs: map[string]any{"invocation_id": invocationID, "root": opts.preparedRoot, "dry_run": opts.dryRun, "refresh": opts.refresh, "clean": opts.clean}}); err != nil {
 		return err
 	}
 	return preparecli.Run(cmd.Context(), preparecli.Options{
@@ -107,6 +108,7 @@ func runPrepareWithOptions(env *cliEnv, cmd *cobra.Command, opts prepareOptions)
 		VarsFiles:      append([]string(nil), opts.varsFiles...),
 		Stdout:         env.stdoutWriter(),
 		Diagnosticf:    env.verbosef,
-		EventSink:      verbosePrepareStepSink(env),
+		InvocationID:   invocationID,
+		EventSink:      verbosePrepareStepSink(env, invocationID),
 	})
 }

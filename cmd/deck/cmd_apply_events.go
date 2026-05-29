@@ -9,8 +9,12 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/lintcli"
 )
 
-func verboseApplyStepSink(env *cliEnv) install.StepEventSink {
+func verboseApplyStepSink(env *cliEnv, invocationID string) install.StepEventSink {
+	if env == nil || env.verbosity < 1 {
+		return nil
+	}
 	return func(event install.StepEvent) {
+		event.InvocationID = invocationID
 		_ = env.stderrPrintf("%s\n", formatWorkflowEventLine("apply", event))
 	}
 }

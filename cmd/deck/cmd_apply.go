@@ -320,6 +320,7 @@ func runApplyWithOptions(env *cliEnv, ctx context.Context, opts applyOptions) er
 	if err != nil {
 		return err
 	}
+	invocationID := newInvocationID("apply")
 	return applycli.RunApplyCommand(ctx, applycli.ApplyCommandOptions{
 		WorkflowPath:   workflowPath,
 		BundleRoot:     bundleRoot,
@@ -334,7 +335,8 @@ func runApplyWithOptions(env *cliEnv, ctx context.Context, opts applyOptions) er
 		Verbosef:       env.verbosef,
 		StdoutPrintf:   env.stdoutPrintf,
 		StdoutPrintln:  env.stdoutPrintln,
-		AdditionalSink: verboseApplyStepSink(env),
+		InvocationID:   invocationID,
+		AdditionalSink: verboseApplyStepSink(env, invocationID),
 		NewRunLogger: func(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (applycli.RunLogger, error) {
 			return newApplyRunLogger(env, workflowPath, workflowSource, scenario, bundleRoot, selectedPhase)
 		},

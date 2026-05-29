@@ -13,6 +13,9 @@ func formatWorkflowEventLine(command string, event install.StepEvent) string {
 		"phase":  displayValueOrDash(event.Phase),
 		"status": displayValueOrDash(event.Status),
 	}
+	if event.InvocationID != "" {
+		attrs["invocation_id"] = event.InvocationID
+	}
 	if event.StepID != "" {
 		attrs["step"] = event.StepID
 	}
