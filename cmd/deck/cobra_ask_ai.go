@@ -65,6 +65,7 @@ func newAskCommand(env *cliEnv) *cobra.Command {
 				Provider:      provider,
 				Model:         model,
 				Endpoint:      endpoint,
+				LogLevel:      askLogLevelForVerbosity(env.verbosity),
 				Stdin:         cmd.InOrStdin(),
 				Stdout:        cmd.OutOrStdout(),
 				Stderr:        cmd.ErrOrStderr(),
@@ -83,14 +84,14 @@ func newAskCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().StringVar(&planName, "plan-name", "", "optional plan artifact name used by ask plan")
 	cmd.Flags().StringVar(&planDir, "plan-dir", ".deck/plan", "directory for ask plan artifacts")
 
-	cmd.AddCommand(newAskPlanCommand())
+	cmd.AddCommand(newAskPlanCommand(env))
 	cmd.AddCommand(newAskConfigCommand(env))
 	cmd.AddCommand(newAskMCPCommand())
 	cmd.AddCommand(newAskLoginCommand(env), newAskLogoutCommand(env), newAskStatusCommand(env))
 	return cmd
 }
 
-func newAskPlanCommand() *cobra.Command {
+func newAskPlanCommand(env *cliEnv) *cobra.Command {
 	var fromPath string
 	var answers []string
 	var planName string
@@ -121,6 +122,7 @@ func newAskPlanCommand() *cobra.Command {
 				Provider: provider,
 				Model:    model,
 				Endpoint: endpoint,
+				LogLevel: askLogLevelForVerbosity(env.verbosity),
 				Stdin:    cmd.InOrStdin(),
 				Stdout:   cmd.OutOrStdout(),
 				Stderr:   cmd.ErrOrStderr(),
@@ -135,6 +137,19 @@ func newAskPlanCommand() *cobra.Command {
 	cmd.Flags().StringVar(&model, "model", "", "override the configured ask model for this run")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "override the configured ask provider endpoint for this run")
 	return cmd
+}
+
+func askLogLevelForVerbosity(level int) string {
+	switch {
+	case level >= 3:
+		return "trace"
+	case level >= 2:
+		return "debug"
+	case level >= 1:
+		return "basic"
+	default:
+		return "off"
+	}
 }
 
 func newAskConfigCommand(env *cliEnv) *cobra.Command {
@@ -156,7 +171,6 @@ func newAskConfigSetCommand(env *cliEnv) *cobra.Command {
 	var provider string
 	var model string
 	var endpoint string
-	var logLevel string
 	cmd := &cobra.Command{
 		Use:   "set",
 		Short: "Save ask config defaults and api key",
@@ -182,17 +196,13 @@ func newAskConfigSetCommand(env *cliEnv) *cobra.Command {
 			if value := strings.TrimSpace(endpoint); value != "" {
 				updated.Endpoint = value
 			}
-			if value := strings.TrimSpace(logLevel); value != "" {
-				updated.LogLevel = value
-			}
 			changed := settings.Provider != updated.Provider ||
 				settings.Model != updated.Model ||
 				settings.APIKey != updated.APIKey ||
 				settings.OAuthToken != updated.OAuthToken ||
-				settings.Endpoint != updated.Endpoint ||
-				settings.LogLevel != updated.LogLevel
+				settings.Endpoint != updated.Endpoint
 			if !changed {
-				return fmt.Errorf("ask config set requires at least one of --api-key, --oauth-token, --provider, --model, --endpoint, or --log-level")
+				return fmt.Errorf("ask config set requires at least one of --api-key, --oauth-token, --provider, --model, or --endpoint")
 			}
 			if err := askconfig.SaveStored(updated); err != nil {
 				return err
@@ -205,7 +215,6 @@ func newAskConfigSetCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().StringVar(&provider, "provider", "", "save the default ask provider")
 	cmd.Flags().StringVar(&model, "model", "", "save the default ask model")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "save the default ask provider endpoint")
-	cmd.Flags().StringVar(&logLevel, "log-level", "", "save the ask terminal log level (basic, debug, trace)")
 	return cmd
 }
 
@@ -235,9 +244,6 @@ func newAskConfigShowCommand(env *cliEnv) *cobra.Command {
 				return err
 			}
 			if err := env.stdoutPrintf("endpointSource=%s\n", effective.EndpointSource); err != nil {
-				return err
-			}
-			if err := env.stdoutPrintf("logLevel=%s\n", effective.LogLevel); err != nil {
 				return err
 			}
 			if err := env.stdoutPrintf("mcpEnabled=%t\n", effective.MCP.Enabled); err != nil {

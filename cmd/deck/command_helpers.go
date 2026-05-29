@@ -1,12 +1,15 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 )
@@ -133,6 +136,21 @@ func resolveCLILogFormat(format string) (string, error) {
 		return "", errors.New("--log-format must be text or json")
 	}
 	return resolved, nil
+}
+
+func resolveCLIVerbosity(level int) (int, error) {
+	if level < 0 || level > 3 {
+		return 0, errors.New("--v must be between 0 and 3")
+	}
+	return level, nil
+}
+
+func newInvocationID(prefix string) string {
+	var raw [4]byte
+	if _, err := rand.Read(raw[:]); err == nil {
+		return strings.TrimSpace(prefix) + "-" + hex.EncodeToString(raw[:])
+	}
+	return strings.TrimSpace(prefix) + "-" + fmt.Sprintf("%x", time.Now().UTC().UnixNano())
 }
 
 func (e *cliEnv) setWriters(stdout io.Writer, stderr io.Writer) {

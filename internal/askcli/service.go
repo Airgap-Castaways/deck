@@ -32,7 +32,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	if opts.Stdin == nil {
 		opts.Stdin = os.Stdin
 	}
-	progress := newAskProgress(opts.Stdout)
+	progress := newAskProgress(opts.Stderr, opts.LogLevel)
 	resolvedRoot, err := filepath.Abs(strings.TrimSpace(opts.Root))
 	if err != nil {
 		return fmt.Errorf("resolve workspace root: %w", err)
@@ -88,6 +88,7 @@ func Execute(ctx context.Context, opts Options, client askprovider.Client) error
 	if err != nil {
 		return err
 	}
+	effective.LogLevel = askconfigLogLevel(opts.LogLevel)
 	if effective.OAuthTokenSource == "session" || effective.OAuthTokenSource == "session-expired" {
 		session, source, status, err := askconfig.ResolveRuntimeSessionWithContext(ctx, effective.Provider)
 		if err != nil {
