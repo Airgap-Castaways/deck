@@ -38,6 +38,36 @@ func TestFormatCLIText(t *testing.T) {
 	}
 }
 
+func TestFormatCLITextUsesPreferredFieldOrder(t *testing.T) {
+	SetCLIColorEnabled(false)
+	line := FormatCLIText(CLIEvent{
+		TS:        time.Date(2026, time.April, 2, 9, 20, 0, 0, time.UTC),
+		Level:     "info",
+		Component: "apply",
+		Event:     "step_succeeded",
+		Attrs: map[string]any{
+			"zeta":        "last",
+			"status":      "succeeded",
+			"workflow":    "workflows/scenarios/apply.yaml",
+			"step":        "install",
+			"duration_ms": 12,
+			"phase":       "bootstrap",
+		},
+	})
+	phaseIdx := strings.Index(line, "phase=bootstrap")
+	stepIdx := strings.Index(line, "step=install")
+	statusIdx := strings.Index(line, "status=succeeded")
+	durationIdx := strings.Index(line, "duration_ms=12")
+	workflowIdx := strings.Index(line, "workflow=workflows/scenarios/apply.yaml")
+	zetaIdx := strings.Index(line, "zeta=last")
+	if phaseIdx < 0 || stepIdx < 0 || statusIdx < 0 || durationIdx < 0 || workflowIdx < 0 || zetaIdx < 0 {
+		t.Fatalf("expected all fields in %q", line)
+	}
+	if phaseIdx >= stepIdx || stepIdx >= statusIdx || statusIdx >= durationIdx || durationIdx >= workflowIdx || workflowIdx >= zetaIdx {
+		t.Fatalf("unexpected field order: %q", line)
+	}
+}
+
 func TestFormatCLITextWithColors(t *testing.T) {
 	SetCLIColorEnabled(true)
 	t.Cleanup(func() {

@@ -50,16 +50,49 @@ func FormatCLIText(event CLIEvent) string {
 		messageKeyCode, messageValueCode := cliFieldCodes("message", normalized.Message)
 		parts = append(parts, colorizeCLIField("message", normalized.Message, messageKeyCode, messageValueCode))
 	}
-	keys := make([]string, 0, len(normalized.Attrs))
-	for key := range normalized.Attrs {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
+	keys := orderedCLIAttrKeys(normalized.Attrs)
 	for _, key := range keys {
 		keyCode, valueCode := cliFieldCodes(key, normalized.Attrs[key])
 		parts = append(parts, colorizeCLIField(key, normalized.Attrs[key], keyCode, valueCode))
 	}
 	return strings.Join(parts, " ")
+}
+
+func orderedCLIAttrKeys(attrs map[string]any) []string {
+	if len(attrs) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(attrs))
+	for key := range attrs {
+		keys = append(keys, key)
+	}
+	sort.SliceStable(keys, func(i, j int) bool {
+		leftRank, leftKnown := cliAttrRank(keys[i])
+		rightRank, rightKnown := cliAttrRank(keys[j])
+		if leftKnown != rightKnown {
+			return leftKnown
+		}
+		if leftKnown && leftRank != rightRank {
+			return leftRank < rightRank
+		}
+		return keys[i] < keys[j]
+	})
+	return keys
+}
+
+func cliAttrRank(key string) (int, bool) {
+	for idx, ranked := range []string{
+		"invocation_id", "run_id", "runlog",
+		"phase", "batch", "step", "kind",
+		"status", "action", "reason", "attempt", "duration_ms",
+		"workflow", "scenario", "source", "path", "state", "bundle", "root", "url",
+		"steps", "phases", "batches", "entries", "records", "matches",
+	} {
+		if key == ranked {
+			return idx, true
+		}
+	}
+	return 0, false
 }
 
 func FormatCLIJSON(event CLIEvent) ([]byte, error) {

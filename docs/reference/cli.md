@@ -56,13 +56,14 @@ OpenAI-compatible provider support currently targets:
 
 You can override `provider`, `model`, and `endpoint` per run, or save defaults with `ask config set`.
 
-`ask.logLevel` controls terminal diagnostics on stderr:
+Global `--v=<n>` controls `deck ask` terminal diagnostics on stderr:
 
-- `basic`: route and provider summary
-- `debug`: `basic` plus the user command and MCP events
-- `trace`: `debug` plus classifier/route system prompts and user prompts
+- `--v=0`: no ask diagnostics
+- `--v=1`: route, provider, and progress summary on stderr
+- `--v=2`: route/provider summary plus the user command and MCP events
+- `--v=3`: debug logs plus classifier/route system prompts and user prompts
 
-At `trace`, `ask` also writes prompt and response payload artifacts under `.deck/ask/runs/<run-id>/` and logs their paths on stderr. Prompt and response bodies stay hidden outside `trace`.
+At `--v=3`, `ask` also writes prompt and response payload artifacts under `.deck/ask/runs/<run-id>/` and logs their paths on stderr. Prompt and response bodies stay hidden below `--v=3`.
 
 `ask.mcp.servers[]` keeps the same config shape, but it now selects built-in external-docs providers rather than arbitrary first-class MCP semantics. Current built-in provider ids are:
 
@@ -96,15 +97,21 @@ Use [Server Audit Log](server-audit-log.md) for the current emitted record shape
 Global `--v=<n>` writes diagnostics to stderr without changing stdout result contracts. Supported levels are 0-3:
 
 - `--v=0`: result only
-- `--v=1`: workflow/source/path decisions and high-level execution context
-- `--v=2`: per-step apply diagnostics, plan evaluation details, and deeper bundle/prepare/health inspection counts
-- `--v=3`: contract notes, lint finding hints, and the most detailed plan/lint traces
+- `--v=1`: workflow/source/path decisions, progress events, and high-level execution context
+- `--v=2`: apply execution plan/state/step metadata, ask debug logs, plan evaluation details, and deeper bundle/prepare/health inspection counts
+- `--v=3`: key-level traces for apply/prepare/bundle/list/server/cache, ask trace artifacts, contract notes, lint finding hints, and the most detailed plan/lint traces
 
 In practice:
 
 - `deck plan --v=3` adds workflow/runtime var traces and per-step evaluation details
+- `deck apply --v=2` adds execution plan, state snapshot, phase/batch plan, and per-step metadata
+- `deck apply --v=3` adds workflow hash/state key, context keys, workflow var keys, runtime state keys, and step contract keys without logging spec values
 - `deck prepare --v=2` adds artifact group and cache reuse/fetch diagnostics
-- `deck bundle build --v=2` and `deck bundle verify --v=2` add manifest entry breakdowns
+- `deck prepare --v=3` adds workflow, phase, step, and runtime-binary key traces without logging spec values
+- `deck bundle build --v=3` and `deck bundle verify --v=3` add per-manifest-entry path/category/size/hash-prefix traces
+- `deck list --v=3`, `deck cache ... --v=3`, and `deck server ... --v=3` add per-entry or request/response/window traces where applicable
+
+Some commands have no additional detail above their highest implemented level. At `--v=0`, `ask`, `prepare`, and `apply` suppress progress diagnostics and keep stdout focused on command results.
 
 Global `--log-format=text|json` controls how migrated diagnostic logs are rendered on stderr.
 
@@ -112,6 +119,20 @@ Global `--log-format=text|json` controls how migrated diagnostic logs are render
 - `--log-format=json`: JSON Lines on stderr with the same event schema for machine processing
 
 Current migrated command families include `ask`, `prepare`, `apply`, `server`, `list`, and `cache`.
+
+Text diagnostics prioritize high-signal fields such as `invocation_id`, `phase`, `batch`, `step`, `kind`, `status`, `action`, `reason`, `duration_ms`, and path/location fields before lower-priority attributes. JSON diagnostics retain the same field names for machine processing.
+
+Event naming follows these conventions for new diagnostics:
+
+- `*_requested`: command intent received
+- `*_selected` or `*_resolved`: input path, source, or config resolution
+- `*_planned`: work plan computed
+- `*_started`, `*_succeeded`, `*_failed`: unit-level execution progress
+- `*_completed`: command-level completion summary with `status` and `duration_ms`
+- `*_summary`: aggregate counts
+- `*_trace`: key-level details intended for `--v=3`
+
+New fields use `duration_ms` for durations, `*_bytes` for byte sizes, `*_count` for new count fields, and `has_*` booleans for presence checks. URL diagnostics redact userinfo, query values, and fragments.
 
 Example text diagnostics:
 
@@ -291,7 +312,6 @@ Optional ask augmentation config example:
   "ask": {
     "provider": "openai",
     "model": "gpt-5.4",
-    "logLevel": "trace",
     "mcp": {
       "enabled": true,
       "servers": [
@@ -343,7 +363,7 @@ Optional transport override example:
 - `deck ask plan` writes plan artifacts under `./.deck/plan/` by default (`<timestamp>-<slug>.md`, `<timestamp>-<slug>.json`, `latest.md`, `latest.json`).
 - `deck ask --from .deck/plan/<name>.md "implement this plan"` prefers the same-basename `.json` artifact when present.
 - complex one-shot authoring requests may stop after planning or clarification if blockers remain; in that case `deck ask` prints the saved plan paths and follow-up commands instead of writing weak output.
-- `ask config set --log-level trace` is the quickest way to see the effective `deck ask` command, MCP events, and prompt text in terminal logs.
+- `deck ask --v=3 ...` is the quickest way to see the effective `deck ask` command, MCP events, and prompt text in terminal logs.
 - optional augmentation config can be defined under `ask.mcp` in the same config file.
 - `ask config show` includes the configured built-in MCP provider ids, effective transport commands, and capability lists.
 - `ask config health` checks whether configured built-in MCP providers can start, initialize, list tools, and satisfy their required capabilities.
