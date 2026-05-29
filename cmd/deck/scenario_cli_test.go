@@ -131,11 +131,11 @@ func TestListVerboseDiagnosticsDoNotPolluteJSON(t *testing.T) {
 	}
 	defer func() { _ = os.Chdir(oldWD) }()
 
-	res := execute([]string{"list", "--source", "local", "-o", "json", "--v=1"})
+	res := execute([]string{"list", "--source", "local", "-o", "json", "--v=3"})
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "component=list") || !strings.Contains(res.stderr, "event=list_requested") || !strings.Contains(res.stderr, "source=local") || !strings.Contains(res.stderr, "output=json") {
+	if !strings.Contains(res.stderr, "component=list") || !strings.Contains(res.stderr, "event=list_requested") || !strings.Contains(res.stderr, "source=local") || !strings.Contains(res.stderr, "output=json") || !strings.Contains(res.stderr, "event=local_loaded") || !strings.Contains(res.stderr, "event=scenario_entry") || !strings.Contains(res.stderr, "name=apply") {
 		t.Fatalf("expected diagnostics on stderr, got %q", res.stderr)
 	}
 	var entries []scenarioEntry

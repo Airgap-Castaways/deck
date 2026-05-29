@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Airgap-Castaways/deck/internal/bundle"
 	"github.com/Airgap-Castaways/deck/internal/logs"
@@ -40,8 +41,18 @@ type manifestSummary struct {
 	Other    int
 }
 
-func Verify(opts VerifyOptions) error {
-	resolvedPath, err := resolveBundlePathArg(opts.FilePath, opts.PositionalArgs, "bundle verify accepts a single <path>")
+func Verify(opts VerifyOptions) (err error) {
+	started := time.Now().UTC()
+	resolvedPath := ""
+	manifestEntries := 0
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "failed"
+		}
+		_ = verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "bundle", Event: "verify_completed", Attrs: map[string]any{"status": status, "duration_ms": time.Since(started).Milliseconds(), "path": resolvedPath, "manifest_entries": manifestEntries}})
+	}()
+	resolvedPath, err = resolveBundlePathArg(opts.FilePath, opts.PositionalArgs, "bundle verify accepts a single <path>")
 	if err != nil {
 		return err
 	}
@@ -49,7 +60,7 @@ func Verify(opts VerifyOptions) error {
 		return err
 	}
 	if err := bundle.VerifyManifest(resolvedPath); err != nil {
-		_ = verboseEvent(opts.Verbosef, 2, logs.CLIEvent{Level: "debug", Component: "bundle", Event: "verify_failed", Attrs: map[string]any{"error": err}})
+		_ = verboseEvent(opts.Verbosef, 2, logs.CLIEvent{Level: "debug", Component: "bundle", Event: "verify_failed", Attrs: map[string]any{"error": err, "suggestion": "rerun `deck prepare` and rebuild the bundle with `deck bundle build`"}})
 		return err
 	}
 	entries, err := bundle.InspectManifest(resolvedPath)
@@ -57,7 +68,11 @@ func Verify(opts VerifyOptions) error {
 		return err
 	}
 	summary := summarizeBundleManifest(entries)
+	manifestEntries = summary.Entries
 	if err := verboseEvent(opts.Verbosef, 2, logs.CLIEvent{Level: "debug", Component: "bundle", Event: "verify_manifest", Attrs: map[string]any{"manifest_entries": summary.Entries, "files": summary.Files, "images": summary.Images, "packages": summary.Packages, "other": summary.Other}}); err != nil {
+		return err
+	}
+	if err := logManifestEntries(opts.Verbosef, "verify_manifest_entry", entries); err != nil {
 		return err
 	}
 	report := verifyReport{Status: "ok", Path: resolvedPath}
@@ -73,7 +88,17 @@ func Verify(opts VerifyOptions) error {
 	return opts.StdoutPrintf("bundle verify: ok (%s)\n", report.Path)
 }
 
-func Build(opts BuildOptions) error {
+func Build(opts BuildOptions) (err error) {
+	started := time.Now().UTC()
+	archiveSize := int64(0)
+	manifestEntries := 0
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "failed"
+		}
+		_ = verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "bundle", Event: "build_completed", Attrs: map[string]any{"status": status, "duration_ms": time.Since(started).Milliseconds(), "archive": strings.TrimSpace(opts.Out), "archive_size": archiveSize, "manifest_entries": manifestEntries}})
+	}()
 	resolvedRoot := strings.TrimSpace(opts.Root)
 	if resolvedRoot == "" {
 		resolvedRoot = "."
@@ -92,10 +117,14 @@ func Build(opts BuildOptions) error {
 		}
 	} else {
 		summary := summarizeBundleManifest(entries)
+		manifestEntries = summary.Entries
 		if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "bundle", Event: "manifest_loaded", Attrs: map[string]any{"manifest": manifestPath, "entries": summary.Entries}}); err != nil {
 			return err
 		}
 		if err := verboseEvent(opts.Verbosef, 2, logs.CLIEvent{Level: "debug", Component: "bundle", Event: "manifest_summary", Attrs: map[string]any{"files": summary.Files, "images": summary.Images, "packages": summary.Packages, "other": summary.Other}}); err != nil {
+			return err
+		}
+		if err := logManifestEntries(opts.Verbosef, "build_manifest_entry", entries); err != nil {
 			return err
 		}
 	}
@@ -103,6 +132,7 @@ func Build(opts BuildOptions) error {
 		return err
 	}
 	if info, err := os.Stat(opts.Out); err == nil {
+		archiveSize = info.Size()
 		if err := verboseEvent(opts.Verbosef, 2, logs.CLIEvent{Level: "debug", Component: "bundle", Event: "archive_written", Attrs: map[string]any{"archive_size": info.Size()}}); err != nil {
 			return err
 		}
@@ -143,6 +173,38 @@ func summarizeBundleManifest(entries []bundle.ManifestEntry) manifestSummary {
 		}
 	}
 	return summary
+}
+
+func logManifestEntries(verbose func(level int, format string, args ...any) error, event string, entries []bundle.ManifestEntry) error {
+	entryCount := len(entries)
+	for idx, entry := range entries {
+		if err := verboseEvent(verbose, 3, logs.CLIEvent{Level: "debug", Component: "bundle", Event: event, Attrs: map[string]any{"entry_index": idx + 1, "entry_count": entryCount, "path": entry.Path, "category": manifestEntryCategory(entry.Path), "size": entry.Size, "sha256_prefix": shaPrefix(entry.SHA256)}}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func manifestEntryCategory(path string) string {
+	trimmed := strings.TrimSpace(path)
+	switch {
+	case workspacepaths.IsPreparedFilePath(trimmed):
+		return "file"
+	case workspacepaths.IsPreparedImagePath(trimmed):
+		return "image"
+	case workspacepaths.IsPreparedPackagePath(trimmed):
+		return "package"
+	default:
+		return "other"
+	}
+}
+
+func shaPrefix(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) <= 12 {
+		return trimmed
+	}
+	return trimmed[:12]
 }
 
 func verboseEvent(fn func(level int, format string, args ...any) error, level int, event logs.CLIEvent) error {

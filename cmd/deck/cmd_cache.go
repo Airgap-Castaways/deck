@@ -19,7 +19,16 @@ type cacheEntry struct {
 	ModTime   string `json:"mod_time"`
 }
 
-func executeCacheList(env *cliEnv, output string) error {
+func executeCacheList(env *cliEnv, output string) (err error) {
+	started := time.Now().UTC()
+	entryCount := 0
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "failed"
+		}
+		_ = env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "list_completed", Attrs: map[string]any{"status": status, "duration_ms": time.Since(started).Milliseconds(), "entries": entryCount}})
+	}()
 	resolvedOutput, err := resolveOutputFormat(output)
 	if err != nil {
 		return err
@@ -36,8 +45,17 @@ func executeCacheList(env *cliEnv, output string) error {
 	if err != nil {
 		return err
 	}
+	entryCount = len(entries)
 	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "list_loaded", Attrs: map[string]any{"entries": len(entries)}}); err != nil {
 		return err
+	}
+	if err := env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "cache", Event: "list_summary", Attrs: cacheEntriesSummary(entries)}); err != nil {
+		return err
+	}
+	for idx, entry := range entries {
+		if err := env.verboseCLIEvent(3, ctrllogs.CLIEvent{Level: "debug", Component: "cache", Event: "list_entry", Attrs: map[string]any{"entry_index": idx + 1, "entry_count": len(entries), "path": entry.Path, "size_bytes": entry.SizeBytes, "mod_time": entry.ModTime}}); err != nil {
+			return err
+		}
 	}
 	if resolvedOutput == "json" {
 		enc := env.stdoutJSONEncoder()
@@ -51,7 +69,17 @@ func executeCacheList(env *cliEnv, output string) error {
 	return nil
 }
 
-func executeCacheClean(env *cliEnv, olderThan string, dryRun bool) error {
+func executeCacheClean(env *cliEnv, olderThan string, dryRun bool) (err error) {
+	started := time.Now().UTC()
+	matchCount := 0
+	deletedCount := 0
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "failed"
+		}
+		_ = env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "clean_completed", Attrs: map[string]any{"status": status, "duration_ms": time.Since(started).Milliseconds(), "matches": matchCount, "deleted": deletedCount, "dry_run": dryRun}})
+	}()
 	root, err := defaultDeckCacheRoot()
 	if err != nil {
 		return err
@@ -61,18 +89,28 @@ func executeCacheClean(env *cliEnv, olderThan string, dryRun bool) error {
 	}
 	cutoff, hasCutoff, err := parseOlderThan(olderThan)
 	if err != nil {
+		_ = env.verboseCLIEvent(1, ctrllogs.CLIEvent{Level: "error", Component: "cache", Event: "clean_parse_failed", Attrs: map[string]any{"older_than": strings.TrimSpace(olderThan), "error": err, "suggestion": "use a duration such as 24h, 7d, or 30d"}})
 		return err
 	}
 	plan, err := computeCacheCleanPlan(root, cutoff, hasCutoff)
 	if err != nil {
 		return err
 	}
+	matchCount = len(plan)
 	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "cache", Event: "clean_planned", Attrs: map[string]any{"matches": len(plan)}}); err != nil {
+		return err
+	}
+	if err := env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "cache", Event: "clean_cutoff", Attrs: map[string]any{"has_cutoff": hasCutoff, "cutoff": formatCacheCutoff(cutoff)}}); err != nil {
 		return err
 	}
 	for _, p := range plan {
 		if err := env.verboseCLIEvent(2, ctrllogs.CLIEvent{Component: "cache", Event: "clean_match", Attrs: map[string]any{"path": p}}); err != nil {
 			return err
+		}
+		if info, statErr := os.Stat(p); statErr == nil {
+			if err := env.verboseCLIEvent(3, ctrllogs.CLIEvent{Level: "debug", Component: "cache", Event: "clean_match_stat", Attrs: map[string]any{"path": p, "is_dir": info.IsDir(), "size_bytes": info.Size(), "mod_time": info.ModTime().UTC().Format(time.RFC3339)}}); err != nil {
+				return err
+			}
 		}
 		if err := env.stdoutPrintln(p); err != nil {
 			return err
@@ -85,8 +123,32 @@ func executeCacheClean(env *cliEnv, olderThan string, dryRun bool) error {
 		if err := os.RemoveAll(p); err != nil {
 			return fmt.Errorf("delete %s: %w", p, err)
 		}
+		deletedCount++
 	}
 	return nil
+}
+
+func cacheEntriesSummary(entries []cacheEntry) map[string]any {
+	totalBytes := int64(0)
+	oldest := ""
+	newest := ""
+	for _, entry := range entries {
+		totalBytes += entry.SizeBytes
+		if oldest == "" || entry.ModTime < oldest {
+			oldest = entry.ModTime
+		}
+		if newest == "" || entry.ModTime > newest {
+			newest = entry.ModTime
+		}
+	}
+	return map[string]any{"entries": len(entries), "total_bytes": totalBytes, "oldest": displayValueOrDash(oldest), "newest": displayValueOrDash(newest)}
+}
+
+func formatCacheCutoff(cutoff time.Time) string {
+	if cutoff.IsZero() {
+		return "-"
+	}
+	return cutoff.UTC().Format(time.RFC3339)
 }
 
 func defaultDeckCacheRoot() (string, error) {
