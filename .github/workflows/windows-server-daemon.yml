@@ -1,0 +1,85 @@
+name: Windows Server Daemon
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-server-daemon-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build deck CLI
+        run: go build -o bin/deck.exe ./cmd/deck
+
+      - name: Run daemon smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString())
+          $unit = "deck-server-ci"
+          $root = Join-Path $tmp "root"
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          $env:XDG_STATE_HOME = Join-Path $tmp "state"
+
+          function Cleanup {
+            try { & .\bin\deck.exe server down --unit $unit | Out-Null } catch {}
+            Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+          }
+
+          try {
+            $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse("127.0.0.1"), 0)
+            $listener.Start()
+            $port = $listener.LocalEndpoint.Port
+            $listener.Stop()
+
+            & .\bin\deck.exe server up --daemon --root $root --addr "127.0.0.1:$port" --unit $unit
+            if ($LASTEXITCODE -ne 0) { throw "server up failed" }
+
+            $pidFile = Join-Path $env:XDG_STATE_HOME "deck\server\$unit.pid"
+            $logFile = Join-Path $env:XDG_STATE_HOME "deck\server\$unit.log"
+            if (-not (Test-Path $pidFile)) { throw "missing pid file: $pidFile" }
+            if (-not (Test-Path $logFile)) { throw "missing log file: $logFile" }
+            $daemonPid = [int](Get-Content -Raw $pidFile).Trim()
+
+            $healthy = $false
+            for ($i = 0; $i -lt 50; $i++) {
+              curl.exe -fsS "http://127.0.0.1:$port/healthz" *> $null
+              if ($LASTEXITCODE -eq 0) {
+                $healthy = $true
+                break
+              }
+              Start-Sleep -Milliseconds 200
+            }
+            if (-not $healthy) { throw "server did not become healthy" }
+
+            & .\bin\deck.exe server down --unit $unit
+            if ($LASTEXITCODE -ne 0) { throw "server down failed" }
+
+            for ($i = 0; $i -lt 50; $i++) {
+              $process = Get-Process -Id $daemonPid -ErrorAction SilentlyContinue
+              if ($null -eq $process) { exit 0 }
+              Start-Sleep -Milliseconds 200
+            }
+
+            throw "daemon process still running after server down"
+          } finally {
+            Cleanup
+          }
