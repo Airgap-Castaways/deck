@@ -10,7 +10,7 @@ import (
 )
 
 func verboseApplyStepSink(env *cliEnv, invocationID string) install.StepEventSink {
-	if env == nil || env.verbosity < 1 {
+	if env == nil {
 		return nil
 	}
 	return func(event install.StepEvent) {

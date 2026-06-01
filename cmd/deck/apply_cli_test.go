@@ -842,7 +842,7 @@ func TestApplyTraceDiagnostics(t *testing.T) {
 	}
 }
 
-func TestApplyDefaultSuppressesProgressLogs(t *testing.T) {
+func TestApplyDefaultShowsProgressLogs(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	wfPath := filepath.Join(t.TempDir(), "apply-default-progress.yaml")
 	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: progress-step\n        kind: Command\n        spec:\n          command: [\"true\"]\n")
@@ -859,8 +859,15 @@ func TestApplyDefaultSuppressesProgressLogs(t *testing.T) {
 	if res.stdout != "apply: ok\n" {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
-	if strings.Contains(res.stderr, "component=apply event=step_started") || strings.Contains(res.stderr, "component=apply event=batch_succeeded") {
-		t.Fatalf("expected default verbosity to suppress progress logs, got %q", res.stderr)
+	for _, want := range []string{"component=apply event=batch_started", "component=apply event=step_started", "step=progress-step", "component=apply event=step_succeeded", "component=apply event=batch_succeeded"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected default verbosity to show progress log %q, got %q", want, res.stderr)
+		}
+	}
+	for _, hidden := range []string{"component=apply event=run_requested", "component=apply event=run_completed", "component=apply event=execution_plan"} {
+		if strings.Contains(res.stderr, hidden) {
+			t.Fatalf("expected default verbosity to suppress diagnostic log %q, got %q", hidden, res.stderr)
+		}
 	}
 }
 

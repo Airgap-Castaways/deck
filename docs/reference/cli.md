@@ -96,7 +96,7 @@ Use [Server Audit Log](server-audit-log.md) for the current emitted record shape
 
 Global `--v=<n>` writes diagnostics to stderr without changing stdout result contracts. Supported levels are 0-3:
 
-- `--v=0`: result only
+- `--v=0`: result-focused output; long-running `apply` runs still show step progress on stderr
 - `--v=1`: workflow/source/path decisions, progress events, and high-level execution context
 - `--v=2`: apply execution plan/state/step metadata, ask debug logs, plan evaluation details, and deeper bundle/prepare/health inspection counts
 - `--v=3`: key-level traces for apply/prepare/bundle/list/server/cache, ask trace artifacts, contract notes, lint finding hints, and the most detailed plan/lint traces
@@ -111,7 +111,7 @@ In practice:
 - `deck bundle build --v=3` and `deck bundle verify --v=3` add per-manifest-entry path/category/size/hash-prefix traces
 - `deck list --v=3`, `deck cache ... --v=3`, and `deck server ... --v=3` add per-entry or request/response/window traces where applicable
 
-Some commands have no additional detail above their highest implemented level. At `--v=0`, `ask`, `prepare`, and `apply` suppress progress diagnostics and keep stdout focused on command results.
+Some commands have no additional detail above their highest implemented level. At `--v=0`, `ask` and `prepare` suppress progress diagnostics, while `apply` keeps human step progress visible on stderr and stdout focused on the final command result.
 
 Global `--log-format=text|json` controls how migrated diagnostic logs are rendered on stderr.
 
