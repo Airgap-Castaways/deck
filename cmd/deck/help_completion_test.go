@@ -72,6 +72,11 @@ func TestCompletionHelp(t *testing.T) {
 	if !strings.Contains(out, "deck completion <bash|zsh|fish|powershell>") {
 		t.Fatalf("unexpected output: %q", out)
 	}
+	for _, want := range []string{"source <(deck completion bash)", "source <(deck completion zsh)", "deck completion fish | source", "~/.config/fish/completions/deck.fish"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected completion help to include %q, got %q", want, out)
+		}
+	}
 }
 
 func TestCompletionCommands(t *testing.T) {
