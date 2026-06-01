@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/applycli"
+	"github.com/Airgap-Castaways/deck/internal/buildinfo"
 	"github.com/Airgap-Castaways/deck/internal/config"
 )
 
@@ -675,9 +676,13 @@ func TestPlan(t *testing.T) {
 	wfPath := filepath.Join(t.TempDir(), "apply.yaml")
 	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: step-1\n        apiVersion: deck/v1alpha1\n        kind: Command\n        spec:\n          command: [\"true\"]\n")
 
-	before, err := runWithCapturedStdout([]string{"plan", "--workflow", wfPath})
-	if err != nil {
-		t.Fatalf("expected success, got %v", err)
+	planRes := execute([]string{"plan", "--workflow", wfPath})
+	if planRes.err != nil {
+		t.Fatalf("expected success, got %v", planRes.err)
+	}
+	before := planRes.stdout
+	if !strings.Contains(planRes.stderr, buildinfo.Summary()+" plan started") {
+		t.Fatalf("expected plan startup line on stderr, got %q", planRes.stderr)
 	}
 	if !strings.Contains(before, "SUMMARY steps=1 run=1 skip=0") {
 		t.Fatalf("expected summary in plan output, got %q", before)
@@ -858,6 +863,9 @@ func TestApplyDefaultShowsProgressLogs(t *testing.T) {
 	}
 	if res.stdout != "apply: ok\n" {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
+	}
+	if !strings.Contains(res.stderr, buildinfo.Summary()+" apply started") {
+		t.Fatalf("expected apply startup line on stderr, got %q", res.stderr)
 	}
 	for _, want := range []string{"component=apply event=phase_started", "phase=install", "component=apply event=batch_started", "component=apply event=step_started", "step=progress-step", "component=apply event=step_succeeded", "component=apply event=batch_succeeded", "component=apply event=phase_succeeded"} {
 		if !strings.Contains(res.stderr, want) {

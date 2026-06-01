@@ -197,6 +197,9 @@ func runPlanVarsWithOptions(env *cliEnv, ctx context.Context, opts planVarsOptio
 }
 
 func runDiffWithOptions(env *cliEnv, ctx context.Context, opts diffOptions) error {
+	if err := env.commandStarted("plan"); err != nil {
+		return err
+	}
 	workflowPath, err := resolvePlanWorkflowPath(ctx, strings.TrimSpace(opts.workflowPath), strings.TrimSpace(opts.scenario), strings.TrimSpace(opts.source))
 	if err != nil {
 		return err
@@ -314,6 +317,9 @@ func runApplyWithOptions(env *cliEnv, ctx context.Context, opts applyOptions) er
 	positionalArgs := make([]string, 0, len(opts.positional))
 	for _, arg := range opts.positional {
 		positionalArgs = append(positionalArgs, strings.TrimSpace(arg))
+	}
+	if err := env.commandStarted("apply"); err != nil {
+		return err
 	}
 
 	workflowPath, bundleRoot, err := resolveApplyWorkflowAndBundle(ctx, opts, positionalArgs)

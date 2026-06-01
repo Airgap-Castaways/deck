@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Airgap-Castaways/deck/internal/buildinfo"
 	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 )
 
@@ -229,6 +230,18 @@ func (e *cliEnv) verboseCLIEvent(level int, event ctrllogs.CLIEvent) error {
 		return nil
 	}
 	return e.stderrCLIEvent(event)
+}
+
+func (e *cliEnv) commandStarted(command string) error {
+	trimmed := strings.TrimSpace(command)
+	if trimmed == "" {
+		trimmed = "command"
+	}
+	if e != nil && strings.TrimSpace(e.logFormat) == "json" {
+		info := buildinfo.Current()
+		return e.stderrCLIEvent(ctrllogs.CLIEvent{Component: trimmed, Event: "command_started", Attrs: map[string]any{"status": "started", "version": info.Version}})
+	}
+	return e.stderrPrintf("%s %s started\n", buildinfo.Summary(), trimmed)
 }
 
 func (e *cliEnv) verbosef(level int, format string, args ...any) error {
