@@ -10,6 +10,6 @@ func verbosePrepareStepSink(env *cliEnv, invocationID string) prepare.StepEventS
 	}
 	return func(event prepare.StepEvent) {
 		event.InvocationID = invocationID
-		_ = env.stderrPrintf("%s\n", formatWorkflowEventLine("prepare", event))
+		_ = env.stderrPrintf("%s\n", formatWorkflowEventLine("prepare", event, env.verbosity, env.logFormat))
 	}
 }

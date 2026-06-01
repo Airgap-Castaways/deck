@@ -120,7 +120,7 @@ Global `--log-format=text|json` controls how migrated diagnostic logs are render
 
 Current migrated command families include `ask`, `prepare`, `apply`, `server`, `list`, and `cache`.
 
-Text diagnostics prioritize high-signal fields such as `invocation_id`, `phase`, `batch`, `step`, `kind`, `status`, `action`, `reason`, `duration_ms`, and path/location fields before lower-priority attributes. JSON diagnostics retain the same field names for machine processing.
+Text diagnostics prioritize high-signal fields such as `phase`, `step`, `status`, `reason`, `kind`, `duration_ms`, `batch`, `invocation_id`, and path/location fields before lower-priority attributes. For `apply` and `prepare` progress logs, text output expands fields by verbosity: `--v=0` shows core progress fields, `--v=1` adds kind/duration/failure details, and `--v>=2` includes batch, parallelism, attempt, and invocation correlation fields. JSON diagnostics retain the full event fields for machine processing.
 
 Event naming follows these conventions for new diagnostics:
 

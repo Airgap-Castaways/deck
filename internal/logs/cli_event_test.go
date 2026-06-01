@@ -46,24 +46,30 @@ func TestFormatCLITextUsesPreferredFieldOrder(t *testing.T) {
 		Component: "apply",
 		Event:     "step_succeeded",
 		Attrs: map[string]any{
-			"zeta":        "last",
-			"status":      "succeeded",
-			"workflow":    "workflows/scenarios/apply.yaml",
-			"step":        "install",
-			"duration_ms": 12,
-			"phase":       "bootstrap",
+			"batch":         "bootstrap",
+			"invocation_id": "apply-1234",
+			"zeta":          "last",
+			"status":        "succeeded",
+			"workflow":      "workflows/scenarios/apply.yaml",
+			"step":          "install",
+			"duration_ms":   12,
+			"reason":        "completed",
+			"phase":         "bootstrap",
 		},
 	})
 	phaseIdx := strings.Index(line, "phase=bootstrap")
 	stepIdx := strings.Index(line, "step=install")
 	statusIdx := strings.Index(line, "status=succeeded")
+	reasonIdx := strings.Index(line, "reason=completed")
 	durationIdx := strings.Index(line, "duration_ms=12")
+	batchIdx := strings.Index(line, "batch=bootstrap")
+	invocationIdx := strings.Index(line, "invocation_id=apply-1234")
 	workflowIdx := strings.Index(line, "workflow=workflows/scenarios/apply.yaml")
 	zetaIdx := strings.Index(line, "zeta=last")
-	if phaseIdx < 0 || stepIdx < 0 || statusIdx < 0 || durationIdx < 0 || workflowIdx < 0 || zetaIdx < 0 {
+	if phaseIdx < 0 || stepIdx < 0 || statusIdx < 0 || reasonIdx < 0 || durationIdx < 0 || batchIdx < 0 || invocationIdx < 0 || workflowIdx < 0 || zetaIdx < 0 {
 		t.Fatalf("expected all fields in %q", line)
 	}
-	if phaseIdx >= stepIdx || stepIdx >= statusIdx || statusIdx >= durationIdx || durationIdx >= workflowIdx || workflowIdx >= zetaIdx {
+	if phaseIdx >= stepIdx || stepIdx >= statusIdx || statusIdx >= reasonIdx || reasonIdx >= durationIdx || durationIdx >= batchIdx || batchIdx >= invocationIdx || invocationIdx >= workflowIdx || workflowIdx >= zetaIdx {
 		t.Fatalf("unexpected field order: %q", line)
 	}
 }

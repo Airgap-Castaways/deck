@@ -15,7 +15,7 @@ func verboseApplyStepSink(env *cliEnv, invocationID string) install.StepEventSin
 	}
 	return func(event install.StepEvent) {
 		event.InvocationID = invocationID
-		_ = env.stderrPrintf("%s\n", formatWorkflowEventLine("apply", event))
+		_ = env.stderrPrintf("%s\n", formatWorkflowEventLine("apply", event, env.verbosity, env.logFormat))
 	}
 }
 

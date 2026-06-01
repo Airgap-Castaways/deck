@@ -8,7 +8,21 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/logs"
 )
 
-func formatWorkflowEventLine(command string, event install.StepEvent) string {
+func formatWorkflowEventLine(command string, event install.StepEvent, verbosity int, logFormat string) string {
+	attrs := workflowEventAttrs(event)
+	if strings.TrimSpace(logFormat) != "json" {
+		attrs = filterWorkflowEventAttrs(attrs, verbosity)
+	}
+	return formatCLIEvent(logs.CLIEvent{
+		TS:        eventTimestamp(event),
+		Level:     eventLevel(event),
+		Component: command,
+		Event:     eventName(event),
+		Attrs:     attrs,
+	})
+}
+
+func workflowEventAttrs(event install.StepEvent) map[string]any {
 	attrs := map[string]any{
 		"phase":  displayValueOrDash(event.Phase),
 		"status": displayValueOrDash(event.Status),
@@ -52,13 +66,27 @@ func formatWorkflowEventLine(command string, event install.StepEvent) string {
 	if durationMS := formatEventDurationMS(event.StartedAt, event.EndedAt); durationMS >= 0 {
 		attrs["duration_ms"] = durationMS
 	}
-	return formatCLIEvent(logs.CLIEvent{
-		TS:        eventTimestamp(event),
-		Level:     eventLevel(event),
-		Component: command,
-		Event:     eventName(event),
-		Attrs:     attrs,
-	})
+	return attrs
+}
+
+func filterWorkflowEventAttrs(attrs map[string]any, verbosity int) map[string]any {
+	if verbosity >= 2 {
+		return attrs
+	}
+	allowed := map[string]bool{"phase": true, "step": true, "status": true, "reason": true}
+	if verbosity >= 1 {
+		allowed["kind"] = true
+		allowed["duration_ms"] = true
+		allowed["failed_step"] = true
+		allowed["error"] = true
+	}
+	filtered := make(map[string]any, len(allowed))
+	for key, value := range attrs {
+		if allowed[key] {
+			filtered[key] = value
+		}
+	}
+	return filtered
 }
 
 func formatEventDurationMS(startedAt, endedAt string) int64 {

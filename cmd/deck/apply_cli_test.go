@@ -915,7 +915,7 @@ func TestApplyParallelBatchProgressLogs(t *testing.T) {
 	}
 	createValidBundleManifest(t, bundle)
 
-	res := execute([]string{"--v=1", "apply", "--workflow", wfPath, bundle})
+	res := execute([]string{"--v=2", "apply", "--workflow", wfPath, bundle})
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}

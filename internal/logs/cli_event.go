@@ -82,9 +82,10 @@ func orderedCLIAttrKeys(attrs map[string]any) []string {
 
 func cliAttrRank(key string) (int, bool) {
 	for idx, ranked := range []string{
+		"phase", "step", "status", "reason",
+		"kind", "duration_ms", "failed_step", "error",
+		"action", "attempt", "batch", "parallel_group", "parallel", "batch_size", "max_parallelism",
 		"invocation_id", "run_id", "runlog",
-		"phase", "batch", "step", "kind",
-		"status", "action", "reason", "attempt", "duration_ms",
 		"workflow", "scenario", "source", "path", "state", "bundle", "root", "url",
 		"steps", "phases", "batches", "entries", "records", "matches",
 	} {

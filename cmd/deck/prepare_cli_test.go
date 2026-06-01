@@ -260,7 +260,6 @@ func TestRunPrepareVerboseStepDiagnostics(t *testing.T) {
 		"component=prepare event=batch_started",
 		"component=prepare event=step_started",
 		"step=seed",
-		"batch=prepare",
 		"component=prepare event=step_succeeded",
 		"duration_ms=",
 		"component=prepare event=batch_succeeded",
