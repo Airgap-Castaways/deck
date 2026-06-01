@@ -5,13 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/Airgap-Castaways/deck/internal/executil"
 	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
+	"github.com/Airgap-Castaways/deck/internal/userdirs"
 )
 
 func newServerCommand(env *cliEnv) *cobra.Command {
@@ -97,8 +101,8 @@ func newServerUpCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("tls-cert", "", "TLS certificate path")
 	cmd.Flags().String("tls-key", "", "TLS private key path")
 	cmd.Flags().Bool("tls-self-signed", false, "auto-generate and use self-signed TLS cert")
-	cmd.Flags().BoolP("daemon", "d", false, "run as a transient systemd service")
-	cmd.Flags().String("unit", "deck-server", "systemd unit name for daemon mode")
+	cmd.Flags().BoolP("daemon", "d", false, "run as a daemon (systemd service on Linux)")
+	cmd.Flags().String("unit", "deck-server", "daemon unit/name")
 	return cmd
 }
 
@@ -115,7 +119,7 @@ func newServerDownCommand(env *cliEnv) *cobra.Command {
 			return executeServerDown(env, cmd.Context(), unit)
 		},
 	}
-	cmd.Flags().String("unit", "deck-server", "systemd unit name to stop")
+	cmd.Flags().String("unit", "deck-server", "daemon unit/name to stop")
 	return cmd
 }
 
@@ -318,6 +322,9 @@ func executeServerDown(env *cliEnv, ctx context.Context, unit string) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
+	if !serverDaemonUsesSystemd() {
+		return stopServerProcessDaemon(env, unit)
+	}
 	resolvedUnit := normalizeServerUnitName(unit)
 	raw, err := executil.CombinedOutputSystemctl(ctx, "stop", resolvedUnit)
 	if err != nil {
@@ -331,6 +338,13 @@ func executeServerDown(env *cliEnv, ctx context.Context, unit string) error {
 }
 
 func runServerDaemon(env *cliEnv, ctx context.Context, opts serverUpOptions) error {
+	if !serverDaemonUsesSystemd() {
+		return runServerProcessDaemon(env, ctx, opts)
+	}
+	return runServerSystemdDaemon(env, ctx, opts)
+}
+
+func runServerSystemdDaemon(env *cliEnv, ctx context.Context, opts serverUpOptions) error {
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
@@ -362,6 +376,66 @@ func runServerDaemon(env *cliEnv, ctx context.Context, opts serverUpOptions) err
 	return env.stdoutPrintf("%s\n", trimmed)
 }
 
+func runServerProcessDaemon(env *cliEnv, ctx context.Context, opts serverUpOptions) error {
+	if ctx == nil {
+		return fmt.Errorf("context is nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	resolvedUnit := normalizeServerUnitBaseName(opts.unit)
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("server up: resolve executable: %w", err)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("server up: resolve working directory: %w", err)
+	}
+	paths, err := serverProcessDaemonStatePaths(resolvedUnit)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(paths.pidPath), 0o700); err != nil {
+		return fmt.Errorf("server up: create daemon state directory: %w", err)
+	}
+	logFile, err := os.OpenFile(paths.logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return fmt.Errorf("server up: open daemon log: %w", err)
+	}
+	defer closeSilently(logFile)
+	stdin, err := os.Open(os.DevNull)
+	if err != nil {
+		return fmt.Errorf("server up: open daemon stdin: %w", err)
+	}
+	defer closeSilently(stdin)
+
+	// #nosec G204 -- execPath is the current deck executable; args are deck server flags.
+	command := exec.Command(execPath, buildServerProcessDaemonArgs(opts)...)
+	command.Dir = cwd
+	command.Stdin = stdin
+	command.Stdout = logFile
+	command.Stderr = logFile
+	configureDetachedServerProcess(command)
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("server up: start daemon process: %w", err)
+	}
+	pid := command.Process.Pid
+	if err := os.WriteFile(paths.pidPath, []byte(strconv.Itoa(pid)+"\n"), 0o600); err != nil {
+		_ = terminateDetachedServerProcess(pid)
+		_ = command.Process.Release()
+		return fmt.Errorf("server up: write daemon pid file: %w", err)
+	}
+	if err := command.Process.Release(); err != nil {
+		_ = terminateDetachedServerProcess(pid)
+		return fmt.Errorf("server up: release daemon process: %w", err)
+	}
+	if err := env.stdoutPrintf("server up: ok (%s, pid %d)\n", resolvedUnit, pid); err != nil {
+		return err
+	}
+	return env.stdoutPrintf("server log: %s\n", paths.logPath)
+}
+
 func buildServerDaemonArgs(resolvedUnit string, execPath string, cwd string, opts serverUpOptions) []string {
 	args := []string{
 		"--unit", resolvedUnit,
@@ -386,6 +460,75 @@ func buildServerDaemonArgs(resolvedUnit string, execPath string, cwd string, opt
 	return args
 }
 
+func buildServerProcessDaemonArgs(opts serverUpOptions) []string {
+	args := []string{
+		"server", "up",
+		"--root", opts.root,
+		"--addr", opts.addr,
+		"--audit-max-size-mb", fmt.Sprintf("%d", opts.auditMaxSize),
+		"--audit-max-files", fmt.Sprintf("%d", opts.auditMaxFiles),
+	}
+	if strings.TrimSpace(opts.tlsCert) != "" {
+		args = append(args, "--tls-cert", opts.tlsCert)
+	}
+	if strings.TrimSpace(opts.tlsKey) != "" {
+		args = append(args, "--tls-key", opts.tlsKey)
+	}
+	if opts.tlsSelfSigned {
+		args = append(args, "--tls-self-signed")
+	}
+	return args
+}
+
+type serverProcessDaemonPaths struct {
+	pidPath string
+	logPath string
+}
+
+func serverProcessDaemonStatePaths(unit string) (serverProcessDaemonPaths, error) {
+	root, err := userdirs.StateRoot()
+	if err != nil {
+		return serverProcessDaemonPaths{}, err
+	}
+	base := normalizeServerUnitBaseName(unit)
+	dir := filepath.Join(root, "server")
+	return serverProcessDaemonPaths{
+		pidPath: filepath.Join(dir, base+".pid"),
+		logPath: filepath.Join(dir, base+".log"),
+	}, nil
+}
+
+func stopServerProcessDaemon(env *cliEnv, unit string) error {
+	resolvedUnit := normalizeServerUnitBaseName(unit)
+	if err := validateServerDaemonUnitName("server down", resolvedUnit); err != nil {
+		return err
+	}
+	paths, err := serverProcessDaemonStatePaths(resolvedUnit)
+	if err != nil {
+		return err
+	}
+	raw, err := os.ReadFile(paths.pidPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("server down: pid file not found: %s", paths.pidPath)
+		}
+		return fmt.Errorf("server down: read pid file: %w", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil || pid <= 0 {
+		return fmt.Errorf("server down: invalid pid file: %s", paths.pidPath)
+	}
+	if err := terminateDetachedServerProcess(pid); err != nil {
+		if !isDetachedServerProcessMissing(err) {
+			return fmt.Errorf("server down: terminate process %d: %w", pid, err)
+		}
+	}
+	if err := os.Remove(paths.pidPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("server down: remove pid file: %w", err)
+	}
+	return env.stdoutPrintf("server down: ok (%s, pid %d)\n", resolvedUnit, pid)
+}
+
 func normalizeServerUnitBaseName(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -406,17 +549,31 @@ func validateServerUpDaemonMode(opts serverUpOptions) error {
 	if !opts.daemon {
 		return nil
 	}
+	if err := validateServerDaemonUnitName("server up", opts.unit); err != nil {
+		return err
+	}
+	if !serverDaemonUsesSystemd() {
+		return nil
+	}
 	if _, err := executil.LookPathSystemdRun(); err != nil {
 		return errors.New("server up: systemd-run not found")
 	}
 	if _, err := executil.LookPathSystemctl(); err != nil {
 		return errors.New("server up: systemctl not found")
 	}
-	if strings.TrimSpace(opts.unit) == "" {
-		return errors.New("server up: --unit must not be empty")
+	return nil
+}
+
+func validateServerDaemonUnitName(command string, unit string) error {
+	if strings.TrimSpace(unit) == "" {
+		return fmt.Errorf("%s: --unit must not be empty", command)
 	}
-	if strings.ContainsRune(opts.unit, filepath.Separator) {
-		return errors.New("server up: --unit must be a unit name, not a path")
+	if strings.ContainsAny(unit, `/\`) {
+		return fmt.Errorf("%s: --unit must be a unit name, not a path", command)
 	}
 	return nil
+}
+
+func serverDaemonUsesSystemd() bool {
+	return runtime.GOOS == "linux"
 }
