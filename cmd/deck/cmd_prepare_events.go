@@ -5,7 +5,7 @@ import (
 )
 
 func verbosePrepareStepSink(env *cliEnv, invocationID string) prepare.StepEventSink {
-	if env == nil || env.verbosity < 1 {
+	if env == nil {
 		return nil
 	}
 	return func(event prepare.StepEvent) {

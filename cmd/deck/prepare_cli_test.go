@@ -255,6 +255,8 @@ func TestRunPrepareVerboseStepDiagnostics(t *testing.T) {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
 	for _, want := range []string{
+		"component=prepare event=phase_started",
+		"phase=prepare",
 		"component=prepare event=batch_started",
 		"component=prepare event=step_started",
 		"step=seed",
@@ -262,6 +264,7 @@ func TestRunPrepareVerboseStepDiagnostics(t *testing.T) {
 		"component=prepare event=step_succeeded",
 		"duration_ms=",
 		"component=prepare event=batch_succeeded",
+		"component=prepare event=phase_succeeded",
 	} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
@@ -269,7 +272,7 @@ func TestRunPrepareVerboseStepDiagnostics(t *testing.T) {
 	}
 }
 
-func TestRunPrepareDefaultSuppressesProgressLog(t *testing.T) {
+func TestRunPrepareDefaultShowsProgressLog(t *testing.T) {
 	root := t.TempDir()
 	workflowsDir := filepath.Join(root, "workflows")
 	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
@@ -296,8 +299,15 @@ func TestRunPrepareDefaultSuppressesProgressLog(t *testing.T) {
 	if !strings.Contains(res.stdout, "prepare: ok") {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
-	if strings.Contains(res.stderr, "component=prepare event=step_started") || strings.Contains(res.stderr, "component=prepare event=batch_succeeded") {
-		t.Fatalf("expected default verbosity to suppress progress logs, got %q", res.stderr)
+	for _, want := range []string{"component=prepare event=phase_started", "phase=prepare", "component=prepare event=batch_started", "component=prepare event=step_started", "step=seed", "component=prepare event=step_succeeded", "component=prepare event=batch_succeeded", "component=prepare event=phase_succeeded"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected default verbosity to show progress log %q, got %q", want, res.stderr)
+		}
+	}
+	for _, hidden := range []string{"component=prepare event=run_requested", "component=prepare event=prepare_completed", "component=prepare event=workflow_trace"} {
+		if strings.Contains(res.stderr, hidden) {
+			t.Fatalf("expected default verbosity to suppress diagnostic log %q, got %q", hidden, res.stderr)
+		}
 	}
 }
 

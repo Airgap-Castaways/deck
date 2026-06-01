@@ -172,10 +172,22 @@ func TestRun_EmitsStepEvents(t *testing.T) {
 	}
 
 	stepEvents := make([]StepEvent, 0, len(events))
+	phaseEvents := make([]StepEvent, 0, len(events))
 	for _, event := range events {
 		if event.StepID != "" {
 			stepEvents = append(stepEvents, event)
+		} else if strings.HasPrefix(event.Event, "phase_") {
+			phaseEvents = append(phaseEvents, event)
 		}
+	}
+	if len(phaseEvents) != 2 {
+		t.Fatalf("expected 2 phase events, got %#v", events)
+	}
+	if phaseEvents[0].Event != "phase_started" || phaseEvents[0].Status != "started" || phaseEvents[0].Phase != "prepare" {
+		t.Fatalf("unexpected first phase event: %+v", phaseEvents[0])
+	}
+	if phaseEvents[1].Event != "phase_succeeded" || phaseEvents[1].Status != "succeeded" || phaseEvents[1].Phase != "prepare" {
+		t.Fatalf("unexpected second phase event: %+v", phaseEvents[1])
 	}
 	if len(stepEvents) != 3 {
 		t.Fatalf("expected 3 step events, got %#v", events)
@@ -244,14 +256,34 @@ func TestRun_RetrySemantics(t *testing.T) {
 			}},
 		}
 
-		err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle})
+		var (
+			events []StepEvent
+			mu     sync.Mutex
+		)
+		err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, EventSink: func(event StepEvent) {
+			mu.Lock()
+			events = append(events, event)
+			mu.Unlock()
+		}})
 		if err == nil {
 			t.Fatalf("expected failure after retry exhaustion")
 		}
 		if !strings.Contains(err.Error(), "E_PREPARE_SOURCE_NOT_FOUND") {
 			t.Fatalf("expected E_PREPARE_SOURCE_NOT_FOUND, got %v", err)
 		}
+		if !hasPrepareEvent(events, "phase_failed", "prepare", "failed") {
+			t.Fatalf("expected phase_failed event, got %#v", events)
+		}
 	})
+}
+
+func hasPrepareEvent(events []StepEvent, eventName string, phase string, status string) bool {
+	for _, event := range events {
+		if event.Event == eventName && event.Phase == phase && event.Status == status {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRun_WhenInvalidExpression(t *testing.T) {
