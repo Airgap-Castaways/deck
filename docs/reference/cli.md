@@ -111,7 +111,7 @@ In practice:
 - `deck bundle build --v=3` and `deck bundle verify --v=3` add per-manifest-entry path/category/size/hash-prefix traces
 - `deck list --v=3`, `deck cache ... --v=3`, and `deck server ... --v=3` add per-entry or request/response/window traces where applicable
 
-Some commands have no additional detail above their highest implemented level. At `--v=0`, `ask` and `prepare` suppress progress diagnostics, while `apply` keeps human step progress visible on stderr and stdout focused on the final command result.
+Some commands have no additional detail above their highest implemented level. At `--v=0`, `ask` and `prepare` suppress progress diagnostics, while `apply` keeps phase and step progress visible on stderr, including completed-state skips, and stdout focused on the final command result.
 
 Global `--log-format=text|json` controls how migrated diagnostic logs are rendered on stderr.
 

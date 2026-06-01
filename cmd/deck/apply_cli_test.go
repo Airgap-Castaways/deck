@@ -859,7 +859,7 @@ func TestApplyDefaultShowsProgressLogs(t *testing.T) {
 	if res.stdout != "apply: ok\n" {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
-	for _, want := range []string{"component=apply event=batch_started", "component=apply event=step_started", "step=progress-step", "component=apply event=step_succeeded", "component=apply event=batch_succeeded"} {
+	for _, want := range []string{"component=apply event=phase_started", "phase=install", "component=apply event=batch_started", "component=apply event=step_started", "step=progress-step", "component=apply event=step_succeeded", "component=apply event=batch_succeeded", "component=apply event=phase_succeeded"} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected default verbosity to show progress log %q, got %q", want, res.stderr)
 		}
@@ -867,6 +867,40 @@ func TestApplyDefaultShowsProgressLogs(t *testing.T) {
 	for _, hidden := range []string{"component=apply event=run_requested", "component=apply event=run_completed", "component=apply event=execution_plan"} {
 		if strings.Contains(res.stderr, hidden) {
 			t.Fatalf("expected default verbosity to suppress diagnostic log %q, got %q", hidden, res.stderr)
+		}
+	}
+
+	res = execute([]string{"apply", "--workflow", wfPath, bundle})
+	if res.err != nil {
+		t.Fatalf("expected second apply success, got %v", res.err)
+	}
+	if res.stdout != "apply: ok\n" {
+		t.Fatalf("unexpected second stdout: %q", res.stdout)
+	}
+	for _, want := range []string{"component=apply event=phase_skipped", "phase=install", "reason=completed", "component=apply event=step_skipped", "step=progress-step"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected default verbosity to show completed skip log %q, got %q", want, res.stderr)
+		}
+	}
+}
+
+func TestApplyDefaultShowsFailureProgressLogs(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	wfPath := filepath.Join(t.TempDir(), "apply-default-failure-progress.yaml")
+	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: fail-step\n        kind: Command\n        spec:\n          command: [\"false\"]\n")
+	bundle := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle workflows: %v", err)
+	}
+	createValidBundleManifest(t, bundle)
+
+	res := execute([]string{"apply", "--workflow", wfPath, bundle})
+	if res.err == nil {
+		t.Fatalf("expected apply failure")
+	}
+	for _, want := range []string{"component=apply event=phase_started", "phase=install", "component=apply event=step_started", "step=fail-step", "component=apply event=step_failed", "status=failed", "component=apply event=batch_failed", "component=apply event=phase_failed"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected default verbosity to show failure progress log %q, got %q", want, res.stderr)
 		}
 	}
 }
