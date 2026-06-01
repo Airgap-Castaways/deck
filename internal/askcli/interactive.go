@@ -4,9 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"math"
 	"strings"
-	"syscall"
 
 	"github.com/Airgap-Castaways/deck/internal/askcontract"
 )
@@ -22,18 +20,6 @@ func isInteractiveSession(stdin io.Reader, stdout io.Writer) bool {
 		return false
 	}
 	return true
-}
-
-func isCharDevice(fd uintptr, name string) bool {
-	_ = name
-	if fd > math.MaxInt {
-		return false
-	}
-	var stat syscall.Stat_t
-	if err := syscall.Fstat(int(fd), &stat); err != nil {
-		return false
-	}
-	return stat.Mode&syscall.S_IFMT == syscall.S_IFCHR
 }
 
 func runInteractiveClarifications(stdin io.Reader, stdout io.Writer, plan askcontract.PlanResponse) (askcontract.PlanResponse, bool, error) {

@@ -1,0 +1,86 @@
+name: macOS Server Daemon
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-server-daemon-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build deck CLI
+        run: go build -o bin/deck ./cmd/deck
+
+      - name: Run daemon smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tmp="$(mktemp -d)"
+          unit="deck-server-ci"
+          mkdir -p "${tmp}/root"
+          export XDG_STATE_HOME="${tmp}/state"
+
+          cleanup() {
+            ./bin/deck server down --unit "${unit}" >/dev/null 2>&1 || true
+            rm -rf "${tmp}"
+          }
+          trap cleanup EXIT
+
+          port="$(python3 - <<'PY'
+          import socket
+
+          with socket.socket() as s:
+              s.bind(("127.0.0.1", 0))
+              print(s.getsockname()[1])
+          PY
+          )"
+
+          ./bin/deck server up \
+            --daemon \
+            --root "${tmp}/root" \
+            --addr "127.0.0.1:${port}" \
+            --unit "${unit}"
+
+          pid_file="${XDG_STATE_HOME}/deck/server/${unit}.pid"
+          log_file="${XDG_STATE_HOME}/deck/server/${unit}.log"
+          test -s "${pid_file}"
+          test -f "${log_file}"
+          pid="$(cat "${pid_file}")"
+
+          for _ in {1..50}; do
+            if curl -fsS "http://127.0.0.1:${port}/healthz" >/dev/null; then
+              break
+            fi
+            sleep 0.2
+          done
+          curl -fsS "http://127.0.0.1:${port}/healthz" >/dev/null
+
+          ./bin/deck server down --unit "${unit}"
+
+          for _ in {1..50}; do
+            if ! kill -0 "${pid}" 2>/dev/null; then
+              exit 0
+            fi
+            sleep 0.2
+          done
+
+          echo "daemon process still running after server down"
+          exit 1
