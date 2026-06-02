@@ -43,15 +43,21 @@ type ExecutionRequestOptions struct {
 	BuildExecutionWorkflow       bool
 	ResolveStatePath             bool
 	StatePathFromExecutionTarget bool
+	StateDir                     string
+	StateDirExplicit             bool
 }
 
 type ExecutionRequest struct {
-	WorkflowPath      string
-	Workflow          *config.Workflow
-	Fresh             bool
-	SelectedPhase     string
-	ExecutionWorkflow *config.Workflow
-	StatePath         string
+	WorkflowPath       string
+	Workflow           *config.Workflow
+	Fresh              bool
+	SelectedPhase      string
+	ExecutionWorkflow  *config.Workflow
+	StatePath          string
+	StateDir           string
+	StateDirExplicit   bool
+	StateMigrationSink func(source string, target string)
+	RemoteWorkflow     bool
 }
 
 func ResolveExecutionRequest(ctx context.Context, opts ExecutionRequestOptions) (ExecutionRequest, error) {
@@ -118,7 +124,7 @@ func ResolveExecutionRequest(ctx context.Context, opts ExecutionRequestOptions) 
 		if opts.StatePathFromExecutionTarget {
 			stateWorkflow = executionWorkflow
 		}
-		resolvedStatePath, err := ResolveInstallStatePath(stateWorkflow)
+		resolvedStatePath, err := ResolveInstallStatePathForWorkflowPath(stateWorkflow, workflowPath, opts.StateDir)
 		if err != nil {
 			return ExecutionRequest{}, err
 		}
@@ -132,6 +138,9 @@ func ResolveExecutionRequest(ctx context.Context, opts ExecutionRequestOptions) 
 		SelectedPhase:     selectedPhase,
 		ExecutionWorkflow: executionWorkflow,
 		StatePath:         statePath,
+		StateDir:          strings.TrimSpace(opts.StateDir),
+		StateDirExplicit:  opts.StateDirExplicit,
+		RemoteWorkflow:    isRemoteWorkflow,
 	}, nil
 }
 
@@ -143,11 +152,20 @@ func LoadInstallDryRunState(request ExecutionRequest) (*install.State, error) {
 	if wf == nil {
 		wf = request.ExecutionWorkflow
 	}
-	statePath, err := ResolveInstallStatePath(wf)
-	if err != nil {
-		return nil, err
+	statePath := strings.TrimSpace(request.StatePath)
+	if statePath == "" {
+		resolvedStatePath, err := ResolveInstallStatePathForWorkflowPath(wf, request.WorkflowPath, request.StateDir)
+		if err != nil {
+			return nil, err
+		}
+		statePath = resolvedStatePath
 	}
-	statePath, err = install.ResolveStateReadPathForWorkflow(wf, statePath)
+	var err error
+	if request.StateDirExplicit {
+		statePath, err = install.ResolveStateReadPathForWorkflowNoFallback(wf, statePath)
+	} else {
+		statePath, err = install.ResolveStateReadPathForWorkflowWithMigrationSink(wf, statePath, request.StateMigrationSink)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +173,42 @@ func LoadInstallDryRunState(request ExecutionRequest) (*install.State, error) {
 }
 
 func ResolveInstallStatePath(wf *config.Workflow) (string, error) {
-	return install.DefaultStatePath(wf)
+	return ResolveInstallStatePathForWorkflowPath(wf, "", "")
+}
+
+func ResolveInstallStatePathWithDir(wf *config.Workflow, stateDir string) (string, error) {
+	return ResolveInstallStatePathForWorkflowPath(wf, "", stateDir)
+}
+
+func ResolveInstallStatePathForWorkflowPath(wf *config.Workflow, workflowPath string, stateDir string) (string, error) {
+	if strings.TrimSpace(stateDir) != "" {
+		return install.StatePathInDir(wf, stateDir)
+	}
+	if IsHTTPWorkflowPath(workflowPath) {
+		return install.XDGApplyStatePath(wf)
+	}
+	root, err := resolveLocalStateRoot(workflowPath)
+	if err != nil {
+		return "", err
+	}
+	return install.StatePathInDir(wf, workspacepaths.ApplyStateDir(root))
+}
+
+func resolveLocalStateRoot(workflowPath string) (string, error) {
+	trimmed := strings.TrimSpace(workflowPath)
+	if trimmed == "" {
+		return ".", nil
+	}
+	if bundleRoot, err := inferBundleRootFromWorkflowPath(trimmed); err != nil {
+		return "", err
+	} else if strings.TrimSpace(bundleRoot) != "" {
+		return bundleRoot, nil
+	}
+	abs, err := filepath.Abs(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("resolve workflow path: %w", err)
+	}
+	return filepath.Dir(abs), nil
 }
 
 func IsHTTPWorkflowPath(raw string) bool {

@@ -53,6 +53,7 @@ func newRootCommand(env *cliEnv) *cobra.Command {
 		withGroup(newBundleCommand(env), commandGroupCore),
 		withGroup(newPlanCommand(env), commandGroupCore),
 		withGroup(newApplyCommand(env), commandGroupCore),
+		withGroup(newStateCommand(env), commandGroupAdditional),
 		withGroup(newListCommand(env), commandGroupAdditional),
 		withGroup(newServerCommand(env), commandGroupAdditional),
 		withGroup(newAskCommand(env), commandGroupAdditional),

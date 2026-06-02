@@ -17,20 +17,48 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/config"
 )
 
-func TestResolveInstallStatePathUsesHomeAndStateKey(t *testing.T) {
-	home := filepath.Join(t.TempDir(), "home")
-	if err := os.MkdirAll(home, 0o755); err != nil {
-		t.Fatalf("mkdir home: %v", err)
-	}
-	t.Setenv("HOME", home)
-
+func TestResolveInstallStatePathUsesLocalWorkspaceStateDir(t *testing.T) {
+	root := t.TempDir()
+	wfPath := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
 	wf := &config.Workflow{StateKey: "abc123"}
-	statePath, err := applycli.ResolveInstallStatePath(wf)
+
+	statePath, err := applycli.ResolveInstallStatePathForWorkflowPath(wf, wfPath, "")
 	if err != nil {
-		t.Fatalf("resolveInstallStatePath failed: %v", err)
+		t.Fatalf("resolve install state path failed: %v", err)
 	}
 
-	expected := filepath.Join(home, ".local", "state", "deck", "state", "abc123.json")
+	expected := filepath.Join(root, ".deck", "state", "apply", "abc123.json")
+	if statePath != expected {
+		t.Fatalf("state path mismatch: got %q want %q", statePath, expected)
+	}
+}
+
+func TestResolveInstallStatePathUsesXDGForRemoteWorkflow(t *testing.T) {
+	stateHome := filepath.Join(t.TempDir(), "state-home")
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	wf := &config.Workflow{StateKey: "abc123"}
+
+	statePath, err := applycli.ResolveInstallStatePathForWorkflowPath(wf, "https://example.invalid/apply.yaml", "")
+	if err != nil {
+		t.Fatalf("resolve install state path failed: %v", err)
+	}
+
+	expected := filepath.Join(stateHome, "deck", "state", "apply", "abc123.json")
+	if statePath != expected {
+		t.Fatalf("state path mismatch: got %q want %q", statePath, expected)
+	}
+}
+
+func TestResolveInstallStatePathUsesExplicitStateDir(t *testing.T) {
+	stateDir := filepath.Join(t.TempDir(), "state")
+	wf := &config.Workflow{StateKey: "abc123"}
+
+	statePath, err := applycli.ResolveInstallStatePathForWorkflowPath(wf, "https://example.invalid/apply.yaml", stateDir)
+	if err != nil {
+		t.Fatalf("resolve install state path failed: %v", err)
+	}
+
+	expected := filepath.Join(stateDir, "abc123.json")
 	if statePath != expected {
 		t.Fatalf("state path mismatch: got %q want %q", statePath, expected)
 	}
@@ -806,6 +834,47 @@ func TestApplyAndPlanFresh(t *testing.T) {
 	}
 	if got := strings.Count(strings.TrimSpace(string(raw)), "run"); got != 2 {
 		t.Fatalf("expected 2 executions after fresh apply, got %d (%q)", got, string(raw))
+	}
+}
+
+func TestStateShowListAndClear(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	root := t.TempDir()
+	wfPath := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	if err := os.MkdirAll(filepath.Dir(wfPath), 0o755); err != nil {
+		t.Fatalf("mkdir workflow dir: %v", err)
+	}
+	createValidBundleManifest(t, root)
+	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: once\n        kind: Command\n        spec:\n          command: [\"true\"]\n")
+
+	if _, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath}); err != nil {
+		t.Fatalf("apply failed: %v", err)
+	}
+	showOut, err := runWithCapturedStdout([]string{"state", "show", "--workflow", wfPath})
+	if err != nil {
+		t.Fatalf("state show failed: %v", err)
+	}
+	for _, want := range []string{"version=2", "status=succeeded", "completedPhases=install", filepath.Join(root, ".deck", "state", "apply")} {
+		if !strings.Contains(showOut, want) {
+			t.Fatalf("expected %q in state show output, got %q", want, showOut)
+		}
+	}
+	listOut, err := runWithCapturedStdout([]string{"state", "list", "--state-dir", filepath.Join(root, ".deck", "state", "apply")})
+	if err != nil {
+		t.Fatalf("state list failed: %v", err)
+	}
+	if !strings.Contains(listOut, "status=succeeded") || !strings.Contains(listOut, "completed=1") {
+		t.Fatalf("unexpected state list output: %q", listOut)
+	}
+	if _, err := runWithCapturedStdout([]string{"state", "clear", "--workflow", wfPath, "--yes"}); err != nil {
+		t.Fatalf("state clear failed: %v", err)
+	}
+	showAfterClear, err := runWithCapturedStdout([]string{"state", "show", "--workflow", wfPath})
+	if err != nil {
+		t.Fatalf("state show after clear failed: %v", err)
+	}
+	if !strings.Contains(showAfterClear, "status=running") || strings.Contains(showAfterClear, "completedPhases=install") {
+		t.Fatalf("expected empty running state after clear, got %q", showAfterClear)
 	}
 }
 

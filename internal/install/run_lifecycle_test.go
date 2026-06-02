@@ -107,7 +107,7 @@ func TestRun_InstallTools(t *testing.T) {
 	}
 }
 
-func TestRun_DefaultStatePathUsesHomeStateKey(t *testing.T) {
+func TestRun_DefaultStatePathUsesWorkspaceStateKey(t *testing.T) {
 	dir := t.TempDir()
 	home := filepath.Join(dir, "home")
 	bundle := filepath.Join(dir, "bundle")
@@ -128,6 +128,7 @@ func TestRun_DefaultStatePathUsesHomeStateKey(t *testing.T) {
 		t.Fatalf("write manifest: %v", err)
 	}
 	t.Setenv("HOME", home)
+	t.Chdir(dir)
 
 	wf := &config.Workflow{
 		StateKey: "state-key-default-path-test",
@@ -141,9 +142,12 @@ func TestRun_DefaultStatePathUsesHomeStateKey(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	statePath := filepath.Join(home, ".local", "state", "deck", "state", wf.StateKey+".json")
+	statePath := filepath.Join(dir, ".deck", "state", "apply", wf.StateKey+".json")
 	if _, err := os.Stat(statePath); err != nil {
-		t.Fatalf("state file missing at expected home path: %v", err)
+		t.Fatalf("state file missing at expected workspace path: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".local", "state", "deck", "state", wf.StateKey+".json")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected old XDG flat state file, err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(bundle, ".deck", "state.json")); !os.IsNotExist(err) {
 		t.Fatalf("unexpected bundle state file, err=%v", err)

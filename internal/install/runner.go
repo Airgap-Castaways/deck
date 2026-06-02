@@ -16,14 +16,17 @@ import (
 )
 
 type RunOptions struct {
-	BundleRoot     string
-	StatePath      string
-	Context        workflowcontext.Context
-	EventSink      StepEventSink
-	Fresh          bool
-	Interaction    operatorio.Interface
-	NonInteractive bool
-	kubeadm        kubeadmExecutor
+	BundleRoot           string
+	StatePath            string
+	StateMetadata        StateMetadata
+	DisableStateFallback bool
+	StateMigrationSink   func(source string, target string)
+	Context              workflowcontext.Context
+	EventSink            StepEventSink
+	Fresh                bool
+	Interaction          operatorio.Interface
+	NonInteractive       bool
+	kubeadm              kubeadmExecutor
 }
 
 const (
@@ -122,7 +125,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	}
 	st := &State{CompletedPhases: []string{}, RuntimeVars: map[string]any{}}
 	if !opts.Fresh {
-		stateReadPath, err := resolveStateReadPath(wf, statePath)
+		stateReadPath, err := resolveStateReadPath(wf, statePath, !opts.DisableStateFallback, opts.StateMigrationSink)
 		if err != nil {
 			return err
 		}
@@ -163,7 +166,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 				st.FailedPhase = phase.Name
 				st.Error = maskSecrets(err.Error(), runtimeSecretValues(runtimeVars, runtimeSecrets))
 				emitPhaseEvent(opts.EventSink, phase.Name, "failed", "", "")
-				if saveErr := SaveState(statePath, sanitizedState(st, runtimeVars, runtimeSecrets, false)); saveErr != nil {
+				if saveErr := SaveStateWithMetadata(statePath, sanitizedState(st, runtimeVars, runtimeSecrets, false), opts.StateMetadata); saveErr != nil {
 					return errors.Join(err, fmt.Errorf("save failed apply state: %w", saveErr))
 				}
 				return maskError(err, runtimeSecretValues(runtimeVars, runtimeSecrets))
@@ -174,7 +177,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 		st.FailedPhase = ""
 		st.Error = ""
 		emitPhaseEvent(opts.EventSink, phase.Name, "succeeded", "", "")
-		if err := SaveState(statePath, sanitizedState(st, runtimeVars, runtimeSecrets, false)); err != nil {
+		if err := SaveStateWithMetadata(statePath, sanitizedState(st, runtimeVars, runtimeSecrets, false), opts.StateMetadata); err != nil {
 			return err
 		}
 	}
@@ -182,7 +185,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	st.Phase = "completed"
 	st.FailedPhase = ""
 	st.Error = ""
-	if err := SaveState(statePath, sanitizedState(st, runtimeVars, runtimeSecrets, true)); err != nil {
+	if err := SaveStateWithMetadata(statePath, sanitizedState(st, runtimeVars, runtimeSecrets, true), opts.StateMetadata); err != nil {
 		return err
 	}
 

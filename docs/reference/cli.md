@@ -357,8 +357,11 @@ Optional transport override example:
 - scenario entrypoints live under `workflows/scenarios/`
 - `plan` and `apply` accept `--scenario` for named scenarios and `--workflow` for an explicit path or URL.
 - `plan` and `apply` support `--fresh` to ignore saved apply state for that invocation.
+- `plan`, `apply`, and `state` support `--state-dir` to use an explicit apply state directory.
+- `deck state show/list/clear` inspects and removes saved apply state.
 - `--source` controls whether `--scenario` resolves from the local workspace or the saved remote server.
-- workspace-local metadata stays under `./.deck/`, while user-global config, state, cache, and run history use standard XDG locations.
+- local workflow apply state stays under `./.deck/state/apply/`; remote workflow apply state uses the user-local XDG state root under `deck/state/apply/`.
+- workspace-local metadata stays under `./.deck/`, while user-global config, remote workflow state, cache, and run history use standard XDG locations.
 - `ask` workspace context lives under `./.deck/ask/`, while saved ask config defaults live under `~/.config/deck/config.json` as the top-level `ask` object.
 - `deck ask plan` writes plan artifacts under `./.deck/plan/` by default (`<timestamp>-<slug>.md`, `<timestamp>-<slug>.json`, `latest.md`, `latest.json`).
 - `deck ask --from .deck/plan/<name>.md "implement this plan"` prefers the same-basename `.json` artifact when present.

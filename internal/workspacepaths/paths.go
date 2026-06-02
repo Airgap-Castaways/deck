@@ -27,6 +27,9 @@ const (
 	PreparedPackagesRoot        = "packages"
 	PreparedImagesRoot          = "images"
 	PreparedBinRoot             = "bin"
+	DeckDirRel                  = ".deck"
+	WorkspaceStateDirRel        = "state"
+	ApplyStateDirRel            = "apply"
 )
 
 var canonicalPreparedRoots = []string{
@@ -80,6 +83,14 @@ func CanonicalVarsPath(root string) string {
 
 func DefaultPreparedRoot(root string) string {
 	return filepath.Join(root, PreparedDirRel)
+}
+
+func ApplyStateDir(root string) string {
+	return filepath.Join(root, DeckDirRel, WorkspaceStateDirRel, ApplyStateDirRel)
+}
+
+func ApplyStateFile(root string, name string) string {
+	return filepath.Join(ApplyStateDir(root), name)
 }
 
 func CanonicalPreparedRoots() []string {
