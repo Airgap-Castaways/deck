@@ -878,6 +878,38 @@ func TestStateShowListAndClear(t *testing.T) {
 	}
 }
 
+func TestStateListSkipsInvalidStateFiles(t *testing.T) {
+	stateDir := t.TempDir()
+	validPath := filepath.Join(stateDir, "valid.json")
+	validState := `{
+  "version": 2,
+  "kind": "deck.applyState",
+  "stateKey": "valid",
+  "status": "succeeded",
+  "currentPhase": "completed",
+  "createdAt": "2026-06-02T00:00:00Z",
+  "updatedAt": "2026-06-02T00:00:00Z",
+  "phases": [{"name":"install","status":"succeeded"}]
+}`
+	if err := os.WriteFile(validPath, []byte(validState), 0o600); err != nil {
+		t.Fatalf("write valid state: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "broken.json"), []byte("{"), 0o600); err != nil {
+		t.Fatalf("write broken state: %v", err)
+	}
+
+	out, err := runWithCapturedStdout([]string{"state", "list", "--state-dir", stateDir})
+	if err != nil {
+		t.Fatalf("state list failed: %v", err)
+	}
+	if !strings.Contains(out, "valid status=succeeded") {
+		t.Fatalf("expected valid state entry, got %q", out)
+	}
+	if strings.Contains(out, "broken") {
+		t.Fatalf("expected broken state to be skipped, got %q", out)
+	}
+}
+
 func TestApplyVerboseDiagnostics(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	wfPath := filepath.Join(t.TempDir(), "apply-verbose.yaml")

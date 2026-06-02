@@ -215,7 +215,7 @@ func readStateEntries(stateDir string) ([]stateEntry, error) {
 		path := filepath.Join(stateDir, entry.Name())
 		state, err := install.LoadState(path)
 		if err != nil {
-			return nil, err
+			continue
 		}
 		result = append(result, stateEntryFromState(path, state))
 	}
