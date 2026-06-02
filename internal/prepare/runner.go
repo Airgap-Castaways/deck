@@ -137,9 +137,11 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	}
 
 	for _, phase := range phases {
+		emitPhaseEvent(opts.EventSink, phase.Name, "started")
 		for _, batch := range workflowexec.BuildPhaseBatches(phase) {
 			batchFiles, err := executePrepareBatch(ctx, runner, bundleRoot, wf, runtimeVars, ctxData, batch, opts)
 			if err != nil {
+				emitPhaseEvent(opts.EventSink, phase.Name, "failed")
 				return err
 			}
 			for _, f := range batchFiles {
@@ -150,6 +152,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 				entries = append(entries, entry)
 			}
 		}
+		emitPhaseEvent(opts.EventSink, phase.Name, "succeeded")
 	}
 
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
@@ -217,6 +220,20 @@ func executePrepareBatch(ctx context.Context, runner CommandRunner, bundleRoot s
 	}
 	emitBatchEvent(opts.EventSink, batchCtx, batch.PhaseName, "succeeded", "")
 	return files, nil
+}
+
+func emitPhaseEvent(sink StepEventSink, phaseName string, status string) {
+	if sink == nil {
+		return
+	}
+	event := StepEvent{Event: "phase_" + strings.TrimSpace(status), Phase: phaseName, Status: status}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if status == "started" {
+		event.StartedAt = now
+	} else {
+		event.EndedAt = now
+	}
+	emitStepEvent(sink, event)
 }
 
 func executePrepareStep(ctx context.Context, runner CommandRunner, bundleRoot string, wf *config.Workflow, runtimeSnapshot map[string]any, ctxData map[string]any, phaseName string, batchCtx batchEventContext, step config.Step, opts RunOptions) (prepareBatchResult, error) {

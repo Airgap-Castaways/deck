@@ -153,12 +153,16 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	for _, phase := range phases {
 		st.Phase = phase.Name
 		if completed[phase.Name] {
+			emitPhaseEvent(opts.EventSink, phase.Name, "skipped", "completed", "")
+			emitCompletedPhaseStepSkipped(opts.EventSink, phase)
 			continue
 		}
+		emitPhaseEvent(opts.EventSink, phase.Name, "started", "", "")
 		for _, batch := range workflowexec.BuildPhaseBatches(phase) {
 			if err := executeInstallBatch(ctx, wf, runtimeVars, runtimeSecrets, ctxData, execCtx, batch, opts.EventSink); err != nil {
 				st.FailedPhase = phase.Name
 				st.Error = maskSecrets(err.Error(), runtimeSecretValues(runtimeVars, runtimeSecrets))
+				emitPhaseEvent(opts.EventSink, phase.Name, "failed", "", "")
 				if saveErr := SaveState(statePath, sanitizedState(st, runtimeVars, runtimeSecrets, false)); saveErr != nil {
 					return errors.Join(err, fmt.Errorf("save failed apply state: %w", saveErr))
 				}
@@ -169,6 +173,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 		completed[phase.Name] = true
 		st.FailedPhase = ""
 		st.Error = ""
+		emitPhaseEvent(opts.EventSink, phase.Name, "succeeded", "", "")
 		if err := SaveState(statePath, sanitizedState(st, runtimeVars, runtimeSecrets, false)); err != nil {
 			return err
 		}
@@ -224,6 +229,32 @@ func executeInstallBatch(ctx context.Context, wf *config.Workflow, runtimeVars m
 	}
 	emitBatchEvent(sink, batchCtx, batch.PhaseName, "succeeded", "")
 	return nil
+}
+
+func emitPhaseEvent(sink StepEventSink, phaseName string, status string, reason string, failedStep string) {
+	if sink == nil {
+		return
+	}
+	event := StepEvent{Event: "phase_" + strings.TrimSpace(status), Phase: phaseName, Status: status, Reason: strings.TrimSpace(reason), FailedStep: strings.TrimSpace(failedStep)}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if status == "started" {
+		event.StartedAt = now
+	} else {
+		event.EndedAt = now
+	}
+	emitStepEvent(sink, event)
+}
+
+func emitCompletedPhaseStepSkipped(sink StepEventSink, phase config.Phase) {
+	if sink == nil {
+		return
+	}
+	for _, batch := range workflowexec.BuildPhaseBatches(phase) {
+		batchCtx := batchrun.NewEventContext(batch)
+		for _, step := range batch.Steps {
+			emitStepEvent(sink, withBatchContext(batchCtx, StepEvent{Event: "step_skipped", StepID: step.ID, Kind: step.Kind, Phase: phase.Name, Status: "skipped", Reason: "completed"}))
+		}
+	}
 }
 
 func executeInstallStep(ctx context.Context, wf *config.Workflow, runtimeSnapshot map[string]any, ctxData map[string]any, execCtx ExecutionContext, phaseName string, batchCtx batchEventContext, step config.Step, sink StepEventSink) (installBatchResult, error) {

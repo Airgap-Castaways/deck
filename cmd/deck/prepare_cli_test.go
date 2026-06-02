@@ -215,6 +215,16 @@ func TestRunPrepareVerboseDiagnostics(t *testing.T) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 		}
 	}
+
+	res = execute([]string{"prepare", "--dry-run", "--v=3", "--bundle-binary-source", "local"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	for _, want := range []string{"event=workflow_trace", "phases=1", "steps=1", "var_keys=x", "event=phase_trace", "event=step_trace", "step=seed", "spec_keys=fetch,outputPath,source"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+		}
+	}
 }
 
 func TestRunPrepareVerboseStepDiagnostics(t *testing.T) {
@@ -245,13 +255,15 @@ func TestRunPrepareVerboseStepDiagnostics(t *testing.T) {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
 	for _, want := range []string{
+		"component=prepare event=phase_started",
+		"phase=prepare",
 		"component=prepare event=batch_started",
 		"component=prepare event=step_started",
 		"step=seed",
-		"batch=prepare",
 		"component=prepare event=step_succeeded",
 		"duration_ms=",
-		"component=prepare event=batch_succeeded batch=prepare",
+		"component=prepare event=batch_succeeded",
+		"component=prepare event=phase_succeeded",
 	} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
@@ -259,7 +271,7 @@ func TestRunPrepareVerboseStepDiagnostics(t *testing.T) {
 	}
 }
 
-func TestRunPrepareEmitsDefaultProgressLog(t *testing.T) {
+func TestRunPrepareDefaultShowsProgressLog(t *testing.T) {
 	root := t.TempDir()
 	workflowsDir := filepath.Join(root, "workflows")
 	if err := os.MkdirAll(filepath.Join(workflowsDir, "scenarios"), 0o755); err != nil {
@@ -283,11 +295,18 @@ func TestRunPrepareEmitsDefaultProgressLog(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "component=prepare event=step_started") || !strings.Contains(res.stderr, "step=seed") || !strings.Contains(res.stderr, "batch=prepare") {
-		t.Fatalf("expected default step progress on stderr, got %q", res.stderr)
+	if !strings.Contains(res.stdout, "prepare: ok") {
+		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
-	if !strings.Contains(res.stderr, "component=prepare event=batch_succeeded batch=prepare") || !strings.Contains(res.stderr, "duration_ms=") {
-		t.Fatalf("expected completion progress with duration, got %q", res.stderr)
+	for _, want := range []string{"component=prepare event=phase_started", "phase=prepare", "component=prepare event=batch_started", "component=prepare event=step_started", "step=seed", "component=prepare event=step_succeeded", "component=prepare event=batch_succeeded", "component=prepare event=phase_succeeded"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected default verbosity to show progress log %q, got %q", want, res.stderr)
+		}
+	}
+	for _, hidden := range []string{"component=prepare event=run_requested", "component=prepare event=prepare_completed", "component=prepare event=workflow_trace"} {
+		if strings.Contains(res.stderr, hidden) {
+			t.Fatalf("expected default verbosity to suppress diagnostic log %q, got %q", hidden, res.stderr)
+		}
 	}
 }
 
@@ -311,7 +330,7 @@ func TestRunPrepareSupportsJSONLogFormat(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(originalCWD) })
 
-	res := execute([]string{"prepare", "--root", filepath.Join(root, "outputs"), "--bundle-binary-source", "local", "--log-format=json"})
+	res := execute([]string{"--v=1", "--log-format=json", "prepare", "--root", filepath.Join(root, "outputs"), "--bundle-binary-source", "local"})
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}

@@ -148,7 +148,7 @@ func synthesizeClassification(prompt string) string {
 
 func TestAskConfigCommands(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	out, err := runWithCapturedStdout([]string{"ask", "config", "set", "--provider", "openrouter", "--model", "anthropic/claude-3.5-sonnet", "--endpoint", "https://openrouter.ai/api/v1", "--api-key", "secret-token", "--oauth-token", "oauth-token", "--log-level", "debug"})
+	out, err := runWithCapturedStdout([]string{"ask", "config", "set", "--provider", "openrouter", "--model", "anthropic/claude-3.5-sonnet", "--endpoint", "https://openrouter.ai/api/v1", "--api-key", "secret-token", "--oauth-token", "oauth-token"})
 	if err != nil {
 		t.Fatalf("config set: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestAskConfigCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config show: %v", err)
 	}
-	for _, want := range []string{"provider=openrouter", "model=anthropic/claude-3.5-sonnet", "endpoint=https://openrouter.ai/api/v1", "endpointSource=config", "logLevel=debug", "mcpEnabled=false", "apiKey=secr****oken", "apiKeySource=config", "oauthToken=oaut***oken", "oauthTokenSource=config", "authStatus="} {
+	for _, want := range []string{"provider=openrouter", "model=anthropic/claude-3.5-sonnet", "endpoint=https://openrouter.ai/api/v1", "endpointSource=config", "mcpEnabled=false", "apiKey=secr****oken", "apiKeySource=config", "oauthToken=oaut***oken", "oauthTokenSource=config", "authStatus="} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in config show output, got %q", want, out)
 		}
@@ -170,6 +170,81 @@ func TestAskConfigCommands(t *testing.T) {
 	}
 	if !strings.Contains(out, "ask config cleared") {
 		t.Fatalf("unexpected config unset output: %q", out)
+	}
+}
+
+func TestAskVerbosityOverridesStoredTraceLogLevel(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+	configPath, err := askconfig.ConfigPath()
+	if err != nil {
+		t.Fatalf("config path: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatalf("mkdir ask config: %v", err)
+	}
+	legacyConfig := []byte(`{"ask":{"provider":"openai","model":"gpt-5.4","logLevel":"trace"}}`)
+	if err := os.WriteFile(configPath, legacyConfig, 0o600); err != nil {
+		t.Fatalf("write legacy ask config: %v", err)
+	}
+	root := t.TempDir()
+	oldWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+
+	res := execute([]string{"ask", "--review", "review workspace"})
+	if res.err != nil {
+		t.Fatalf("ask review: %v", res.err)
+	}
+	if strings.Contains(res.stderr, "log_level=") {
+		t.Fatalf("expected default --v=0 to suppress ask logs, got %q", res.stderr)
+	}
+	if strings.Contains(res.stdout, "ask status:") || strings.Contains(res.stderr, "ask status:") {
+		t.Fatalf("expected default --v=0 to suppress ask progress, got stdout=%q stderr=%q", res.stdout, res.stderr)
+	}
+	for _, hidden := range []string{"event=command", "event=request content="} {
+		if strings.Contains(res.stderr, hidden) {
+			t.Fatalf("expected %s to stay hidden at default verbosity, got %q", hidden, res.stderr)
+		}
+	}
+
+	res = execute([]string{"--v=1", "ask", "--review", "review workspace"})
+	if res.err != nil {
+		t.Fatalf("ask review --v=1: %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "log_level=basic") {
+		t.Fatalf("expected --v=1 to enable basic ask logs, got %q", res.stderr)
+	}
+	if strings.Contains(res.stdout, "ask status:") {
+		t.Fatalf("expected ask progress on stderr, not stdout, got stdout=%q", res.stdout)
+	}
+	for _, hidden := range []string{"event=command", "event=request content="} {
+		if strings.Contains(res.stderr, hidden) {
+			t.Fatalf("expected %s to stay hidden at --v=1, got %q", hidden, res.stderr)
+		}
+	}
+
+	res = execute([]string{"--v=2", "ask", "--review", "review workspace"})
+	if res.err != nil {
+		t.Fatalf("ask review --v=2: %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "log_level=debug") || !strings.Contains(res.stderr, "event=command") {
+		t.Fatalf("expected --v=2 to enable debug ask logs, got %q", res.stderr)
+	}
+	if strings.Contains(res.stderr, "event=request content=") {
+		t.Fatalf("expected trace request log to stay hidden at --v=2, got %q", res.stderr)
+	}
+
+	res = execute([]string{"--v=3", "ask", "--review", "review workspace"})
+	if res.err != nil {
+		t.Fatalf("ask review --v=3: %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "log_level=trace") || !strings.Contains(res.stderr, "event=request content=") {
+		t.Fatalf("expected --v=3 to enable trace ask logs, got %q", res.stderr)
 	}
 }
 
@@ -238,7 +313,6 @@ func TestAskConfigShowIncludesStoredMCPSettings(t *testing.T) {
 		Model:      "gpt-5.4",
 		APIKey:     testAPIKey(),
 		OAuthToken: testOAuthToken(),
-		LogLevel:   "trace",
 		MCP:        askconfig.MCP{Enabled: true, Servers: []askconfig.MCPServer{{Name: "context7", RunCommand: "context7-mcp"}}},
 	}); err != nil {
 		t.Fatalf("save stored config: %v", err)
@@ -247,7 +321,7 @@ func TestAskConfigShowIncludesStoredMCPSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config show: %v", err)
 	}
-	for _, want := range []string{"logLevel=trace", "mcpEnabled=true", "mcpProviderCount=1", "mcpProvider[0].name=context7", "mcpProvider[0].id=context7", "mcpProvider[0].transport=context7-mcp", "mcpProvider[0].transportSource=config-override", "mcpProvider[0].capabilities=entity-resolve,doc-fetch,official-doc-search"} {
+	for _, want := range []string{"mcpEnabled=true", "mcpProviderCount=1", "mcpProvider[0].name=context7", "mcpProvider[0].id=context7", "mcpProvider[0].transport=context7-mcp", "mcpProvider[0].transportSource=config-override", "mcpProvider[0].capabilities=entity-resolve,doc-fetch,official-doc-search"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in config show output, got %q", want, out)
 		}

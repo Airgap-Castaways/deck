@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/applycli"
+	"github.com/Airgap-Castaways/deck/internal/buildinfo"
 	"github.com/Airgap-Castaways/deck/internal/config"
 )
 
@@ -675,9 +676,13 @@ func TestPlan(t *testing.T) {
 	wfPath := filepath.Join(t.TempDir(), "apply.yaml")
 	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: step-1\n        apiVersion: deck/v1alpha1\n        kind: Command\n        spec:\n          command: [\"true\"]\n")
 
-	before, err := runWithCapturedStdout([]string{"plan", "--workflow", wfPath})
-	if err != nil {
-		t.Fatalf("expected success, got %v", err)
+	planRes := execute([]string{"plan", "--workflow", wfPath})
+	if planRes.err != nil {
+		t.Fatalf("expected success, got %v", planRes.err)
+	}
+	before := planRes.stdout
+	if !strings.Contains(planRes.stderr, buildinfo.Summary()+" plan started") {
+		t.Fatalf("expected plan startup line on stderr, got %q", planRes.stderr)
 	}
 	if !strings.Contains(before, "SUMMARY steps=1 run=1 skip=0") {
 		t.Fatalf("expected summary in plan output, got %q", before)
@@ -816,14 +821,33 @@ func TestApplyVerboseDiagnostics(t *testing.T) {
 	if res.stdout != "apply: ok\n" {
 		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
-	for _, want := range []string{"component=apply event=run_requested", "workflow=" + wfPath, "component=apply event=runlog_created", "runlog=", "component=apply event=batch_started batch=install", "component=apply event=step_started", "step=verbose-step", "component=apply event=step_succeeded", "duration_ms=", "component=apply event=batch_succeeded batch=install"} {
+	for _, want := range []string{"component=apply event=run_requested", "workflow=" + wfPath, "component=apply event=execution_plan", "phases=1", "batches=1", "steps=1", "component=apply event=state_snapshot", "component=apply event=phase_plan", "phase=install", "component=apply event=batch_plan", "component=apply event=step_plan", "kind=Command", "component=apply event=runlog_created", "runlog=", "component=apply event=batch_started", "batch=install", "component=apply event=step_started", "step=verbose-step", "component=apply event=step_succeeded", "duration_ms=", "component=apply event=batch_succeeded", "component=apply event=run_completed", "status=ok"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+		}
+	}
+	if strings.Contains(res.stderr, "component=apply event=step_contract") || strings.Contains(res.stderr, "component=apply event=execution_context") {
+		t.Fatalf("expected --v=2 to exclude v3 apply traces, got %q", res.stderr)
+	}
+}
+
+func TestApplyTraceDiagnostics(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	wfPath := filepath.Join(t.TempDir(), "apply-trace.yaml")
+	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nvars:\n  mode: test\nphases:\n  - name: install\n    steps:\n      - id: trace-step\n        kind: Command\n        metadata:\n          owner: test\n        when: vars.mode == \"test\"\n        spec:\n          command: [\"true\"]\n")
+
+	res := execute([]string{"apply", "--workflow", wfPath, "--v=3"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	for _, want := range []string{"component=apply event=execution_context", "workflow_sha256=", "state_key=", "component=apply event=context_keys", "component=apply event=workflow_vars", "keys=mode", "component=apply event=state_runtime", "component=apply event=step_contract", "api_version=-", "metadata_keys=owner", "spec_keys=command"} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 		}
 	}
 }
 
-func TestApplyDefaultProgressLogs(t *testing.T) {
+func TestApplyDefaultShowsProgressLogs(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	wfPath := filepath.Join(t.TempDir(), "apply-default-progress.yaml")
 	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: progress-step\n        kind: Command\n        spec:\n          command: [\"true\"]\n")
@@ -837,11 +861,55 @@ func TestApplyDefaultProgressLogs(t *testing.T) {
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "component=apply event=step_started") || !strings.Contains(res.stderr, "step=progress-step") || !strings.Contains(res.stderr, "batch=install") {
-		t.Fatalf("expected started progress log, got %q", res.stderr)
+	if res.stdout != "apply: ok\n" {
+		t.Fatalf("unexpected stdout: %q", res.stdout)
 	}
-	if !strings.Contains(res.stderr, "component=apply event=batch_succeeded batch=install") || !strings.Contains(res.stderr, "duration_ms=") {
-		t.Fatalf("expected completion progress log with duration, got %q", res.stderr)
+	if !strings.Contains(res.stderr, buildinfo.Summary()+" apply started") {
+		t.Fatalf("expected apply startup line on stderr, got %q", res.stderr)
+	}
+	for _, want := range []string{"component=apply event=phase_started", "phase=install", "component=apply event=batch_started", "component=apply event=step_started", "step=progress-step", "component=apply event=step_succeeded", "component=apply event=batch_succeeded", "component=apply event=phase_succeeded"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected default verbosity to show progress log %q, got %q", want, res.stderr)
+		}
+	}
+	for _, hidden := range []string{"component=apply event=run_requested", "component=apply event=run_completed", "component=apply event=execution_plan"} {
+		if strings.Contains(res.stderr, hidden) {
+			t.Fatalf("expected default verbosity to suppress diagnostic log %q, got %q", hidden, res.stderr)
+		}
+	}
+
+	res = execute([]string{"apply", "--workflow", wfPath, bundle})
+	if res.err != nil {
+		t.Fatalf("expected second apply success, got %v", res.err)
+	}
+	if res.stdout != "apply: ok\n" {
+		t.Fatalf("unexpected second stdout: %q", res.stdout)
+	}
+	for _, want := range []string{"component=apply event=phase_skipped", "phase=install", "reason=completed", "component=apply event=step_skipped", "step=progress-step"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected default verbosity to show completed skip log %q, got %q", want, res.stderr)
+		}
+	}
+}
+
+func TestApplyDefaultShowsFailureProgressLogs(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	wfPath := filepath.Join(t.TempDir(), "apply-default-failure-progress.yaml")
+	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: fail-step\n        kind: Command\n        spec:\n          command: [\"false\"]\n")
+	bundle := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(bundle, "workflows"), 0o755); err != nil {
+		t.Fatalf("mkdir bundle workflows: %v", err)
+	}
+	createValidBundleManifest(t, bundle)
+
+	res := execute([]string{"apply", "--workflow", wfPath, bundle})
+	if res.err == nil {
+		t.Fatalf("expected apply failure")
+	}
+	for _, want := range []string{"component=apply event=phase_started", "phase=install", "component=apply event=step_started", "step=fail-step", "component=apply event=step_failed", "status=failed", "component=apply event=batch_failed", "component=apply event=phase_failed"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected default verbosity to show failure progress log %q, got %q", want, res.stderr)
+		}
 	}
 }
 
@@ -855,19 +923,20 @@ func TestApplyParallelBatchProgressLogs(t *testing.T) {
 	}
 	createValidBundleManifest(t, bundle)
 
-	res := execute([]string{"apply", "--workflow", wfPath, bundle})
+	res := execute([]string{"--v=2", "apply", "--workflow", wfPath, bundle})
 	if res.err != nil {
 		t.Fatalf("expected success, got %v", res.err)
 	}
 	for _, want := range []string{
-		"component=apply event=batch_started batch=install:downloads",
+		"component=apply event=batch_started",
+		"batch=install:downloads",
 		"parallel_group=downloads",
 		"batch_size=2",
 		"max_parallelism=2",
 		"component=apply event=step_started",
 		"step=first",
 		"step=second",
-		"component=apply event=batch_succeeded batch=install:downloads",
+		"component=apply event=batch_succeeded",
 		"duration_ms=",
 	} {
 		if !strings.Contains(res.stderr, want) {

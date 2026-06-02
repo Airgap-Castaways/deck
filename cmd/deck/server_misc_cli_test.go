@@ -71,6 +71,15 @@ func TestHealth(t *testing.T) {
 		if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "url="+srv.URL+"/healthz") || !strings.Contains(res.stderr, "http_status=200") {
 			t.Fatalf("expected v2 diagnostics on stderr, got %q", res.stderr)
 		}
+		res = execute([]string{"server", "health", "--server", srv.URL, "-o", "json", "--v=3"})
+		if res.err != nil {
+			t.Fatalf("expected success, got %v", res.err)
+		}
+		for _, want := range []string{"event=health_request", "method=GET", "timeout_ms=5000", "event=health_response", "status=200", "duration_ms="} {
+			if !strings.Contains(res.stderr, want) {
+				t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
+			}
+		}
 		res = execute([]string{"server", "health", "--server", srv.URL, "-o", "json", "--v=2", "--log-format=json"})
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
@@ -161,26 +170,41 @@ func TestServerRemoteCommands(t *testing.T) {
 		t.Fatalf("expected config file removal, got %v", statErr)
 	}
 
-	res := execute([]string{"server", "remote", "set", "http://127.0.0.1:9090", "--v=1"})
+	res := execute([]string{"server", "remote", "set", "http://127.0.0.1:9090", "--v=3"})
 	if res.err != nil {
 		t.Fatalf("server remote verbose set failed: %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "event=remote_set") || !strings.Contains(res.stderr, "url=http://127.0.0.1:9090") || !strings.Contains(res.stderr, "config=") {
+	if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "event=remote_set") || !strings.Contains(res.stderr, "url=http://127.0.0.1:9090") || !strings.Contains(res.stderr, "config=") || !strings.Contains(res.stderr, "event=remote_set_target") || !strings.Contains(res.stderr, "scheme=http") || !strings.Contains(res.stderr, "host=127.0.0.1:9090") || !strings.Contains(res.stderr, "event=remote_set_target_trace") || !strings.Contains(res.stderr, "event=remote_completed") || !strings.Contains(res.stderr, "operation=set") {
 		t.Fatalf("unexpected verbose set stderr: %q", res.stderr)
 	}
-	res = execute([]string{"server", "remote", "show", "--v=1"})
+	res = execute([]string{"server", "remote", "show", "--v=3"})
 	if res.err != nil {
 		t.Fatalf("server remote verbose show failed: %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "event=remote_show") || !strings.Contains(res.stderr, "config=") || !strings.Contains(res.stderr, "origin=config") {
+	if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "event=remote_show") || !strings.Contains(res.stderr, "config=") || !strings.Contains(res.stderr, "origin=config") || !strings.Contains(res.stderr, "event=remote_show_target") || !strings.Contains(res.stderr, "event=remote_completed") || !strings.Contains(res.stderr, "operation=show") {
 		t.Fatalf("unexpected verbose show stderr: %q", res.stderr)
 	}
-	res = execute([]string{"server", "remote", "unset", "--v=1"})
+	res = execute([]string{"server", "remote", "unset", "--v=2"})
 	if res.err != nil {
 		t.Fatalf("server remote verbose unset failed: %v", res.err)
 	}
-	if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "event=remote_unset") || !strings.Contains(res.stderr, "config=") {
+	if !strings.Contains(res.stderr, "component=server") || !strings.Contains(res.stderr, "event=remote_unset") || !strings.Contains(res.stderr, "config=") || !strings.Contains(res.stderr, "event=remote_config") || !strings.Contains(res.stderr, "event=remote_completed") || !strings.Contains(res.stderr, "operation=unset") {
 		t.Fatalf("unexpected verbose unset stderr: %q", res.stderr)
+	}
+
+	res = execute([]string{"server", "remote", "set", "https://user:secret@example.invalid/help?token=x#fragment-secret", "--v=3"})
+	if res.err != nil {
+		t.Fatalf("server remote redaction set failed: %v", res.err)
+	}
+	for _, leaked := range []string{"secret", "token=x", "fragment-secret"} {
+		if strings.Contains(res.stderr, leaked) {
+			t.Fatalf("expected stderr URL diagnostics to redact %q, got %q", leaked, res.stderr)
+		}
+	}
+	for _, want := range []string{"url=https://redacted@example.invalid/help", "has_userinfo=true", "has_query=true", "has_fragment=true"} {
+		if !strings.Contains(res.stderr, want) {
+			t.Fatalf("expected redacted URL diagnostic %q, got %q", want, res.stderr)
+		}
 	}
 }
 
@@ -369,11 +393,11 @@ func TestCache(t *testing.T) {
 	})
 
 	t.Run("list json keeps diagnostics on stderr", func(t *testing.T) {
-		res := execute([]string{"cache", "list", "-o", "json", "--v=1"})
+		res := execute([]string{"cache", "list", "-o", "json", "--v=3"})
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
-		if !strings.Contains(res.stderr, "component=cache") || !strings.Contains(res.stderr, "event=list_requested") || !strings.Contains(res.stderr, "root=") || !strings.Contains(res.stderr, "event=list_loaded") || !strings.Contains(res.stderr, "entries=") {
+		if !strings.Contains(res.stderr, "component=cache") || !strings.Contains(res.stderr, "event=list_requested") || !strings.Contains(res.stderr, "root=") || !strings.Contains(res.stderr, "event=list_loaded") || !strings.Contains(res.stderr, "entries=") || !strings.Contains(res.stderr, "event=list_summary") || !strings.Contains(res.stderr, "total_bytes=") || !strings.Contains(res.stderr, "event=list_entry") || !strings.Contains(res.stderr, "path=packages/p.deb") {
 			t.Fatalf("expected diagnostics on stderr, got %q", res.stderr)
 		}
 		var entries []struct {
@@ -407,14 +431,14 @@ func TestCache(t *testing.T) {
 	})
 
 	t.Run("clean dry-run diagnostics", func(t *testing.T) {
-		res := execute([]string{"cache", "clean", "--older-than", "1h", "--dry-run", "--v=2"})
+		res := execute([]string{"cache", "clean", "--older-than", "1h", "--dry-run", "--v=3"})
 		if res.err != nil {
 			t.Fatalf("expected success, got %v", res.err)
 		}
 		if !strings.Contains(res.stdout, packagesDir) {
 			t.Fatalf("expected packages dir in plan, got %q", res.stdout)
 		}
-		for _, want := range []string{"component=cache", "event=clean_requested", "event=clean_planned", "matches=1", "event=clean_match", "path="} {
+		for _, want := range []string{"component=cache", "event=clean_requested", "event=clean_planned", "matches=1", "event=clean_cutoff", "has_cutoff=true", "event=clean_match", "path=", "event=clean_match_stat", "is_dir=true"} {
 			if !strings.Contains(res.stderr, want) {
 				t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 			}
@@ -798,6 +822,13 @@ func TestRunWorkflowBundleVerifyJSON(t *testing.T) {
 	if !strings.Contains(res.stderr, "component=bundle") || !strings.Contains(res.stderr, "event=verify_manifest") || !strings.Contains(res.stderr, "manifest_entries=1") || !strings.Contains(res.stderr, "files=1") || !strings.Contains(res.stderr, "images=0") || !strings.Contains(res.stderr, "packages=0") || !strings.Contains(res.stderr, "other=0") {
 		t.Fatalf("expected manifest count diagnostic, got %q", res.stderr)
 	}
+	res = execute([]string{"bundle", "verify", "--file", bundleDir, "-o", "json", "--v=3"})
+	if res.err != nil {
+		t.Fatalf("expected success, got %v", res.err)
+	}
+	if !strings.Contains(res.stderr, "event=verify_manifest_entry") || !strings.Contains(res.stderr, "category=file") || !strings.Contains(res.stderr, "sha256_prefix=") {
+		t.Fatalf("expected v3 manifest entry diagnostic, got %q", res.stderr)
+	}
 }
 
 func TestRunWorkflowBundleBuildSuccess(t *testing.T) {
@@ -817,11 +848,11 @@ func TestRunWorkflowBundleBuildSuccess(t *testing.T) {
 		t.Fatalf("expected archive file, got %v", err)
 	}
 
-	res := execute([]string{"bundle", "build", "--root", bundleDir, "--out", archivePath, "--v=2"})
+	res := execute([]string{"bundle", "build", "--root", bundleDir, "--out", archivePath, "--v=3"})
 	if res.err != nil {
 		t.Fatalf("expected build success, got %v", res.err)
 	}
-	for _, want := range []string{"component=bundle", "event=manifest_loaded", "entries=1", "event=manifest_summary", "files=1", "images=0", "packages=0", "other=0", "event=archive_written", "archive_size="} {
+	for _, want := range []string{"component=bundle", "event=manifest_loaded", "entries=1", "event=manifest_summary", "files=1", "images=0", "packages=0", "other=0", "event=build_manifest_entry", "category=file", "event=archive_written", "archive_size="} {
 		if !strings.Contains(res.stderr, want) {
 			t.Fatalf("expected %q in stderr, got %q", want, res.stderr)
 		}

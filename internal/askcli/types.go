@@ -33,6 +33,7 @@ type Options struct {
 	Provider      string
 	Model         string
 	Endpoint      string
+	LogLevel      string
 	Stdin         io.Reader
 	Stdout        io.Writer
 	Stderr        io.Writer

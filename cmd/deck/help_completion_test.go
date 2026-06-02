@@ -52,6 +52,18 @@ func TestRunUsageShowsTopLevelAxes(t *testing.T) {
 	}
 }
 
+func TestRejectsInvalidVerbosity(t *testing.T) {
+	for _, args := range [][]string{{"--v=-1", "version"}, {"--v=4", "version"}} {
+		res := execute(args)
+		if res.err == nil {
+			t.Fatalf("expected invalid verbosity error for %v", args)
+		}
+		if !strings.Contains(res.stderr, "--v must be between 0 and 3") {
+			t.Fatalf("expected verbosity range error for %v, got %q", args, res.stderr)
+		}
+	}
+}
+
 func TestCompletionHelp(t *testing.T) {
 	out, err := runWithCapturedStdout([]string{"help", "completion"})
 	if err != nil {
@@ -59,6 +71,11 @@ func TestCompletionHelp(t *testing.T) {
 	}
 	if !strings.Contains(out, "deck completion <bash|zsh|fish|powershell>") {
 		t.Fatalf("unexpected output: %q", out)
+	}
+	for _, want := range []string{"source <(deck completion bash)", "source <(deck completion zsh)", "deck completion fish | source", "~/.config/fish/completions/deck.fish"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected completion help to include %q, got %q", want, out)
+		}
 	}
 }
 

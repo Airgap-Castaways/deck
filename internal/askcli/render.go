@@ -198,7 +198,7 @@ func render(stdout io.Writer, stderr io.Writer, result runResult) error {
 }
 
 func shouldLogAsk(current string, required string) bool {
-	levels := map[string]int{"basic": 1, "debug": 2, "trace": 3}
+	levels := map[string]int{"off": 0, "basic": 1, "debug": 2, "trace": 3}
 	current = askconfigLogLevel(current)
 	required = askconfigLogLevel(required)
 	return levels[current] >= levels[required]
@@ -206,11 +206,15 @@ func shouldLogAsk(current string, required string) bool {
 
 func askconfigLogLevel(level string) string {
 	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "off", "none", "quiet":
+		return "off"
 	case "debug":
 		return "debug"
 	case "trace":
 		return "trace"
-	default:
+	case "basic":
 		return "basic"
+	default:
+		return "off"
 	}
 }

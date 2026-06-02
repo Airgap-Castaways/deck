@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -237,7 +239,15 @@ func newServerRemoteUnsetCommand(env *cliEnv) *cobra.Command {
 	return cmd
 }
 
-func executeServerRemoteSet(env *cliEnv, rawURL string) error {
+func executeServerRemoteSet(env *cliEnv, rawURL string) (err error) {
+	started := time.Now().UTC()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "failed"
+		}
+		_ = env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_completed", Attrs: map[string]any{"operation": "set", "status": status, "duration_ms": time.Since(started).Milliseconds()}})
+	}()
 	resolved := strings.TrimRight(strings.TrimSpace(rawURL), "/")
 	if err := validateSourceURL(resolved); err != nil {
 		return err
@@ -246,7 +256,10 @@ func executeServerRemoteSet(env *cliEnv, rawURL string) error {
 	if err != nil {
 		return err
 	}
-	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_set", Attrs: map[string]any{"url": resolved, "config": configPath}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_set", Attrs: map[string]any{"url": redactDiagnosticURLString(resolved), "config": configPath}}); err != nil {
+		return err
+	}
+	if err := emitRemoteTargetDetails(env, "remote_set_target", resolved); err != nil {
 		return err
 	}
 	if err := saveSourceDefaults(sourceDefaults{URL: resolved}); err != nil {
@@ -255,7 +268,15 @@ func executeServerRemoteSet(env *cliEnv, rawURL string) error {
 	return env.stdoutPrintf("server remote set: %s\n", resolved)
 }
 
-func executeServerRemoteShow(env *cliEnv) error {
+func executeServerRemoteShow(env *cliEnv) (err error) {
+	started := time.Now().UTC()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "failed"
+		}
+		_ = env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_completed", Attrs: map[string]any{"operation": "show", "status": status, "duration_ms": time.Since(started).Milliseconds()}})
+	}()
 	configPath, err := sourceDefaultsPath()
 	if err != nil {
 		return err
@@ -264,7 +285,10 @@ func executeServerRemoteShow(env *cliEnv) error {
 	if err != nil {
 		return err
 	}
-	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_show", Attrs: map[string]any{"config": configPath, "resolved": displayValueOrDash(resolved), "origin": displayValueOrDash(source)}}); err != nil {
+	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_show", Attrs: map[string]any{"config": configPath, "resolved": displayValueOrDash(redactDiagnosticURLString(resolved)), "origin": displayValueOrDash(source)}}); err != nil {
+		return err
+	}
+	if err := emitRemoteTargetDetails(env, "remote_show_target", resolved); err != nil {
 		return err
 	}
 	if resolved == "" {
@@ -279,7 +303,15 @@ func executeServerRemoteShow(env *cliEnv) error {
 	return env.stdoutPrintf("origin=%s\n", source)
 }
 
-func executeServerRemoteUnset(env *cliEnv) error {
+func executeServerRemoteUnset(env *cliEnv) (err error) {
+	started := time.Now().UTC()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "failed"
+		}
+		_ = env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_completed", Attrs: map[string]any{"operation": "unset", "status": status, "duration_ms": time.Since(started).Milliseconds()}})
+	}()
 	configPath, err := sourceDefaultsPath()
 	if err != nil {
 		return err
@@ -287,10 +319,53 @@ func executeServerRemoteUnset(env *cliEnv) error {
 	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "server", Event: "remote_unset", Attrs: map[string]any{"config": configPath}}); err != nil {
 		return err
 	}
+	if err := env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "server", Event: "remote_config", Attrs: map[string]any{"config": configPath}}); err != nil {
+		return err
+	}
 	if err := clearSourceDefaults(); err != nil {
 		return err
 	}
 	return env.stdoutPrintln("server remote cleared")
+}
+
+func emitRemoteTargetDetails(env *cliEnv, event string, raw string) error {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "server", Event: event, Attrs: map[string]any{"configured": false}})
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "server", Event: event, Attrs: map[string]any{"configured": true, "parse_error": err.Error()}})
+	}
+	if err := env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "server", Event: event, Attrs: map[string]any{"configured": true, "scheme": parsed.Scheme, "host": parsed.Host, "path": displayValueOrDash(parsed.Path)}}); err != nil {
+		return err
+	}
+	return env.verboseCLIEvent(3, ctrllogs.CLIEvent{Level: "debug", Component: "server", Event: event + "_trace", Attrs: map[string]any{"url": redactDiagnosticURL(parsed), "has_userinfo": parsed.User != nil, "has_query": parsed.RawQuery != "", "has_fragment": parsed.Fragment != ""}})
+}
+
+func redactDiagnosticURL(parsed *url.URL) string {
+	if parsed == nil {
+		return ""
+	}
+	redacted := *parsed
+	if redacted.User != nil {
+		redacted.User = url.User("redacted")
+	}
+	redacted.RawQuery = ""
+	redacted.Fragment = ""
+	return strings.TrimRight(redacted.String(), "?")
+}
+
+func redactDiagnosticURLString(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return trimmed
+	}
+	return redactDiagnosticURL(parsed)
 }
 
 type serverUpOptions struct {

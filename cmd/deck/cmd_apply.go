@@ -197,6 +197,9 @@ func runPlanVarsWithOptions(env *cliEnv, ctx context.Context, opts planVarsOptio
 }
 
 func runDiffWithOptions(env *cliEnv, ctx context.Context, opts diffOptions) error {
+	if err := env.commandStarted("plan"); err != nil {
+		return err
+	}
 	workflowPath, err := resolvePlanWorkflowPath(ctx, strings.TrimSpace(opts.workflowPath), strings.TrimSpace(opts.scenario), strings.TrimSpace(opts.source))
 	if err != nil {
 		return err
@@ -315,11 +318,15 @@ func runApplyWithOptions(env *cliEnv, ctx context.Context, opts applyOptions) er
 	for _, arg := range opts.positional {
 		positionalArgs = append(positionalArgs, strings.TrimSpace(arg))
 	}
+	if err := env.commandStarted("apply"); err != nil {
+		return err
+	}
 
 	workflowPath, bundleRoot, err := resolveApplyWorkflowAndBundle(ctx, opts, positionalArgs)
 	if err != nil {
 		return err
 	}
+	invocationID := newInvocationID("apply")
 	return applycli.RunApplyCommand(ctx, applycli.ApplyCommandOptions{
 		WorkflowPath:   workflowPath,
 		BundleRoot:     bundleRoot,
@@ -334,7 +341,8 @@ func runApplyWithOptions(env *cliEnv, ctx context.Context, opts applyOptions) er
 		Verbosef:       env.verbosef,
 		StdoutPrintf:   env.stdoutPrintf,
 		StdoutPrintln:  env.stdoutPrintln,
-		AdditionalSink: verboseApplyStepSink(env),
+		InvocationID:   invocationID,
+		AdditionalSink: verboseApplyStepSink(env, invocationID),
 		NewRunLogger: func(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (applycli.RunLogger, error) {
 			return newApplyRunLogger(env, workflowPath, workflowSource, scenario, bundleRoot, selectedPhase)
 		},
