@@ -57,14 +57,7 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 				{
 					ID:   "pkg",
 					Kind: "DownloadPackage",
-					Spec: map[string]any{
-						"packages": []any{"containerd"},
-						"backend": map[string]any{
-							"mode":    "container",
-							"runtime": "docker",
-							"image":   "ubuntu:22.04",
-						},
-					},
+					Spec: testDebDownloadPackageSpec([]any{"containerd"}, ""),
 				},
 				{
 					ID:   "img",
@@ -84,7 +77,7 @@ func TestRun_ContainerBackendsWithFakeRunner(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "mock-package.deb")); err != nil {
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "deb", "ubuntu2204", "pkgs", "mock-package.deb")); err != nil {
 		t.Fatalf("expected mock package artifact: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(bundle, "images", "registry.k8s.io_kube-apiserver_v1.30.1.tar")); err != nil {
@@ -154,14 +147,7 @@ func TestRun_PackagesContainerBackend(t *testing.T) {
 				{
 					ID:   "k8s-pkgs",
 					Kind: "DownloadPackage",
-					Spec: map[string]any{
-						"packages": []any{"kubelet", "kubeadm"},
-						"backend": map[string]any{
-							"mode":    "container",
-							"runtime": "docker",
-							"image":   "ubuntu:22.04",
-						},
-					},
+					Spec: testDebDownloadPackageSpec([]any{"kubelet", "kubeadm"}, ""),
 				},
 			},
 		}},
@@ -171,7 +157,7 @@ func TestRun_PackagesContainerBackend(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "mock-package.deb")); err != nil {
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "deb", "ubuntu2204", "pkgs", "mock-package.deb")); err != nil {
 		t.Fatalf("expected mock package artifact: %v", err)
 	}
 }
@@ -188,15 +174,11 @@ func TestRun_DownloadPackagePassesPlatformToContainer(t *testing.T) {
 			Steps: []config.Step{{
 				ID:   "k8s-pkgs",
 				Kind: "DownloadPackage",
-				Spec: map[string]any{
-					"packages": []any{"kubelet", "kubeadm"},
-					"platform": " linux/AMD64 ",
-					"backend": map[string]any{
-						"mode":    "container",
-						"runtime": "docker",
-						"image":   "ubuntu:22.04",
-					},
-				},
+				Spec: func() map[string]any {
+					spec := testDebDownloadPackageSpec([]any{"kubelet", "kubeadm"}, "")
+					spec["platform"] = " linux/AMD64 "
+					return spec
+				}(),
 			}},
 		}},
 	}
@@ -216,7 +198,7 @@ func TestRun_DownloadPackagePassesPlatformToContainer(t *testing.T) {
 		t.Fatalf("expected docker create --platform linux/amd64, got %#v", createArgs)
 	}
 
-	raw, err := os.ReadFile(packageMetaFileAbs(bundle, "packages"))
+	raw, err := os.ReadFile(packageMetaFileAbs(bundle, filepath.ToSlash(filepath.Join("packages", "deb", "ubuntu2204"))))
 	if err != nil {
 		t.Fatalf("read package metadata: %v", err)
 	}
@@ -238,11 +220,11 @@ func TestRun_DownloadPackageRejectsInvalidPlatform(t *testing.T) {
 			Steps: []config.Step{{
 				ID:   "k8s-pkgs",
 				Kind: "DownloadPackage",
-				Spec: map[string]any{
-					"packages": []any{"kubelet"},
-					"platform": "linux",
-					"backend":  map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"},
-				},
+				Spec: func() map[string]any {
+					spec := testDebDownloadPackageSpec([]any{"kubelet"}, "")
+					spec["platform"] = "linux"
+					return spec
+				}(),
 			}},
 		}},
 	}
@@ -264,14 +246,11 @@ func TestRun_PackagesContainerRuntimeMissing(t *testing.T) {
 				{
 					ID:   "pkg",
 					Kind: "DownloadPackage",
-					Spec: map[string]any{
-						"packages": []any{"containerd"},
-						"backend": map[string]any{
-							"mode":    "container",
-							"runtime": "auto",
-							"image":   "ubuntu:22.04",
-						},
-					},
+					Spec: func() map[string]any {
+						spec := testDebDownloadPackageSpec([]any{"containerd"}, "")
+						spec["backend"].(map[string]any)["runtime"] = "auto"
+						return spec
+					}(),
 				},
 			},
 		}},
@@ -298,14 +277,7 @@ func TestRun_PackagesContainerNoArtifact(t *testing.T) {
 				{
 					ID:   "pkg",
 					Kind: "DownloadPackage",
-					Spec: map[string]any{
-						"packages": []any{"containerd"},
-						"backend": map[string]any{
-							"mode":    "container",
-							"runtime": "docker",
-							"image":   "ubuntu:22.04",
-						},
-					},
+					Spec: testDebDownloadPackageSpec([]any{"containerd"}, ""),
 				},
 			},
 		}},
@@ -330,18 +302,15 @@ func TestRun_DownloadPackageUsesOutputDir(t *testing.T) {
 			Steps: []config.Step{{
 				ID:   "pkg",
 				Kind: "DownloadPackage",
-				Spec: map[string]any{
-					"packages":  []any{"containerd"},
-					"outputDir": "packages/custom",
-				},
+				Spec: testDebDownloadPackageSpec([]any{"containerd"}, "packages/custom"),
 			}},
 		}},
 	}
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "custom", "containerd.txt")); err != nil {
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "custom", "pkgs", "mock-package.deb")); err != nil {
 		t.Fatalf("expected package artifact in custom dir: %v", err)
 	}
 }
@@ -356,10 +325,7 @@ func TestRun_DownloadPackageRejectsNonCanonicalOutputDir(t *testing.T) {
 			Steps: []config.Step{{
 				ID:   "pkg",
 				Kind: "DownloadPackage",
-				Spec: map[string]any{
-					"packages":  []any{"containerd"},
-					"outputDir": "artifacts/packages",
-				},
+				Spec: testDebDownloadPackageSpec([]any{"containerd"}, "artifacts/packages"),
 			}},
 		}},
 	}
@@ -381,14 +347,11 @@ func TestRun_ExposesTypedRuntimeErrorCode(t *testing.T) {
 			Steps: []config.Step{{
 				ID:   "pkg",
 				Kind: "DownloadPackage",
-				Spec: map[string]any{
-					"packages": []any{"containerd"},
-					"backend": map[string]any{
-						"mode":    "container",
-						"runtime": "auto",
-						"image":   "ubuntu:22.04",
-					},
-				},
+				Spec: func() map[string]any {
+					spec := testDebDownloadPackageSpec([]any{"containerd"}, "")
+					spec["backend"].(map[string]any)["runtime"] = "auto"
+					return spec
+				}(),
 			}},
 		}},
 	}
@@ -410,10 +373,7 @@ func TestRun_DownloadPackageReusesExportedArtifactCache(t *testing.T) {
 			Steps: []config.Step{{
 				ID:   "pkg-cache",
 				Kind: "DownloadPackage",
-				Spec: map[string]any{
-					"packages": []any{"containerd"},
-					"backend":  map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"},
-				},
+				Spec: testDebDownloadPackageSpec([]any{"containerd"}, ""),
 			}},
 		}},
 	}
@@ -426,7 +386,7 @@ func TestRun_DownloadPackageReusesExportedArtifactCache(t *testing.T) {
 	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &noArtifactRunner{}}); err != nil {
 		t.Fatalf("expected exported cache reuse, got %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(bundle, "packages", "mock-package.deb")); err != nil {
+	if _, err := os.Stat(filepath.Join(bundle, "packages", "deb", "ubuntu2204", "pkgs", "mock-package.deb")); err != nil {
 		t.Fatalf("expected package restored from exported cache: %v", err)
 	}
 	cacheRoot := filepath.Join(home, ".cache", "deck", "artifacts", "package")
@@ -445,17 +405,14 @@ func TestRun_DownloadPackageCorruptedBundleArtifactFallsBackToExportedCache(t *t
 	step := config.Step{
 		ID:   "pkg-cache",
 		Kind: "DownloadPackage",
-		Spec: map[string]any{
-			"packages": []any{"containerd"},
-			"backend":  map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"},
-		},
+		Spec: testDebDownloadPackageSpec([]any{"containerd"}, ""),
 	}
 	wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "prepare", Steps: []config.Step{step}}}}
 
 	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}}); err != nil {
 		t.Fatalf("initial run failed: %v", err)
 	}
-	bundlePkg := filepath.Join(bundle, "packages", "mock-package.deb")
+	bundlePkg := filepath.Join(bundle, "packages", "deb", "ubuntu2204", "pkgs", "mock-package.deb")
 	if err := os.WriteFile(bundlePkg, []byte("corrupt"), 0o644); err != nil {
 		t.Fatalf("corrupt bundle package: %v", err)
 	}
@@ -479,10 +436,7 @@ func TestRun_DownloadPackageCorruptedExportedCacheTriggersFetch(t *testing.T) {
 	step := config.Step{
 		ID:   "pkg-cache",
 		Kind: "DownloadPackage",
-		Spec: map[string]any{
-			"packages": []any{"containerd"},
-			"backend":  map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"},
-		},
+		Spec: testDebDownloadPackageSpec([]any{"containerd"}, ""),
 	}
 	wf := &config.Workflow{Version: "v1", Phases: []config.Phase{{Name: "prepare", Steps: []config.Step{step}}}}
 
@@ -496,7 +450,7 @@ func TestRun_DownloadPackageCorruptedExportedCacheTriggersFetch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve exported cache path: %v", err)
 	}
-	cachePkg := filepath.Join(exportedPackageCachePayloadPath(cachePath), "mock-package.deb")
+	cachePkg := filepath.Join(exportedPackageCachePayloadPath(cachePath), "pkgs", "mock-package.deb")
 	if err := os.WriteFile(cachePkg, []byte("corrupt"), 0o644); err != nil {
 		t.Fatalf("corrupt exported cache package: %v", err)
 	}
@@ -562,10 +516,7 @@ func TestRun_DownloadPackageExportFailureLeavesNoBundleOutput(t *testing.T) {
 			Steps: []config.Step{{
 				ID:   "pkg-export-fail",
 				Kind: "DownloadPackage",
-				Spec: map[string]any{
-					"packages": []any{"containerd"},
-					"backend":  map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"},
-				},
+				Spec: testDebDownloadPackageSpec([]any{"containerd"}, ""),
 			}},
 		}},
 	}

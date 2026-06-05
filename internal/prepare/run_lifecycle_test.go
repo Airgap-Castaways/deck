@@ -43,16 +43,12 @@ func TestRun_PrepareArtifactAndManifest(t *testing.T) {
 					{
 						ID:   "download-os-packages",
 						Kind: "DownloadPackage",
-						Spec: map[string]any{
-							"packages": []any{"containerd", "iptables"},
-						},
+						Spec: testDebDownloadPackageSpec([]any{"containerd", "iptables"}, "packages/deb/os"),
 					},
 					{
 						ID:   "download-k8s-packages",
 						Kind: "DownloadPackage",
-						Spec: map[string]any{
-							"packages": []any{"kubelet"},
-						},
+						Spec: testDebDownloadPackageSpec([]any{"kubelet"}, "packages/deb/k8s"),
 					},
 					{
 						ID:   "download-images",
@@ -66,15 +62,14 @@ func TestRun_PrepareArtifactAndManifest(t *testing.T) {
 		},
 	}
 
-	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, imageDownloadOps: imageOps}); err != nil {
+	if err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle, CommandRunner: &fakeRunner{}, imageDownloadOps: imageOps}); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
 	expectFiles := []string{
 		"files/artifact.bin",
-		"packages/containerd.txt",
-		"packages/iptables.txt",
-		"packages/kubelet.txt",
+		"packages/deb/os/pkgs/mock-package.deb",
+		"packages/deb/k8s/pkgs/mock-package.deb",
 		"images/registry.k8s.io_kube-apiserver_v1.30.1.tar",
 		".deck/manifest.json",
 	}

@@ -82,14 +82,29 @@ func authoringProgramPromptBlock(program askcontract.AuthoringProgram) string {
 		b.WriteString(strings.TrimSpace(program.Platform.RepoType))
 		b.WriteString("\n")
 	}
+	if strings.TrimSpace(program.Platform.BackendImage) != "" {
+		b.WriteString("- platform.backendImage: ")
+		b.WriteString(strings.TrimSpace(program.Platform.BackendImage))
+		b.WriteString("\n")
+	}
 	if len(program.Artifacts.Packages) > 0 {
 		b.WriteString("- artifacts.packages: ")
 		b.WriteString(strings.Join(program.Artifacts.Packages, ", "))
 		b.WriteString("\n")
 	}
+	if strings.TrimSpace(program.Artifacts.PackageOutputDir) != "" {
+		b.WriteString("- artifacts.packageOutputDir: ")
+		b.WriteString(strings.TrimSpace(program.Artifacts.PackageOutputDir))
+		b.WriteString("\n")
+	}
 	if len(program.Artifacts.Images) > 0 {
 		b.WriteString("- artifacts.images: ")
 		b.WriteString(strings.Join(program.Artifacts.Images, ", "))
+		b.WriteString("\n")
+	}
+	if strings.TrimSpace(program.Artifacts.ImageOutputDir) != "" {
+		b.WriteString("- artifacts.imageOutputDir: ")
+		b.WriteString(strings.TrimSpace(program.Artifacts.ImageOutputDir))
 		b.WriteString("\n")
 	}
 	if strings.TrimSpace(program.Cluster.KubernetesVersion) != "" {

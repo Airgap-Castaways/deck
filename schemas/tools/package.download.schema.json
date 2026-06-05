@@ -39,10 +39,60 @@
       "$id": "https://github.com/Airgap-Castaways/deck/internal/stepspec/download-package",
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "distro": {
+                "properties": {
+                  "family": {
+                    "const": "debian"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "repo": {
+                "properties": {
+                  "type": {
+                    "const": "deb-flat"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "distro": {
+                "properties": {
+                  "family": {
+                    "const": "rhel"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "repo": {
+                "properties": {
+                  "type": {
+                    "const": "rpm"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
       "properties": {
         "backend": {
           "additionalProperties": false,
-          "description": "Container-based download backend configuration.",
+          "description": "Required container-based download backend configuration.",
           "examples": [
             "{mode:container,runtime:docker,image:rockylinux:9}"
           ],
@@ -93,10 +143,13 @@
           "properties": {
             "family": {
               "description": "Distribution family used to resolve package tooling.",
+              "enum": [
+                "debian",
+                "rhel"
+              ],
               "examples": [
                 "rhel"
               ],
-              "minLength": 1,
               "type": "string"
             },
             "release": {
@@ -108,6 +161,10 @@
               "type": "string"
             }
           },
+          "required": [
+            "family",
+            "release"
+          ],
           "type": "object"
         },
         "outputDir": {
@@ -195,11 +252,17 @@
               "type": "string"
             }
           },
+          "required": [
+            "type"
+          ],
           "type": "object"
         }
       },
       "required": [
-        "packages"
+        "packages",
+        "distro",
+        "repo",
+        "backend"
       ],
       "type": "object"
     },

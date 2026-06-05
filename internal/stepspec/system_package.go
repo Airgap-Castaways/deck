@@ -424,7 +424,7 @@ type DownloadPackage struct {
 	// Repository settings applied before download.
 	// @deck.example {type:rpm,modules:[{name:container-tools,stream:4.0}]}
 	Repo DownloadPackageRepo `json:"repo"`
-	// Container-based download backend configuration.
+	// Required container-based download backend configuration.
 	// @deck.example {mode:container,runtime:docker,image:rockylinux:9}
 	Backend DownloadPackageBackend `json:"backend"`
 	// Optional bundle-relative output directory for downloaded package artifacts.

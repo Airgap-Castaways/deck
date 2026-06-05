@@ -162,12 +162,12 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.backend` | `object` | no | `` | `` | Container-based download backend configuration. | `{mode:container,runtime:docker,image:rockylinux:9}` |
-| `spec.distro` | `object` | no | `` | `` | Target distribution hint used to select resolver behavior. | `{family:rhel,release:rocky9}` |
+| `spec.backend` | `object` | yes | `` | `` | Required container-based download backend configuration. | `{mode:container,runtime:docker,image:rockylinux:9}` |
+| `spec.distro` | `object` | yes | `` | `` | Target distribution hint used to select resolver behavior. | `{family:rhel,release:rocky9}` |
 | `spec.outputDir` | `string` | no | `` | `` | Optional bundle-relative output directory for downloaded package artifacts. | `packages/kubernetes` |
 | `spec.packages` | `array<string>` | yes | `` | `` | Package names to download. | `[kubelet,kubeadm,kubectl]` |
 | `spec.platform` | `string` | no | `` | `` | Target container platform for package resolution in os/arch or os/arch/variant form. | `linux/amd64` |
-| `spec.repo` | `object` | no | `` | `` | Repository settings applied before download. | `{type:rpm,modules:[{name:container-tools,stream:4.0}]}` |
+| `spec.repo` | `object` | yes | `` | `` | Repository settings applied before download. | `{type:rpm,modules:[{name:container-tools,stream:4.0}]}` |
 
 ### Nested Objects
 
@@ -183,8 +183,8 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.distro.family` | `string` | no | `` | `` | Distribution family used to resolve package tooling. | `rhel` |
-| `spec.distro.release` | `string` | no | `` | `` | Distribution release used for resolver and repo layout selection. | `rocky9` |
+| `spec.distro.family` | `string` | yes | `` | `debian, rhel` | Distribution family used to resolve package tooling. | `rhel` |
+| `spec.distro.release` | `string` | yes | `` | `` | Distribution release used for resolver and repo layout selection. | `rocky9` |
 
 ### `spec.repo`
 
@@ -193,17 +193,19 @@ spec:
 | `spec.repo.generate` | `boolean` | no | `` | `` | Generate repository metadata after collecting packages. | `true` |
 | `spec.repo.modules` | `array<object>` | no | `` | `` | RPM module streams to enable before resolving downloads. | `[{name:container-tools,stream:4.0}]` |
 | `spec.repo.pkgsDir` | `string` | no | `` | `` | Subdirectory under the generated repo root where packages are written. | `pkgs` |
-| `spec.repo.type` | `string` | no | `` | `deb-flat, rpm` | Repository output type for download repo mode. | `rpm` |
+| `spec.repo.type` | `string` | yes | `` | `deb-flat, rpm` | Repository output type for download repo mode. | `rpm` |
 
 
 ### Notes
 
 - Use `DownloadPackage` and `InstallPackage` with `ConfigureRepository` and `RefreshRepository` for a complete typed package-management flow.
+- `DownloadPackage` requires a container backend; `backend.mode` must be `container` and `backend.image` must name a resolver image.
+- Supported resolver families are `debian` with `repo.type: deb-flat` and `rhel` with `repo.type: rpm`.
+- Known example resolver images are `ubuntu:22.04`, `ubuntu:24.04`, and `rockylinux:9`; choose an image that matches `distro.family` and `distro.release`.
 - `outputDir` must stay under the prepared `packages/` root.
-- Omit `outputDir` unless you need a custom package location; deck uses `packages/` by default, or `packages/deb/<release>` and `packages/rpm/<release>` when `repo.type` is set.
+- Omit `outputDir` unless you need a custom package location; deck uses `packages/deb/<release>` or `packages/rpm/<release>` by default.
 - Keeping the same package list across `download` and `install` helps maintain offline parity.
 - Use `restrictToRepos` on the `InstallPackage` step to prevent the node's default online repos from being consulted during an offline apply.
-- When `repo` is set for `DownloadPackage`, deck expects `repo.type` and `distro.release` so it can build a `deb-flat` or `rpm` repository layout.
 - Container-backed `DownloadPackage` exports completed artifacts into a host-owned cache and does not bind-mount deb/rpm package-manager cache directories.
 
 ## `DownloadImage`

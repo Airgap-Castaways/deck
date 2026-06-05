@@ -28,7 +28,8 @@ func TestRun_PackagesKubernetesSetRepoModeDebFlatGeneratesMetadata(t *testing.T)
 						"release": "ubuntu2204",
 					},
 					"repo": map[string]any{
-						"type": "deb-flat",
+						"type":     "deb-flat",
+						"generate": true,
 					},
 					"backend": map[string]any{
 						"mode":    "container",
@@ -74,7 +75,8 @@ func TestRun_PackagesKubernetesSetRepoModeRpmGeneratesRepodata(t *testing.T) {
 						"release": "rhel9",
 					},
 					"repo": map[string]any{
-						"type": "rpm",
+						"type":     "rpm",
+						"generate": true,
 					},
 					"backend": map[string]any{
 						"mode":    "container",

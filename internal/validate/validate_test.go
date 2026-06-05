@@ -279,6 +279,32 @@ phases:
 		}
 	})
 
+	t.Run("tool schema rejects Package download without backend distro repo", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: download-packages
+        apiVersion: deck/v1alpha1
+        kind: DownloadPackage
+        spec:
+          packages: [containerd]
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
+		}
+	})
+
 	t.Run("tool schema rejects removed Package family kind", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
@@ -1393,6 +1419,15 @@ phases:
         kind: DownloadPackage
         spec:
           packages: [containerd]
+          distro:
+            family: debian
+            release: ubuntu2204
+          repo:
+            type: deb-flat
+          backend:
+            mode: container
+            runtime: docker
+            image: ubuntu:22.04
           outputDir: packages/custom
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
@@ -1465,6 +1500,15 @@ phases:
         kind: DownloadPackage
         spec:
           packages: [containerd]
+          distro:
+            family: debian
+            release: ubuntu2204
+          repo:
+            type: deb-flat
+          backend:
+            mode: container
+            runtime: docker
+            image: ubuntu:22.04
           outputDir: artifacts/packages
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {

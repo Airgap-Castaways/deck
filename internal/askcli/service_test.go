@@ -1236,7 +1236,7 @@ func TestSemanticCriticKeepsVarsAndComponentsAsAdvisory(t *testing.T) {
 }
 
 func TestSemanticCriticDetectsRepeatedValuesForVarsAdvisory(t *testing.T) {
-	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: download\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      outputDir: packages/kubernetes\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      source:\n        type: local-repo\n        path: packages/kubernetes\n"}})
+	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: download\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      distro:\n        family: debian\n        release: jammy\n      repo:\n        type: deb-flat\n      backend:\n        mode: container\n        image: ubuntu:22.04\n      outputDir: packages/kubernetes\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      source:\n        type: local-repo\n        path: packages/kubernetes\n"}})
 	critic := semanticCritic(gen, askintent.Decision{Route: askintent.RouteDraft}, askcontract.PlanResponse{}, askcontract.AuthoringBrief{}, askretrieve.RetrievalResult{})
 	joined := strings.Join(critic.Advisory, "\n")
 	if !strings.Contains(joined, "workflows/vars.yaml") {
@@ -1286,7 +1286,7 @@ func TestSemanticCriticBlocksWhenAuthoringBriefLosesPrepareApplyScope(t *testing
 }
 
 func TestSemanticCriticTreatsMissingComponentTargetsAsAdvisoryForWorkspaceDrafts(t *testing.T) {
-	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: prepare-download\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: apply-install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      source:\n        type: local-repo\n        path: /tmp/deck/packages\n"}})
+	gen := testMaterialized("", []askcontract.GeneratedFile{{Path: "workflows/prepare.yaml", Content: "version: v1alpha1\nsteps:\n  - id: prepare-download\n    kind: DownloadPackage\n    spec:\n      packages: [kubeadm]\n      distro:\n        family: debian\n        release: jammy\n      repo:\n        type: deb-flat\n      backend:\n        mode: container\n        image: ubuntu:22.04\n      outputDir: /tmp/deck/packages\n"}, {Path: "workflows/scenarios/apply.yaml", Content: "version: v1alpha1\nsteps:\n  - id: apply-install\n    kind: InstallPackage\n    spec:\n      packages: [kubeadm]\n      source:\n        type: local-repo\n        path: /tmp/deck/packages\n"}})
 	plan := askcontract.PlanResponse{AuthoringBrief: askcontract.AuthoringBrief{TargetScope: "workspace", ModeIntent: "prepare+apply", TargetPaths: []string{"workflows/prepare.yaml", "workflows/scenarios/apply.yaml", "workflows/components/bootstrap/control-plane.yaml"}}}
 	critic := semanticCritic(gen, askintent.Decision{Route: askintent.RouteDraft}, plan, plan.AuthoringBrief, askretrieve.RetrievalResult{})
 	if strings.Contains(strings.Join(critic.Blocking, "\n"), "workflows/components/bootstrap/control-plane.yaml") {
