@@ -86,3 +86,26 @@ func TestDiscoverCandidateStepsBoostsAirGappedPackageStaging(t *testing.T) {
 	}
 	t.Fatalf("expected DownloadPackage candidate for air-gapped package staging prompt, got %#v", selected)
 }
+
+func TestPackageArtifactPromptUsesWholeWords(t *testing.T) {
+	for _, prompt := range []string{"air-gapped report", "postage review", "reportFile output"} {
+		if isPackageArtifactPrompt(prompt) {
+			t.Fatalf("expected %q not to match package artifact prompt", prompt)
+		}
+	}
+	for _, prompt := range []string{"air-gapped repo setup", "package staging", "prepare artifact bundle"} {
+		if !isPackageArtifactPrompt(prompt) {
+			t.Fatalf("expected %q to match package artifact prompt", prompt)
+		}
+	}
+}
+
+func TestMatchingGroupAliasUsesWholeWords(t *testing.T) {
+	aliases := []string{"artifact staging", "waits"}
+	if got := matchingGroupAlias("adapt the workflow for reports", aliases); got != "" {
+		t.Fatalf("expected no substring alias match, got %q", got)
+	}
+	if got := matchingGroupAlias("use artifact-staging for offline packages", aliases); got != "artifact staging" {
+		t.Fatalf("expected phrase alias match across punctuation, got %q", got)
+	}
+}

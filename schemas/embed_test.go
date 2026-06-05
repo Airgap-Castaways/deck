@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Airgap-Castaways/deck/internal/schemadoc"
 	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
@@ -19,27 +20,11 @@ func TestGeneratedStepKindPagesExist(t *testing.T) {
 		if def.Visibility != "public" {
 			continue
 		}
-		page := filepath.Join("..", "docs", "step-kinds", stepKindDocSlug(def.Kind)+".md")
+		page := filepath.Join("..", "docs", "step-kinds", schemadoc.StepKindSlug(def.Kind)+".md")
 		if _, err := os.Stat(page); err != nil {
 			t.Fatalf("step kind page missing for %s: %v", def.Kind, err)
 		}
 	}
-}
-
-func stepKindDocSlug(kind string) string {
-	var out []rune
-	runes := []rune(kind)
-	for i, r := range runes {
-		if r >= 'A' && r <= 'Z' {
-			if i > 0 && ((runes[i-1] >= 'a' && runes[i-1] <= 'z') || (i+1 < len(runes) && runes[i+1] >= 'a' && runes[i+1] <= 'z')) {
-				out = append(out, '-')
-			}
-			out = append(out, r+('a'-'A'))
-			continue
-		}
-		out = append(out, r)
-	}
-	return string(out)
 }
 
 func TestToolSchemasCoverStepContracts(t *testing.T) {

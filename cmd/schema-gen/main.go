@@ -102,28 +102,28 @@ func run() error {
 }
 
 func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSchema, toolDefinitionSchema map[string]any, groupPages []schemadoc.PageInput) error {
-	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "schema")); err != nil {
+	if err := removePathIfExists(filepath.Join(root, "docs", "reference", "schema")); err != nil {
 		return err
 	}
-	if err := removeDirIfExists(filepath.Join(root, "docs", "_generated")); err != nil {
+	if err := removePathIfExists(filepath.Join(root, "docs", "_generated")); err != nil {
 		return err
 	}
-	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "groups")); err != nil {
+	if err := removePathIfExists(filepath.Join(root, "docs", "reference", "groups")); err != nil {
 		return err
 	}
-	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "typed-steps")); err != nil {
+	if err := removePathIfExists(filepath.Join(root, "docs", "reference", "typed-steps")); err != nil {
 		return err
 	}
-	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "typed-steps.md")); err != nil {
+	if err := removePathIfExists(filepath.Join(root, "docs", "reference", "typed-steps.md")); err != nil {
 		return err
 	}
-	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "step-kinds")); err != nil {
+	if err := removePathIfExists(filepath.Join(root, "docs", "reference", "step-kinds")); err != nil {
 		return err
 	}
-	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "step-kinds.md")); err != nil {
+	if err := removePathIfExists(filepath.Join(root, "docs", "reference", "step-kinds.md")); err != nil {
 		return err
 	}
-	if err := removeDirIfExists(filepath.Join(root, "docs", "step-kinds")); err != nil {
+	if err := removePathIfExists(filepath.Join(root, "docs", "step-kinds")); err != nil {
 		return err
 	}
 	if err := writeFile(filepath.Join(root, "docs", "step-kinds.md"), schemadoc.RenderStepKindsPage(groupPages)); err != nil {
@@ -149,14 +149,14 @@ func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSche
 	return nil
 }
 
-func removeDirIfExists(dir string) error {
-	if _, err := os.Stat(dir); err != nil {
+func removePathIfExists(path string) error {
+	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		return err
 	}
-	return os.RemoveAll(dir)
+	return os.RemoveAll(path)
 }
 
 func writeToolSchemas(root string) error {

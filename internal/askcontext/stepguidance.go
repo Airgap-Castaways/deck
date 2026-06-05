@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 type StepGuidanceOptions struct {
@@ -285,7 +286,7 @@ func containsGuidanceString(values []string, want string) bool {
 func matchingGroupAlias(prompt string, aliases []string) string {
 	for _, alias := range aliases {
 		alias = strings.ToLower(strings.TrimSpace(alias))
-		if alias != "" && strings.Contains(prompt, alias) {
+		if alias != "" && containsWordSequence(prompt, alias) {
 			return alias
 		}
 	}
@@ -293,12 +294,40 @@ func matchingGroupAlias(prompt string, aliases []string) string {
 }
 
 func isPackageArtifactPrompt(prompt string) bool {
-	for _, token := range []string{"artifact", "package", "packages", "repo", "repository", "stage", "staging"} {
-		if strings.Contains(prompt, token) {
+	for _, token := range splitWords(prompt) {
+		switch token {
+		case "artifact", "package", "packages", "repo", "repository", "stage", "staging":
 			return true
 		}
 	}
 	return false
+}
+
+func containsWordSequence(text string, phrase string) bool {
+	textWords := splitWords(text)
+	phraseWords := splitWords(phrase)
+	if len(textWords) == 0 || len(phraseWords) == 0 || len(phraseWords) > len(textWords) {
+		return false
+	}
+	for i := 0; i <= len(textWords)-len(phraseWords); i++ {
+		matched := true
+		for j, phraseWord := range phraseWords {
+			if textWords[i+j] != phraseWord {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
+func splitWords(text string) []string {
+	return strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
 }
 
 func applyCapabilityScore(score *int, why *[]string, step StepKindContext, capabilities map[string]bool, modeIntent string, topology string) {
