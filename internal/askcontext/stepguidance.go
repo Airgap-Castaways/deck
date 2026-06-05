@@ -156,7 +156,7 @@ func DiscoverCandidateStepsWithOptions(prompt string, options StepGuidanceOption
 			}
 		}
 		if strings.Contains(lower, "air-gapped") || strings.Contains(lower, "air gapped") {
-			if containsGuidanceString(step.Capabilities, "image-staging") {
+			if stepSupportsCapability(step, "image-staging") || (isPackageArtifactPrompt(lower) && (stepSupportsCapability(step, "package-staging") || stepSupportsCapability(step, "prepare-artifacts"))) {
 				score += 18
 				why = append(why, "supports air-gapped artifact flow")
 			}
@@ -290,6 +290,15 @@ func matchingGroupAlias(prompt string, aliases []string) string {
 		}
 	}
 	return ""
+}
+
+func isPackageArtifactPrompt(prompt string) bool {
+	for _, token := range []string{"artifact", "package", "packages", "repo", "repository", "stage", "staging"} {
+		if strings.Contains(prompt, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func applyCapabilityScore(score *int, why *[]string, step StepKindContext, capabilities map[string]bool, modeIntent string, topology string) {

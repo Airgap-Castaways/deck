@@ -180,28 +180,32 @@ func phaseSections(inputs []PageInput) []phaseSection {
 }
 
 func roleFilteredKinds(inputs []PageInput, role string, both bool) []string {
-	kinds := make([]string, 0)
+	seenKinds := map[string]bool{}
 	for _, in := range inputs {
 		for _, variant := range in.Variants {
 			hasPrepare := containsString(variant.Roles, "prepare")
 			hasApply := containsString(variant.Roles, "apply")
 			if both {
 				if hasPrepare && hasApply {
-					kinds = append(kinds, variant.Kind)
+					seenKinds[variant.Kind] = true
 				}
 				continue
 			}
 			switch role {
 			case "prepare":
 				if hasPrepare && !hasApply {
-					kinds = append(kinds, variant.Kind)
+					seenKinds[variant.Kind] = true
 				}
 			case "apply":
 				if hasApply && !hasPrepare {
-					kinds = append(kinds, variant.Kind)
+					seenKinds[variant.Kind] = true
 				}
 			}
 		}
+	}
+	kinds := make([]string, 0, len(seenKinds))
+	for kind := range seenKinds {
+		kinds = append(kinds, kind)
 	}
 	sort.Strings(kinds)
 	if len(kinds) == 0 {

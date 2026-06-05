@@ -72,3 +72,17 @@ func TestDiscoverCandidateStepsUsesNewDomainGroupIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestDiscoverCandidateStepsBoostsAirGappedPackageStaging(t *testing.T) {
+	selected := DiscoverCandidateStepsWithOptions("create an air-gapped offline package staging flow", StepGuidanceOptions{ModeIntent: "prepare+apply"})
+	for _, item := range selected {
+		if item.Step.Kind != "DownloadPackage" {
+			continue
+		}
+		if !strings.Contains(item.WhyRelevant, "supports air-gapped artifact flow") {
+			t.Fatalf("expected air-gapped artifact boost for DownloadPackage, got %#v", item)
+		}
+		return
+	}
+	t.Fatalf("expected DownloadPackage candidate for air-gapped package staging prompt, got %#v", selected)
+}

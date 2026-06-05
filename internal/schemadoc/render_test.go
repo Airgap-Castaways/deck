@@ -95,6 +95,16 @@ func TestRenderTypedStepsPageLinksCoreContracts(t *testing.T) {
 	}
 }
 
+func TestRoleFilteredKindsDeduplicatesKinds(t *testing.T) {
+	got := roleFilteredKinds([]PageInput{{Variants: []VariantInput{
+		{Kind: "DownloadFile", Roles: []string{"prepare"}},
+		{Kind: "DownloadFile", Roles: []string{"prepare"}},
+	}}}, "prepare", false)
+	if len(got) != 1 || got[0] != "DownloadFile" {
+		t.Fatalf("expected deduplicated prepare kinds, got %#v", got)
+	}
+}
+
 func TestRenderWorkflowSchemaPartialUsesNestedHeadings(t *testing.T) {
 	raw, err := schemas.WorkflowSchema()
 	if err != nil {
