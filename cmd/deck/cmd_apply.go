@@ -18,6 +18,7 @@ type diffOptions struct {
 	scenario      string
 	source        string
 	fresh         bool
+	stateDir      string
 	selectedPhase string
 	output        string
 	varOverrides  map[string]string
@@ -40,6 +41,7 @@ type planVarsOptions struct {
 func newPlanCommand(env *cliEnv) *cobra.Command {
 	vars := &varFlag{}
 	varsFiles := &stringSliceFlag{}
+	var stateDir string
 	cmd := &cobra.Command{
 		Use:     "plan",
 		Aliases: []string{"diff"},
@@ -74,6 +76,7 @@ func newPlanCommand(env *cliEnv) *cobra.Command {
 				scenario:      scenario,
 				source:        source,
 				fresh:         fresh,
+				stateDir:      stateDir,
 				selectedPhase: selectedPhase,
 				output:        output,
 				varOverrides:  vars.AsMap(),
@@ -87,6 +90,7 @@ func newPlanCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("source", scenarioSourceLocal, "scenario source (local|server)")
 	cmd.Flags().String("phase", "", "phase name to plan (defaults to all phases)")
 	cmd.Flags().Bool("fresh", false, "ignore saved apply state for this invocation")
+	cmd.Flags().StringVar(&stateDir, "state-dir", "", "directory for apply state files (overrides local .deck/state/apply or remote XDG state)")
 	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
 	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
@@ -205,22 +209,25 @@ func runDiffWithOptions(env *cliEnv, ctx context.Context, opts diffOptions) erro
 		return err
 	}
 	selectedPhase := strings.TrimSpace(opts.selectedPhase)
-	return executeDiff(env, ctx, workflowPath, strings.TrimSpace(opts.scenario), selectedPhase, opts.output, opts.fresh, opts.varsFiles, varsAsAnyMap(opts.varOverrides))
+	return executeDiff(env, ctx, workflowPath, strings.TrimSpace(opts.scenario), selectedPhase, opts.output, opts.fresh, opts.stateDir, opts.varsFiles, varsAsAnyMap(opts.varOverrides))
 }
 
-func executeDiff(env *cliEnv, ctx context.Context, workflowPath, scenario, selectedPhase, output string, fresh bool, varsFiles []string, varOverrides map[string]any) error {
+func executeDiff(env *cliEnv, ctx context.Context, workflowPath, scenario, selectedPhase, output string, fresh bool, stateDir string, varsFiles []string, varOverrides map[string]any) error {
+	stateDir = strings.TrimSpace(stateDir)
 	return applycli.RunPlanCommand(ctx, applycli.PlanCommandOptions{
-		WorkflowPath:    workflowPath,
-		Scenario:        scenario,
-		SelectedPhase:   selectedPhase,
-		Output:          output,
-		Fresh:           fresh,
-		VarOverrides:    varOverrides,
-		VarsFiles:       append([]string(nil), varsFiles...),
-		Verbosef:        env.verbosef,
-		StdoutPrintf:    env.stdoutPrintf,
-		JSONEncoderFunc: env.stdoutJSONEncoder,
-		ResolveOutput:   resolveOutputFormat,
+		WorkflowPath:     workflowPath,
+		Scenario:         scenario,
+		SelectedPhase:    selectedPhase,
+		Output:           output,
+		Fresh:            fresh,
+		StateDir:         stateDir,
+		StateDirExplicit: stateDir != "",
+		VarOverrides:     varOverrides,
+		VarsFiles:        append([]string(nil), varsFiles...),
+		Verbosef:         env.verbosef,
+		StdoutPrintf:     env.stdoutPrintf,
+		JSONEncoderFunc:  env.stdoutJSONEncoder,
+		ResolveOutput:    resolveOutputFormat,
 	})
 }
 
@@ -230,6 +237,7 @@ type applyOptions struct {
 	source         string
 	selectedPhase  string
 	fresh          bool
+	stateDir       string
 	dryRun         bool
 	nonInteractive bool
 	varOverrides   map[string]string
@@ -240,6 +248,7 @@ type applyOptions struct {
 func newApplyCommand(env *cliEnv) *cobra.Command {
 	vars := &varFlag{}
 	varsFiles := &stringSliceFlag{}
+	var stateDir string
 	cmd := &cobra.Command{
 		Use:   "apply [workflow] [bundle]",
 		Short: "Execute an apply file against a bundle",
@@ -284,6 +293,7 @@ func newApplyCommand(env *cliEnv) *cobra.Command {
 				source:         source,
 				selectedPhase:  selectedPhase,
 				fresh:          fresh,
+				stateDir:       stateDir,
 				dryRun:         dryRun,
 				nonInteractive: nonInteractive,
 				varOverrides:   vars.AsMap(),
@@ -298,6 +308,7 @@ func newApplyCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("source", scenarioSourceLocal, "scenario source (local|server)")
 	cmd.Flags().String("phase", "", "phase name to execute (defaults to all phases)")
 	cmd.Flags().Bool("fresh", false, "ignore saved apply state for this invocation")
+	cmd.Flags().StringVar(&stateDir, "state-dir", "", "directory for apply state files (overrides local .deck/state/apply or remote XDG state)")
 	cmd.Flags().Bool("dry-run", false, "print apply plan without executing steps")
 	cmd.Flags().Bool("non-interactive", false, "fail or use defaults for operator interaction steps instead of prompting")
 	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
@@ -328,21 +339,23 @@ func runApplyWithOptions(env *cliEnv, ctx context.Context, opts applyOptions) er
 	}
 	invocationID := newInvocationID("apply")
 	return applycli.RunApplyCommand(ctx, applycli.ApplyCommandOptions{
-		WorkflowPath:   workflowPath,
-		BundleRoot:     bundleRoot,
-		WorkflowSource: inferWorkflowSource(workflowPath, strings.TrimSpace(opts.source)),
-		Scenario:       strings.TrimSpace(opts.scenario),
-		SelectedPhase:  opts.selectedPhase,
-		Fresh:          opts.fresh,
-		DryRun:         opts.dryRun,
-		NonInteractive: opts.nonInteractive,
-		VarOverrides:   varsAsAnyMap(opts.varOverrides),
-		VarsFiles:      append([]string(nil), opts.varsFiles...),
-		Verbosef:       env.verbosef,
-		StdoutPrintf:   env.stdoutPrintf,
-		StdoutPrintln:  env.stdoutPrintln,
-		InvocationID:   invocationID,
-		AdditionalSink: verboseApplyStepSink(env, invocationID),
+		WorkflowPath:     workflowPath,
+		BundleRoot:       bundleRoot,
+		WorkflowSource:   inferWorkflowSource(workflowPath, strings.TrimSpace(opts.source)),
+		Scenario:         strings.TrimSpace(opts.scenario),
+		SelectedPhase:    opts.selectedPhase,
+		Fresh:            opts.fresh,
+		StateDir:         strings.TrimSpace(opts.stateDir),
+		StateDirExplicit: strings.TrimSpace(opts.stateDir) != "",
+		DryRun:           opts.dryRun,
+		NonInteractive:   opts.nonInteractive,
+		VarOverrides:     varsAsAnyMap(opts.varOverrides),
+		VarsFiles:        append([]string(nil), opts.varsFiles...),
+		Verbosef:         env.verbosef,
+		StdoutPrintf:     env.stdoutPrintf,
+		StdoutPrintln:    env.stdoutPrintln,
+		InvocationID:     invocationID,
+		AdditionalSink:   verboseApplyStepSink(env, invocationID),
 		NewRunLogger: func(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (applycli.RunLogger, error) {
 			return newApplyRunLogger(env, workflowPath, workflowSource, scenario, bundleRoot, selectedPhase)
 		},
