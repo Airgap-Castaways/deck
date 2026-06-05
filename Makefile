@@ -11,6 +11,7 @@ GOVULNCHECK_GOTOOLCHAIN ?= go1.26.4
 GORELEASER ?= $(BIN_DIR)/goreleaser
 GORELEASER_PKG ?= github.com/goreleaser/goreleaser/v2
 GORELEASER_VERSION ?= v2.14.3
+GORELEASER_VERSION_NUMBER := $(patsubst v%,%,$(GORELEASER_VERSION))
 BUILDINFO_PKG ?= github.com/Airgap-Castaways/deck/internal/buildinfo
 VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf unknown)
@@ -68,7 +69,7 @@ print-build-meta:
 
 ensure-goreleaser:
 	@mkdir -p "$(BIN_DIR)"
-	@if [ ! -x "$(GORELEASER)" ] || ! "$(GORELEASER)" --version 2>/dev/null | grep -q "GitVersion:[[:space:]]*$(GORELEASER_VERSION)"; then \
+	@if [ ! -x "$(GORELEASER)" ] || ! "$(GORELEASER)" --version 2>/dev/null | grep -q -E "(GitVersion|version):[[:space:]]*v?$(GORELEASER_VERSION_NUMBER)"; then \
 		GOBIN="$(abspath $(BIN_DIR))" $(GO) install $(GORELEASER_PKG)@$(GORELEASER_VERSION); \
 	fi
 
