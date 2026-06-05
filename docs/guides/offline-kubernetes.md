@@ -36,13 +36,14 @@ Prefer typed steps where possible. `Command` is available for the edges that are
 
 Useful group entrypoints for Kubernetes workflows:
 
-- [Host Prep](../reference/groups/host-prep.md)
-- [Packages and Repositories](../reference/groups/packages-repositories.md)
-- [Container Images](../reference/groups/container-images.md)
-- [Container Runtime](../reference/groups/container-runtime.md)
-- [Services and Systemd](../reference/groups/services-systemd.md)
-- [Kubernetes Lifecycle](../reference/groups/kubernetes-lifecycle.md)
-- [Waits and Polling](../reference/groups/waits-polling.md)
+- [Prepare packages](../reference/typed-steps/prepare/packages-repositories.md)
+- [Prepare container images](../reference/typed-steps/prepare/container-images.md)
+- [Apply host prep](../reference/typed-steps/apply/host-prep.md)
+- [Apply packages and repositories](../reference/typed-steps/apply/packages-repositories.md)
+- [Apply container runtime](../reference/typed-steps/apply/container-runtime.md)
+- [Apply services and systemd](../reference/typed-steps/apply/services-systemd.md)
+- [Apply Kubernetes lifecycle](../reference/typed-steps/apply/kubernetes-lifecycle.md)
+- [Apply waits and polling](../reference/typed-steps/apply/waits-polling.md)
 
 ## 4. Prepare the bundle in the connected environment
 

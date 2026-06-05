@@ -79,10 +79,13 @@ func TestRenderTypedStepsPageListsGroups(t *testing.T) {
 	page := RenderTypedStepsPage([]PageInput{testGroupPageInput(t, "host-prep"), testGroupPageInput(t, "kubernetes-lifecycle")})
 	rendered := string(page)
 
-	for _, want := range []string{"# Typed Steps", "## By Phase", "### Prepare", "### Apply", "## By Task", "### [Host Prep](groups/host-prep.md)", "### [Kubernetes Lifecycle](groups/kubernetes-lifecycle.md)"} {
+	for _, want := range []string{"# Typed Steps", "## Apply", "## Common", "[Host Prep](typed-steps/apply/host-prep.md)", "[CheckHost](typed-steps/common/host-prep.md#checkhost)", "[Kubernetes Lifecycle](typed-steps/apply/kubernetes-lifecycle.md)"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("expected %q in typed steps index:\n%s", want, rendered)
 		}
+	}
+	if strings.Contains(rendered, "groups/") {
+		t.Fatalf("did not expect legacy groups links in typed steps index:\n%s", rendered)
 	}
 }
 
@@ -102,6 +105,37 @@ func TestRoleFilteredKindsDeduplicatesKinds(t *testing.T) {
 	}}}, "prepare", false)
 	if len(got) != 1 || got[0] != "DownloadFile" {
 		t.Fatalf("expected deduplicated prepare kinds, got %#v", got)
+	}
+}
+
+func TestPhasePagesSeparatePhaseSpecificVariants(t *testing.T) {
+	pages := PhasePages([]PageInput{testGroupPageInput(t, "packages-repositories"), testGroupPageInput(t, "host-prep")})
+	preparePackages := phasePageByPhaseAndGroup(t, pages, "prepare", "packages-repositories")
+	if got := pageKinds(preparePackages.Page.Variants); len(got) != 1 || got[0] != "DownloadPackage" {
+		t.Fatalf("expected prepare packages page to contain only DownloadPackage, got %#v", got)
+	}
+	applyPackages := phasePageByPhaseAndGroup(t, pages, "apply", "packages-repositories")
+	if got := pageKinds(applyPackages.Page.Variants); containsString(got, "DownloadPackage") || !containsString(got, "InstallPackage") {
+		t.Fatalf("expected apply packages page to contain install/apply kinds only, got %#v", got)
+	}
+	commonHost := phasePageByPhaseAndGroup(t, pages, "common", "host-prep")
+	if got := pageKinds(commonHost.Page.Variants); len(got) != 1 || got[0] != "CheckHost" {
+		t.Fatalf("expected common host-prep page to contain only CheckHost, got %#v", got)
+	}
+}
+
+func TestRenderTypedStepPhaseGroupPageUsesPhaseScopedLinks(t *testing.T) {
+	pages := PhasePages([]PageInput{testGroupPageInput(t, "packages-repositories")})
+	page := phasePageByPhaseAndGroup(t, pages, "prepare", "packages-repositories")
+	rendered := string(RenderTypedStepPhaseGroupPage(page))
+
+	for _, want := range []string{"- phase: `prepare`", "[DownloadPackage](#downloadpackage)", "[Typed Steps](../../typed-steps.md)", "[Step Envelope Contract](../../workflow-model.md#step-envelope-contract)"} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("expected %q in phase group page:\n%s", want, rendered)
+		}
+	}
+	if strings.Contains(rendered, "## `InstallPackage`") {
+		t.Fatalf("did not expect apply-only InstallPackage in prepare page:\n%s", rendered)
 	}
 }
 
@@ -157,6 +191,17 @@ func sectionForKind(page string, kind string) string {
 		return rest[:len(marker)+next]
 	}
 	return rest
+}
+
+func phasePageByPhaseAndGroup(t *testing.T, pages []PhasePage, phase string, group string) PhasePage {
+	t.Helper()
+	for _, page := range pages {
+		if page.Phase.Key == phase && page.Page.Group == group {
+			return page
+		}
+	}
+	t.Fatalf("missing phase page phase=%s group=%s in %#v", phase, group, pages)
+	return PhasePage{}
 }
 
 func testGroupPageInput(t *testing.T, group string) PageInput {

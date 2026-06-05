@@ -108,7 +108,10 @@ func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSche
 	if err := removeDirIfExists(filepath.Join(root, "docs", "_generated")); err != nil {
 		return err
 	}
-	if err := removeGeneratedGroupDocs(filepath.Join(root, "docs", "reference", "groups"), groupPages); err != nil {
+	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "groups")); err != nil {
+		return err
+	}
+	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "typed-steps")); err != nil {
 		return err
 	}
 	if err := writeFile(filepath.Join(root, "docs", "reference", "typed-steps.md"), schemadoc.RenderTypedStepsPage(groupPages)); err != nil {
@@ -126,31 +129,8 @@ func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSche
 	if err := syncGeneratedBlock(filepath.Join(root, "docs", "contributing", "tool-definition-schema.md"), toolDefinitionBlockBegin, toolDefinitionBlockEnd, schemadoc.RenderToolDefinitionSchemaPartial("../../schemas/deck-tooldefinition.schema.json", toolDefinitionSchema, schemadoc.ToolDefinitionMeta())); err != nil {
 		return err
 	}
-	for _, page := range groupPages {
-		if err := writeFile(filepath.Join(root, "docs", "reference", "groups", page.PageSlug+".md"), schemadoc.RenderGroupPage(page)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func removeGeneratedGroupDocs(dir string, groupPages []schemadoc.PageInput) error {
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return err
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-	keep := map[string]bool{}
-	for _, page := range groupPages {
-		keep[page.PageSlug+".md"] = true
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" || keep[entry.Name()] {
-			continue
-		}
-		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
+	for _, page := range schemadoc.PhasePages(groupPages) {
+		if err := writeFile(filepath.Join(root, "docs", "reference", "typed-steps", page.Phase.Key, page.Page.PageSlug+".md"), schemadoc.RenderTypedStepPhaseGroupPage(page)); err != nil {
 			return err
 		}
 	}

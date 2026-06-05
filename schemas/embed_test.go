@@ -10,8 +10,8 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
-func TestGeneratedGroupPagesExist(t *testing.T) {
-	seenGroups := map[string]bool{}
+func TestGeneratedTypedStepPagesExist(t *testing.T) {
+	seenPages := map[string]bool{}
 	defs, err := workflowcontract.StepDefinitions()
 	if err != nil {
 		t.Fatalf("StepDefinitions: %v", err)
@@ -20,15 +20,35 @@ func TestGeneratedGroupPagesExist(t *testing.T) {
 		if def.Visibility != "public" {
 			continue
 		}
-		if seenGroups[def.Group] {
+		page := filepath.Join("..", "docs", "reference", "typed-steps", typedStepPagePhase(def.Roles), def.Group+".md")
+		if seenPages[page] {
 			continue
 		}
-		seenGroups[def.Group] = true
-		page := filepath.Join("..", "docs", "reference", "groups", def.Group+".md")
+		seenPages[page] = true
 		if _, err := os.Stat(page); err != nil {
-			t.Fatalf("group page missing for %s: %v", def.Kind, err)
+			t.Fatalf("typed step page missing for %s: %v", def.Kind, err)
 		}
 	}
+}
+
+func typedStepPagePhase(roles []string) string {
+	hasPrepare := false
+	hasApply := false
+	for _, role := range roles {
+		switch role {
+		case "prepare":
+			hasPrepare = true
+		case "apply":
+			hasApply = true
+		}
+	}
+	if hasPrepare && hasApply {
+		return "common"
+	}
+	if hasPrepare {
+		return "prepare"
+	}
+	return "apply"
 }
 
 func TestToolSchemasCoverStepContracts(t *testing.T) {
