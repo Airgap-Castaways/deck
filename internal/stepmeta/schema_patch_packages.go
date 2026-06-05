@@ -103,6 +103,10 @@ func patchConfigureRepositoryToolSchema(root map[string]any) {
 		repos["minItems"] = 1
 		if items, ok := repos["items"].(map[string]any); ok {
 			itemProps := propertyMap(items)
+			items["anyOf"] = []any{
+				map[string]any{"required": []any{"id"}},
+				map[string]any{"required": []any{"baseurl"}},
+			}
 			setMap(itemProps, "id", minLenStringSchema())
 			setMap(itemProps, "name", minLenStringSchema())
 			setMap(itemProps, "baseurl", minLenStringSchema())
@@ -117,5 +121,15 @@ func patchConfigureRepositoryToolSchema(root map[string]any) {
 		}
 	}
 	spec["required"] = []any{"repositories"}
+	spec["allOf"] = []any{
+		map[string]any{
+			"if":   map[string]any{"properties": map[string]any{"format": map[string]any{"const": "deb"}}, "required": []any{"format"}},
+			"then": map[string]any{"properties": map[string]any{"repositories": map[string]any{"items": map[string]any{"required": []any{"baseurl"}}}}},
+		},
+		map[string]any{
+			"if":   map[string]any{"properties": map[string]any{"format": map[string]any{"const": "rpm"}}, "required": []any{"format"}},
+			"then": map[string]any{"properties": map[string]any{"repositories": map[string]any{"items": map[string]any{"required": []any{"id"}}}}},
+		},
+	}
 	setMap(props, "spec", spec)
 }

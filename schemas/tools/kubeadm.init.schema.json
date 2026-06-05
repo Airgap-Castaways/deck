@@ -39,6 +39,20 @@
       "$id": "https://github.com/Airgap-Castaways/deck/internal/stepspec/kubeadm-init",
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "configTemplate"
+            ]
+          },
+          "then": {
+            "required": [
+              "configFile"
+            ]
+          }
+        }
+      ],
       "properties": {
         "advertiseAddress": {
           "description": "API server advertise address or `auto`.",
@@ -52,6 +66,7 @@
           "examples": [
             "/tmp/deck/kubeadm.conf"
           ],
+          "minLength": 1,
           "type": "string"
         },
         "configTemplate": {
@@ -59,6 +74,7 @@
           "examples": [
             "default"
           ],
+          "minLength": 1,
           "type": "string"
         },
         "criSocket": {

@@ -45,8 +45,9 @@ var _ = stepmeta.MustRegister[KubeadmInit](stepmeta.Definition{
 				{Path: "when", From: "derive:cluster.roleWhen.control-plane"},
 			},
 		}},
-		MatchSignals: []string{"kubeadm", "bootstrap", "init", "control-plane", "cluster init"},
-		KeyFields:    []string{"spec.outputJoinFile", "spec.configFile", "spec.kubernetesVersion", "spec.advertiseAddress", "spec.podNetworkCIDR"},
+		MatchSignals:    []string{"kubeadm", "bootstrap", "init", "control-plane", "cluster init"},
+		KeyFields:       []string{"spec.outputJoinFile", "spec.configFile", "spec.configTemplate", "spec.kubernetesVersion", "spec.advertiseAddress", "spec.podNetworkCIDR"},
+		ValidationHints: []stepmeta.ValidationHint{{ErrorContains: "spec.configFile", Fix: "When InitKubeadm uses spec.configTemplate, also provide spec.configFile so the rendered kubeadm config has a destination path."}},
 	},
 })
 
