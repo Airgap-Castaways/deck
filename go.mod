@@ -1,6 +1,6 @@
 module github.com/Airgap-Castaways/deck
 
-go 1.25.10
+go 1.26.4
 
 require (
 	github.com/google/cel-go v0.21.0
@@ -12,7 +12,7 @@ require (
 	github.com/sashabaranov/go-openai v1.41.2
 	github.com/spf13/cobra v1.9.1
 	github.com/xeipuuv/gojsonschema v1.2.0
-	golang.org/x/net v0.53.0
+	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.12.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20230803162519-f966b187b2e5
 	gopkg.in/yaml.v3 v3.0.1
@@ -45,7 +45,7 @@ require (
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230803162519-f966b187b2e5 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 )
