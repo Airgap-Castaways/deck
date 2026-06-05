@@ -93,6 +93,127 @@ phases:
 		}
 	})
 
+	t.Run("tool schema rejects conditional typed-step required field drift", func(t *testing.T) {
+		cases := []struct {
+			name    string
+			content string
+			want    string
+		}{
+			{
+				name: "InitKubeadm configTemplate without configFile",
+				content: `version: v1alpha1
+phases:
+  - name: apply
+    steps:
+      - id: init-control-plane
+        kind: InitKubeadm
+        spec:
+          outputJoinFile: /tmp/deck/join.txt
+          configTemplate: default
+`,
+				want: "configFile",
+			},
+			{
+				name: "CheckHost binaries check without binaries",
+				content: `version: v1alpha1
+phases:
+  - name: apply
+    steps:
+      - id: check-host
+        kind: CheckHost
+        spec:
+          checks: [binaries]
+`,
+				want: "binaries",
+			},
+			{
+				name: "WriteContainerdConfig set without value",
+				content: `version: v1alpha1
+phases:
+  - name: apply
+    steps:
+      - id: containerd-config
+        kind: WriteContainerdConfig
+        spec:
+          rawSettings:
+            - op: set
+              rawPath: plugins."io.containerd.grpc.v1.cri".registry.config_path
+`,
+				want: "value",
+			},
+			{
+				name: "ConfigureRepository deb without baseurl",
+				content: `version: v1alpha1
+phases:
+  - name: apply
+    steps:
+      - id: repo-config
+        kind: ConfigureRepository
+        spec:
+          format: deb
+          repositories:
+            - id: offline
+`,
+				want: "baseurl",
+			},
+			{
+				name: "ConfigureRepository rpm without id",
+				content: `version: v1alpha1
+phases:
+  - name: apply
+    steps:
+      - id: repo-config
+        kind: ConfigureRepository
+        spec:
+          format: rpm
+          repositories:
+            - baseurl: file:///srv/offline-repo
+`,
+				want: "id",
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				dir := t.TempDir()
+				path := filepath.Join(dir, "workflow.yaml")
+				if err := os.WriteFile(path, []byte(tc.content), 0o644); err != nil {
+					t.Fatalf("write file: %v", err)
+				}
+				err := File(path)
+				if err == nil {
+					t.Fatalf("expected schema error")
+				}
+				if !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("expected error to mention %q, got %v", tc.want, err)
+				}
+			})
+		}
+	})
+
+	t.Run("tool schema valid CheckHost binaries check", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: check-binaries
+        apiVersion: deck/v1alpha1
+        kind: CheckHost
+        spec:
+          checks: [binaries]
+          binaries: [kubeadm, kubelet, kubectl]
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected valid CheckHost binaries check, got %v", err)
+		}
+	})
+
 	t.Run("tool schema valid Image download with auth", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")
@@ -276,6 +397,32 @@ phases:
 
 		if err := File(path); err != nil {
 			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects Package download without backend distro repo", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: prepare
+    steps:
+      - id: download-packages
+        apiVersion: deck/v1alpha1
+        kind: DownloadPackage
+        spec:
+          packages: [containerd]
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil {
+			t.Fatalf("expected tool schema validation error")
+		}
+		if got := err.Error(); !strings.Contains(got, "E_SCHEMA_INVALID") {
+			t.Fatalf("expected E_SCHEMA_INVALID, got %v", err)
 		}
 	})
 
@@ -1393,6 +1540,15 @@ phases:
         kind: DownloadPackage
         spec:
           packages: [containerd]
+          distro:
+            family: debian
+            release: ubuntu2204
+          repo:
+            type: deb-flat
+          backend:
+            mode: container
+            runtime: docker
+            image: ubuntu:22.04
           outputDir: packages/custom
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {
@@ -1465,6 +1621,15 @@ phases:
         kind: DownloadPackage
         spec:
           packages: [containerd]
+          distro:
+            family: debian
+            release: ubuntu2204
+          repo:
+            type: deb-flat
+          backend:
+            mode: container
+            runtime: docker
+            image: ubuntu:22.04
           outputDir: artifacts/packages
 `)
 		if err := os.WriteFile(path, content, 0o644); err != nil {

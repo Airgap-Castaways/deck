@@ -216,14 +216,7 @@ func TestRun_RetrySemantics(t *testing.T) {
 					ID:    "retry-packages",
 					Kind:  "DownloadPackage",
 					Retry: 1,
-					Spec: map[string]any{
-						"packages": []any{"containerd"},
-						"backend": map[string]any{
-							"mode":    "container",
-							"runtime": "docker",
-							"image":   "ubuntu:22.04",
-						},
-					},
+					Spec:  testDebDownloadPackageSpec([]any{"containerd"}, ""),
 				}},
 			}},
 		}

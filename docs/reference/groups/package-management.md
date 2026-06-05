@@ -68,6 +68,7 @@ spec:
 
 - `ConfigureRepository` only writes repository definition files. Use `RefreshRepository` when the package manager needs an explicit metadata refresh.
 - Keep repository definitions mirror-specific rather than mutating the host's default online sources.
+- Repository entries need a usable identity for the selected format: `format: deb` entries require `baseurl`; `format: rpm` entries require `id`.
 
 ## `RefreshRepository`
 

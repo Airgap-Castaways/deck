@@ -39,6 +39,27 @@
       "$id": "https://github.com/Airgap-Castaways/deck/internal/stepspec/check-host",
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "checks": {
+                "contains": {
+                  "const": "binaries"
+                }
+              }
+            },
+            "required": [
+              "checks"
+            ]
+          },
+          "then": {
+            "required": [
+              "binaries"
+            ]
+          }
+        }
+      ],
       "properties": {
         "binaries": {
           "description": "Binary names to verify are present in `PATH`.",
@@ -46,8 +67,10 @@
             "[kubeadm,kubelet,kubectl]"
           ],
           "items": {
+            "minLength": 1,
             "type": "string"
           },
+          "minItems": 1,
           "type": "array"
         },
         "checks": {

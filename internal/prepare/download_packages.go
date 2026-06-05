@@ -54,68 +54,78 @@ func runDownloadPackage(ctx context.Context, runner CommandRunner, bundleRoot st
 	if err != nil {
 		return nil, err
 	}
+	family, repoType, err := validateDownloadPackageSpec(decoded)
+	if err != nil {
+		return nil, err
+	}
 
-	if decoded.Backend.Mode == "container" && decoded.Backend.Image != "" {
-		repo := decoded.Repo
-		if repo.Type != "" || repo.Generate || repo.PkgsDir != "" || len(repo.Modules) > 0 {
-			family := decoded.Distro.Family
-			if family == "" {
-				family = "debian"
-			}
-			release := strings.TrimSpace(decoded.Distro.Release)
-			if release == "" {
-				return nil, fmt.Errorf("packages action download repo mode requires distro.release")
-			}
-
-			repoType := strings.TrimSpace(repo.Type)
-			generate := repo.Generate
-			pkgsDir := strings.TrimSpace(repo.PkgsDir)
-			if pkgsDir == "" {
-				pkgsDir = "pkgs"
-			}
-
-			var repoRoot string
-			switch repoType {
-			case "deb-flat":
-				repoRoot = filepath.ToSlash(filepath.Join("packages", "deb", release))
-			case "rpm":
-				repoRoot = filepath.ToSlash(filepath.Join("packages", "rpm", release))
-			default:
-				return nil, fmt.Errorf("packages action download repo.type must be deb-flat or rpm")
-			}
-
-			if files, reused, err := tryReusePackageArtifact(bundleRoot, repoRoot, packages, platform, opts); err != nil {
-				return nil, err
-			} else if reused {
-				return files, nil
-			}
-			files, err := runContainerPackageRepoBuild(ctx, runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, step, decoded, inputVars, packages, platform, opts)
-			if err != nil {
-				return nil, err
-			}
-			if err := writePackageArtifactMeta(bundleRoot, repoRoot, packages, platform, files); err != nil {
-				return nil, err
-			}
-			return files, nil
+	repoRoot := defaultDownloadPackageRepoRoot(repoType, strings.TrimSpace(decoded.Distro.Release))
+	if strings.TrimSpace(decoded.OutputDir) != "" {
+		repoRoot = dir
+	} else {
+		root := "packages/deb"
+		if repoType == "rpm" {
+			root = "packages/rpm"
 		}
-
-		if files, reused, err := tryReusePackageArtifact(bundleRoot, dir, packages, platform, opts); err != nil {
-			return nil, err
-		} else if reused {
-			return files, nil
-		}
-
-		files, err := runContainerDownloadPackageAll(ctx, runner, bundleRoot, dir, step, decoded, inputVars, packages, platform, opts)
+		validatedRepoRoot, err := ensurePreparedPathUnderRoot("DownloadPackage", "distro.release", repoRoot, root)
 		if err != nil {
 			return nil, err
 		}
-		if err := writePackageArtifactMeta(bundleRoot, dir, packages, platform, files); err != nil {
-			return nil, err
-		}
-		return files, nil
+		repoRoot = validatedRepoRoot
+	}
+	generate := decoded.Repo.Generate
+	pkgsDir := strings.TrimSpace(decoded.Repo.PkgsDir)
+	if pkgsDir == "" {
+		pkgsDir = "pkgs"
 	}
 
-	return writePackagePlaceholders(bundleRoot, dir, packages), nil
+	if files, reused, err := tryReusePackageArtifact(bundleRoot, repoRoot, packages, platform, opts); err != nil {
+		return nil, err
+	} else if reused {
+		return files, nil
+	}
+	files, err := runContainerPackageRepoBuild(ctx, runner, bundleRoot, repoRoot, family, repoType, generate, pkgsDir, step, decoded, inputVars, packages, platform, opts)
+	if err != nil {
+		return nil, err
+	}
+	if err := writePackageArtifactMeta(bundleRoot, repoRoot, packages, platform, files); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func validateDownloadPackageSpec(spec stepspec.DownloadPackage) (string, string, error) {
+	if strings.TrimSpace(spec.Backend.Mode) != "container" {
+		return "", "", fmt.Errorf("DownloadPackage requires spec.backend.mode to be container")
+	}
+	if strings.TrimSpace(spec.Backend.Image) == "" {
+		return "", "", fmt.Errorf("DownloadPackage requires spec.backend.image")
+	}
+	family := strings.TrimSpace(spec.Distro.Family)
+	if family != "debian" && family != "rhel" {
+		return "", "", fmt.Errorf("DownloadPackage requires spec.distro.family to be debian or rhel")
+	}
+	if strings.TrimSpace(spec.Distro.Release) == "" {
+		return "", "", fmt.Errorf("DownloadPackage requires spec.distro.release")
+	}
+	repoType := strings.TrimSpace(spec.Repo.Type)
+	if repoType != "deb-flat" && repoType != "rpm" {
+		return "", "", fmt.Errorf("DownloadPackage requires spec.repo.type to be deb-flat or rpm")
+	}
+	if family == "debian" && repoType != "deb-flat" {
+		return "", "", fmt.Errorf("DownloadPackage spec.repo.type must be deb-flat when spec.distro.family is debian")
+	}
+	if family == "rhel" && repoType != "rpm" {
+		return "", "", fmt.Errorf("DownloadPackage spec.repo.type must be rpm when spec.distro.family is rhel")
+	}
+	return family, repoType, nil
+}
+
+func defaultDownloadPackageRepoRoot(repoType string, release string) string {
+	if repoType == "rpm" {
+		return filepath.ToSlash(filepath.Join("packages", "rpm", release))
+	}
+	return filepath.ToSlash(filepath.Join("packages", "deb", release))
 }
 
 func runContainerPackageRepoBuild(
@@ -152,71 +162,6 @@ func runContainerPackageRepoBuild(
 		return nil, err
 	}
 	return runContainerDownloadPackageToCache(ctx, runner, runtimeSel, image, platform, bundleRoot, repoRoot, step, inputVars, packages, cmdScript, opts)
-}
-
-func runContainerDownloadPackageAll(ctx context.Context, runner CommandRunner, bundleRoot, dir string, step config.Step, decoded stepspec.DownloadPackage, inputVars map[string]string, packages []string, platform string, opts RunOptions) ([]string, error) {
-	runtimeSel, err := detectRuntime(runner, decoded.Backend.Runtime)
-	if err != nil {
-		return nil, err
-	}
-
-	image := decoded.Backend.Image
-	if image == "" {
-		return nil, fmt.Errorf("backend.image is required for container package download")
-	}
-
-	family := decoded.Distro.Family
-	if family == "" {
-		family = "debian"
-	}
-
-	modules, err := parseRPMModules(decoded.Repo)
-	if err != nil {
-		return nil, err
-	}
-	cmdScript, err := buildDownloadPackageAllScript(family, packages, modules)
-	if err != nil {
-		return nil, err
-	}
-	return runContainerDownloadPackageToCache(ctx, runner, runtimeSel, image, platform, bundleRoot, dir, step, inputVars, packages, cmdScript, opts)
-}
-
-func buildDownloadPackageAllScript(family string, packages []string, modules []rpmModuleSpec) (string, error) {
-	parts := make([]string, 0, len(packages))
-	for _, p := range packages {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		parts = append(parts, "'"+shellEscape(p)+"'")
-	}
-	pkgList := strings.Join(parts, " ")
-
-	if family == "rhel" {
-		moduleEnable, err := buildRPMModuleEnableCommand(modules)
-		if err != nil {
-			return "", err
-		}
-		if moduleEnable != "" {
-			return fmt.Sprintf(
-				"set -euo pipefail; mkdir -p /out; dnf -y install 'dnf-command(download)' >/dev/null 2>&1 || true; %s; dnf -y download --resolve --destdir /out %s",
-				moduleEnable,
-				pkgList,
-			), nil
-		}
-		return fmt.Sprintf(
-			"set -euo pipefail; mkdir -p /out; (dnf -y install 'dnf-command(download)' >/dev/null 2>&1 || yum -y install yum-utils >/dev/null 2>&1 || true); (dnf -y download --resolve --destdir /out %s || yumdownloader --resolve --destdir /out %s)",
-			pkgList,
-			pkgList,
-		), nil
-	}
-
-	return fmt.Sprintf(
-		"set -euo pipefail; export DEBIAN_FRONTEND=noninteractive; mkdir -p %s; apt-get update -y >/dev/null; apt-get install -y --download-only --no-install-recommends %s >/dev/null; cp -a /var/cache/apt/archives/*.deb %s/ 2>/dev/null || true",
-		shellEscape(containerOutputRoot),
-		pkgList,
-		shellEscape(containerOutputRoot),
-	), nil
 }
 
 func buildPackageRepoBuildScript(family string, packages []string, modules []rpmModuleSpec, repoType string, generate bool, pkgsDir string) (string, error) {
@@ -377,19 +322,6 @@ func runContainerDownloadPackageToCache(ctx context.Context, runner CommandRunne
 		return nil, err
 	}
 	return files, nil
-}
-
-func writePackagePlaceholders(bundleRoot, dir string, packages []string) []string {
-	files := make([]string, 0, len(packages))
-	for _, pkg := range packages {
-		filename := fmt.Sprintf("%s.txt", pkg)
-		rel := filepath.ToSlash(filepath.Join(dir, filename))
-		target := filepath.Join(bundleRoot, rel)
-		_ = filemode.EnsureParentArtifactDir(target)
-		_ = filemode.WriteArtifactFile(target, []byte(fmt.Sprintf("package=%s\n", pkg)))
-		files = append(files, rel)
-	}
-	return files
 }
 
 func packageFilesFromDirListing(base string, relFiles []string) []string {

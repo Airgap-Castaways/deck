@@ -36,8 +36,8 @@ func TestRunPrepareStepOutputsCoverContracts(t *testing.T) {
 		{
 			name:   "packages download",
 			kind:   "DownloadPackage",
-			spec:   map[string]any{"packages": []any{"containerd"}},
-			runner: &noArtifactRunner{},
+			spec:   testDebDownloadPackageSpec([]any{"containerd"}, ""),
+			runner: &fakeRunner{},
 			expect: []string{"artifacts"},
 		},
 		{

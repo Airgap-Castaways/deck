@@ -110,6 +110,28 @@ func (n *noRuntimeRunner) RunWithIO(_ context.Context, _ io.Writer, _ io.Writer,
 
 type noArtifactRunner struct{}
 
+func testDebDownloadPackageSpec(packages []any, outputDir string) map[string]any {
+	spec := map[string]any{
+		"packages": packages,
+		"distro": map[string]any{
+			"family":  "debian",
+			"release": "ubuntu2204",
+		},
+		"repo": map[string]any{
+			"type": "deb-flat",
+		},
+		"backend": map[string]any{
+			"mode":    "container",
+			"runtime": "docker",
+			"image":   "ubuntu:22.04",
+		},
+	}
+	if strings.TrimSpace(outputDir) != "" {
+		spec["outputDir"] = outputDir
+	}
+	return spec
+}
+
 func (n *noArtifactRunner) LookPath(file string) (string, error) {
 	if file == "docker" || file == "podman" {
 		return "/usr/bin/" + file, nil

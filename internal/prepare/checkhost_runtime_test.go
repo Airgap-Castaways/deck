@@ -21,14 +21,7 @@ func TestRun_CheckHostStep(t *testing.T) {
 					ID:   "runtime-branch",
 					Kind: "DownloadPackage",
 					When: "runtime.host.os.family == \"debian\" && runtime.host.arch == \"arm64\"",
-					Spec: map[string]any{
-						"packages": []any{"containerd"},
-						"backend": map[string]any{
-							"mode":    "container",
-							"runtime": "docker",
-							"image":   "ubuntu:22.04",
-						},
-					},
+					Spec: testDebDownloadPackageSpec([]any{"containerd"}, ""),
 				}},
 			}},
 		}
@@ -74,14 +67,7 @@ func TestRun_CheckHostStep(t *testing.T) {
 						ID:   "runtime-branch",
 						Kind: "DownloadPackage",
 						When: "runtime.hostPassed == true && vars.want == \"ok\" && runtime.host.os.family == \"debian\" && runtime.host.arch == \"arm64\"",
-						Spec: map[string]any{
-							"packages": []any{"containerd"},
-							"backend": map[string]any{
-								"mode":    "container",
-								"runtime": "docker",
-								"image":   "ubuntu:22.04",
-							},
-						},
+						Spec: testDebDownloadPackageSpec([]any{"containerd"}, ""),
 					},
 				},
 			}},
@@ -186,7 +172,7 @@ func TestRun_ExposesTypedPrepareValidationCodes(t *testing.T) {
 				Steps: []config.Step{{
 					ID:   "pkg",
 					Kind: "DownloadPackage",
-					Spec: map[string]any{"packages": []any{"containerd"}, "backend": map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"}},
+					Spec: testDebDownloadPackageSpec([]any{"containerd"}, ""),
 				}},
 			}},
 		}

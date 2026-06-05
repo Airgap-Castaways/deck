@@ -107,6 +107,15 @@ func patchWriteContainerdConfigToolSchema(root map[string]any) {
 			},
 		},
 	})
+	if rawSettings, ok := properties["rawSettings"].(map[string]any); ok {
+		if items, ok := rawSettings["items"].(map[string]any); ok {
+			items["allOf"] = []any{
+				map[string]any{"if": map[string]any{"properties": map[string]any{"op": map[string]any{"const": "set"}}, "required": []any{"op"}}, "then": map[string]any{"required": []any{"value"}}},
+				map[string]any{"if": map[string]any{"properties": map[string]any{"op": map[string]any{"const": "appendUnique"}}, "required": []any{"op"}}, "then": map[string]any{"required": []any{"value"}}},
+				map[string]any{"if": map[string]any{"properties": map[string]any{"op": map[string]any{"const": "replaceList"}}, "required": []any{"op"}}, "then": map[string]any{"required": []any{"value"}}},
+			}
+		}
+	}
 	setMap(props, "spec", spec)
 }
 
@@ -217,9 +226,15 @@ func patchCheckHostToolSchema(root map[string]any) {
 	spec := specMap(root)
 	properties := propertyMap(spec)
 	setMap(properties, "checks", map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "enum": []any{"os", "arch", "kernelModules", "swap", "binaries"}}})
-	setMap(properties, "binaries", stringArraySchema(0, false))
+	setMap(properties, "binaries", stringArraySchema(1, true))
 	setMap(properties, "failFast", map[string]any{"type": "boolean", "default": true})
 	spec["required"] = []any{"checks"}
+	spec["allOf"] = []any{
+		map[string]any{
+			"if":   map[string]any{"properties": map[string]any{"checks": map[string]any{"contains": map[string]any{"const": "binaries"}}}, "required": []any{"checks"}},
+			"then": map[string]any{"required": []any{"binaries"}},
+		},
+	}
 	setMap(props, "spec", spec)
 }
 
@@ -247,7 +262,15 @@ func patchInitKubeadmToolSchema(root map[string]any) {
 	spec["required"] = []any{"outputJoinFile"}
 	properties := propertyMap(spec)
 	setMap(properties, "outputJoinFile", minLenStringSchema())
+	setMap(properties, "configFile", minLenStringSchema())
+	setMap(properties, "configTemplate", minLenStringSchema())
 	setMap(properties, "skipIfAdminConfExists", map[string]any{"type": "boolean", "default": true})
+	spec["allOf"] = []any{
+		map[string]any{
+			"if":   map[string]any{"required": []any{"configTemplate"}},
+			"then": map[string]any{"required": []any{"configFile"}},
+		},
+	}
 	setMap(props, "spec", spec)
 }
 

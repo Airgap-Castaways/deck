@@ -1,6 +1,7 @@
 package stepmeta_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Airgap-Castaways/deck/internal/stepmeta"
@@ -27,6 +28,19 @@ func TestLookupCommand(t *testing.T) {
 	}
 	if len(entry.Docs.Fields) != 4 {
 		t.Fatalf("expected 4 command fields, got %d", len(entry.Docs.Fields))
+	}
+}
+
+func TestLookupCheckHostAskMetadataIncludesBinariesContract(t *testing.T) {
+	entry, ok, err := stepmeta.Lookup("CheckHost")
+	if err != nil {
+		t.Fatalf("Lookup(CheckHost): %v", err)
+	}
+	if !ok {
+		t.Fatal("expected CheckHost registration")
+	}
+	if !hasAskKeyField(entry.Definition.Ask.KeyFields, "spec.binaries") || !hasValidationHint(entry.Definition.Ask.ValidationHints, "binaries") {
+		t.Fatalf("expected CheckHost ask metadata to include binaries guidance: %+v", entry.Definition.Ask)
 	}
 }
 
@@ -141,6 +155,9 @@ func TestLookupInitKubeadmIncludesRepresentativeFields(t *testing.T) {
 			t.Fatalf("expected kubeadm init field doc %s", want)
 		}
 	}
+	if !hasAskKeyField(entry.Definition.Ask.KeyFields, "spec.configTemplate") || !hasValidationHint(entry.Definition.Ask.ValidationHints, "configFile") {
+		t.Fatalf("expected kubeadm init ask metadata to describe configTemplate/configFile coupling: %+v", entry.Definition.Ask)
+	}
 
 	reset, ok, err := stepmeta.Lookup("ResetKubeadm")
 	if err != nil {
@@ -182,6 +199,22 @@ func TestLookupServiceAndPackageKinds(t *testing.T) {
 			t.Fatalf("expected package field doc %s", want)
 		}
 	}
+
+	repo, ok, err := stepmeta.Lookup("ConfigureRepository")
+	if err != nil {
+		t.Fatalf("Lookup(ConfigureRepository): %v", err)
+	}
+	if !ok {
+		t.Fatal("expected ConfigureRepository registration")
+	}
+	for _, want := range []string{"spec.repositories[].id", "spec.repositories[].baseurl"} {
+		if !hasAskKeyField(repo.Definition.Ask.KeyFields, want) {
+			t.Fatalf("expected repository ask key field %s", want)
+		}
+	}
+	if !hasValidationHint(repo.Definition.Ask.ValidationHints, "spec.repositories") {
+		t.Fatalf("expected repository ask metadata to include repository field guidance: %+v", repo.Definition.Ask)
+	}
 }
 
 func TestLookupContainerdAndClusterKinds(t *testing.T) {
@@ -196,6 +229,9 @@ func TestLookupContainerdAndClusterKinds(t *testing.T) {
 		if !hasFieldPath(containerd.Docs.Fields, want) {
 			t.Fatalf("expected containerd field doc %s", want)
 		}
+	}
+	if !hasAskKeyField(containerd.Definition.Ask.KeyFields, "spec.rawSettings[].value") || !hasValidationHint(containerd.Definition.Ask.ValidationHints, "rawSettings") {
+		t.Fatalf("expected containerd ask metadata to include rawSettings value guidance: %+v", containerd.Definition.Ask)
 	}
 
 	cluster, ok, err := stepmeta.Lookup("CheckKubernetesCluster")
@@ -258,6 +294,24 @@ func TestAllRegisteredKindsValidate(t *testing.T) {
 func hasFieldPath(fields []stepmeta.FieldDoc, want string) bool {
 	for _, field := range fields {
 		if field.Path == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasAskKeyField(fields []string, want string) bool {
+	for _, field := range fields {
+		if field == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasValidationHint(hints []stepmeta.ValidationHint, token string) bool {
+	for _, hint := range hints {
+		if strings.Contains(hint.ErrorContains, token) || strings.Contains(hint.Fix, token) {
 			return true
 		}
 	}

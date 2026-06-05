@@ -30,18 +30,12 @@ func TestPackCacheInvalidation(t *testing.T) {
 				{
 					ID:   "artifact-a",
 					Kind: "DownloadPackage",
-					Spec: map[string]any{
-						"packages": []any{"containerd-{{ .vars.pkgA }}"},
-						"backend":  map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"},
-					},
+					Spec: testDebDownloadPackageSpec([]any{"containerd-{{ .vars.pkgA }}"}, ""),
 				},
 				{
 					ID:   "artifact-b",
 					Kind: "DownloadPackage",
-					Spec: map[string]any{
-						"packages": []any{"iptables-{{ .vars.pkgB }}"},
-						"backend":  map[string]any{"mode": "container", "runtime": "docker", "image": "ubuntu:22.04"},
-					},
+					Spec: testDebDownloadPackageSpec([]any{"iptables-{{ .vars.pkgB }}"}, "packages/deb/iptables"),
 				},
 			},
 		}},
@@ -117,7 +111,7 @@ func TestPackCachePlanFallsBackToFetchWhenExportedCacheMissing(t *testing.T) {
 	step := config.Step{
 		ID:   "artifact-a",
 		Kind: "DownloadPackage",
-		Spec: map[string]any{"packages": []any{"containerd-{{ .vars.pkgA }}"}},
+		Spec: testDebDownloadPackageSpec([]any{"containerd-{{ .vars.pkgA }}"}, ""),
 	}
 	effectiveVars := map[string]any{"pkgA": "alpha"}
 	prevState := packCacheState{Artifact: collectPackCacheArtifact([]config.Step{step}, effectiveVars)}
