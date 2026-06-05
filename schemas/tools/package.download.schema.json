@@ -48,9 +48,15 @@
                   "family": {
                     "const": "debian"
                   }
-                }
+                },
+                "required": [
+                  "family"
+                ]
               }
-            }
+            },
+            "required": [
+              "distro"
+            ]
           },
           "then": {
             "properties": {
@@ -72,9 +78,15 @@
                   "family": {
                     "const": "rhel"
                   }
-                }
+                },
+                "required": [
+                  "family"
+                ]
               }
-            }
+            },
+            "required": [
+              "distro"
+            ]
           },
           "then": {
             "properties": {

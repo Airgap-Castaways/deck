@@ -70,7 +70,10 @@
                     "op": {
                       "const": "set"
                     }
-                  }
+                  },
+                  "required": [
+                    "op"
+                  ]
                 },
                 "then": {
                   "required": [
@@ -84,7 +87,10 @@
                     "op": {
                       "const": "appendUnique"
                     }
-                  }
+                  },
+                  "required": [
+                    "op"
+                  ]
                 },
                 "then": {
                   "required": [
@@ -98,7 +104,10 @@
                     "op": {
                       "const": "replaceList"
                     }
-                  }
+                  },
+                  "required": [
+                    "op"
+                  ]
                 },
                 "then": {
                   "required": [

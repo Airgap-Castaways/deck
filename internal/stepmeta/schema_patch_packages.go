@@ -58,11 +58,11 @@ func patchDownloadPackageToolSchema(root map[string]any) {
 	spec["required"] = []any{"packages", "distro", "repo", "backend"}
 	spec["allOf"] = []any{
 		map[string]any{
-			"if":   map[string]any{"properties": map[string]any{"distro": map[string]any{"properties": map[string]any{"family": map[string]any{"const": "debian"}}}}},
+			"if":   map[string]any{"properties": map[string]any{"distro": map[string]any{"properties": map[string]any{"family": map[string]any{"const": "debian"}}, "required": []any{"family"}}}, "required": []any{"distro"}},
 			"then": map[string]any{"properties": map[string]any{"repo": map[string]any{"properties": map[string]any{"type": map[string]any{"const": "deb-flat"}}}}},
 		},
 		map[string]any{
-			"if":   map[string]any{"properties": map[string]any{"distro": map[string]any{"properties": map[string]any{"family": map[string]any{"const": "rhel"}}}}},
+			"if":   map[string]any{"properties": map[string]any{"distro": map[string]any{"properties": map[string]any{"family": map[string]any{"const": "rhel"}}, "required": []any{"family"}}}, "required": []any{"distro"}},
 			"then": map[string]any{"properties": map[string]any{"repo": map[string]any{"properties": map[string]any{"type": map[string]any{"const": "rpm"}}}}},
 		},
 	}

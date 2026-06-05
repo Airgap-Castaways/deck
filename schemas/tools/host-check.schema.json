@@ -48,7 +48,10 @@
                   "const": "binaries"
                 }
               }
-            }
+            },
+            "required": [
+              "checks"
+            ]
           },
           "then": {
             "required": [

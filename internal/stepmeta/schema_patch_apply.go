@@ -67,9 +67,9 @@ func patchWriteContainerdConfigToolSchema(root map[string]any) {
 	if rawSettings, ok := properties["rawSettings"].(map[string]any); ok {
 		if items, ok := rawSettings["items"].(map[string]any); ok {
 			items["allOf"] = []any{
-				map[string]any{"if": map[string]any{"properties": map[string]any{"op": map[string]any{"const": "set"}}}, "then": map[string]any{"required": []any{"value"}}},
-				map[string]any{"if": map[string]any{"properties": map[string]any{"op": map[string]any{"const": "appendUnique"}}}, "then": map[string]any{"required": []any{"value"}}},
-				map[string]any{"if": map[string]any{"properties": map[string]any{"op": map[string]any{"const": "replaceList"}}}, "then": map[string]any{"required": []any{"value"}}},
+				map[string]any{"if": map[string]any{"properties": map[string]any{"op": map[string]any{"const": "set"}}, "required": []any{"op"}}, "then": map[string]any{"required": []any{"value"}}},
+				map[string]any{"if": map[string]any{"properties": map[string]any{"op": map[string]any{"const": "appendUnique"}}, "required": []any{"op"}}, "then": map[string]any{"required": []any{"value"}}},
+				map[string]any{"if": map[string]any{"properties": map[string]any{"op": map[string]any{"const": "replaceList"}}, "required": []any{"op"}}, "then": map[string]any{"required": []any{"value"}}},
 			}
 		}
 	}
@@ -188,7 +188,7 @@ func patchCheckHostToolSchema(root map[string]any) {
 	spec["required"] = []any{"checks"}
 	spec["allOf"] = []any{
 		map[string]any{
-			"if":   map[string]any{"properties": map[string]any{"checks": map[string]any{"contains": map[string]any{"const": "binaries"}}}},
+			"if":   map[string]any{"properties": map[string]any{"checks": map[string]any{"contains": map[string]any{"const": "binaries"}}}, "required": []any{"checks"}},
 			"then": map[string]any{"required": []any{"binaries"}},
 		},
 	}

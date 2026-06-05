@@ -336,6 +336,31 @@ func TestRun_DownloadPackageRejectsNonCanonicalOutputDir(t *testing.T) {
 	}
 }
 
+func TestRun_DownloadPackageRejectsReleasePathTraversal(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	bundle := t.TempDir()
+	wf := &config.Workflow{
+		Version: "v1",
+		Phases: []config.Phase{{
+			Name: "prepare",
+			Steps: []config.Step{{
+				ID:   "pkg",
+				Kind: "DownloadPackage",
+				Spec: func() map[string]any {
+					spec := testDebDownloadPackageSpec([]any{"containerd"}, "")
+					spec["distro"].(map[string]any)["release"] = "../../escape"
+					return spec
+				}(),
+			}},
+		}},
+	}
+
+	err := Run(context.Background(), wf, RunOptions{BundleRoot: bundle})
+	if err == nil || !strings.Contains(err.Error(), "DownloadPackage distro.release must stay under packages/deb/") {
+		t.Fatalf("expected distro.release traversal error, got %v", err)
+	}
+}
+
 func TestRun_ExposesTypedRuntimeErrorCode(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	bundle := t.TempDir()

@@ -62,6 +62,16 @@ func runDownloadPackage(ctx context.Context, runner CommandRunner, bundleRoot st
 	repoRoot := defaultDownloadPackageRepoRoot(repoType, strings.TrimSpace(decoded.Distro.Release))
 	if strings.TrimSpace(decoded.OutputDir) != "" {
 		repoRoot = dir
+	} else {
+		root := "packages/deb"
+		if repoType == "rpm" {
+			root = "packages/rpm"
+		}
+		validatedRepoRoot, err := ensurePreparedPathUnderRoot("DownloadPackage", "distro.release", repoRoot, root)
+		if err != nil {
+			return nil, err
+		}
+		repoRoot = validatedRepoRoot
 	}
 	generate := decoded.Repo.Generate
 	pkgsDir := strings.TrimSpace(decoded.Repo.PkgsDir)
