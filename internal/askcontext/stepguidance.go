@@ -121,6 +121,13 @@ func DiscoverCandidateStepsWithOptions(prompt string, options StepGuidanceOption
 			} else {
 				why = append(why, fmt.Sprintf("matches %s group", step.Group))
 			}
+		} else if alias := matchingGroupAlias(lower, step.GroupAliases); alias != "" {
+			score += 16
+			if step.GroupTitle != "" {
+				why = append(why, fmt.Sprintf("matches %s group alias %q", step.GroupTitle, alias))
+			} else {
+				why = append(why, fmt.Sprintf("matches group alias %q", alias))
+			}
 		}
 		for _, signal := range step.MatchSignals {
 			signal = strings.ToLower(strings.TrimSpace(signal))
@@ -146,6 +153,12 @@ func DiscoverCandidateStepsWithOptions(prompt string, options StepGuidanceOption
 				score -= 40
 			} else {
 				score += 10
+			}
+		}
+		if strings.Contains(lower, "air-gapped") || strings.Contains(lower, "air gapped") {
+			if containsGuidanceString(step.Capabilities, "image-staging") {
+				score += 18
+				why = append(why, "supports air-gapped artifact flow")
 			}
 		}
 		if step.Kind == "Command" {
@@ -267,6 +280,16 @@ func containsGuidanceString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func matchingGroupAlias(prompt string, aliases []string) string {
+	for _, alias := range aliases {
+		alias = strings.ToLower(strings.TrimSpace(alias))
+		if alias != "" && strings.Contains(prompt, alias) {
+			return alias
+		}
+	}
+	return ""
 }
 
 func applyCapabilityScore(score *int, why *[]string, step StepKindContext, capabilities map[string]bool, modeIntent string, topology string) {

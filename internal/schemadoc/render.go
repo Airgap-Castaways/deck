@@ -34,6 +34,7 @@ type VariantInput struct {
 	Required    []string
 	Spec        map[string]any
 	Outputs     []string
+	Roles       []string
 	GroupOrder  int
 	DocsOrder   int
 }
@@ -144,8 +145,16 @@ func RenderTypedStepsPage(inputs []PageInput) []byte {
 	buf.WriteString("# Typed Steps\n\n")
 	buf.WriteString("Choose typed workflow steps by task-oriented group rather than internal implementation family.\n\n")
 	buf.WriteString("Use these pages when you are deciding which kind to author. For shared step envelope rules, see [Step Envelope Contract](workflow-model.md#step-envelope-contract). For top-level workflow and component document contracts, see [Workflow Model](workflow-model.md#workflow-schema-contract) and [Workspace Layout](workspace-layout.md#component-fragment-contract).\n\n")
+	buf.WriteString("## By Phase\n\n")
+	buf.WriteString("Use this view first when you need to know which step kinds are valid in prepare workflows, apply workflows, or both.\n\n")
+	for _, section := range phaseSections(inputs) {
+		buf.WriteString("### " + section.title + "\n\n")
+		buf.WriteString(section.description + "\n\n")
+		buf.WriteString("- **Kinds**: `" + strings.Join(section.kinds, "`, `") + "`\n\n")
+	}
+	buf.WriteString("## By Task\n\n")
 	for _, in := range inputs {
-		buf.WriteString("## [" + in.Title + "](groups/" + in.PageSlug + ".md)\n\n")
+		buf.WriteString("### [" + in.Title + "](groups/" + in.PageSlug + ".md)\n\n")
 		buf.WriteString("- **Summary**: " + firstNonEmpty(in.Summary, in.Description) + "\n")
 		if strings.TrimSpace(in.WhenToUse) != "" {
 			buf.WriteString("- **When to use**: " + in.WhenToUse + "\n")
@@ -154,6 +163,60 @@ func RenderTypedStepsPage(inputs []PageInput) []byte {
 		buf.WriteString("\n")
 	}
 	return buf.Bytes()
+}
+
+type phaseSection struct {
+	title       string
+	description string
+	kinds       []string
+}
+
+func phaseSections(inputs []PageInput) []phaseSection {
+	return []phaseSection{
+		{title: "Prepare", description: "Use these kinds in prepare workflows that produce bundle artifacts or collect local preflight facts.", kinds: roleFilteredKinds(inputs, "prepare", false)},
+		{title: "Apply", description: "Use these kinds in apply workflows that mutate or verify target nodes.", kinds: roleFilteredKinds(inputs, "apply", false)},
+		{title: "Prepare and Apply", description: "These kinds are valid in both workflow roles.", kinds: roleFilteredKinds(inputs, "", true)},
+	}
+}
+
+func roleFilteredKinds(inputs []PageInput, role string, both bool) []string {
+	kinds := make([]string, 0)
+	for _, in := range inputs {
+		for _, variant := range in.Variants {
+			hasPrepare := containsString(variant.Roles, "prepare")
+			hasApply := containsString(variant.Roles, "apply")
+			if both {
+				if hasPrepare && hasApply {
+					kinds = append(kinds, variant.Kind)
+				}
+				continue
+			}
+			switch role {
+			case "prepare":
+				if hasPrepare && !hasApply {
+					kinds = append(kinds, variant.Kind)
+				}
+			case "apply":
+				if hasApply && !hasPrepare {
+					kinds = append(kinds, variant.Kind)
+				}
+			}
+		}
+	}
+	sort.Strings(kinds)
+	if len(kinds) == 0 {
+		return []string{"none"}
+	}
+	return kinds
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func RenderWorkflowSchemaPartial(schemaPath string, schema map[string]any, meta PageMetadata) []byte {

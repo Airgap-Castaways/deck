@@ -17,7 +17,7 @@ Use this group for kubeadm bootstrap, join, reset, upgrade, and Kubernetes clust
 ### Bootstrap a control plane
 
 - kinds: `InitKubeadm`, `CheckKubernetesCluster`
-- note: Offline control-plane flows usually load required images earlier through Runtime and Services.
+- note: Offline control-plane flows usually stage packages and images before kubeadm runs.
 
 ### Join workers
 
@@ -264,9 +264,8 @@ spec:
 ## Related
 
 - [Host Prep](host-prep.md)
-- [Package Management](package-management.md)
+- [Packages and Repositories](packages-repositories.md)
+- [Container Images](container-images.md)
 - [Waits and Polling](waits-polling.md)
-- [Artifact Staging](artifact-staging.md)
-- [Runtime and Services](runtime-services.md)
 - [Typed Steps](../typed-steps.md)
 - [Step Envelope Contract](../workflow-model.md#step-envelope-contract)

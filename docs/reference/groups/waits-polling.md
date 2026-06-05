@@ -255,7 +255,7 @@ spec:
 
 ## Related
 
-- [Runtime and Services](runtime-services.md)
+- [Services and Systemd](services-systemd.md)
 - [Kubernetes Lifecycle](kubernetes-lifecycle.md)
 - [Typed Steps](../typed-steps.md)
 - [Step Envelope Contract](../workflow-model.md#step-envelope-contract)

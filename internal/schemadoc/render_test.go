@@ -12,10 +12,10 @@ import (
 )
 
 func TestRenderGroupPageListsKindsByGroup(t *testing.T) {
-	page := testGroupPageInput(t, "filesystem-content")
+	page := testGroupPageInput(t, "files-archives")
 	rendered := string(RenderGroupPage(page))
 
-	if !strings.Contains(rendered, "- group: `filesystem-content`") {
+	if !strings.Contains(rendered, "- group: `files-archives`") {
 		t.Fatalf("expected group summary header:\n%s", rendered)
 	}
 	for _, kind := range []string{"EnsureDirectory", "WriteFile", "CopyFile", "EditFile", "CreateSymlink"} {
@@ -29,25 +29,25 @@ func TestRenderGroupPageListsKindsByGroup(t *testing.T) {
 }
 
 func TestRenderGroupPageIncludesTypicalFlowsAndSeeAlso(t *testing.T) {
-	page := testGroupPageInput(t, "runtime-services")
+	page := testGroupPageInput(t, "container-runtime")
 	rendered := string(RenderGroupPage(page))
 
-	for _, want := range []string{"## Typical Flows", "### Configure containerd", "[Waits and Polling](waits-polling.md)", "[Step Envelope Contract](../workflow-model.md#step-envelope-contract)"} {
+	for _, want := range []string{"## Typical Flows", "### Configure containerd", "[Container Images](container-images.md)", "[Step Envelope Contract](../workflow-model.md#step-envelope-contract)"} {
 		if !strings.Contains(rendered, want) {
-			t.Fatalf("expected %q in runtime services page:\n%s", want, rendered)
+			t.Fatalf("expected %q in container runtime page:\n%s", want, rendered)
 		}
 	}
 }
 
 func TestRenderGroupPageUsesConcreteExamplesAndValidationRules(t *testing.T) {
-	page := testGroupPageInput(t, "artifact-staging")
+	page := testGroupPageInput(t, "packages-repositories")
 	rendered := string(RenderGroupPage(page))
 
 	if !strings.Contains(rendered, "## `DownloadPackage`") || !strings.Contains(rendered, "kind: DownloadPackage") {
 		t.Fatalf("expected concrete DownloadPackage section:\n%s", rendered)
 	}
-	if !strings.Contains(rendered, "At least one of `spec.source` or `spec.items` must be set.") {
-		t.Fatalf("expected schema-derived branch rule in artifact staging page:\n%s", rendered)
+	if !strings.Contains(rendered, "At least one of `spec.clean` or `spec.update` must be set.") {
+		t.Fatalf("expected schema-derived branch rule in packages page:\n%s", rendered)
 	}
 	if strings.Contains(rendered, "schema: `../../../schemas/tools/") {
 		t.Fatalf("did not expect raw per-kind schema path in public group page:\n%s", rendered)
@@ -55,7 +55,7 @@ func TestRenderGroupPageUsesConcreteExamplesAndValidationRules(t *testing.T) {
 }
 
 func TestRenderGroupPageEscapesMultilineExamples(t *testing.T) {
-	page := testGroupPageInput(t, "runtime-services")
+	page := testGroupPageInput(t, "services-systemd")
 	rendered := string(RenderGroupPage(page))
 
 	if !strings.Contains(rendered, "[Service]<br>Environment=NODE_IP={{ .vars.nodeIP }}") {
@@ -64,14 +64,14 @@ func TestRenderGroupPageEscapesMultilineExamples(t *testing.T) {
 }
 
 func TestRenderGroupPagePreservesKindScopedNotes(t *testing.T) {
-	rendered := string(RenderGroupPage(testGroupPageInput(t, "kubernetes-lifecycle")))
+	rendered := string(RenderGroupPage(testGroupPageInput(t, "container-images")))
 	loadSection := sectionForKind(rendered, "LoadImage")
 	if strings.Contains(loadSection, "spec.auth") || strings.Contains(loadSection, "outputDir") {
 		t.Fatalf("expected LoadImage notes to exclude DownloadImage-only guidance:\n%s", loadSection)
 	}
-	verifySection := sectionForKind(rendered, "CheckKubernetesCluster")
-	if !strings.Contains(verifySection, "Use this for typed bootstrap and upgrade verification") {
-		t.Fatalf("expected Kubernetes cluster check guidance:\n%s", verifySection)
+	verifySection := sectionForKind(rendered, "VerifyImage")
+	if !strings.Contains(verifySection, "Use this instead of `LoadImage`") {
+		t.Fatalf("expected image verification guidance:\n%s", verifySection)
 	}
 }
 
@@ -79,7 +79,7 @@ func TestRenderTypedStepsPageListsGroups(t *testing.T) {
 	page := RenderTypedStepsPage([]PageInput{testGroupPageInput(t, "host-prep"), testGroupPageInput(t, "kubernetes-lifecycle")})
 	rendered := string(page)
 
-	for _, want := range []string{"# Typed Steps", "## [Host Prep](groups/host-prep.md)", "## [Kubernetes Lifecycle](groups/kubernetes-lifecycle.md)"} {
+	for _, want := range []string{"# Typed Steps", "## By Phase", "### Prepare", "### Apply", "## By Task", "### [Host Prep](groups/host-prep.md)", "### [Kubernetes Lifecycle](groups/kubernetes-lifecycle.md)"} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("expected %q in typed steps index:\n%s", want, rendered)
 		}
@@ -189,6 +189,7 @@ func testGroupPageInput(t *testing.T, group string) PageInput {
 			Required:    toRequiredStrings(spec["required"]),
 			Spec:        spec,
 			Outputs:     append([]string(nil), def.Outputs...),
+			Roles:       append([]string(nil), def.Roles...),
 			GroupOrder:  def.GroupOrder,
 			DocsOrder:   def.DocsOrder,
 		})

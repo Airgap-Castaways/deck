@@ -5,55 +5,85 @@ Choose typed workflow steps by task-oriented group rather than internal implemen
 
 Use these pages when you are deciding which kind to author. For shared step envelope rules, see [Step Envelope Contract](workflow-model.md#step-envelope-contract). For top-level workflow and component document contracts, see [Workflow Model](workflow-model.md#workflow-schema-contract) and [Workspace Layout](workspace-layout.md#component-fragment-contract).
 
-## [Host Prep](groups/host-prep.md)
+## By Phase
+
+Use this view first when you need to know which step kinds are valid in prepare workflows, apply workflows, or both.
+
+### Prepare
+
+Use these kinds in prepare workflows that produce bundle artifacts or collect local preflight facts.
+
+- **Kinds**: `DownloadFile`, `DownloadImage`, `DownloadPackage`
+
+### Apply
+
+Use these kinds in apply workflows that mutate or verify target nodes.
+
+- **Kinds**: `CheckKubernetesCluster`, `Command`, `ConfigureRepository`, `Confirm`, `CopyFile`, `CreateSymlink`, `EditFile`, `EditJSON`, `EditTOML`, `EditYAML`, `EnsureDirectory`, `ExtractArchive`, `InitKubeadm`, `Input`, `InstallPackage`, `JoinKubeadm`, `KernelModule`, `LoadImage`, `ManageService`, `RefreshRepository`, `ResetKubeadm`, `Swap`, `Sysctl`, `UpgradeKubeadm`, `VerifyImage`, `WaitForCommand`, `WaitForFile`, `WaitForMissingFile`, `WaitForMissingTCPPort`, `WaitForService`, `WaitForTCPPort`, `WriteContainerdConfig`, `WriteContainerdRegistryHosts`, `WriteFile`, `WriteSystemdUnit`
+
+### Prepare and Apply
+
+These kinds are valid in both workflow roles.
+
+- **Kinds**: `CheckHost`, `Message`
+
+## By Task
+
+### [Host Prep](groups/host-prep.md)
 
 - **Summary**: Prepare a node so later runtime and Kubernetes steps can succeed predictably.
 - **When to use**: Start here for host suitability checks and low-level node prerequisites such as swap, kernel modules, and sysctl settings.
 - **Kinds**: `CheckHost`, `Swap`, `KernelModule`, `Sysctl`
 
-## [Artifact Staging](groups/artifact-staging.md)
+### [Files and Archives](groups/files-archives.md)
 
-- **Summary**: Collect offline-ready files, packages, and images during prepare.
-- **When to use**: Use this group during prepare when apply must avoid remote downloads and consume pre-staged bundle content.
-- **Kinds**: `DownloadFile`, `DownloadPackage`, `DownloadImage`
+- **Summary**: Fetch, create, copy, extract, edit, and link files used by prepare or apply workflows.
+- **When to use**: Use this group for file artifacts, node-side file placement, archive extraction, and structured or textual file edits.
+- **Kinds**: `DownloadFile`, `EnsureDirectory`, `WriteFile`, `CopyFile`, `ExtractArchive`, `EditFile`, `EditTOML`, `EditYAML`, `EditJSON`, `CreateSymlink`
 
-## [Filesystem and Content](groups/filesystem-content.md)
+### [Packages and Repositories](groups/packages-repositories.md)
 
-- **Summary**: Create directories, write files, edit structured documents, extract archives, and arrange paths on the node.
-- **When to use**: Use this group for direct node-side filesystem mutations and content management during apply.
-- **Kinds**: `EnsureDirectory`, `WriteFile`, `CopyFile`, `ExtractArchive`, `EditFile`, `EditTOML`, `EditYAML`, `EditJSON`, `CreateSymlink`
+- **Summary**: Stage packages, configure repositories, refresh metadata, and install packages.
+- **When to use**: Use this group for package workflows that start with prepare-time package staging and finish with apply-time repository setup and installation.
+- **Kinds**: `DownloadPackage`, `ConfigureRepository`, `RefreshRepository`, `InstallPackage`
 
-## [Package Management](groups/package-management.md)
+### [Container Images](groups/container-images.md)
 
-- **Summary**: Configure local repositories, refresh package metadata, and install packages during apply.
-- **When to use**: Use this group when a node must install packages from mirrored or staged package content without relying on online repositories.
-- **Kinds**: `ConfigureRepository`, `RefreshRepository`, `InstallPackage`
+- **Summary**: Stage container images during prepare, then load or verify them on nodes during apply.
+- **When to use**: Use this group when image archives must be prepared for air-gapped apply runs or verified in the local container runtime.
+- **Kinds**: `DownloadImage`, `LoadImage`, `VerifyImage`
 
-## [Runtime and Services](groups/runtime-services.md)
+### [Container Runtime](groups/container-runtime.md)
 
-- **Summary**: Configure container runtimes, load or verify local images, and manage systemd units and services on the node.
-- **When to use**: Use this group when runtime settings, local image availability, or service state changes must take effect locally during apply.
-- **Kinds**: `WriteContainerdConfig`, `WriteContainerdRegistryHosts`, `WriteSystemdUnit`, `ManageService`, `LoadImage`, `VerifyImage`
+- **Summary**: Configure containerd and registry host resolution on the node.
+- **When to use**: Use this group when container runtime configuration, registry mirrors, or trust policy must be managed during apply.
+- **Kinds**: `WriteContainerdConfig`, `WriteContainerdRegistryHosts`
 
-## [Kubernetes Lifecycle](groups/kubernetes-lifecycle.md)
+### [Services and Systemd](groups/services-systemd.md)
+
+- **Summary**: Write systemd units and manage local service lifecycle actions.
+- **When to use**: Use this group when workflows need to install unit files, reload systemd, or start, stop, restart, reload, enable, or disable services.
+- **Kinds**: `WriteSystemdUnit`, `ManageService`
+
+### [Kubernetes Lifecycle](groups/kubernetes-lifecycle.md)
 
 - **Summary**: Bootstrap or join kubeadm nodes and verify Kubernetes-specific cluster state.
 - **When to use**: Use this group for kubeadm bootstrap, join, reset, upgrade, and Kubernetes cluster verification steps.
 - **Kinds**: `InitKubeadm`, `JoinKubeadm`, `UpgradeKubeadm`, `ResetKubeadm`, `CheckKubernetesCluster`
 
-## [Waits and Polling](groups/waits-polling.md)
+### [Waits and Polling](groups/waits-polling.md)
 
 - **Summary**: Wait for files, commands, services, and ports to converge before dependent steps continue.
 - **When to use**: Use this group when later steps must wait on a specific local condition instead of assuming immediate convergence.
 - **Kinds**: `WaitForService`, `WaitForFile`, `WaitForMissingFile`, `WaitForCommand`, `WaitForTCPPort`, `WaitForMissingTCPPort`
 
-## [Operator Interaction](groups/operator-interaction.md)
+### [Operator Interaction](groups/operator-interaction.md)
 
 - **Summary**: Print operator-facing messages and collect explicit local operator decisions or values.
 - **When to use**: Use this group when a workflow needs a clear local checkpoint or an apply-time value that should flow through register outputs.
 - **Kinds**: `Message`, `Confirm`, `Input`
 
-## [Advanced](groups/advanced.md)
+### [Advanced](groups/advanced.md)
 
 - **Summary**: Use escape-hatch steps only when no typed step clearly matches the requested action.
 - **When to use**: Start with typed groups first. Use the advanced group only for vendor tools, custom probes, or one-off local commands that deck does not model directly.

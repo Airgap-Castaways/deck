@@ -45,3 +45,30 @@ func TestDiscoverCandidateStepsUsesHyphenatedGroupIDs(t *testing.T) {
 	}
 	t.Fatalf("expected CheckHost candidate for hyphenated group prompt, got %#v", selected)
 }
+
+func TestDiscoverCandidateStepsUsesLegacyGroupAliases(t *testing.T) {
+	selected := DiscoverCandidateStepsWithOptions("use artifact staging for offline packages", StepGuidanceOptions{ModeIntent: "prepare+apply"})
+	for _, item := range selected {
+		if item.Step.Kind != "DownloadPackage" {
+			continue
+		}
+		if !strings.Contains(item.WhyRelevant, "Packages and Repositories group alias") {
+			t.Fatalf("expected legacy alias relevance reason, got %#v", item)
+		}
+		return
+	}
+	t.Fatalf("expected DownloadPackage candidate for artifact staging alias prompt, got %#v", selected)
+}
+
+func TestDiscoverCandidateStepsUsesNewDomainGroupIDs(t *testing.T) {
+	selected := DiscoverCandidateStepsWithOptions("show container-images steps for offline image flow", StepGuidanceOptions{ModeIntent: "prepare+apply"})
+	seen := map[string]bool{}
+	for _, item := range selected {
+		seen[item.Step.Kind] = true
+	}
+	for _, want := range []string{"DownloadImage", "LoadImage", "VerifyImage"} {
+		if !seen[want] {
+			t.Fatalf("expected %s candidate for container-images group, got %#v", want, selected)
+		}
+	}
+}

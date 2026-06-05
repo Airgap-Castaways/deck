@@ -93,6 +93,7 @@ func buildStepKinds() []StepKindContext {
 			Category:                 step.Category,
 			Group:                    step.Group,
 			GroupTitle:               step.GroupTitle,
+			GroupAliases:             append([]string(nil), step.GroupAliases...),
 			Summary:                  step.Summary,
 			WhenToUse:                step.WhenToUse,
 			SchemaFile:               step.SchemaFile,

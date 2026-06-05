@@ -6,7 +6,7 @@ var _ = stepmeta.MustRegister[WriteContainerdConfig](stepmeta.Definition{
 	Kind:        "WriteContainerdConfig",
 	Family:      "containerd",
 	FamilyTitle: "Containerd",
-	Group:       "runtime-services",
+	Group:       "container-runtime",
 	GroupOrder:  10,
 	DocsPage:    "containerd",
 	DocsOrder:   10,
@@ -24,4 +24,4 @@ var _ = stepmeta.MustRegister[WriteContainerdConfig](stepmeta.Definition{
 	},
 })
 
-var _ = stepmeta.MustRegister[WriteContainerdRegistryHosts](stepmeta.Definition{Kind: "WriteContainerdRegistryHosts", Family: "containerd", FamilyTitle: "Containerd", Group: "runtime-services", GroupOrder: 20, DocsPage: "containerd", DocsOrder: 20, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "containerd.registry-hosts.schema.json", SchemaPatch: stepmeta.PatchWriteContainerdRegistryHostsToolSchema, Parallel: parallelTargetPaths("spec.path")})
+var _ = stepmeta.MustRegister[WriteContainerdRegistryHosts](stepmeta.Definition{Kind: "WriteContainerdRegistryHosts", Family: "containerd", FamilyTitle: "Containerd", Group: "container-runtime", GroupOrder: 20, DocsPage: "containerd", DocsOrder: 20, Visibility: "public", Roles: []string{"apply"}, Outputs: []string{"path"}, SchemaFile: "containerd.registry-hosts.schema.json", SchemaPatch: stepmeta.PatchWriteContainerdRegistryHostsToolSchema, Parallel: parallelTargetPaths("spec.path")})

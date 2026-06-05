@@ -37,8 +37,10 @@ Prefer typed steps where possible. `Command` is available for the edges that are
 Useful group entrypoints for Kubernetes workflows:
 
 - [Host Prep](../reference/groups/host-prep.md)
-- [Artifact Staging](../reference/groups/artifact-staging.md)
-- [Runtime and Services](../reference/groups/runtime-services.md)
+- [Packages and Repositories](../reference/groups/packages-repositories.md)
+- [Container Images](../reference/groups/container-images.md)
+- [Container Runtime](../reference/groups/container-runtime.md)
+- [Services and Systemd](../reference/groups/services-systemd.md)
 - [Kubernetes Lifecycle](../reference/groups/kubernetes-lifecycle.md)
 - [Waits and Polling](../reference/groups/waits-polling.md)
 

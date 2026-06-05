@@ -113,6 +113,7 @@ type StepKindContext struct {
 	Category                 string
 	Group                    string
 	GroupTitle               string
+	GroupAliases             []string
 	Summary                  string
 	WhenToUse                string
 	SchemaFile               string
