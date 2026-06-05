@@ -10,8 +10,7 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
-func TestGeneratedTypedStepPagesExist(t *testing.T) {
-	seenPages := map[string]bool{}
+func TestGeneratedStepKindPagesExist(t *testing.T) {
 	defs, err := workflowcontract.StepDefinitions()
 	if err != nil {
 		t.Fatalf("StepDefinitions: %v", err)
@@ -20,35 +19,27 @@ func TestGeneratedTypedStepPagesExist(t *testing.T) {
 		if def.Visibility != "public" {
 			continue
 		}
-		page := filepath.Join("..", "docs", "reference", "typed-steps", typedStepPagePhase(def.Roles), def.Group+".md")
-		if seenPages[page] {
-			continue
-		}
-		seenPages[page] = true
+		page := filepath.Join("..", "docs", "reference", "step-kinds", stepKindDocSlug(def.Kind)+".md")
 		if _, err := os.Stat(page); err != nil {
-			t.Fatalf("typed step page missing for %s: %v", def.Kind, err)
+			t.Fatalf("step kind page missing for %s: %v", def.Kind, err)
 		}
 	}
 }
 
-func typedStepPagePhase(roles []string) string {
-	hasPrepare := false
-	hasApply := false
-	for _, role := range roles {
-		switch role {
-		case "prepare":
-			hasPrepare = true
-		case "apply":
-			hasApply = true
+func stepKindDocSlug(kind string) string {
+	var out []rune
+	runes := []rune(kind)
+	for i, r := range runes {
+		if r >= 'A' && r <= 'Z' {
+			if i > 0 && ((runes[i-1] >= 'a' && runes[i-1] <= 'z') || (i+1 < len(runes) && runes[i+1] >= 'a' && runes[i+1] <= 'z')) {
+				out = append(out, '-')
+			}
+			out = append(out, r+('a'-'A'))
+			continue
 		}
+		out = append(out, r)
 	}
-	if hasPrepare && hasApply {
-		return "common"
-	}
-	if hasPrepare {
-		return "prepare"
-	}
-	return "apply"
+	return string(out)
 }
 
 func TestToolSchemasCoverStepContracts(t *testing.T) {

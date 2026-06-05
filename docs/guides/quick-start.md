@@ -30,7 +30,7 @@ This creates a starter layout with two entry workflows and a prepared output tre
 
 Prefer typed steps. They make the procedure easier to read and lint as it grows.
 
-When choosing a step, start with [Typed Steps](../reference/typed-steps.md). For shared step fields such as `when`, `parallelGroup`, `register`, `metadata`, `retry`, and `timeout`, use the [Step Envelope Contract](../reference/workflow-model.md#step-envelope-contract).
+When choosing a step, start with [Step Kinds](../reference/step-kinds.md). For shared step fields such as `when`, `parallelGroup`, `register`, `metadata`, `retry`, and `timeout`, use the [Step Envelope Contract](../reference/workflow-model.md#step-envelope-contract).
 
 ```yaml
 version: v1alpha1
@@ -96,7 +96,7 @@ That path extends the local workflow. It does not replace it.
 - [Why deck?](../core-concepts/why-deck.md)
 - [Workflow model](../reference/workflow-model.md)
 - [Apply State](../reference/apply-state.md)
-- [Typed Steps](../reference/typed-steps.md)
+- [Step Kinds](../reference/step-kinds.md)
 - [Bundle layout](../reference/bundle-layout.md)
 - [CLI Reference](../reference/cli.md)
 - [Using deck ask](ask.md)

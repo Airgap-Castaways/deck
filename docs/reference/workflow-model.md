@@ -391,18 +391,20 @@ If a workflow needs one step to consume another step's runtime output, put those
 
 Typed steps make the workflow easier to scan, validate, and evolve. Use `Command` only when no supported kind fits.
 
-Public typed step reference is organized by task-oriented groups:
+The public step kind reference is organized by workflow phase and task-oriented group:
 
 - `Host Prep`
-- `Artifact Staging`
-- `Filesystem and Content`
-- `Package Management`
-- `Runtime and Services`
+- `Files and Archives`
+- `Packages and Repositories`
+- `Container Images`
+- `Container Runtime`
+- `Services and Systemd`
 - `Kubernetes Lifecycle`
 - `Waits and Polling`
+- `Operator Interaction`
 - `Advanced`
 
-Use [Typed Steps](typed-steps.md) for the current group pages and exact supported kind inventory.
+Use [Step Kinds](step-kinds.md) for the current phase/group index and exact supported kind inventory.
 
 ## Prepare semantics
 

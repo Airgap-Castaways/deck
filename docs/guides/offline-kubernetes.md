@@ -36,14 +36,14 @@ Prefer typed steps where possible. `Command` is available for the edges that are
 
 Useful group entrypoints for Kubernetes workflows:
 
-- [Prepare packages](../reference/typed-steps/prepare/packages-repositories.md)
-- [Prepare container images](../reference/typed-steps/prepare/container-images.md)
-- [Apply host prep](../reference/typed-steps/apply/host-prep.md)
-- [Apply packages and repositories](../reference/typed-steps/apply/packages-repositories.md)
-- [Apply container runtime](../reference/typed-steps/apply/container-runtime.md)
-- [Apply services and systemd](../reference/typed-steps/apply/services-systemd.md)
-- [Apply Kubernetes lifecycle](../reference/typed-steps/apply/kubernetes-lifecycle.md)
-- [Apply waits and polling](../reference/typed-steps/apply/waits-polling.md)
+- [DownloadPackage](../reference/step-kinds/download-package.md)
+- [DownloadImage](../reference/step-kinds/download-image.md)
+- [CheckHost](../reference/step-kinds/check-host.md)
+- [InstallPackage](../reference/step-kinds/install-package.md)
+- [WriteContainerdConfig](../reference/step-kinds/write-containerd-config.md)
+- [ManageService](../reference/step-kinds/manage-service.md)
+- [InitKubeadm](../reference/step-kinds/init-kubeadm.md)
+- [WaitForService](../reference/step-kinds/wait-for-service.md)
 
 ## 4. Prepare the bundle in the connected environment
 
@@ -102,7 +102,7 @@ deck lint --workflow ./workflows/scenarios/apply.yaml
 For planning and diagnostics, also review:
 
 - [Workflow model](../reference/workflow-model.md)
-- [Typed Steps](../reference/typed-steps.md)
+- [Step Kinds](../reference/step-kinds.md)
 - [Workspace Layout](../reference/workspace-layout.md)
 - [Server audit log](../reference/server-audit-log.md)
 - [CLI Reference](../reference/cli.md)

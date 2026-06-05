@@ -114,7 +114,13 @@ func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSche
 	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "typed-steps")); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "typed-steps.md"), schemadoc.RenderTypedStepsPage(groupPages)); err != nil {
+	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "typed-steps.md")); err != nil {
+		return err
+	}
+	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "step-kinds")); err != nil {
+		return err
+	}
+	if err := writeFile(filepath.Join(root, "docs", "reference", "step-kinds.md"), schemadoc.RenderStepKindsPage(groupPages)); err != nil {
 		return err
 	}
 	if err := syncGeneratedBlock(filepath.Join(root, "docs", "reference", "workflow-model.md"), workflowSchemaBlockBegin, workflowSchemaBlockEnd, schemadoc.RenderWorkflowSchemaPartial("../../schemas/deck-workflow.schema.json", workflowSchema, schemadoc.WorkflowMeta())); err != nil {
@@ -129,8 +135,8 @@ func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSche
 	if err := syncGeneratedBlock(filepath.Join(root, "docs", "contributing", "tool-definition-schema.md"), toolDefinitionBlockBegin, toolDefinitionBlockEnd, schemadoc.RenderToolDefinitionSchemaPartial("../../schemas/deck-tooldefinition.schema.json", toolDefinitionSchema, schemadoc.ToolDefinitionMeta())); err != nil {
 		return err
 	}
-	for _, page := range schemadoc.PhasePages(groupPages) {
-		if err := writeFile(filepath.Join(root, "docs", "reference", "typed-steps", page.Phase.Key, page.Page.PageSlug+".md"), schemadoc.RenderTypedStepPhaseGroupPage(page)); err != nil {
+	for _, page := range schemadoc.StepKindPages(groupPages) {
+		if err := writeFile(filepath.Join(root, "docs", "reference", "step-kinds", schemadoc.StepKindSlug(page.Variant.Kind)+".md"), schemadoc.RenderStepKindPage(page)); err != nil {
 			return err
 		}
 	}

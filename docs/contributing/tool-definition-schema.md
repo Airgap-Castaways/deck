@@ -2,7 +2,7 @@
 
 This document covers the `ToolDefinition` manifest contract used by deck's typed tool metadata and generation pipeline.
 
-Use this when changing internal tool-definition contracts, schema generation behavior, or contributor-facing tool metadata. Workflow authors should usually start with [Typed Steps](../reference/typed-steps.md), [Workflow Model](../reference/workflow-model.md), and [Workspace Layout](../reference/workspace-layout.md) instead.
+Use this when changing internal tool-definition contracts, schema generation behavior, or contributor-facing tool metadata. Workflow authors should usually start with [Step Kinds](../reference/step-kinds.md), [Workflow Model](../reference/workflow-model.md), and [Workspace Layout](../reference/workspace-layout.md) instead.
 
 <!-- BEGIN GENERATED:TOOL_DEFINITION_SCHEMA -->
 ## Tool Definition Contract

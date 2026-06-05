@@ -46,4 +46,4 @@ This directory contains JSON Schema files for typed workflow steps.
 - `file.write.schema.json`: `WriteFile` (`public`)
 - `systemd-unit.schema.json`: `WriteSystemdUnit` (`public`)
 
-Use `../../docs/reference/typed-steps.md` for typed step reference, `../../docs/reference/workflow-model.md` and `../../docs/reference/workspace-layout.md` for workflow/component contracts, and `../../docs/contributing/tool-definition-schema.md` for tool-definition details.
+Use `../../docs/reference/step-kinds.md` for step kind reference, `../../docs/reference/workflow-model.md` and `../../docs/reference/workspace-layout.md` for workflow/component contracts, and `../../docs/contributing/tool-definition-schema.md` for tool-definition details.

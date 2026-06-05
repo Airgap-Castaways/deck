@@ -20,6 +20,8 @@ LDFLAGS ?= -X $(BUILDINFO_PKG).Version=$(VERSION) -X $(BUILDINFO_PKG).Commit=$(C
 GENERATED_PATHS := \
 	docs/contributing/tool-definition-schema.md \
 	docs/reference/groups \
+	docs/reference/step-kinds \
+	docs/reference/step-kinds.md \
 	docs/reference/typed-steps \
 	docs/reference/typed-steps.md \
 	docs/reference/workflow-model.md \
