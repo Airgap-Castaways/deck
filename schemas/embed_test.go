@@ -19,7 +19,7 @@ func TestGeneratedStepKindPagesExist(t *testing.T) {
 		if def.Visibility != "public" {
 			continue
 		}
-		page := filepath.Join("..", "docs", "reference", "step-kinds", stepKindDocSlug(def.Kind)+".md")
+		page := filepath.Join("..", "docs", "step-kinds", stepKindDocSlug(def.Kind)+".md")
 		if _, err := os.Stat(page); err != nil {
 			t.Fatalf("step kind page missing for %s: %v", def.Kind, err)
 		}

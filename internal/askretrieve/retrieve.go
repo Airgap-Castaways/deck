@@ -67,7 +67,7 @@ type RetrievalResult struct {
 }
 
 const (
-	exampleDocsGuidesRoot     = "docs/guides/examples/"
+	exampleDocsRoot           = "docs/examples/"
 	exampleTestWorkflowsRoot  = "test/workflows/"
 	exampleTestScenariosRoot  = exampleTestWorkflowsRoot + "scenarios/"
 	exampleTestComponentsRoot = exampleTestWorkflowsRoot + "components/"
@@ -522,7 +522,7 @@ func exampleReferenceChunks(route askintent.Route, lowerPrompt string) []Chunk {
 		return nil
 	}
 	candidates := []string{
-		filepath.Join(root, filepath.FromSlash(strings.TrimSuffix(exampleDocsGuidesRoot, "/"))),
+		filepath.Join(root, filepath.FromSlash(strings.TrimSuffix(exampleDocsRoot, "/"))),
 		filepath.Join(root, filepath.FromSlash(strings.TrimSuffix(exampleTestWorkflowsRoot, "/"))),
 	}
 	out := make([]Chunk, 0, 8)
@@ -585,7 +585,7 @@ func exampleChunkScore(prompt string, path string, content string) int {
 			score += 12
 		}
 	}
-	if strings.HasPrefix(path, exampleDocsGuidesRoot) {
+	if strings.HasPrefix(path, exampleDocsRoot) {
 		score += 6
 	}
 	if strings.HasPrefix(path, exampleTestWorkflowsRoot) {
@@ -633,7 +633,7 @@ func exampleChunkScore(prompt string, path string, content string) int {
 func exampleChunkAllowed(path string, content string) bool {
 	_ = content
 	path = filepath.ToSlash(strings.TrimSpace(path))
-	return strings.HasPrefix(path, exampleDocsGuidesRoot) || strings.HasPrefix(path, exampleTestWorkflowsRoot)
+	return strings.HasPrefix(path, exampleDocsRoot) || strings.HasPrefix(path, exampleTestWorkflowsRoot)
 }
 
 func exampleChunkContent(path string, content string) string {

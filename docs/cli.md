@@ -40,7 +40,7 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 
 `ask` is experimental and ships as part of the standard `deck` binary.
 
-For a task-oriented guide to configuring and using `deck ask`, see `../guides/ask.md`.
+For a task-oriented guide to configuring and using `deck ask`, see [Using deck ask](ask.md).
 
 `ask` routes requests before generation. Explicit authoring and review flags such as `--create`, `--edit`, and `--review` act as hard overrides. Other requests go through LLM-assisted route classification, and ambiguous requests can stop for clarification instead of drifting into generation.
 

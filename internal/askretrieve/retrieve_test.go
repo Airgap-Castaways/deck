@@ -229,7 +229,7 @@ func TestCompressChunkContentDoesNotTrimYAML(t *testing.T) {
 
 func TestExampleChunkScorePrefersRepoNativeCurrentExamples(t *testing.T) {
 	prompt := "create an air-gapped kubeadm prepare and apply workflow with worker join"
-	docsGuide := exampleChunkScore(prompt, "docs/guides/examples/offline-k8s-worker.yaml", "version: v1alpha1\napiVersion: deck/v1alpha1\nkind: JoinKubeadm")
+	docsGuide := exampleChunkScore(prompt, "docs/examples/offline-k8s-worker.yaml", "version: v1alpha1\napiVersion: deck/v1alpha1\nkind: JoinKubeadm")
 	repoNative := exampleChunkScore(prompt, "test/workflows/scenarios/worker-join.yaml", "version: v1alpha1\nkind: JoinKubeadm")
 	if repoNative <= docsGuide {
 		t.Fatalf("expected repo-native workflow example to outrank docs guide example, got repo=%d docs=%d", repoNative, docsGuide)
@@ -237,13 +237,13 @@ func TestExampleChunkScorePrefersRepoNativeCurrentExamples(t *testing.T) {
 }
 
 func TestExampleChunkAllowedKeepsCurrentCanonicalSources(t *testing.T) {
-	if !exampleChunkAllowed("docs/guides/examples/offline-k8s-worker.yaml", "version: v1alpha1\napiVersion: deck/v1alpha1\nkind: JoinKubeadm") {
-		t.Fatalf("expected current docs guide example to remain eligible")
+	if !exampleChunkAllowed("docs/examples/offline-k8s-worker.yaml", "version: v1alpha1\napiVersion: deck/v1alpha1\nkind: JoinKubeadm") {
+		t.Fatalf("expected current docs example to remain eligible")
 	}
 	if !exampleChunkAllowed("test/workflows/scenarios/worker-join.yaml", "version: v1alpha1\nkind: JoinKubeadm") {
 		t.Fatalf("expected repo-native example to remain eligible")
 	}
-	if exampleChunkAllowed("docs/examples/offline-k8s-worker.yaml", "version: v1alpha1\nkind: JoinKubeadm") {
+	if exampleChunkAllowed("docs/legacy-examples/offline-k8s-worker.yaml", "version: v1alpha1\nkind: JoinKubeadm") {
 		t.Fatalf("expected non-canonical example path to be filtered out")
 	}
 }

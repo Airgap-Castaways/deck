@@ -33,7 +33,7 @@ For walkthrough-oriented context, start with [Quick Start](../quick-start.md) an
 Use `deck lint` for schema-level checks:
 
 ```bash
-deck lint --workflow docs/guides/examples/offline-k8s-control-plane.yaml
+deck lint --workflow docs/examples/offline-k8s-control-plane.yaml
 ```
 
 `cases.tsv` is the lightweight example index used by repository maintainers and CI.

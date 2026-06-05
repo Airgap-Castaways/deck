@@ -4,8 +4,22 @@
 
 ## Start here
 
-- **[Guides](guides/README.md)**: Quick start, `deck ask`, operational walkthroughs, and example-oriented docs.
-- **[Reference](reference/README.md)**: CLI lookup, workflow model, schemas, bundle layout, and other technical contracts.
+- **[Quick Start](quick-start.md)**: Create a workspace, lint it, prepare artifacts, build a bundle, and apply locally.
+- **[Using deck ask](ask.md)**: Configure and use `deck ask`, including plan mode and diagnostics.
+- **[Examples](examples/README.md)**: Start from concrete workflow files that can be adapted for site procedures.
+
+## Author Workflows
+
+- **[Workflow Model](workflow-model.md)**: Workflow structure, shared step fields, variables, phases, and validation rules.
+- **[Step Kinds](step-kinds.md)**: Phase and task-oriented reference for choosing and authoring workflow step kinds.
+- **[Workspace Layout](workspace-layout.md)**: Workspace structure and component fragment contracts.
+
+## Operate
+
+- **[CLI Reference](cli.md)**: Command-line usage and flags.
+- **[Apply State](apply-state.md)**: Phase-based apply resume and `--fresh` behavior.
+- **[Bundle Layout](bundle-layout.md)**: Self-contained bundle format.
+- **[Server Audit Log](server-audit-log.md)**: Server audit log record shape.
 
 ## Supporting sections
 
@@ -14,7 +28,7 @@
 
 ## Common paths
 
-- New to deck: start with [Quick Start](guides/quick-start.md)
-- Writing workflows: use [Workflow Model](reference/workflow-model.md)
-- Using AI-assisted authoring: read [deck ask](guides/ask.md)
-- Looking up exact command syntax: use [CLI Reference](reference/cli.md)
+- New to deck: start with [Quick Start](quick-start.md)
+- Planning an offline Kubernetes workflow: read [Offline Kubernetes Tutorial](offline-kubernetes.md)
+- Writing workflows: use [Workflow Model](workflow-model.md)
+- Looking up exact command syntax: use [CLI Reference](cli.md)

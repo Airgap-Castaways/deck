@@ -37,7 +37,7 @@ deck bundle build --out ./bundle.tar
 deck apply
 ```
 
-For a detailed walkthrough, start with the [Quick Start Guide](docs/guides/quick-start.md).
+For a detailed walkthrough, start with the [Quick Start Guide](docs/quick-start.md).
 
 ## Core Features
 
@@ -80,13 +80,13 @@ source <(deck completion zsh)  # for zsh
 deck completion fish | source  # for fish
 ```
 
-To make it persistent, add the relevant command to your shell's startup file (e.g., `~/.bashrc` or `~/.zshrc`). For detailed instructions for all supported shells, see the [CLI Reference](docs/reference/cli.md#shell-completion).
+To make it persistent, add the relevant command to your shell's startup file (e.g., `~/.bashrc` or `~/.zshrc`). For detailed instructions for all supported shells, see the [CLI Reference](docs/cli.md#shell-completion).
 
 ## Documentation
 
-- [Guides](docs/guides/README.md)
 - [Core Concepts](docs/core-concepts/README.md)
-- [Reference](docs/reference/README.md)
+- [Documentation](docs/README.md)
+- [Examples](docs/examples/README.md)
 - [Contributing](docs/contributing/README.md)
 
 ## License

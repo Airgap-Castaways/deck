@@ -120,23 +120,29 @@ func writeGeneratedSchemaDocs(root string, workflowSchema, componentFragmentSche
 	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "step-kinds")); err != nil {
 		return err
 	}
-	if err := writeFile(filepath.Join(root, "docs", "reference", "step-kinds.md"), schemadoc.RenderStepKindsPage(groupPages)); err != nil {
+	if err := removeDirIfExists(filepath.Join(root, "docs", "reference", "step-kinds.md")); err != nil {
 		return err
 	}
-	if err := syncGeneratedBlock(filepath.Join(root, "docs", "reference", "workflow-model.md"), workflowSchemaBlockBegin, workflowSchemaBlockEnd, schemadoc.RenderWorkflowSchemaPartial("../../schemas/deck-workflow.schema.json", workflowSchema, schemadoc.WorkflowMeta())); err != nil {
+	if err := removeDirIfExists(filepath.Join(root, "docs", "step-kinds")); err != nil {
 		return err
 	}
-	if err := syncGeneratedBlock(filepath.Join(root, "docs", "reference", "workflow-model.md"), systemVariablesBlockBegin, systemVariablesBlockEnd, schemadoc.RenderSystemVariablesPartial()); err != nil {
+	if err := writeFile(filepath.Join(root, "docs", "step-kinds.md"), schemadoc.RenderStepKindsPage(groupPages)); err != nil {
 		return err
 	}
-	if err := syncGeneratedBlock(filepath.Join(root, "docs", "reference", "workspace-layout.md"), componentFragmentBlockBegin, componentFragmentBlockEnd, schemadoc.RenderComponentFragmentSchemaPartial("../../schemas/deck-component-fragment.schema.json", componentFragmentSchema, schemadoc.ComponentFragmentMeta())); err != nil {
+	if err := syncGeneratedBlock(filepath.Join(root, "docs", "workflow-model.md"), workflowSchemaBlockBegin, workflowSchemaBlockEnd, schemadoc.RenderWorkflowSchemaPartial("../schemas/deck-workflow.schema.json", workflowSchema, schemadoc.WorkflowMeta())); err != nil {
+		return err
+	}
+	if err := syncGeneratedBlock(filepath.Join(root, "docs", "workflow-model.md"), systemVariablesBlockBegin, systemVariablesBlockEnd, schemadoc.RenderSystemVariablesPartial()); err != nil {
+		return err
+	}
+	if err := syncGeneratedBlock(filepath.Join(root, "docs", "workspace-layout.md"), componentFragmentBlockBegin, componentFragmentBlockEnd, schemadoc.RenderComponentFragmentSchemaPartial("../schemas/deck-component-fragment.schema.json", componentFragmentSchema, schemadoc.ComponentFragmentMeta())); err != nil {
 		return err
 	}
 	if err := syncGeneratedBlock(filepath.Join(root, "docs", "contributing", "tool-definition-schema.md"), toolDefinitionBlockBegin, toolDefinitionBlockEnd, schemadoc.RenderToolDefinitionSchemaPartial("../../schemas/deck-tooldefinition.schema.json", toolDefinitionSchema, schemadoc.ToolDefinitionMeta())); err != nil {
 		return err
 	}
 	for _, page := range schemadoc.StepKindPages(groupPages) {
-		if err := writeFile(filepath.Join(root, "docs", "reference", "step-kinds", schemadoc.StepKindSlug(page.Variant.Kind)+".md"), schemadoc.RenderStepKindPage(page)); err != nil {
+		if err := writeFile(filepath.Join(root, "docs", "step-kinds", schemadoc.StepKindSlug(page.Variant.Kind)+".md"), schemadoc.RenderStepKindPage(page)); err != nil {
 			return err
 		}
 	}

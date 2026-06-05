@@ -18,9 +18,9 @@ For kubeadm authoring, the most reliable starter prompt today is explicit about 
 
 Use `--create` or `--edit` when you want to make authoring intent explicit. Use `deck ask plan` when you want a saved plan artifact without writing workflow files yet.
 
-For command-level syntax and subcommands, see [CLI Reference](../reference/cli.md).
+For command-level syntax and subcommands, see [CLI Reference](cli.md).
 
-Contributors working on the internal pipeline should see [Ask Agent Runtime](../contributing/ask-agent-runtime.md). For background on why the runtime looks this way, see [Ask History](../contributing/ask-history.md).
+Contributors working on the internal pipeline should see [Ask Agent Runtime](contributing/ask-agent-runtime.md). For background on why the runtime looks this way, see [Ask History](contributing/ask-history.md).
 
 ## How it works
 

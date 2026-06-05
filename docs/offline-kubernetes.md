@@ -32,18 +32,18 @@ Use steps and phases to show what the procedure is doing. Typical boundaries in 
 - kubeadm bootstrap or join
 - verification
 
-Prefer typed steps where possible. `Command` is available for the edges that are not modeled yet. For shared step fields such as `when`, `parallelGroup`, `register`, `metadata`, `retry`, and `timeout`, use the [Step Envelope Contract](../reference/workflow-model.md#step-envelope-contract).
+Prefer typed steps where possible. `Command` is available for the edges that are not modeled yet. For shared step fields such as `when`, `parallelGroup`, `register`, `metadata`, `retry`, and `timeout`, use the [Step Envelope Contract](workflow-model.md#step-envelope-contract).
 
 Useful group entrypoints for Kubernetes workflows:
 
-- [DownloadPackage](../reference/step-kinds/download-package.md)
-- [DownloadImage](../reference/step-kinds/download-image.md)
-- [CheckHost](../reference/step-kinds/check-host.md)
-- [InstallPackage](../reference/step-kinds/install-package.md)
-- [WriteContainerdConfig](../reference/step-kinds/write-containerd-config.md)
-- [ManageService](../reference/step-kinds/manage-service.md)
-- [InitKubeadm](../reference/step-kinds/init-kubeadm.md)
-- [WaitForService](../reference/step-kinds/wait-for-service.md)
+- [DownloadPackage](step-kinds/download-package.md)
+- [DownloadImage](step-kinds/download-image.md)
+- [CheckHost](step-kinds/check-host.md)
+- [InstallPackage](step-kinds/install-package.md)
+- [WriteContainerdConfig](step-kinds/write-containerd-config.md)
+- [ManageService](step-kinds/manage-service.md)
+- [InitKubeadm](step-kinds/init-kubeadm.md)
+- [WaitForService](step-kinds/wait-for-service.md)
 
 ## 4. Prepare the bundle in the connected environment
 
@@ -101,8 +101,8 @@ deck lint --workflow ./workflows/scenarios/apply.yaml
 
 For planning and diagnostics, also review:
 
-- [Workflow model](../reference/workflow-model.md)
-- [Step Kinds](../reference/step-kinds.md)
-- [Workspace Layout](../reference/workspace-layout.md)
-- [Server audit log](../reference/server-audit-log.md)
-- [CLI Reference](../reference/cli.md)
+- [Workflow model](workflow-model.md)
+- [Step Kinds](step-kinds.md)
+- [Workspace Layout](workspace-layout.md)
+- [Server audit log](server-audit-log.md)
+- [CLI Reference](cli.md)

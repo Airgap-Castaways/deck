@@ -17,7 +17,7 @@ Public workflow step kinds in `deck` use a comment-driven source-of-truth model.
 For step kind taxonomy, keep these roles distinct:
 
 - `kind`: concrete public step identity such as `WriteFile` or `CheckKubernetesCluster`
-- `group`: public task taxonomy used to organize step kind docs under `docs/reference/step-kinds.md`
+- `group`: public task taxonomy used to organize step kind docs under `docs/step-kinds.md`
 - `family`: internal registration/codegen taxonomy that groups related kinds without driving public navigation directly
 
 Generated contract sections for workflow and component fragment docs, plus the contributor-facing tool-definition schema doc, remain centrally declared in `internal/schemadoc/metadata.go` because they document authoring document formats rather than individual typed step kinds.

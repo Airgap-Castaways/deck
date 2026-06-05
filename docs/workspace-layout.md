@@ -45,7 +45,7 @@ Components are **Component Fragments**—reusable sets of steps that are importe
 
 Reference for reusable workflow component fragments located under `workflows/components/`.
 
-- schema: `../../schemas/deck-component-fragment.schema.json`
+- schema: `../schemas/deck-component-fragment.schema.json`
 
 ##### Example
 

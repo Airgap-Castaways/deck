@@ -23,7 +23,7 @@ Phase imports resolve from `workflows/components/`. Write component-relative pat
 
 Top-level workflow authoring reference for deck workflows.
 
-- schema: `../../schemas/deck-workflow.schema.json`
+- schema: `../schemas/deck-workflow.schema.json`
 
 ### Example
 
