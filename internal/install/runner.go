@@ -10,17 +10,20 @@ import (
 	"github.com/Airgap-Castaways/deck/internal/batchrun"
 	"github.com/Airgap-Castaways/deck/internal/bundle"
 	"github.com/Airgap-Castaways/deck/internal/config"
+	"github.com/Airgap-Castaways/deck/internal/operatorio"
 	"github.com/Airgap-Castaways/deck/internal/workflowcontext"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
 type RunOptions struct {
-	BundleRoot string
-	StatePath  string
-	Context    workflowcontext.Context
-	EventSink  StepEventSink
-	Fresh      bool
-	kubeadm    kubeadmExecutor
+	BundleRoot     string
+	StatePath      string
+	Context        workflowcontext.Context
+	EventSink      StepEventSink
+	Fresh          bool
+	Interaction    operatorio.Interface
+	NonInteractive bool
+	kubeadm        kubeadmExecutor
 }
 
 const (
@@ -77,6 +80,8 @@ const (
 	errCodeInstallWaitPathType           = "E_INSTALL_WAITPATH_TYPE_INVALID"
 	errCodeInstallWaitPathPoll           = "E_INSTALL_WAITPATH_POLL_INTERVAL_INVALID"
 	errCodeInstallWaitPathTimeout        = "E_INSTALL_WAITPATH_TIMEOUT"
+	errCodeInstallInteraction            = "E_INSTALL_INTERACTION_FAILED"
+	errCodeInstallInteractionUnsupported = "E_INSTALL_INTERACTION_UNSUPPORTED"
 	errCodeInstallSourceNotFound         = "E_INSTALL_SOURCE_NOT_FOUND"
 	errCodeInstallChecksumMismatch       = "E_INSTALL_CHECKSUM_MISMATCH"
 	errCodeInstallOfflineBlocked         = "E_INSTALL_OFFLINE_POLICY_BLOCK"
@@ -126,6 +131,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 			return err
 		}
 		st = loadedState
+		resetCompletedPhasesForMissingSecrets(st)
 	}
 	completed := make(map[string]bool, len(st.CompletedPhases))
 	for _, id := range st.CompletedPhases {
@@ -136,31 +142,39 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	for k, v := range st.RuntimeVars {
 		runtimeVars[k] = v
 	}
+	runtimeSecrets := cloneRuntimeSecrets(st.RuntimeSecrets)
 	runtimeVars["host"] = detectHostFacts()
-	execCtx := ExecutionContext{BundleRoot: bundleRoot, StatePath: statePath, Context: opts.Context, kubeadm: withKubeadmExecutor(opts.kubeadm)}
+	interaction := opts.Interaction
+	if interaction == nil {
+		interaction = &operatorio.Terminal{NonInteractive: opts.NonInteractive}
+	}
+	execCtx := ExecutionContext{BundleRoot: bundleRoot, StatePath: statePath, Context: opts.Context, Interaction: interaction, kubeadm: withKubeadmExecutor(opts.kubeadm)}
 	ctxData := execCtx.RenderContext()
 	for _, phase := range phases {
 		st.Phase = phase.Name
 		if completed[phase.Name] {
+			emitPhaseEvent(opts.EventSink, phase.Name, "skipped", "completed", "")
+			emitCompletedPhaseStepSkipped(opts.EventSink, phase)
 			continue
 		}
+		emitPhaseEvent(opts.EventSink, phase.Name, "started", "", "")
 		for _, batch := range workflowexec.BuildPhaseBatches(phase) {
-			if err := executeInstallBatch(ctx, wf, runtimeVars, ctxData, execCtx, batch, opts.EventSink); err != nil {
+			if err := executeInstallBatch(ctx, wf, runtimeVars, runtimeSecrets, ctxData, execCtx, batch, opts.EventSink); err != nil {
 				st.FailedPhase = phase.Name
-				st.Error = err.Error()
-				st.RuntimeVars = runtimeVars
-				if saveErr := SaveState(statePath, st); saveErr != nil {
+				st.Error = maskSecrets(err.Error(), runtimeSecretValues(runtimeVars, runtimeSecrets))
+				emitPhaseEvent(opts.EventSink, phase.Name, "failed", "", "")
+				if saveErr := SaveState(statePath, sanitizedState(st, runtimeVars, runtimeSecrets, false)); saveErr != nil {
 					return errors.Join(err, fmt.Errorf("save failed apply state: %w", saveErr))
 				}
-				return err
+				return maskError(err, runtimeSecretValues(runtimeVars, runtimeSecrets))
 			}
 		}
 		st.CompletedPhases = append(st.CompletedPhases, phase.Name)
 		completed[phase.Name] = true
 		st.FailedPhase = ""
 		st.Error = ""
-		st.RuntimeVars = runtimeVars
-		if err := SaveState(statePath, st); err != nil {
+		emitPhaseEvent(opts.EventSink, phase.Name, "succeeded", "", "")
+		if err := SaveState(statePath, sanitizedState(st, runtimeVars, runtimeSecrets, false)); err != nil {
 			return err
 		}
 	}
@@ -168,8 +182,7 @@ func Run(ctx context.Context, wf *config.Workflow, opts RunOptions) error {
 	st.Phase = "completed"
 	st.FailedPhase = ""
 	st.Error = ""
-	st.RuntimeVars = runtimeVars
-	if err := SaveState(statePath, st); err != nil {
+	if err := SaveState(statePath, sanitizedState(st, runtimeVars, runtimeSecrets, true)); err != nil {
 		return err
 	}
 
@@ -188,15 +201,18 @@ type installBatchResult struct {
 
 type batchEventContext = batchrun.EventContext
 
-func executeInstallBatch(ctx context.Context, wf *config.Workflow, runtimeVars map[string]any, ctxData map[string]any, execCtx ExecutionContext, batch workflowexec.StepBatch, sink StepEventSink) error {
+func executeInstallBatch(ctx context.Context, wf *config.Workflow, runtimeVars map[string]any, runtimeSecrets map[string]RuntimeSecret, ctxData map[string]any, execCtx ExecutionContext, batch workflowexec.StepBatch, sink StepEventSink) error {
 	if len(batch.Steps) == 0 {
 		return nil
 	}
 	snapshot := batchrun.CloneRuntimeVars(runtimeVars)
+	secretValues := runtimeSecretValues(snapshot, runtimeSecrets)
 	batchCtx := batchrun.NewEventContext(batch)
 	emitBatchEvent(sink, batchCtx, batch.PhaseName, "started", "")
 	results, err := batchrun.Execute(ctx, batch, func(stepCtx context.Context, step config.Step) (installBatchResult, error) {
-		return executeInstallStep(stepCtx, wf, snapshot, ctxData, execCtx, batch.PhaseName, batchCtx, step, sink)
+		stepExecCtx := execCtx
+		stepExecCtx.SecretValues = secretValues
+		return executeInstallStep(withSecretValues(stepCtx, secretValues), wf, snapshot, ctxData, stepExecCtx, batch.PhaseName, batchCtx, step, sink)
 	})
 	if err != nil {
 		emitBatchEvent(sink, batchCtx, batch.PhaseName, "failed", failedInstallBatchStep(batch, results))
@@ -206,13 +222,39 @@ func executeInstallBatch(ctx context.Context, wf *config.Workflow, runtimeVars m
 		if results[i].skipped {
 			continue
 		}
-		if err := applyRegister(step, results[i].rendered, results[i].outputs, runtimeVars); err != nil {
+		if err := applyRegisterWithSecrets(step, batch.PhaseName, results[i].rendered, results[i].outputs, runtimeVars, runtimeSecrets); err != nil {
 			emitBatchEvent(sink, batchCtx, batch.PhaseName, "failed", step.ID)
 			return fmt.Errorf("step %s (%s): %w", step.ID, step.Kind, err)
 		}
 	}
 	emitBatchEvent(sink, batchCtx, batch.PhaseName, "succeeded", "")
 	return nil
+}
+
+func emitPhaseEvent(sink StepEventSink, phaseName string, status string, reason string, failedStep string) {
+	if sink == nil {
+		return
+	}
+	event := StepEvent{Event: "phase_" + strings.TrimSpace(status), Phase: phaseName, Status: status, Reason: strings.TrimSpace(reason), FailedStep: strings.TrimSpace(failedStep)}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if status == "started" {
+		event.StartedAt = now
+	} else {
+		event.EndedAt = now
+	}
+	emitStepEvent(sink, event)
+}
+
+func emitCompletedPhaseStepSkipped(sink StepEventSink, phase config.Phase) {
+	if sink == nil {
+		return
+	}
+	for _, batch := range workflowexec.BuildPhaseBatches(phase) {
+		batchCtx := batchrun.NewEventContext(batch)
+		for _, step := range batch.Steps {
+			emitStepEvent(sink, withBatchContext(batchCtx, StepEvent{Event: "step_skipped", StepID: step.ID, Kind: step.Kind, Phase: phase.Name, Status: "skipped", Reason: "completed"}))
+		}
+	}
 }
 
 func executeInstallStep(ctx context.Context, wf *config.Workflow, runtimeSnapshot map[string]any, ctxData map[string]any, execCtx ExecutionContext, phaseName string, batchCtx batchEventContext, step config.Step, sink StepEventSink) (installBatchResult, error) {
@@ -239,7 +281,7 @@ func executeInstallStep(ctx context.Context, wf *config.Workflow, runtimeSnapsho
 		rendered, renderErr := workflowexec.RenderSpec(step.Spec, wf, runtimeSnapshot, ctxData)
 		if renderErr != nil {
 			execErr = fmt.Errorf("render spec template: %w", renderErr)
-			emitStepEvent(sink, withBatchContext(batchCtx, StepEvent{Event: "step_failed", StepID: step.ID, Kind: step.Kind, Phase: phaseName, Status: "failed", Attempt: i + 1, StartedAt: startedAt, EndedAt: time.Now().UTC().Format(time.RFC3339Nano), Error: execErr.Error()}))
+			emitStepEvent(sink, withBatchContext(batchCtx, StepEvent{Event: "step_failed", StepID: step.ID, Kind: step.Kind, Phase: phaseName, Status: "failed", Attempt: i + 1, StartedAt: startedAt, EndedAt: time.Now().UTC().Format(time.RFC3339Nano), Error: maskSecrets(execErr.Error(), execCtx.SecretValues)}))
 			break
 		}
 		key, keyErr := workflowexec.ResolveStepTypeKey(wf.Version, step.APIVersion, step.Kind)
@@ -256,11 +298,14 @@ func executeInstallStep(ctx context.Context, wf *config.Workflow, runtimeSnapsho
 		}
 		endedAt := time.Now().UTC().Format(time.RFC3339Nano)
 		if execErr != nil {
-			emitStepEvent(sink, withBatchContext(batchCtx, StepEvent{Event: "step_failed", StepID: step.ID, Kind: step.Kind, Phase: phaseName, Status: "failed", Attempt: i + 1, StartedAt: startedAt, EndedAt: endedAt, Error: execErr.Error()}))
+			emitStepEvent(sink, withBatchContext(batchCtx, StepEvent{Event: "step_failed", StepID: step.ID, Kind: step.Kind, Phase: phaseName, Status: "failed", Attempt: i + 1, StartedAt: startedAt, EndedAt: endedAt, Error: maskSecrets(execErr.Error(), execCtx.SecretValues)}))
 		}
 		if ctx.Err() != nil {
 			break
 		}
+	}
+	if masked := maskSecrets(errorString(execErr), execCtx.SecretValues); masked != errorString(execErr) {
+		return installBatchResult{}, fmt.Errorf("step %s (%s): %s", step.ID, step.Kind, masked)
 	}
 	return installBatchResult{}, fmt.Errorf("step %s (%s): %w", step.ID, step.Kind, execErr)
 }

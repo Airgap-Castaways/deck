@@ -17,7 +17,7 @@ import (
 
 func TestSaveStoredAndLoadStored(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	settings := Settings{Provider: "openrouter", Model: "anthropic/claude-3.5-sonnet", APIKey: "stored-api-value", OAuthToken: "stored-session-value", Endpoint: "https://example.invalid/v1", LogLevel: "trace", MCP: MCP{Enabled: true, Servers: []MCPServer{{Name: "web-search", RunCommand: "node", Args: []string{"mcp.js"}}}}}
+	settings := Settings{Provider: "openrouter", Model: "anthropic/claude-3.5-sonnet", APIKey: "stored-api-value", OAuthToken: "stored-session-value", Endpoint: "https://example.invalid/v1", MCP: MCP{Enabled: true, Servers: []MCPServer{{Name: "web-search", RunCommand: "node", Args: []string{"mcp.js"}}}}}
 	if err := SaveStored(settings); err != nil {
 		t.Fatalf("save stored: %v", err)
 	}
@@ -80,8 +80,8 @@ func TestResolveEffectivePrecedence(t *testing.T) {
 	if !effective.MCP.Enabled || len(effective.MCP.Servers) != 1 {
 		t.Fatalf("expected stored mcp config in effective settings: %#v", effective)
 	}
-	if effective.LogLevel != "basic" {
-		t.Fatalf("expected default log level to be basic, got %#v", effective)
+	if effective.LogLevel != "off" {
+		t.Fatalf("expected default log level to be off, got %#v", effective)
 	}
 }
 
@@ -224,14 +224,6 @@ func TestResolveRuntimeSessionRefreshesExpiredOpenAISession(t *testing.T) {
 	}
 	if session.AccessToken != "fresh-access-value" || source != "session" || status != "valid" {
 		t.Fatalf("unexpected refreshed runtime session: %#v %q %q", session, source, status)
-	}
-}
-
-func TestNormalizeLogLevel(t *testing.T) {
-	for input, want := range map[string]string{"": "basic", "basic": "basic", "DEBUG": "debug", "trace": "trace", "loud": "basic"} {
-		if got := normalizeLogLevel(input); got != want {
-			t.Fatalf("normalizeLogLevel(%q) = %q, want %q", input, got, want)
-		}
 	}
 }
 

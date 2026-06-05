@@ -11,8 +11,8 @@ type askProgress struct {
 	enabled bool
 }
 
-func newAskProgress(writer io.Writer) askProgress {
-	return askProgress{writer: writer, enabled: writer != nil && writer != io.Discard}
+func newAskProgress(writer io.Writer, logLevel string) askProgress {
+	return askProgress{writer: writer, enabled: writer != nil && writer != io.Discard && shouldLogAsk(logLevel, "basic")}
 }
 
 func (p askProgress) status(format string, args ...any) {

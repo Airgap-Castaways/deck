@@ -85,6 +85,9 @@ func stageRuntimeBinariesWithContext(ctx context.Context, preparedRootAbs string
 	if err != nil {
 		return err
 	}
+	if err := emitDiagnosticEvent(opts, 3, logs.CLIEvent{Level: "debug", Component: "prepare", Event: "runtime_binary_plan", Attrs: map[string]any{"source": source, "release_version": displayValueOrDash(releaseVersion), "targets": len(targets), "target_keys": joinOrDash(runtimeBinaryTargetKeys(targets))}}); err != nil {
+		return err
+	}
 	for _, target := range targets {
 		raw, err := loadRuntimeBinary(ctx, opts, deps, source, releaseVersion, target)
 		if err != nil {
@@ -99,6 +102,17 @@ func stageRuntimeBinariesWithContext(ctx context.Context, preparedRootAbs string
 		}
 	}
 	return nil
+}
+
+func runtimeBinaryTargetKeys(targets []runtimeBinaryTarget) []string {
+	if len(targets) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(targets))
+	for _, target := range targets {
+		keys = append(keys, target.OS+"/"+target.Arch)
+	}
+	return keys
 }
 
 func dryRunRuntimeBinaryWrites(preparedRootAbs string, opts Options) ([]string, error) {

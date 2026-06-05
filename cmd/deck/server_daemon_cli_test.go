@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -43,7 +44,54 @@ func TestBuildServerDaemonArgsEscapesWorkingDirectoryPercents(t *testing.T) {
 	}
 }
 
+func TestBuildServerProcessDaemonArgsRunsForegroundServer(t *testing.T) {
+	args := buildServerProcessDaemonArgs(serverUpOptions{
+		root:          "/tmp/content",
+		addr:          "127.0.0.1:18080",
+		auditMaxSize:  12,
+		auditMaxFiles: 3,
+		tlsCert:       "/tmp/cert.pem",
+		tlsKey:        "/tmp/key.pem",
+		tlsSelfSigned: true,
+	})
+	want := []string{
+		"server", "up",
+		"--root", "/tmp/content",
+		"--addr", "127.0.0.1:18080",
+		"--audit-max-size-mb", "12",
+		"--audit-max-files", "3",
+		"--tls-cert", "/tmp/cert.pem",
+		"--tls-key", "/tmp/key.pem",
+		"--tls-self-signed",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("unexpected process daemon args:\n got: %#v\nwant: %#v", args, want)
+	}
+	if strings.Contains(strings.Join(args, " "), "--daemon") {
+		t.Fatalf("process daemon child must not pass --daemon: %#v", args)
+	}
+}
+
+func TestServerProcessDaemonStatePathsUseStateHome(t *testing.T) {
+	stateHome := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateHome)
+
+	paths, err := serverProcessDaemonStatePaths("deck-server.service")
+	if err != nil {
+		t.Fatalf("state paths failed: %v", err)
+	}
+	if got, want := paths.pidPath, filepath.Join(stateHome, "deck", "server", "deck-server.pid"); got != want {
+		t.Fatalf("unexpected pid path: got %q want %q", got, want)
+	}
+	if got, want := paths.logPath, filepath.Join(stateHome, "deck", "server", "deck-server.log"); got != want {
+		t.Fatalf("unexpected log path: got %q want %q", got, want)
+	}
+}
+
 func TestServerUpDaemonReportsSystemdRunPropertyFailures(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("systemd daemon path is Linux-only")
+	}
 	root := t.TempDir()
 	binDir := filepath.Join(t.TempDir(), "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {

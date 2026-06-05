@@ -1,0 +1,117 @@
+{
+  "$id": "https://deck.local/schemas/tools/input.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Ask the local operator for a string value.",
+  "properties": {
+    "apiVersion": {
+      "const": "deck/v1alpha1",
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    },
+    "kind": {
+      "const": "Input"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "parallelGroup": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "register": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      },
+      "type": "object"
+    },
+    "retry": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "spec": {
+      "$id": "https://github.com/Airgap-Castaways/deck/internal/stepspec/input",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "secret": {
+                "const": true
+              }
+            },
+            "required": [
+              "secret"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "default"
+              ]
+            }
+          }
+        }
+      ],
+      "properties": {
+        "default": {
+          "description": "Default value used for empty input and non-interactive mode.",
+          "examples": [
+            "192.0.2.10"
+          ],
+          "type": "string"
+        },
+        "message": {
+          "description": "Prompt shown to the local operator.",
+          "examples": [
+            "Node advertise address"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "description": "Require a non-empty value. Defaults to `true`.",
+          "examples": [
+            "true"
+          ],
+          "type": "boolean"
+        },
+        "secret": {
+          "default": false,
+          "description": "Treat the value as secret. Secret values require `register`, are available to later steps in memory, and are not persisted in state.",
+          "examples": [
+            "false"
+          ],
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "timeout": {
+      "pattern": "^[0-9]+(ms|s|m|h)$",
+      "type": "string"
+    },
+    "when": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "kind",
+    "spec"
+  ],
+  "title": "InputStep",
+  "type": "object",
+  "x-deck-visibility": "public"
+}

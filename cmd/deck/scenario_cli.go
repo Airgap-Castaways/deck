@@ -56,7 +56,16 @@ func newListCommand(env *cliEnv) *cobra.Command {
 	return cmd
 }
 
-func executeList(env *cliEnv, ctx context.Context, source, output string) error {
+func executeList(env *cliEnv, ctx context.Context, source, output string) (err error) {
+	started := time.Now().UTC()
+	entries := []scenarioEntry{}
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "failed"
+		}
+		_ = env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "list", Event: "list_completed", Attrs: map[string]any{"status": status, "duration_ms": time.Since(started).Milliseconds(), "entries": len(entries), "local_entries": countScenarioSource(entries, scenarioSourceLocal), "server_entries": countScenarioSource(entries, scenarioSourceServer)}})
+	}()
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
@@ -72,11 +81,14 @@ func executeList(env *cliEnv, ctx context.Context, source, output string) error 
 		return err
 	}
 
-	entries, err := discoverScenarioEntries(env, ctx, resolvedSource)
+	entries, err = discoverScenarioEntries(env, ctx, resolvedSource)
 	if err != nil {
 		return err
 	}
 	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{Component: "list", Event: "list_loaded", Attrs: map[string]any{"entries": len(entries)}}); err != nil {
+		return err
+	}
+	if err := logScenarioEntries(env, entries); err != nil {
 		return err
 	}
 
@@ -105,6 +117,7 @@ func discoverScenarioEntries(env *cliEnv, ctx context.Context, source string) ([
 			}
 			_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "local_skipped", Attrs: map[string]any{"error": err}})
 		} else {
+			_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "local_loaded", Attrs: map[string]any{"entries": len(localEntries)}})
 			entries = append(entries, localEntries...)
 		}
 	}
@@ -125,6 +138,7 @@ func discoverScenarioEntries(env *cliEnv, ctx context.Context, source string) ([
 				}
 				_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "server_lookup_failed", Attrs: map[string]any{"server": serverURL, "error": err}})
 			} else {
+				_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "server_loaded", Attrs: map[string]any{"server": serverURL, "entries": len(serverEntries)}})
 				entries = append(entries, serverEntries...)
 			}
 		case source == scenarioSourceAll:
@@ -144,6 +158,26 @@ func discoverScenarioEntries(env *cliEnv, ctx context.Context, source string) ([
 		return entries[i].Workflow < entries[j].Workflow
 	})
 	return entries, nil
+}
+
+func logScenarioEntries(env *cliEnv, entries []scenarioEntry) error {
+	entryCount := len(entries)
+	for idx, entry := range entries {
+		if err := env.verboseCLIEvent(3, ctrllogs.CLIEvent{Level: "debug", Component: "list", Event: "scenario_entry", Attrs: map[string]any{"entry_index": idx + 1, "entry_count": entryCount, "source": entry.Source, "name": entry.Name, "workflow": entry.Workflow}}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func countScenarioSource(entries []scenarioEntry, source string) int {
+	count := 0
+	for _, entry := range entries {
+		if entry.Source == source {
+			count++
+		}
+	}
+	return count
 }
 
 func discoverLocalScenarioEntries(root string) ([]scenarioEntry, error) {

@@ -8,8 +8,19 @@ import (
 
 func newCompletionCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:                   "completion <bash|zsh|fish|powershell>",
-		Short:                 "Generate shell completion scripts",
+		Use:   "completion <bash|zsh|fish|powershell>",
+		Short: "Generate shell completion scripts",
+		Long: `Generate shell completion scripts.
+
+Immediate sourcing:
+  bash: source <(deck completion bash)
+  zsh:  source <(deck completion zsh)
+  fish: deck completion fish | source
+
+Persistent setup:
+  bash: add 'source <(deck completion bash)' to ~/.bashrc
+  zsh:  add 'source <(deck completion zsh)' to ~/.zshrc
+  fish: deck completion fish > ~/.config/fish/completions/deck.fish`,
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {

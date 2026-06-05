@@ -296,19 +296,18 @@ When the request still has blockers or unresolved clarifications, `deck ask` may
 
 ## Diagnostics and troubleshooting
 
-`ask.logLevel` controls terminal diagnostics on stderr:
+Global `--v=<n>` controls terminal diagnostics on stderr:
 
-- `basic`: route and provider summary
-- `debug`: `basic` plus the user command and MCP events
-- `trace`: `debug` plus classifier and route prompt text
+- `--v=0`: no ask diagnostics
+- `--v=1`: route, provider, and progress summary on stderr
+- `--v=2`: route/provider summary plus the user command and MCP events
+- `--v=3`: debug logs plus classifier and route prompt text
 
-Set it with:
+Use trace-level diagnostics when you need to inspect route selection, clarification behavior, or external evidence setup:
 
 ```bash
-deck ask config set --log-level trace
+deck ask --v=3 "review this workspace"
 ```
-
-Use `trace` when you need to inspect route selection, clarification behavior, or external evidence setup.
 
 For external evidence setup, `deck ask config health` is the quickest way to distinguish:
 

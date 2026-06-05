@@ -37,6 +37,7 @@ type ApplyCommandOptions struct {
 	SelectedPhase  string
 	Fresh          bool
 	DryRun         bool
+	NonInteractive bool
 	VarOverrides   map[string]any
 	VarsFiles      []string
 	Hostname       string
@@ -44,6 +45,7 @@ type ApplyCommandOptions struct {
 	Verbosef       func(level int, format string, args ...any) error
 	StdoutPrintf   func(format string, args ...any) error
 	StdoutPrintln  func(args ...any) error
+	InvocationID   string
 	AdditionalSink install.StepEventSink
 	NewRunLogger   func(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (RunLogger, error)
 }
@@ -133,9 +135,11 @@ func RunApplyCommand(ctx context.Context, opts ApplyCommandOptions) error {
 		WorkflowSource: strings.TrimSpace(opts.WorkflowSource),
 		Scenario:       strings.TrimSpace(opts.Scenario),
 		DryRun:         opts.DryRun,
+		NonInteractive: opts.NonInteractive,
 		Verbosef:       opts.Verbosef,
 		StdoutPrintf:   opts.StdoutPrintf,
 		StdoutPrintln:  opts.StdoutPrintln,
+		InvocationID:   strings.TrimSpace(opts.InvocationID),
 		AdditionalSink: opts.AdditionalSink,
 		NewRunLogger:   opts.NewRunLogger,
 	})

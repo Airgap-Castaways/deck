@@ -14,6 +14,7 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.12.0
+	golang.org/x/term v0.43.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20230803162519-f966b187b2e5
 	gopkg.in/yaml.v3 v3.0.1
 )

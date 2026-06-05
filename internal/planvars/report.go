@@ -55,6 +55,7 @@ type PlannedRuntimeVar struct {
 	Step   string `json:"step"`
 	Output string `json:"output"`
 	Phase  string `json:"phase,omitempty"`
+	Secret bool   `json:"secret,omitempty"`
 }
 
 func Execute(ctx context.Context, opts Options) error {
@@ -268,11 +269,20 @@ func plannedRuntimeVars(wf *config.Workflow) []PlannedRuntimeVar {
 			}
 			slices.Sort(keys)
 			for _, key := range keys {
-				planned = append(planned, PlannedRuntimeVar{Key: key, Step: step.ID, Output: step.Register[key], Phase: phase.Name})
+				output := step.Register[key]
+				planned = append(planned, PlannedRuntimeVar{Key: key, Step: step.ID, Output: output, Phase: phase.Name, Secret: plannedRuntimeSecret(step, output)})
 			}
 		}
 	}
 	return planned
+}
+
+func plannedRuntimeSecret(step config.Step, output string) bool {
+	if step.Kind != "Input" || output != "value" {
+		return false
+	}
+	secret, _ := step.Spec["secret"].(bool)
+	return secret
 }
 
 func cloneMap(input map[string]any) map[string]any {
@@ -328,6 +338,11 @@ func writeTextReport(stdoutPrintf func(format string, args ...any) error, report
 		}
 		if err := stdoutPrintf("      output: %s\n", planned.Output); err != nil {
 			return err
+		}
+		if planned.Secret {
+			if err := stdoutPrintf("      secret: true\n"); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

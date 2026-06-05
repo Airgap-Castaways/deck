@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -158,6 +159,7 @@ func executeHealth(env *cliEnv, ctx context.Context, server string, output strin
 	}
 	resolvedServer, _, err := resolveRequiredSourceURL(server)
 	if err != nil {
+		_ = env.verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "error", Component: "server", Event: "health_check_failed", Attrs: map[string]any{"error": err, "suggestion": "set a remote with `deck server remote set <url>` or pass --server"}})
 		return err
 	}
 	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer}}); err != nil {
@@ -169,18 +171,24 @@ func executeHealth(env *cliEnv, ctx context.Context, server string, output strin
 	if err := env.verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "debug", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer, "url": healthURL}}); err != nil {
 		return err
 	}
+	if err := env.verboseCLIEvent(3, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "debug", Component: "server", Event: "health_request", Attrs: map[string]any{"method": http.MethodGet, "url": healthURL, "timeout_ms": 5000}}); err != nil {
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if err != nil {
 		return fmt.Errorf("health: build request: %w", err)
 	}
+	started := time.Now().UTC()
 	resp, err := client.Do(req)
+	durationMS := time.Since(started).Milliseconds()
 	if err != nil {
-		_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "error", Component: "server", Event: "health_check_failed", Attrs: map[string]any{"server": resolvedServer, "url": healthURL, "error": err}})
+		_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "error", Component: "server", Event: "health_check_failed", Attrs: map[string]any{"server": resolvedServer, "url": healthURL, "error": err, "suggestion": "check `deck server up`, the remote URL, and network/firewall access"}})
 		return fmt.Errorf("health: request failed: %w", err)
 	}
 	defer closeSilently(resp.Body)
+	_ = env.verboseCLIEvent(3, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "debug", Component: "server", Event: "health_response", Attrs: map[string]any{"status": resp.StatusCode, "duration_ms": durationMS, "content_length": resp.ContentLength, "header_keys": strings.Join(sortedHeaderKeys(resp.Header), ",")}})
 	if resp.StatusCode != http.StatusOK {
-		_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "warn", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer, "url": healthURL, "http_status": resp.StatusCode}})
+		_ = env.verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "warn", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer, "url": healthURL, "http_status": resp.StatusCode, "suggestion": "inspect server logs and confirm the bundle server is healthy"}})
 		return fmt.Errorf("health: unexpected status %d", resp.StatusCode)
 	}
 	if err := env.verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "health_check", Attrs: map[string]any{"server": resolvedServer, "url": healthURL, "http_status": resp.StatusCode}}); err != nil {
@@ -250,6 +258,12 @@ func executeLogs(env *cliEnv, ctx context.Context, root string, source string, p
 	if err := env.verboseCLIEvent(1, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "info", Component: "server", Event: "logs_loaded", Attrs: map[string]any{"records": len(records)}}); err != nil {
 		return err
 	}
+	if err := env.verboseCLIEvent(2, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "debug", Component: "server", Event: "logs_summary", Attrs: summarizeLogRecords(records)}); err != nil {
+		return err
+	}
+	if err := env.verboseCLIEvent(3, ctrllogs.CLIEvent{TS: time.Now().UTC(), Level: "debug", Component: "server", Event: "logs_window", Attrs: logRecordWindow(records)}); err != nil {
+		return err
+	}
 
 	if resolvedOutput == "json" {
 		enc := env.stdoutJSONEncoder()
@@ -261,6 +275,55 @@ func executeLogs(env *cliEnv, ctx context.Context, root string, source string, p
 		}
 	}
 	return nil
+}
+
+func sortedHeaderKeys(header http.Header) []string {
+	if len(header) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(header))
+	for key := range header {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func summarizeLogRecords(records []ctrllogs.LogRecord) map[string]any {
+	levels := map[string]int{}
+	sources := map[string]int{}
+	for _, record := range records {
+		levels[displayValueOrDash(record.Level)]++
+		sources[displayValueOrDash(record.Source)]++
+	}
+	return map[string]any{"records": len(records), "levels": compactCounts(levels), "sources": compactCounts(sources)}
+}
+
+func logRecordWindow(records []ctrllogs.LogRecord) map[string]any {
+	if len(records) == 0 {
+		return map[string]any{"first_ts": "-", "last_ts": "-", "event_types": "-"}
+	}
+	events := map[string]int{}
+	for _, record := range records {
+		events[displayValueOrDash(record.EventType)]++
+	}
+	return map[string]any{"first_ts": displayValueOrDash(records[0].TS), "last_ts": displayValueOrDash(records[len(records)-1].TS), "event_types": compactCounts(events)}
+}
+
+func compactCounts(counts map[string]int) string {
+	if len(counts) == 0 {
+		return "-"
+	}
+	keys := make([]string, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s:%d", key, counts[key]))
+	}
+	return strings.Join(parts, ",")
 }
 
 func resolveLogsFilePath(root string, path string) (string, error) {

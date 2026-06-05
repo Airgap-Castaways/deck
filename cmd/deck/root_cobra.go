@@ -23,12 +23,16 @@ func newRootCommand(env *cliEnv) *cobra.Command {
 		SilenceUsage:       true,
 		DisableSuggestions: true,
 		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
+			verbosity, err := resolveCLIVerbosity(env.verbosity)
+			if err != nil {
+				return err
+			}
 			resolved, err := resolveCLILogFormat(env.logFormat)
 			if err != nil {
 				return err
 			}
 			env.setLogFormat(resolved)
-			env.setVerbosity(env.verbosity)
+			env.setVerbosity(verbosity)
 			return nil
 		},
 	}

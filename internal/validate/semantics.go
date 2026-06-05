@@ -83,6 +83,17 @@ func validateSemantics(name string, wf *config.Workflow) error {
 				return fmt.Errorf("E_SCHEMA_INVALID: step %s (%s): requireTarget and ignoreMissingTarget cannot both be true", step.ID, step.Kind)
 			}
 		}
+		if step.Kind == "Input" {
+			secret, _ := step.Spec["secret"].(bool)
+			if secret {
+				if _, hasDefault := step.Spec["default"]; hasDefault {
+					return fmt.Errorf("E_SCHEMA_INVALID: step %s (%s): spec.default is not allowed when spec.secret is true", step.ID, step.Kind)
+				}
+				if len(step.Register) == 0 {
+					return fmt.Errorf("E_SCHEMA_INVALID: step %s (%s): spec.secret requires register", step.ID, step.Kind)
+				}
+			}
+		}
 	}
 
 	return nil

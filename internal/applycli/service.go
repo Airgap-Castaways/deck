@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
+	"github.com/Airgap-Castaways/deck/internal/config"
 	"github.com/Airgap-Castaways/deck/internal/install"
 	"github.com/Airgap-Castaways/deck/internal/logs"
 	"github.com/Airgap-Castaways/deck/internal/workflowcontext"
+	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
 type RunLogger interface {
@@ -24,9 +28,11 @@ type ExecuteOptions struct {
 	WorkflowSource string
 	Scenario       string
 	DryRun         bool
+	NonInteractive bool
 	Verbosef       func(level int, format string, args ...any) error
 	StdoutPrintf   func(format string, args ...any) error
 	StdoutPrintln  func(args ...any) error
+	InvocationID   string
 	AdditionalSink install.StepEventSink
 	NewRunLogger   func(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (RunLogger, error)
 }
@@ -42,7 +48,21 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 	if request.ExecutionWorkflow == nil {
 		return fmt.Errorf("execution workflow is nil")
 	}
-	if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "apply", Event: "run_requested", Attrs: map[string]any{"workflow": request.WorkflowPath, "phase": request.SelectedPhase, "state": request.StatePath, "bundle": strings.TrimSpace(opts.BundleRoot), "dry_run": opts.DryRun, "fresh": request.Fresh}}); err != nil {
+	started := time.Now().UTC()
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "failed"
+		}
+		_ = emitApplyDiagnostic(opts, 1, logs.CLIEvent{Component: "apply", Event: "run_completed", Attrs: map[string]any{"status": status, "duration_ms": time.Since(started).Milliseconds()}})
+	}()
+	if err := emitApplyDiagnostic(opts, 1, logs.CLIEvent{Component: "apply", Event: "run_requested", Attrs: map[string]any{"workflow": request.WorkflowPath, "phase": request.SelectedPhase, "state": request.StatePath, "bundle": strings.TrimSpace(opts.BundleRoot), "dry_run": opts.DryRun, "fresh": request.Fresh}}); err != nil {
+		return err
+	}
+	if err := logApplyExecutionPlan(opts, request); err != nil {
+		return err
+	}
+	if err := logApplyContext(opts, request); err != nil {
 		return err
 	}
 	if opts.DryRun {
@@ -55,7 +75,7 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 	if err != nil {
 		return err
 	}
-	if err := verboseEvent(opts.Verbosef, 1, logs.CLIEvent{Component: "apply", Event: "runlog_created", Attrs: map[string]any{"runlog": runLogger.Dir()}}); err != nil {
+	if err := emitApplyDiagnostic(opts, 1, logs.CLIEvent{Component: "apply", Event: "runlog_created", Attrs: map[string]any{"runlog": runLogger.Dir()}}); err != nil {
 		return err
 	}
 	eventSink := combineStepEventSinks(runLogger.EventSink(), opts.AdditionalSink)
@@ -70,7 +90,7 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 		}
 	}()
 
-	if err := install.Run(ctx, request.ExecutionWorkflow, install.RunOptions{BundleRoot: opts.BundleRoot, StatePath: request.StatePath, Context: opts.Context, EventSink: eventSink, Fresh: request.Fresh}); err != nil {
+	if err := install.Run(ctx, request.ExecutionWorkflow, install.RunOptions{BundleRoot: opts.BundleRoot, StatePath: request.StatePath, Context: opts.Context, EventSink: eventSink, Fresh: request.Fresh, NonInteractive: opts.NonInteractive}); err != nil {
 		return err
 	}
 	if opts.StdoutPrintln == nil {
@@ -152,6 +172,130 @@ func combineStepEventSinks(sinks ...install.StepEventSink) install.StepEventSink
 			sink(event)
 		}
 	}
+}
+
+func logApplyExecutionPlan(opts ExecuteOptions, request ExecutionRequest) error {
+	wf := request.ExecutionWorkflow
+	if wf == nil {
+		return nil
+	}
+	phases := config.NormalizedPhases(wf)
+	phaseCount, batchCount, stepCount, parallelBatchCount := summarizeApplyWorkflow(phases)
+	if err := emitApplyDiagnostic(opts, 2, logs.CLIEvent{Level: "debug", Component: "apply", Event: "execution_plan", Attrs: map[string]any{"phases": phaseCount, "batches": batchCount, "steps": stepCount, "parallel_batches": parallelBatchCount}}); err != nil {
+		return err
+	}
+	state, stateErr := LoadInstallDryRunState(request)
+	if stateErr != nil {
+		if err := emitApplyDiagnostic(opts, 2, logs.CLIEvent{Level: "debug", Component: "apply", Event: "state_snapshot_failed", Attrs: map[string]any{"state": request.StatePath, "error": stateErr}}); err != nil {
+			return err
+		}
+	} else {
+		if err := emitApplyDiagnostic(opts, 2, logs.CLIEvent{Level: "debug", Component: "apply", Event: "state_snapshot", Attrs: map[string]any{"state": request.StatePath, "completed_phases": len(state.CompletedPhases), "runtime_vars": len(state.RuntimeVars), "runtime_secrets": len(state.RuntimeSecrets)}}); err != nil {
+			return err
+		}
+		if err := emitApplyDiagnostic(opts, 3, logs.CLIEvent{Level: "debug", Component: "apply", Event: "state_runtime", Attrs: map[string]any{"completed_phases": joinOrDash(cloneStrings(state.CompletedPhases)), "runtime_vars": joinOrDash(sortedAnyKeys(state.RuntimeVars)), "runtime_secrets": len(state.RuntimeSecrets)}}); err != nil {
+			return err
+		}
+	}
+	for _, phase := range phases {
+		batches := workflowexec.BuildPhaseBatches(phase)
+		if err := emitApplyDiagnostic(opts, 2, logs.CLIEvent{Level: "debug", Component: "apply", Event: "phase_plan", Attrs: map[string]any{"phase": phase.Name, "steps": len(phase.Steps), "batches": len(batches), "max_parallelism": phase.MaxParallelism}}); err != nil {
+			return err
+		}
+		for _, batch := range batches {
+			if err := emitApplyDiagnostic(opts, 2, logs.CLIEvent{Level: "debug", Component: "apply", Event: "batch_plan", Attrs: map[string]any{"phase": batch.PhaseName, "parallel_group": displayValueOrDash(batch.ParallelGroup), "parallel": batch.Parallel(), "steps": len(batch.Steps), "max_parallelism": batch.MaxParallelism}}); err != nil {
+				return err
+			}
+			for _, step := range batch.Steps {
+				if err := emitApplyDiagnostic(opts, 2, logs.CLIEvent{Level: "debug", Component: "apply", Event: "step_plan", Attrs: map[string]any{"phase": batch.PhaseName, "step": step.ID, "kind": step.Kind, "parallel_group": displayValueOrDash(step.ParallelGroup), "when": displayValueOrDash(step.When), "retry": step.Retry, "timeout": displayValueOrDash(step.Timeout), "register": len(step.Register)}}); err != nil {
+					return err
+				}
+				if err := emitApplyDiagnostic(opts, 3, logs.CLIEvent{Level: "debug", Component: "apply", Event: "step_contract", Attrs: map[string]any{"phase": batch.PhaseName, "step": step.ID, "api_version": displayValueOrDash(step.APIVersion), "metadata_keys": joinOrDash(sortedAnyKeys(step.Metadata)), "register_keys": joinOrDash(sortedRegisterKeys(step.Register)), "spec_keys": joinOrDash(sortedAnyKeys(step.Spec))}}); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func logApplyContext(opts ExecuteOptions, request ExecutionRequest) error {
+	wf := request.Workflow
+	if wf == nil {
+		wf = request.ExecutionWorkflow
+	}
+	attrs := map[string]any{
+		"workflow":        request.WorkflowPath,
+		"workflow_source": displayValueOrDash(opts.WorkflowSource),
+		"scenario":        displayValueOrDash(opts.Scenario),
+		"selected_phase":  displayValueOrDash(request.SelectedPhase),
+		"bundle":          displayValueOrDash(strings.TrimSpace(opts.BundleRoot)),
+		"state":           displayValueOrDash(request.StatePath),
+		"non_interactive": opts.NonInteractive,
+	}
+	if wf != nil {
+		attrs["state_key"] = displayValueOrDash(wf.StateKey)
+		attrs["workflow_sha256"] = displayValueOrDash(wf.WorkflowSHA256)
+		attrs["vars"] = len(wf.Vars)
+	}
+	if err := emitApplyDiagnostic(opts, 3, logs.CLIEvent{Level: "debug", Component: "apply", Event: "execution_context", Attrs: attrs}); err != nil {
+		return err
+	}
+	contextMap := opts.Context.RenderMap()
+	if err := emitApplyDiagnostic(opts, 3, logs.CLIEvent{Level: "debug", Component: "apply", Event: "context_keys", Attrs: map[string]any{"keys": joinOrDash(sortedAnyKeys(contextMap))}}); err != nil {
+		return err
+	}
+	if wf != nil {
+		return emitApplyDiagnostic(opts, 3, logs.CLIEvent{Level: "debug", Component: "apply", Event: "workflow_vars", Attrs: map[string]any{"keys": joinOrDash(sortedAnyKeys(wf.Vars))}})
+	}
+	return nil
+}
+
+func summarizeApplyWorkflow(phases []config.Phase) (phaseCount int, batchCount int, stepCount int, parallelBatchCount int) {
+	for _, phase := range phases {
+		phaseCount++
+		stepCount += len(phase.Steps)
+		for _, batch := range workflowexec.BuildPhaseBatches(phase) {
+			batchCount++
+			if batch.Parallel() {
+				parallelBatchCount++
+			}
+		}
+	}
+	return phaseCount, batchCount, stepCount, parallelBatchCount
+}
+
+func sortedAnyKeys(values map[string]any) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func cloneStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := append([]string(nil), values...)
+	slices.Sort(cloned)
+	return cloned
+}
+
+func emitApplyDiagnostic(opts ExecuteOptions, level int, event logs.CLIEvent) error {
+	if strings.TrimSpace(opts.InvocationID) != "" {
+		attrs := make(map[string]any, len(event.Attrs)+1)
+		for key, value := range event.Attrs {
+			attrs[key] = value
+		}
+		attrs["invocation_id"] = strings.TrimSpace(opts.InvocationID)
+		event.Attrs = attrs
+	}
+	return verboseEvent(opts.Verbosef, level, event)
 }
 
 func verboseEvent(fn func(level int, format string, args ...any) error, level int, event logs.CLIEvent) error {

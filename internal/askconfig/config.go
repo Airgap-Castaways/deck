@@ -30,7 +30,6 @@ type Settings struct {
 	APIKey     string `json:"apiKey,omitempty"`
 	OAuthToken string `json:"oauthToken,omitempty"`
 	Endpoint   string `json:"endpoint,omitempty"`
-	LogLevel   string `json:"logLevel,omitempty"`
 	MCP        MCP    `json:"mcp,omitempty"`
 }
 
@@ -58,6 +57,7 @@ type EffectiveSettings struct {
 	ModelSource      string
 	AuthStatus       string
 	AccountID        string
+	LogLevel         string
 }
 
 func ConfigPath() (string, error) {
@@ -139,7 +139,6 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 			APIKey:     "",
 			OAuthToken: "",
 			Endpoint:   "",
-			LogLevel:   "basic",
 			MCP:        stored.MCP,
 		},
 		ProviderSource:   "default",
@@ -147,6 +146,7 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 		APIKeySource:     "unset",
 		OAuthTokenSource: "unset",
 		EndpointSource:   "unset",
+		LogLevel:         "off",
 	}
 	if stored.Provider != "" {
 		effective.Provider = stored.Provider
@@ -167,9 +167,6 @@ func ResolveEffective(cli Settings) (EffectiveSettings, error) {
 	if stored.Endpoint != "" {
 		effective.Endpoint = stored.Endpoint
 		effective.EndpointSource = "config"
-	}
-	if stored.LogLevel != "" {
-		effective.LogLevel = stored.LogLevel
 	}
 	if value := strings.TrimSpace(os.Getenv(envServiceEndpoint)); value != "" {
 		effective.Endpoint = value
@@ -342,7 +339,6 @@ func normalize(settings Settings) Settings {
 	settings.APIKey = strings.TrimSpace(settings.APIKey)
 	settings.OAuthToken = strings.TrimSpace(settings.OAuthToken)
 	settings.Endpoint = strings.TrimSpace(settings.Endpoint)
-	settings.LogLevel = normalizeLogLevel(settings.LogLevel)
 	for i := range settings.MCP.Servers {
 		settings.MCP.Servers[i].Name = NormalizeMCPProviderName(settings.MCP.Servers[i].Name)
 		settings.MCP.Servers[i].RunCommand = strings.TrimSpace(settings.MCP.Servers[i].RunCommand)
@@ -355,19 +351,6 @@ func normalize(settings Settings) Settings {
 		settings.MCP.Servers[i].Args = trimmed
 	}
 	return settings
-}
-
-func normalizeLogLevel(level string) string {
-	switch strings.ToLower(strings.TrimSpace(level)) {
-	case "", "basic":
-		return "basic"
-	case "debug":
-		return "debug"
-	case "trace":
-		return "trace"
-	default:
-		return "basic"
-	}
 }
 
 func normalizeProvider(provider string) string {

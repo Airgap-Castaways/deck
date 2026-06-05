@@ -217,6 +217,58 @@
                 {
                   "properties": {
                     "kind": {
+                      "const": "Confirm"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": {
+                    "enum": [
+                      "confirmed"
+                    ]
+                  },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
                       "const": "CopyFile"
                     }
                   },
@@ -843,6 +895,58 @@
                 {
                   "properties": {
                     "kind": {
+                      "const": "Input"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": {
+                    "enum": [
+                      "value"
+                    ]
+                  },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
                       "const": "InstallPackage"
                     }
                   },
@@ -1082,6 +1186,55 @@
                       "names"
                     ]
                   },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "Message"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
                   "propertyNames": {
                     "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                   },
@@ -1904,6 +2057,7 @@
               "CheckKubernetesCluster",
               "Command",
               "ConfigureRepository",
+              "Confirm",
               "CopyFile",
               "CreateSymlink",
               "DownloadFile",
@@ -1916,11 +2070,13 @@
               "EnsureDirectory",
               "ExtractArchive",
               "InitKubeadm",
+              "Input",
               "InstallPackage",
               "JoinKubeadm",
               "KernelModule",
               "LoadImage",
               "ManageService",
+              "Message",
               "RefreshRepository",
               "ResetKubeadm",
               "Swap",

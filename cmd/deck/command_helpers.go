@@ -1,13 +1,17 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/Airgap-Castaways/deck/internal/buildinfo"
 	ctrllogs "github.com/Airgap-Castaways/deck/internal/logs"
 )
 
@@ -135,6 +139,21 @@ func resolveCLILogFormat(format string) (string, error) {
 	return resolved, nil
 }
 
+func resolveCLIVerbosity(level int) (int, error) {
+	if level < 0 || level > 3 {
+		return 0, errors.New("--v must be between 0 and 3")
+	}
+	return level, nil
+}
+
+func newInvocationID(prefix string) string {
+	var raw [4]byte
+	if _, err := rand.Read(raw[:]); err == nil {
+		return strings.TrimSpace(prefix) + "-" + hex.EncodeToString(raw[:])
+	}
+	return strings.TrimSpace(prefix) + "-" + fmt.Sprintf("%x", time.Now().UTC().UnixNano())
+}
+
 func (e *cliEnv) setWriters(stdout io.Writer, stderr io.Writer) {
 	if e == nil {
 		return
@@ -211,6 +230,18 @@ func (e *cliEnv) verboseCLIEvent(level int, event ctrllogs.CLIEvent) error {
 		return nil
 	}
 	return e.stderrCLIEvent(event)
+}
+
+func (e *cliEnv) commandStarted(command string) error {
+	trimmed := strings.TrimSpace(command)
+	if trimmed == "" {
+		trimmed = "command"
+	}
+	if e != nil && strings.TrimSpace(e.logFormat) == "json" {
+		info := buildinfo.Current()
+		return e.stderrCLIEvent(ctrllogs.CLIEvent{Component: trimmed, Event: "command_started", Attrs: map[string]any{"status": "started", "version": info.Version}})
+	}
+	return e.stderrPrintf("%s %s started\n", buildinfo.Summary(), trimmed)
 }
 
 func (e *cliEnv) verbosef(level int, format string, args ...any) error {

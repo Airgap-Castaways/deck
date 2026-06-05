@@ -197,6 +197,9 @@ func runPlanVarsWithOptions(env *cliEnv, ctx context.Context, opts planVarsOptio
 }
 
 func runDiffWithOptions(env *cliEnv, ctx context.Context, opts diffOptions) error {
+	if err := env.commandStarted("plan"); err != nil {
+		return err
+	}
 	workflowPath, err := resolvePlanWorkflowPath(ctx, strings.TrimSpace(opts.workflowPath), strings.TrimSpace(opts.scenario), strings.TrimSpace(opts.source))
 	if err != nil {
 		return err
@@ -222,15 +225,16 @@ func executeDiff(env *cliEnv, ctx context.Context, workflowPath, scenario, selec
 }
 
 type applyOptions struct {
-	workflowPath  string
-	scenario      string
-	source        string
-	selectedPhase string
-	fresh         bool
-	dryRun        bool
-	varOverrides  map[string]string
-	varsFiles     []string
-	positional    []string
+	workflowPath   string
+	scenario       string
+	source         string
+	selectedPhase  string
+	fresh          bool
+	dryRun         bool
+	nonInteractive bool
+	varOverrides   map[string]string
+	varsFiles      []string
+	positional     []string
 }
 
 func newApplyCommand(env *cliEnv) *cobra.Command {
@@ -270,16 +274,21 @@ func newApplyCommand(env *cliEnv) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			nonInteractive, err := cmdFlagBoolValue(cmd, "non-interactive")
+			if err != nil {
+				return err
+			}
 			return runApplyWithOptions(env, cmd.Context(), applyOptions{
-				workflowPath:  workflowPath,
-				scenario:      scenario,
-				source:        source,
-				selectedPhase: selectedPhase,
-				fresh:         fresh,
-				dryRun:        dryRun,
-				varOverrides:  vars.AsMap(),
-				varsFiles:     varsFiles.Values(),
-				positional:    args,
+				workflowPath:   workflowPath,
+				scenario:       scenario,
+				source:         source,
+				selectedPhase:  selectedPhase,
+				fresh:          fresh,
+				dryRun:         dryRun,
+				nonInteractive: nonInteractive,
+				varOverrides:   vars.AsMap(),
+				varsFiles:      varsFiles.Values(),
+				positional:     args,
 			})
 		},
 	}
@@ -290,6 +299,7 @@ func newApplyCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("phase", "", "phase name to execute (defaults to all phases)")
 	cmd.Flags().Bool("fresh", false, "ignore saved apply state for this invocation")
 	cmd.Flags().Bool("dry-run", false, "print apply plan without executing steps")
+	cmd.Flags().Bool("non-interactive", false, "fail or use defaults for operator interaction steps instead of prompting")
 	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	registerScenarioSourceCompletion(cmd, "source", false)
@@ -308,11 +318,15 @@ func runApplyWithOptions(env *cliEnv, ctx context.Context, opts applyOptions) er
 	for _, arg := range opts.positional {
 		positionalArgs = append(positionalArgs, strings.TrimSpace(arg))
 	}
+	if err := env.commandStarted("apply"); err != nil {
+		return err
+	}
 
 	workflowPath, bundleRoot, err := resolveApplyWorkflowAndBundle(ctx, opts, positionalArgs)
 	if err != nil {
 		return err
 	}
+	invocationID := newInvocationID("apply")
 	return applycli.RunApplyCommand(ctx, applycli.ApplyCommandOptions{
 		WorkflowPath:   workflowPath,
 		BundleRoot:     bundleRoot,
@@ -321,12 +335,14 @@ func runApplyWithOptions(env *cliEnv, ctx context.Context, opts applyOptions) er
 		SelectedPhase:  opts.selectedPhase,
 		Fresh:          opts.fresh,
 		DryRun:         opts.dryRun,
+		NonInteractive: opts.nonInteractive,
 		VarOverrides:   varsAsAnyMap(opts.varOverrides),
 		VarsFiles:      append([]string(nil), opts.varsFiles...),
 		Verbosef:       env.verbosef,
 		StdoutPrintf:   env.stdoutPrintf,
 		StdoutPrintln:  env.stdoutPrintln,
-		AdditionalSink: verboseApplyStepSink(env),
+		InvocationID:   invocationID,
+		AdditionalSink: verboseApplyStepSink(env, invocationID),
 		NewRunLogger: func(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (applycli.RunLogger, error) {
 			return newApplyRunLogger(env, workflowPath, workflowSource, scenario, bundleRoot, selectedPhase)
 		},

@@ -6,7 +6,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/Airgap-Castaways/deck/internal/config"
 	"github.com/Airgap-Castaways/deck/internal/filemode"
@@ -32,6 +34,7 @@ type Options struct {
 	VarsFiles         []string
 	Stdout            io.Writer
 	Diagnosticf       func(level int, format string, args ...any) error
+	InvocationID      string
 	EventSink         prepare.StepEventSink
 	runtimeBinaryDeps runtimeBinaryDeps
 }
@@ -46,7 +49,17 @@ type preparedManifestEntry struct {
 	Size   int64  `json:"size"`
 }
 
-func Run(ctx context.Context, opts Options) error {
+func Run(ctx context.Context, opts Options) (err error) {
+	started := time.Now().UTC()
+	preparedRootForLog := ""
+	manifestEntries := 0
+	defer func() {
+		status := "ok"
+		if err != nil {
+			status = "failed"
+		}
+		_ = emitDiagnosticEvent(opts, 1, logs.CLIEvent{Component: "prepare", Event: "prepare_completed", Attrs: map[string]any{"status": status, "duration_ms": time.Since(started).Milliseconds(), "prepared_root": preparedRootForLog, "manifest_entries": manifestEntries}})
+	}()
 	if ctx == nil {
 		return fmt.Errorf("context is nil")
 	}
@@ -87,6 +100,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err := emitDiagnosticEvent(opts, 1, logs.CLIEvent{Component: "prepare", Event: "prepared_root", Attrs: map[string]any{"prepared_root": filepath.ToSlash(resolvedPreparedRootAbs)}}); err != nil {
 		return err
 	}
+	preparedRootForLog = filepath.ToSlash(resolvedPreparedRootAbs)
 	preparedRoot, err := fsutil.NewPreparedRoot(resolvedPreparedRootAbs)
 	if err != nil {
 		return err
@@ -105,6 +119,9 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	prepareWorkflow, err := config.LoadWithOptions(ctx, prepareWorkflowPath, config.LoadOptions{VarOverrides: opts.VarOverrides, VarsFiles: opts.VarsFiles, NodeScopedVars: true})
 	if err != nil {
+		return err
+	}
+	if err := logPrepareWorkflowTrace(opts, prepareWorkflow); err != nil {
 		return err
 	}
 	if err := emitDiagnosticEvent(opts, 1, logs.CLIEvent{Component: "prepare", Event: "run_config", Attrs: map[string]any{"refresh": opts.Refresh, "clean": opts.Clean}}); err != nil {
@@ -207,6 +224,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	manifestEntries = len(manifest.Entries)
 	if err := writePreparedManifest(filepath.Join(preparedWorkspaceRoot, ".deck", "manifest.json"), manifest); err != nil {
 		return err
 	}
@@ -221,6 +239,14 @@ func Run(ctx context.Context, opts Options) error {
 }
 
 func emitDiagnosticEvent(opts Options, level int, event logs.CLIEvent) error {
+	if strings.TrimSpace(opts.InvocationID) != "" {
+		attrs := make(map[string]any, len(event.Attrs)+1)
+		for key, value := range event.Attrs {
+			attrs[key] = value
+		}
+		attrs["invocation_id"] = strings.TrimSpace(opts.InvocationID)
+		event.Attrs = attrs
+	}
 	return logs.EmitCLIEventf(opts.Diagnosticf, level, event)
 }
 
@@ -233,6 +259,70 @@ func workflowIncludeCount(prepareWorkflowPath, varsWorkflowPath, applyWorkflowPa
 		count++
 	}
 	return count
+}
+
+func logPrepareWorkflowTrace(opts Options, wf *config.Workflow) error {
+	if wf == nil {
+		return nil
+	}
+	phases := config.NormalizedPhases(wf)
+	stepCount := 0
+	for _, phase := range phases {
+		stepCount += len(phase.Steps)
+	}
+	if err := emitDiagnosticEvent(opts, 3, logs.CLIEvent{Level: "debug", Component: "prepare", Event: "workflow_trace", Attrs: map[string]any{"version": wf.Version, "state_key": displayValueOrDash(wf.StateKey), "workflow_sha256": displayValueOrDash(wf.WorkflowSHA256), "phases": len(phases), "steps": stepCount, "vars": len(wf.Vars), "var_keys": joinOrDash(sortedAnyKeys(wf.Vars))}}); err != nil {
+		return err
+	}
+	for _, phase := range phases {
+		if err := emitDiagnosticEvent(opts, 3, logs.CLIEvent{Level: "debug", Component: "prepare", Event: "phase_trace", Attrs: map[string]any{"phase": phase.Name, "steps": len(phase.Steps), "imports": len(phase.Imports), "max_parallelism": phase.MaxParallelism}}); err != nil {
+			return err
+		}
+		for _, step := range phase.Steps {
+			if err := emitDiagnosticEvent(opts, 3, logs.CLIEvent{Level: "debug", Component: "prepare", Event: "step_trace", Attrs: map[string]any{"phase": phase.Name, "step": step.ID, "kind": step.Kind, "api_version": displayValueOrDash(step.APIVersion), "when": displayValueOrDash(step.When), "parallel_group": displayValueOrDash(step.ParallelGroup), "retry": step.Retry, "timeout": displayValueOrDash(step.Timeout), "register_keys": joinOrDash(sortedRegisterKeys(step.Register)), "metadata_keys": joinOrDash(sortedAnyKeys(step.Metadata)), "spec_keys": joinOrDash(sortedAnyKeys(step.Spec))}}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func displayValueOrDash(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "-"
+	}
+	return trimmed
+}
+
+func joinOrDash(values []string) string {
+	if len(values) == 0 {
+		return "-"
+	}
+	return strings.Join(values, ",")
+}
+
+func sortedAnyKeys(values map[string]any) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func sortedRegisterKeys(values map[string]string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
 }
 
 func printLine(w io.Writer, line string) error {
