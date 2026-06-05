@@ -90,7 +90,12 @@ func Execute(ctx context.Context, opts ExecuteOptions) (err error) {
 		}
 	}()
 
-	if err := install.Run(ctx, request.ExecutionWorkflow, install.RunOptions{BundleRoot: opts.BundleRoot, StatePath: request.StatePath, Context: opts.Context, EventSink: eventSink, Fresh: request.Fresh, NonInteractive: opts.NonInteractive}); err != nil {
+	stateMetadata := install.StateMetadata{Workflow: install.StateWorkflow{Path: request.WorkflowPath, Source: strings.TrimSpace(opts.WorkflowSource)}}
+	if request.Workflow != nil {
+		stateMetadata.StateKey = request.Workflow.StateKey
+		stateMetadata.Workflow.SHA256 = request.Workflow.WorkflowSHA256
+	}
+	if err := install.Run(ctx, request.ExecutionWorkflow, install.RunOptions{BundleRoot: opts.BundleRoot, StatePath: request.StatePath, StateMetadata: stateMetadata, DisableStateFallback: request.StateDirExplicit, StateMigrationSink: request.StateMigrationSink, Context: opts.Context, EventSink: eventSink, Fresh: request.Fresh, NonInteractive: opts.NonInteractive}); err != nil {
 		return err
 	}
 	if opts.StdoutPrintln == nil {
@@ -296,6 +301,12 @@ func emitApplyDiagnostic(opts ExecuteOptions, level int, event logs.CLIEvent) er
 		event.Attrs = attrs
 	}
 	return verboseEvent(opts.Verbosef, level, event)
+}
+
+func stateMigrationDiagnosticSink(component string, verbosef func(level int, format string, args ...any) error) func(source string, target string) {
+	return func(source string, target string) {
+		_ = verboseEvent(verbosef, 1, logs.CLIEvent{Component: strings.TrimSpace(component), Event: "state_migrated", Attrs: map[string]any{"source": source, "target": target}})
+	}
 }
 
 func verboseEvent(fn func(level int, format string, args ...any) error, level int, event logs.CLIEvent) error {

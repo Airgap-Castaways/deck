@@ -14,6 +14,7 @@ coverage.out
 /dist/
 /bundle/
 /reports/
+/.deck/state/
 /.vagrant/
 /test/vagrant/.vagrant/
 /test/artifacts/

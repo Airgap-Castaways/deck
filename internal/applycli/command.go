@@ -14,40 +14,88 @@ import (
 )
 
 type PlanCommandOptions struct {
-	WorkflowPath    string
-	Scenario        string
-	SelectedPhase   string
-	Output          string
-	Fresh           bool
-	VarOverrides    map[string]any
-	VarsFiles       []string
-	Hostname        string
-	DetectHostname  func() (string, error)
-	Verbosef        func(level int, format string, args ...any) error
-	StdoutPrintf    func(format string, args ...any) error
-	JSONEncoderFunc func() *json.Encoder
-	ResolveOutput   func(string) (string, error)
+	WorkflowPath     string
+	Scenario         string
+	SelectedPhase    string
+	Output           string
+	Fresh            bool
+	StateDir         string
+	StateDirExplicit bool
+	VarOverrides     map[string]any
+	VarsFiles        []string
+	Hostname         string
+	DetectHostname   func() (string, error)
+	Verbosef         func(level int, format string, args ...any) error
+	StdoutPrintf     func(format string, args ...any) error
+	JSONEncoderFunc  func() *json.Encoder
+	ResolveOutput    func(string) (string, error)
 }
 
 type ApplyCommandOptions struct {
-	WorkflowPath   string
-	BundleRoot     string
-	WorkflowSource string
-	Scenario       string
-	SelectedPhase  string
-	Fresh          bool
-	DryRun         bool
-	NonInteractive bool
-	VarOverrides   map[string]any
-	VarsFiles      []string
-	Hostname       string
-	DetectHostname func() (string, error)
-	Verbosef       func(level int, format string, args ...any) error
-	StdoutPrintf   func(format string, args ...any) error
-	StdoutPrintln  func(args ...any) error
-	InvocationID   string
-	AdditionalSink install.StepEventSink
-	NewRunLogger   func(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (RunLogger, error)
+	WorkflowPath     string
+	BundleRoot       string
+	WorkflowSource   string
+	Scenario         string
+	SelectedPhase    string
+	Fresh            bool
+	StateDir         string
+	StateDirExplicit bool
+	DryRun           bool
+	NonInteractive   bool
+	VarOverrides     map[string]any
+	VarsFiles        []string
+	Hostname         string
+	DetectHostname   func() (string, error)
+	Verbosef         func(level int, format string, args ...any) error
+	StdoutPrintf     func(format string, args ...any) error
+	StdoutPrintln    func(args ...any) error
+	InvocationID     string
+	AdditionalSink   install.StepEventSink
+	NewRunLogger     func(workflowPath, workflowSource, scenario, bundleRoot, selectedPhase string) (RunLogger, error)
+}
+
+type StateRequestOptions struct {
+	WorkflowPath     string
+	SelectedPhase    string
+	StateDir         string
+	StateDirExplicit bool
+	VarOverrides     map[string]any
+	VarsFiles        []string
+	Hostname         string
+	DetectHostname   func() (string, error)
+}
+
+func ResolveStateRequest(ctx context.Context, opts StateRequestOptions) (ExecutionRequest, error) {
+	if ctx == nil {
+		return ExecutionRequest{}, fmt.Errorf("context is nil")
+	}
+	resolvedRequest, err := ResolveExecutionRequest(ctx, ExecutionRequestOptions{
+		CommandName:                  "state",
+		WorkflowPath:                 strings.TrimSpace(opts.WorkflowPath),
+		AllowRemoteWorkflow:          true,
+		VarOverrides:                 opts.VarOverrides,
+		VarsFiles:                    append([]string(nil), opts.VarsFiles...),
+		NodeScopedVars:               true,
+		Hostname:                     opts.Hostname,
+		DetectHostname:               opts.DetectHostname,
+		StateDir:                     strings.TrimSpace(opts.StateDir),
+		StateDirExplicit:             opts.StateDirExplicit,
+		SelectedPhase:                strings.TrimSpace(opts.SelectedPhase),
+		BuildExecutionWorkflow:       true,
+		ResolveStatePath:             true,
+		StatePathFromExecutionTarget: false,
+	})
+	if err != nil {
+		return ExecutionRequest{}, err
+	}
+	execContext, err := buildPlanExecutionContext(&resolvedRequest, "")
+	if err != nil {
+		return ExecutionRequest{}, err
+	}
+	if err := applyContextStateKey(&resolvedRequest, execContext); err != nil {
+		return ExecutionRequest{}, err
+	}
+	return resolvedRequest, nil
 }
 
 func RunPlanCommand(ctx context.Context, opts PlanCommandOptions) error {
@@ -64,12 +112,15 @@ func RunPlanCommand(ctx context.Context, opts PlanCommandOptions) error {
 	resolvedRequest, err := ResolveExecutionRequest(ctx, ExecutionRequestOptions{
 		CommandName:                  "diff",
 		WorkflowPath:                 strings.TrimSpace(opts.WorkflowPath),
+		AllowRemoteWorkflow:          true,
 		VarOverrides:                 opts.VarOverrides,
 		VarsFiles:                    append([]string(nil), opts.VarsFiles...),
 		NodeScopedVars:               true,
 		Hostname:                     opts.Hostname,
 		DetectHostname:               opts.DetectHostname,
 		Fresh:                        opts.Fresh,
+		StateDir:                     strings.TrimSpace(opts.StateDir),
+		StateDirExplicit:             opts.StateDirExplicit,
 		SelectedPhase:                strings.TrimSpace(opts.SelectedPhase),
 		DefaultPhase:                 "",
 		BuildExecutionWorkflow:       true,
@@ -79,6 +130,7 @@ func RunPlanCommand(ctx context.Context, opts PlanCommandOptions) error {
 	if err != nil {
 		return err
 	}
+	resolvedRequest.StateMigrationSink = stateMigrationDiagnosticSink("plan", opts.Verbosef)
 	execContext, err := buildPlanExecutionContext(&resolvedRequest, strings.TrimSpace(opts.Scenario))
 	if err != nil {
 		return err
@@ -111,6 +163,8 @@ func RunApplyCommand(ctx context.Context, opts ApplyCommandOptions) error {
 		Hostname:                     opts.Hostname,
 		DetectHostname:               opts.DetectHostname,
 		Fresh:                        opts.Fresh,
+		StateDir:                     strings.TrimSpace(opts.StateDir),
+		StateDirExplicit:             opts.StateDirExplicit,
 		SelectedPhase:                strings.TrimSpace(opts.SelectedPhase),
 		DefaultPhase:                 "",
 		BuildExecutionWorkflow:       true,
@@ -120,6 +174,7 @@ func RunApplyCommand(ctx context.Context, opts ApplyCommandOptions) error {
 	if err != nil {
 		return err
 	}
+	resolvedRequest.StateMigrationSink = stateMigrationDiagnosticSink("apply", opts.Verbosef)
 	execContext, bundleRoot, err := buildApplyExecutionContext(resolvedRequest, opts)
 	if err != nil {
 		return err
@@ -204,7 +259,7 @@ func applyContextStateKey(request *ExecutionRequest, execContext workflowcontext
 	if request.ExecutionWorkflow != nil {
 		request.ExecutionWorkflow.StateKey = stateKey
 	}
-	statePath, err := ResolveInstallStatePath(request.Workflow)
+	statePath, err := ResolveInstallStatePathForWorkflowPath(request.Workflow, request.WorkflowPath, request.StateDir)
 	if err != nil {
 		return err
 	}

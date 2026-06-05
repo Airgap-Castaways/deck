@@ -210,7 +210,7 @@ func applyContextStateKey(request *applycli.ExecutionRequest, execContext workfl
 	if request.ExecutionWorkflow != nil {
 		request.ExecutionWorkflow.StateKey = stateKey
 	}
-	statePath, err := applycli.ResolveInstallStatePath(request.Workflow)
+	statePath, err := applycli.ResolveInstallStatePathForWorkflowPath(request.Workflow, request.WorkflowPath, request.StateDir)
 	if err != nil {
 		return err
 	}
