@@ -30,8 +30,8 @@ steps:
 	}
 }
 
-func TestDocsGuidesExamplesValidate(t *testing.T) {
-	paths, err := filepath.Glob(filepath.Join("..", "..", "docs", "guides", "examples", "*.yaml"))
+func TestDocsExamplesValidate(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("..", "..", "docs", "examples", "*.yaml"))
 	if err != nil {
 		t.Fatalf("glob examples: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestScenarioWorkspaceValidates(t *testing.T) {
 }
 
 func TestWorkflowModelDocsDescribeRuntimeRegisterNamespace(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "workflow-model.md"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "workflow-model.md"))
 	if err != nil {
 		t.Fatalf("read workflow model docs: %v", err)
 	}

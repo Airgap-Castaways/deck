@@ -30,13 +30,13 @@ func TestManifestIncludesAllStepKinds(t *testing.T) {
 }
 
 func TestDocsReferenceCLIIncludesSyncedAskContextBlocks(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "cli.md"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "cli.md"))
 	if err != nil {
 		t.Fatalf("read docs: %v", err)
 	}
 	text := string(raw)
 	if got := SyncManagedBlocks(text); got != text {
-		t.Fatalf("docs/reference/cli.md is out of sync with generated ask blocks")
+		t.Fatalf("docs/cli.md is out of sync with generated ask blocks")
 	}
 }
 

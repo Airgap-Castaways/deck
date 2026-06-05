@@ -107,6 +107,7 @@ func loadGroupPageInputs(dir string) ([]schemadoc.PageInput, error) {
 			Required:    nestedRequired(doc.Properties, "spec"),
 			Spec:        spec,
 			Outputs:     append([]string(nil), def.Outputs...),
+			Roles:       append([]string(nil), def.Roles...),
 			GroupOrder:  def.GroupOrder,
 			DocsOrder:   def.DocsOrder,
 		})

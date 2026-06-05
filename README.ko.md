@@ -37,7 +37,7 @@ deck bundle build --out ./bundle.tar
 deck apply
 ```
 
-상세한 사용법은 [빠른 시작 가이드](docs/guides/quick-start.md)에서 확인하실 수 있습니다.
+상세한 사용법은 [빠른 시작 가이드](docs/quick-start.md)에서 확인하실 수 있습니다.
 
 ## 핵심 기능
 
@@ -79,13 +79,13 @@ source <(deck completion zsh)  # zsh 사용 시
 deck completion fish | source  # fish 사용 시
 ```
 
-영구적으로 적용하려면, 사용하는 셸의 시작 파일(예: `~/.bashrc`, `~/.zshrc`)에 해당 명령어를 추가하세요. 지원되는 모든 셸에 대한 자세한 내용은 [CLI 레퍼런스](docs/reference/cli.md#shell-completion)를 참고하세요.
+영구적으로 적용하려면, 사용하는 셸의 시작 파일(예: `~/.bashrc`, `~/.zshrc`)에 해당 명령어를 추가하세요. 지원되는 모든 셸에 대한 자세한 내용은 [CLI 레퍼런스](docs/cli.md#shell-completion)를 참고하세요.
 
 ## 상세 문서
 
-- [가이드](docs/guides/README.md)
 - [핵심 개념](docs/core-concepts/README.md)
-- [레퍼런스](docs/reference/README.md)
+- [문서](docs/README.md)
+- [예제](docs/examples/README.md)
 - [기여하기](docs/contributing/README.md)
 
 ## 라이선스

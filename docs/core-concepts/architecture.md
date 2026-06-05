@@ -309,6 +309,6 @@ New capabilities should follow the same shape.
 ## Related references
 
 - [Why Deck?](why-deck.md)
-- [Workflow Model](../reference/workflow-model.md)
-- [Bundle Layout](../reference/bundle-layout.md)
-- [CLI Reference](../reference/cli.md)
+- [Workflow Model](../workflow-model.md)
+- [Bundle Layout](../bundle-layout.md)
+- [CLI Reference](../cli.md)

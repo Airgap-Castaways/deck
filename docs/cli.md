@@ -1,0 +1,403 @@
+# CLI Reference
+
+The `deck` CLI is intentionally small.
+
+It supports a simple operator flow: author the workflow, lint it, prepare bundle contents, build the bundle, and run locally.
+
+## Default local flow
+
+- `init`: create starter workflow files under `workflows/`
+- `lint`: validate a workflow file or workspace against the workflow and step schemas (`-o text|json`)
+- `prepare`: gather artifacts into `outputs/`, write a local `deck` launcher, and write `.deck/manifest.json`
+- `bundle build`: package the current workspace into a transportable archive
+- `apply`: execute the `apply` workflow locally
+
+## Additional helpers
+- `plan`: inspect which apply steps would run or skip before execution (`-o text|json`)
+- `list`: list available scenarios from the local workspace or the saved remote server
+- `cache list`: inspect cached artifact entries
+- `cache clean`: delete cached entries, optionally by age or as a dry run
+- `server remote set`: save the default remote server URL used for server-backed scenario lookup
+- `server remote show`: show the effective default remote server URL
+- `server remote unset`: clear the saved remote server URL
+- `server up`: expose a prepared bundle root over HTTP inside the air gap when a shared local source is useful
+- `server down`: stop a daemonized local server started with `deck server up -d`
+- `server health`: check `/healthz` on an explicit server or the saved remote server URL (`-o text|json`)
+- `server logs`: read local server audit logs from file or journal
+- `version`: show the current `deck` build version and metadata (`-o text|json`)
+- `completion`: generate shell completion for bash, zsh, fish, and PowerShell
+
+## Authoring helper
+
+- `ask`: experimental helper to question, explain, review, draft, or refine workflows from the current workspace using an LLM-backed authoring assistant
+- `ask config set`: save `ask.provider`, `ask.model`, `ask.endpoint`, and `ask.apiKey` in XDG config
+- `ask config show`: show the effective ask config with a masked api key
+- `ask config health`: probe configured ask augmentation providers and show transport and capability status
+- `ask config unset`: clear saved ask config
+- `ask login`: start or import an OpenAI OAuth session for `ask`
+- `ask logout`: delete the saved OAuth session for a provider
+- `ask status`: inspect whether a saved OAuth session is currently available
+
+`ask` is experimental and ships as part of the standard `deck` binary.
+
+For a task-oriented guide to configuring and using `deck ask`, see [Using deck ask](ask.md).
+
+`ask` routes requests before generation. Explicit authoring and review flags such as `--create`, `--edit`, and `--review` act as hard overrides. Other requests go through LLM-assisted route classification, and ambiguous requests can stop for clarification instead of drifting into generation.
+
+For authoring routes, `ask` builds a plan before generation, then uses constrained selection and validation-driven repair. Workflow generation only runs for authoring routes (`draft`/`refine`), while `question`, `explain`, `review`, and `clarify` return answer-oriented or plan-oriented responses.
+
+When model access is unavailable, `ask` degrades explicitly instead of silently pretending to answer with full reasoning. `explain` falls back to a local structural summary of the target file, `review` falls back to local findings, and generation routes fail fast because local validation cannot replace model output.
+
+OpenAI-compatible provider support currently targets:
+
+- `openai`
+- `openrouter`
+- `gemini`
+
+You can override `provider`, `model`, and `endpoint` per run, or save defaults with `ask config set`.
+
+Global `--v=<n>` controls `deck ask` terminal diagnostics on stderr:
+
+- `--v=0`: no ask diagnostics
+- `--v=1`: route, provider, and progress summary on stderr
+- `--v=2`: route/provider summary plus the user command and MCP events
+- `--v=3`: debug logs plus classifier/route system prompts and user prompts
+
+At `--v=3`, `ask` also writes prompt and response payload artifacts under `.deck/ask/runs/<run-id>/` and logs their paths on stderr. Prompt and response bodies stay hidden below `--v=3`.
+
+`ask.mcp.servers[]` keeps the same config shape, but it now selects built-in external-docs providers rather than arbitrary first-class MCP semantics. Current built-in provider ids are:
+
+- `context7`: upstream library and API documentation lookup
+- `web-search`: upstream web search for install, compatibility, version, and troubleshooting context
+
+Compatibility notes:
+
+- `web-server` remains accepted as a legacy alias for `web-search`
+- `command` and `args` still work as transport overrides for a built-in provider id
+- unknown provider names are ignored with diagnostics instead of being treated as supported authoring inputs
+
+These commands are additive. They do not replace the default local execution path.
+
+`deck lint -o json` returns a structured report with the validated workflow list, summary counts, supported workflow contracts, and warning-level `findings` such as opaque `Command` steps or remote artifacts without integrity checks.
+
+`deck plan -o json` returns the resolved workflow path, state path, runtime var keys, per-step actions, and a summary section.
+
+`deck plan vars -o json` returns the execution input snapshot: effective `vars`, resolved `context`, initial `runtime` values known before execution, and planned `runtime` keys that later steps may register.
+
+`deck server health -o json` returns the resolved server URL, `/healthz` URL, and HTTP status.
+
+`deck server up` writes structured audit records under `.deck/logs/server-audit.log`. The current audit schema is version 2 and uses top-level fields such as `component`, `event`, `method`, `path`, `status`, and `duration_ms`. Raw consumers that read the log file directly should expect this version-2 shape going forward.
+
+Use [Server Audit Log](server-audit-log.md) for the current emitted record shape and compatibility notes.
+
+`deck bundle verify -o json` returns the verified bundle path and final status.
+
+`deck cache list -o json` and `deck server logs -o json` keep machine-readable output on stdout while `--v=<n>` sends path and count diagnostics to stderr.
+
+Global `--v=<n>` writes diagnostics to stderr without changing stdout result contracts. Supported levels are 0-3:
+
+- `--v=0`: result-focused output; long-running `apply` and `prepare` runs still show phase and step progress on stderr
+- `--v=1`: workflow/source/path decisions, progress events, and high-level execution context
+- `--v=2`: apply execution plan/state/step metadata, ask debug logs, plan evaluation details, and deeper bundle/prepare/health inspection counts
+- `--v=3`: key-level traces for apply/prepare/bundle/list/server/cache, ask trace artifacts, contract notes, lint finding hints, and the most detailed plan/lint traces
+
+In practice:
+
+- `deck plan --v=3` adds workflow/runtime var traces and per-step evaluation details
+- `deck apply --v=2` adds execution plan, state snapshot, phase/batch plan, and per-step metadata
+- `deck apply --v=3` adds workflow hash/state key, context keys, workflow var keys, runtime state keys, and step contract keys without logging spec values
+- `deck prepare --v=2` adds artifact group and cache reuse/fetch diagnostics
+- `deck prepare --v=3` adds workflow, phase, step, and runtime-binary key traces without logging spec values
+- `deck bundle build --v=3` and `deck bundle verify --v=3` add per-manifest-entry path/category/size/hash-prefix traces
+- `deck list --v=3`, `deck cache ... --v=3`, and `deck server ... --v=3` add per-entry or request/response/window traces where applicable
+
+Some commands have no additional detail above their highest implemented level. At `--v=0`, `ask` suppresses progress diagnostics, while `apply` and `prepare` keep phase and step progress visible on stderr. `apply` also reports completed-state skips. Stdout remains focused on the final command result.
+
+Global `--log-format=text|json` controls how migrated diagnostic logs are rendered on stderr.
+
+- `--log-format=text`: one-line structured text logs intended for humans
+- `--log-format=json`: JSON Lines on stderr with the same event schema for machine processing
+
+Current migrated command families include `ask`, `prepare`, `apply`, `server`, `list`, and `cache`.
+
+Text diagnostics prioritize high-signal fields such as `phase`, `step`, `status`, `reason`, `kind`, `duration_ms`, `batch`, `invocation_id`, and path/location fields before lower-priority attributes. For `apply` and `prepare` progress logs, text output expands fields by verbosity: `--v=0` shows core progress fields, `--v=1` adds kind/duration/failure details, and `--v>=2` includes batch, parallelism, attempt, and invocation correlation fields. JSON diagnostics retain the full event fields for machine processing.
+
+Event naming follows these conventions for new diagnostics:
+
+- `*_requested`: command intent received
+- `*_selected` or `*_resolved`: input path, source, or config resolution
+- `*_planned`: work plan computed
+- `*_started`, `*_succeeded`, `*_failed`: unit-level execution progress
+- `*_completed`: command-level completion summary with `status` and `duration_ms`
+- `*_summary`: aggregate counts
+- `*_trace`: key-level details intended for `--v=3`
+
+New fields use `duration_ms` for durations, `*_bytes` for byte sizes, `*_count` for new count fields, and `has_*` booleans for presence checks. URL diagnostics redact userinfo, query values, and fragments.
+
+Example text diagnostics:
+
+```text
+ts=2026-04-02T09:20:00Z level=info component=prepare event=batch_started phase=prepare batch=prepare:downloads parallel_group=downloads batch_size=2 max_parallelism=2 status=started
+ts=2026-04-02T09:20:00Z level=info component=prepare event=step_started phase=prepare batch=prepare:downloads step=download-runc kind=DownloadFile attempt=1 status=started
+```
+
+Example JSON diagnostics:
+
+```json
+{"ts":"2026-04-02T09:20:00Z","level":"info","component":"prepare","event":"batch_started","phase":"prepare","batch":"prepare:downloads","parallel_group":"downloads","batch_size":2,"max_parallelism":2,"status":"started"}
+{"ts":"2026-04-02T09:20:00Z","level":"info","component":"prepare","event":"step_started","phase":"prepare","batch":"prepare:downloads","step":"download-runc","kind":"DownloadFile","attempt":1,"status":"started"}
+```
+
+## Shell completion
+
+`deck completion` is the only completion entrypoint. Supported shells: `bash`, `zsh`, `fish`, `powershell`.
+
+### Immediate sourcing
+
+To enable completion for your current shell session:
+
+```bash
+source <(deck completion bash)
+source <(deck completion zsh)
+deck completion fish | source
+```
+
+### Persistent registration
+
+To enable completion for all future shell sessions, add the sourcing command to your shell's initialization file:
+
+- **Bash**: Add `source <(deck completion bash)` to `~/.bashrc`.
+- **Zsh**: Add `source <(deck completion zsh)` to `~/.zshrc`.
+- **Fish**: Create a file at `~/.config/fish/completions/deck.fish` containing `deck completion fish | source`.
+- **PowerShell**: Add `deck completion powershell | Out-String | Invoke-Expression` to your `$PROFILE`.
+
+## Other lifecycle commands
+
+- `bundle`: bundle lifecycle operations
+- `cache`: inspect or clean the artifact cache
+
+## Practical flags worth knowing
+
+### Variable overrides
+
+`lint`, `prepare`, `plan`, and `apply` support repeatable `-f, --vars-file` YAML overlays. `prepare`, `plan`, and `apply` also support repeatable `--var key=value` overrides for one invocation.
+
+Use these when you want to test a different site value without editing `workflows/vars.yaml` or the scenario file itself.
+
+- Vars files are merged on top of `workflows/vars.yaml` in the order provided.
+- Node-scoped `all:` and `hosts:` values are selected after vars-file overlays are merged.
+- Workflow `vars:` are applied after node-scoped selection.
+- `--var` overrides are applied last and have the highest precedence.
+
+```bash
+deck prepare -f vars/site.yaml --var registryHost=mirror.local --var kubernetesVersion=v1.30.1
+deck plan --scenario apply -f vars/site.yaml -f vars/worker.yaml --var role=worker
+deck apply --scenario apply -f vars/site.yaml -f vars/cp1.yaml --var role=control-plane --var nodeIP=10.0.0.10
+```
+
+Vars file paths are relative to the same `workflows/` location that contains `vars.yaml`. For example, `-f vars/site.yaml` reads `workflows/vars/site.yaml` for a local workflow tree.
+
+### Node-scoped workflow variables
+
+`deck lint`, `deck prepare`, `deck plan`, and `deck apply` automatically select node-scoped variables from `workflows/vars.yaml` when the file contains a `hosts:` map. There is no node-selection flag. Deck detects the local hostname, matches `hosts.<hostname>` or the short hostname before the first `.`, and merges that host entry into top-level `vars`.
+
+```yaml
+all:
+  kubernetesVersion: v1.35.5
+
+hosts:
+  k8s-cp1:
+    role: control-plane
+    ip: 192.168.81.211
+```
+
+If the hostname is not listed, these commands still run with ordinary `vars.yaml` values and `all:` values. Workflows that branch on host-specific fields should provide safe defaults in `all:`, such as `role: ""`, then use conditions such as `vars.role == "control-plane"`.
+
+CLI vars files are merged into shared vars before the selected node-scoped values, and `--var` overrides remain highest precedence. For example, `--var kubernetesVersion=v1.35.6` overrides a value from `all:` or any `-f` file.
+
+### `server up` operational flags
+
+`deck server up` supports a few operational modes beyond the default `--root` and `--addr` pair:
+
+- `--tls-cert` and `--tls-key`: serve HTTPS with explicit certificate files
+- `--tls-self-signed`: auto-generate a self-signed certificate for local use
+- `--daemon` / `-d`: run as a transient systemd service instead of foreground mode
+- `--unit`: choose the transient systemd unit name used by daemon mode
+- `--audit-max-size-mb` and `--audit-max-files`: control audit log rotation limits
+
+### `cache clean`
+
+Use `deck cache clean` to prune cached downloads and release archives.
+
+- `--older-than 30d`: delete entries older than the given duration
+- `--dry-run`: print what would be removed without deleting anything
+
+### `ask` OAuth session commands
+
+For OpenAI-backed `ask` usage, `deck` also supports local OAuth session management:
+
+- `deck ask login`: start browser or headless device login, or import a token explicitly
+- `deck ask status`: show whether the saved session is present and whether it has a refresh token
+- `deck ask logout`: remove the saved session for that provider
+
+These commands complement `ask config set`; they do not replace model, endpoint, or MCP configuration.
+
+## Common examples
+
+```bash
+deck init --out ./demo
+deck version
+deck version -o json
+deck list --source local
+deck completion bash > ./deck.bash
+deck lint --workflow ./demo/workflows/scenarios/apply.yaml
+deck lint --workflow ./demo/workflows/scenarios/apply.yaml -o json
+deck lint --workflow ./demo/workflows/prepare.yaml
+
+cd ./demo
+deck prepare
+deck prepare --bundle-binary-source local --bundle-binary-dir ../test/artifacts/bin --bundle-binary linux/amd64 --bundle-binary linux/arm64
+deck prepare --bundle-binary-source release --bundle-binary-exclude darwin/amd64 --bundle-binary-exclude darwin/arm64
+deck prepare --bundle-binary-source release --bundle-binary-version v0.1.0 --bundle-binary linux/amd64
+deck prepare -f vars/site.yaml --var registryHost=mirror.local --var kubernetesVersion=v1.30.1
+deck plan vars --command prepare -f vars/site.yaml --var registryHost=mirror.local
+deck bundle build --out ./bundle.tar
+deck plan --scenario apply --source local
+deck plan --scenario apply --source local -o json
+deck plan --scenario apply --source local -f vars/worker.yaml --var role=worker
+deck plan vars --scenario apply --source local -f vars/worker.yaml --var role=worker
+deck apply --scenario apply --source local
+deck apply --scenario apply --source local -f vars/cp1.yaml --var role=control-plane --var nodeIP=10.0.0.10
+deck cache clean --older-than 30d --dry-run
+```
+
+Prepare runtime binary notes:
+
+- `prepare` always writes a root `./deck` launcher and stores real runtime binaries under `outputs/bin/<os>/<arch>/deck`
+- by default `prepare` includes every supported runtime tuple; on dev builds `auto` resolves the latest GitHub Release runtime binaries unless you point `--bundle-binary-dir` at local artifacts
+- `--bundle-binary` is repeatable and overrides the default set with an explicit include list
+- `--bundle-binary-exclude` is repeatable and removes runtime tuples from the default or explicit include set
+- `--bundle-binary-source=local` reads from the current executable or from `--bundle-binary-dir`
+- `--bundle-binary-source=local` without `--bundle-binary-dir` uses the current executable for the current host tuple unless you explicitly request other targets
+- `--bundle-binary-source=release` downloads matching GitHub Release archives, caches them under the deck cache root, and atomically publishes the final `deck` binary into `outputs/bin/...`
+- `auto` defaults to `release`; on dev builds it resolves the latest GitHub Release unless `--bundle-binary-dir` selects local binaries
+
+Optional site-local helper example:
+
+```bash
+deck server remote set http://127.0.0.1:8080
+deck list --source server
+deck server up --root ./bundle --addr :8080
+deck server up --root ./bundle --addr :8443 --tls-self-signed
+deck server health --server http://127.0.0.1:8080
+deck server health --server http://127.0.0.1:8080 -o json
+deck server logs --root ./bundle --source file -o json --v=1
+deck bundle verify --file ./bundle -o json
+deck cache list -o json --v=1
+deck plan --scenario apply --source server
+
+deck ask config set --provider openai --model gpt-5.4 --endpoint https://api.openai.com/v1 --api-key "$DECK_ASK_API_KEY"
+deck ask status --provider openai
+deck ask --create "create an air-gapped rhel9 single-node kubeadm workflow"
+deck ask plan "air-gapped rhel9 kubeadm cluster with prepare/apply split"
+deck ask "explain what workflows/scenarios/apply.yaml does"
+deck ask --review
+deck ask --create --from ./request.md
+```
+
+Optional ask augmentation config example:
+
+```json
+{
+  "ask": {
+    "provider": "openai",
+    "model": "gpt-5.4",
+    "mcp": {
+      "enabled": true,
+      "servers": [
+        {
+          "name": "context7"
+        },
+        {
+          "name": "web-search"
+        }
+      ]
+    }
+  }
+}
+```
+
+Optional transport override example:
+
+```json
+{
+  "ask": {
+    "mcp": {
+      "enabled": true,
+      "servers": [
+        {
+          "name": "context7",
+          "command": "npx",
+          "args": ["-y", "@upstash/context7-mcp@latest"]
+        },
+        {
+          "name": "web-search",
+          "command": "/usr/local/bin/deck",
+          "args": ["ask", "mcp", "web-search"]
+        }
+      ]
+    }
+  }
+}
+```
+
+## Notes
+
+- `prepare` expects a workflow tree rooted at `workflows/` with entrypoints under `workflows/scenarios/`.
+- scenario entrypoints live under `workflows/scenarios/`
+- `plan` and `apply` accept `--scenario` for named scenarios and `--workflow` for an explicit path or URL.
+- `plan` and `apply` support `--fresh` to ignore saved apply state for that invocation.
+- `plan`, `apply`, and `state` support `--state-dir` to use an explicit apply state directory.
+- `deck state show/list/clear` inspects and removes saved apply state.
+- `--source` controls whether `--scenario` resolves from the local workspace or the saved remote server.
+- local workflow apply state stays under `./.deck/state/apply/`; remote workflow apply state uses the user-local XDG state root under `deck/state/apply/`.
+- workspace-local metadata stays under `./.deck/`, while user-global config, remote workflow state, cache, and run history use standard XDG locations.
+- `ask` workspace context lives under `./.deck/ask/`, while saved ask config defaults live under `~/.config/deck/config.json` as the top-level `ask` object.
+- `deck ask plan` writes plan artifacts under `./.deck/plan/` by default (`<timestamp>-<slug>.md`, `<timestamp>-<slug>.json`, `latest.md`, `latest.json`).
+- `deck ask --from .deck/plan/<name>.md "implement this plan"` prefers the same-basename `.json` artifact when present.
+- complex one-shot authoring requests may stop after planning or clarification if blockers remain; in that case `deck ask` prints the saved plan paths and follow-up commands instead of writing weak output.
+- `deck ask --v=3 ...` is the quickest way to see the effective `deck ask` command, MCP events, and prompt text in terminal logs.
+- optional augmentation config can be defined under `ask.mcp` in the same config file.
+- `ask config show` includes the configured built-in MCP provider ids, effective transport commands, and capability lists.
+- `ask config health` checks whether configured built-in MCP providers can start, initialize, list tools, and satisfy their required capabilities.
+- external docs evidence is used for upstream install, compatibility, version, and troubleshooting facts; local deck workflow validity still comes from local metadata and validation.
+- required external evidence can block freshness-sensitive authoring requests when providers are unavailable; answer routes surface the limitation explicitly instead of guessing.
+- phase imports resolve from `workflows/components/` using component-relative paths
+- `apply` runs all phases by default when phases are used; `--phase` narrows execution to one phase.
+- top-level `steps` execute as an implicit `default` phase.
+- `parallelGroup` only parallelizes consecutive steps inside one phase.
+- apply-time parallel batches also use a limited safe kind allowlist and reject same-batch path or `runtime.*` dependencies.
+- `bundle build` archives the canonical workspace bundle inputs: the root `deck` launcher, `workflows/`, `outputs/`, and `.deck/manifest.json`, and respects `.deckignore` within those paths.
+- Help text is shown on stdout only when you request it with `--help` or `help`.
+- Command and flag errors are written to stderr without automatic usage output.
+- `version` prints `deck <version>` by default and supports `-o json` for machine-readable metadata.
+- Prefer typed step kinds for common host changes.
+- Keep `Command` for cases where the clearer typed form does not exist yet.
+- `deck ask` writes workflow files directly for authoring routes; use `deck ask plan` when you want a saved plan artifact without applying workflow changes yet.
+- `--max-iterations` applies to generation routes (`draft`/`refine`) only; non-generation routes do not run repair loops.
+
+<!-- BEGIN GENERATED:ASK_CLI_CONTEXT -->
+## Ask CLI context
+
+- `deck ask` writes workflow files directly for authoring routes; use `--create` or `--edit` to make authoring intent explicit.
+- `deck ask plan` saves reusable plan artifacts under `./.deck/plan/`.
+<!-- END GENERATED:ASK_CLI_CONTEXT -->
+
+<!-- BEGIN GENERATED:ASK_AUTHORING_CONTEXT -->
+## Ask authoring context
+
+- Top-level workflow authoring reference for deck workflows.
+- Imports are only valid under phases[].imports and resolve from workflows/components/ using component-relative paths.
+- Prefer workflows/vars.yaml for configurable values that would otherwise be repeated inline across steps or files.
+- Start with typed step groups first. Prefer typed steps over `Command` when a typed step exists.
+<!-- END GENERATED:ASK_AUTHORING_CONTEXT -->

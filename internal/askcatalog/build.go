@@ -74,6 +74,7 @@ func build() (Catalog, error) {
 			Category:                 workflowMeta.Category,
 			Group:                    strings.TrimSpace(workflowMeta.Group),
 			GroupTitle:               strings.TrimSpace(groupMeta.Title),
+			GroupAliases:             append([]string(nil), groupMeta.Aliases...),
 			Summary:                  toolMeta.Summary,
 			WhenToUse:                toolMeta.WhenToUse,
 			SchemaFile:               workflowMeta.SchemaFile,

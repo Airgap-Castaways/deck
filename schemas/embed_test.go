@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Airgap-Castaways/deck/internal/schemadoc"
 	"github.com/Airgap-Castaways/deck/internal/workflowcontract"
 	"github.com/Airgap-Castaways/deck/internal/workflowexec"
 )
 
-func TestGeneratedGroupPagesExist(t *testing.T) {
-	seenGroups := map[string]bool{}
+func TestGeneratedStepKindPagesExist(t *testing.T) {
 	defs, err := workflowcontract.StepDefinitions()
 	if err != nil {
 		t.Fatalf("StepDefinitions: %v", err)
@@ -20,13 +20,9 @@ func TestGeneratedGroupPagesExist(t *testing.T) {
 		if def.Visibility != "public" {
 			continue
 		}
-		if seenGroups[def.Group] {
-			continue
-		}
-		seenGroups[def.Group] = true
-		page := filepath.Join("..", "docs", "reference", "groups", def.Group+".md")
+		page := filepath.Join("..", "docs", "step-kinds", schemadoc.StepKindSlug(def.Kind)+".md")
 		if _, err := os.Stat(page); err != nil {
-			t.Fatalf("group page missing for %s: %v", def.Kind, err)
+			t.Fatalf("step kind page missing for %s: %v", def.Kind, err)
 		}
 	}
 }

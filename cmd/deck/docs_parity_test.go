@@ -10,8 +10,8 @@ import (
 func TestUserFacingCommandFlowDocsDoNotMentionDoctor(t *testing.T) {
 	for _, rel := range []string{
 		"README.md",
-		"docs/reference/cli.md",
-		"docs/guides/quick-start.md",
+		"docs/cli.md",
+		"docs/quick-start.md",
 		"test/vagrant/README.md",
 	} {
 		rel := rel
@@ -25,7 +25,7 @@ func TestUserFacingCommandFlowDocsDoNotMentionDoctor(t *testing.T) {
 }
 
 func TestQuickStartDocsIncludeCurrentLifecycleCommands(t *testing.T) {
-	for _, rel := range []string{"README.md", "README.ko.md", "docs/guides/quick-start.md"} {
+	for _, rel := range []string{"README.md", "README.ko.md", "docs/quick-start.md"} {
 		rel := rel
 		t.Run(rel, func(t *testing.T) {
 			content := readRepoDoc(t, rel)

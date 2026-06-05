@@ -68,6 +68,7 @@ type StepKnowledge struct {
 	Category                 string
 	Group                    string
 	GroupTitle               string
+	GroupAliases             []string
 	Summary                  string
 	WhenToUse                string
 	SchemaFile               string
@@ -148,6 +149,7 @@ func buildBundle() Bundle {
 			Category:                 step.Category,
 			Group:                    step.Group,
 			GroupTitle:               step.GroupTitle,
+			GroupAliases:             append([]string(nil), step.GroupAliases...),
 			Summary:                  step.Summary,
 			WhenToUse:                step.WhenToUse,
 			SchemaFile:               step.SchemaFile,
