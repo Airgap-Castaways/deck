@@ -89,5 +89,7 @@ spec:
 - [ConfigureRepository](configure-repository.md)
 - [RefreshRepository](refresh-repository.md)
 - [InstallPackage](install-package.md)
+- [InstallAptPackage](install-apt-package.md)
+- [InstallDnfPackage](install-dnf-package.md)
 - [Step Kinds](../step-kinds.md)
 - [Step Envelope Contract](../workflow-model.md#step-envelope-contract)

@@ -33,6 +33,7 @@ const (
 	errCodeInstallKindUnsupported        = "E_INSTALL_KIND_UNSUPPORTED"
 	errCodeInstallPackagesRequired       = "E_INSTALL_PACKAGES_REQUIRED"
 	errCodeInstallPkgMgrMissing          = "E_INSTALL_PACKAGES_MANAGER_NOT_FOUND"
+	errCodeInstallPkgOptionInvalid       = "E_INSTALL_PACKAGES_OPTION_INVALID"
 	errCodeInstallPkgSourceInvalid       = "E_INSTALL_PACKAGES_SOURCE_INVALID"
 	errCodeInstallPkgFailed              = "E_INSTALL_PACKAGES_INSTALL_FAILED"
 	errCodeInstallWritePathMissing       = "E_INSTALL_WRITEFILE_PATH_REQUIRED"

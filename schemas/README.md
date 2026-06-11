@@ -36,6 +36,8 @@ For the human-facing reference, read `../docs/step-kinds.md`, `../docs/workflow-
 - `tools/file.extract-archive.schema.json`: `ExtractArchive` (`public`)
 - `tools/kubeadm.init.schema.json`: `InitKubeadm` (`public`)
 - `tools/input.schema.json`: `Input` (`public`)
+- `tools/package.install-apt.schema.json`: `InstallAptPackage` (`public`)
+- `tools/package.install-dnf.schema.json`: `InstallDnfPackage` (`public`)
 - `tools/package.install.schema.json`: `InstallPackage` (`public`)
 - `tools/kubeadm.join.schema.json`: `JoinKubeadm` (`public`)
 - `tools/kernel-module.schema.json`: `KernelModule` (`public`)

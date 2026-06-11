@@ -23,6 +23,8 @@ This directory contains JSON Schema files for typed workflow steps.
 - `file.extract-archive.schema.json`: `ExtractArchive` (`public`)
 - `kubeadm.init.schema.json`: `InitKubeadm` (`public`)
 - `input.schema.json`: `Input` (`public`)
+- `package.install-apt.schema.json`: `InstallAptPackage` (`public`)
+- `package.install-dnf.schema.json`: `InstallDnfPackage` (`public`)
 - `package.install.schema.json`: `InstallPackage` (`public`)
 - `kubeadm.join.schema.json`: `JoinKubeadm` (`public`)
 - `kernel-module.schema.json`: `KernelModule` (`public`)

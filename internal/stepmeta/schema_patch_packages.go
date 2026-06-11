@@ -4,6 +4,8 @@ var (
 	PatchRefreshRepositoryToolSchema   = patchRefreshRepositoryToolSchema
 	PatchDownloadPackageToolSchema     = patchDownloadPackageToolSchema
 	PatchInstallPackageToolSchema      = patchInstallPackageToolSchema
+	PatchInstallAptPackageToolSchema   = patchInstallAptPackageToolSchema
+	PatchInstallDnfPackageToolSchema   = patchInstallDnfPackageToolSchema
 	PatchConfigureRepositoryToolSchema = patchConfigureRepositoryToolSchema
 )
 
@@ -74,6 +76,43 @@ func patchInstallPackageToolSchema(root map[string]any) {
 	spec := specMap(root)
 	delete(propertyMap(spec), "timeout")
 	properties := propertyMap(spec)
+	patchInstallPackageCommonProperties(properties)
+	setMap(properties, "manager", enumStringSchema("auto", "apt", "dnf"))
+	patchInstallPackageAptProperties(properties)
+	patchInstallPackageDnfProperties(properties)
+	spec["required"] = []any{"packages"}
+	spec["allOf"] = []any{
+		map[string]any{"if": map[string]any{"required": []any{"apt"}}, "then": map[string]any{"required": []any{"manager"}, "properties": map[string]any{"manager": map[string]any{"const": "apt"}}}},
+		map[string]any{"if": map[string]any{"required": []any{"dnf"}}, "then": map[string]any{"required": []any{"manager"}, "properties": map[string]any{"manager": map[string]any{"const": "dnf"}}}},
+		map[string]any{"if": map[string]any{"properties": map[string]any{"manager": map[string]any{"const": "apt"}}, "required": []any{"manager"}}, "then": map[string]any{"not": map[string]any{"required": []any{"dnf"}}}},
+		map[string]any{"if": map[string]any{"properties": map[string]any{"manager": map[string]any{"const": "dnf"}}, "required": []any{"manager"}}, "then": map[string]any{"not": map[string]any{"required": []any{"apt"}}}},
+	}
+	setMap(props, "spec", spec)
+}
+
+func patchInstallAptPackageToolSchema(root map[string]any) {
+	props := propertyMap(root)
+	spec := specMap(root)
+	delete(propertyMap(spec), "timeout")
+	properties := propertyMap(spec)
+	patchInstallPackageCommonProperties(properties)
+	patchInstallPackageAptProperties(properties)
+	spec["required"] = []any{"packages"}
+	setMap(props, "spec", spec)
+}
+
+func patchInstallDnfPackageToolSchema(root map[string]any) {
+	props := propertyMap(root)
+	spec := specMap(root)
+	delete(propertyMap(spec), "timeout")
+	properties := propertyMap(spec)
+	patchInstallPackageCommonProperties(properties)
+	patchInstallPackageDnfProperties(properties)
+	spec["required"] = []any{"packages"}
+	setMap(props, "spec", spec)
+}
+
+func patchInstallPackageCommonProperties(properties map[string]any) {
 	if source, ok := properties["source"].(map[string]any); ok {
 		source["required"] = []any{"type", "path"}
 		sourceProps := propertyMap(source)
@@ -83,8 +122,35 @@ func patchInstallPackageToolSchema(root map[string]any) {
 	setMap(properties, "packages", stringArraySchema(1, false))
 	setMap(properties, "restrictToRepos", stringArraySchema(0, true))
 	setMap(properties, "excludeRepos", stringArraySchema(0, true))
-	spec["required"] = []any{"packages"}
-	setMap(props, "spec", spec)
+}
+
+func patchInstallPackageAptProperties(properties map[string]any) {
+	apt, ok := properties["apt"].(map[string]any)
+	if !ok {
+		return
+	}
+	aptProps := propertyMap(apt)
+	setMap(aptProps, "fixBroken", map[string]any{"type": "boolean"})
+	setMap(aptProps, "installRecommends", map[string]any{"type": "boolean"})
+	setMap(aptProps, "dpkgOptions", stringArraySchema(0, true))
+	setMap(aptProps, "defaultRelease", minLenStringSchema())
+	setMap(aptProps, "allowDowngrade", map[string]any{"type": "boolean"})
+	setMap(aptProps, "failOnAutoremove", map[string]any{"type": "boolean"})
+}
+
+func patchInstallPackageDnfProperties(properties map[string]any) {
+	dnf, ok := properties["dnf"].(map[string]any)
+	if !ok {
+		return
+	}
+	dnfProps := propertyMap(dnf)
+	setMap(dnfProps, "skipBroken", map[string]any{"type": "boolean"})
+	setMap(dnfProps, "allowErasing", map[string]any{"type": "boolean"})
+	setMap(dnfProps, "installWeakDeps", map[string]any{"type": "boolean"})
+	setMap(dnfProps, "disableGpgCheck", map[string]any{"type": "boolean"})
+	setMap(dnfProps, "best", map[string]any{"type": "boolean"})
+	setMap(dnfProps, "cacheOnly", map[string]any{"type": "boolean"})
+	setMap(dnfProps, "excludePackages", stringArraySchema(0, true))
 }
 
 func patchConfigureRepositoryToolSchema(root map[string]any) {

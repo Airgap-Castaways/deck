@@ -1020,6 +1020,104 @@
                       {
                         "properties": {
                           "kind": {
+                            "const": "InstallAptPackage"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
+                            "const": "InstallDnfPackage"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "not": {
+                              "required": [
+                                "apiVersion"
+                              ]
+                            }
+                          },
+                          {
+                            "properties": {
+                              "apiVersion": {
+                                "const": "deck/v1alpha1"
+                              }
+                            },
+                            "required": [
+                              "apiVersion"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "register": {
+                        "additionalProperties": false,
+                        "maxProperties": 0,
+                        "propertyNames": {
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                        },
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "allOf": [
+                      {
+                        "properties": {
+                          "kind": {
                             "const": "InstallPackage"
                           }
                         },
@@ -2144,6 +2242,8 @@
                     "ExtractArchive",
                     "InitKubeadm",
                     "Input",
+                    "InstallAptPackage",
+                    "InstallDnfPackage",
                     "InstallPackage",
                     "JoinKubeadm",
                     "KernelModule",
@@ -3149,6 +3249,104 @@
                       "value"
                     ]
                   },
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "InstallAptPackage"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "allOf": [
+                {
+                  "properties": {
+                    "kind": {
+                      "const": "InstallDnfPackage"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "anyOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "apiVersion"
+                        ]
+                      }
+                    },
+                    {
+                      "properties": {
+                        "apiVersion": {
+                          "const": "deck/v1alpha1"
+                        }
+                      },
+                      "required": [
+                        "apiVersion"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "then": {
+              "properties": {
+                "register": {
+                  "additionalProperties": false,
+                  "maxProperties": 0,
                   "propertyNames": {
                     "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                   },
@@ -4287,6 +4485,8 @@
               "ExtractArchive",
               "InitKubeadm",
               "Input",
+              "InstallAptPackage",
+              "InstallDnfPackage",
               "InstallPackage",
               "JoinKubeadm",
               "KernelModule",

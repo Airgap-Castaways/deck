@@ -1,8 +1,8 @@
 {
-  "$id": "https://deck.local/schemas/tools/package.install.schema.json",
+  "$id": "https://deck.local/schemas/tools/package.install-apt.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Install packages on the local node.",
+  "description": "Install packages on Debian-family nodes with apt.",
   "properties": {
     "apiVersion": {
       "const": "deck/v1alpha1",
@@ -12,7 +12,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "InstallPackage"
+      "const": "InstallAptPackage"
     },
     "metadata": {
       "additionalProperties": true,
@@ -36,87 +36,13 @@
       "type": "integer"
     },
     "spec": {
-      "$id": "https://github.com/Airgap-Castaways/deck/internal/stepspec/install-package",
+      "$id": "https://github.com/Airgap-Castaways/deck/internal/stepspec/install-apt-package",
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "required": [
-              "apt"
-            ]
-          },
-          "then": {
-            "properties": {
-              "manager": {
-                "const": "apt"
-              }
-            },
-            "required": [
-              "manager"
-            ]
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "dnf"
-            ]
-          },
-          "then": {
-            "properties": {
-              "manager": {
-                "const": "dnf"
-              }
-            },
-            "required": [
-              "manager"
-            ]
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "manager": {
-                "const": "apt"
-              }
-            },
-            "required": [
-              "manager"
-            ]
-          },
-          "then": {
-            "not": {
-              "required": [
-                "dnf"
-              ]
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "manager": {
-                "const": "dnf"
-              }
-            },
-            "required": [
-              "manager"
-            ]
-          },
-          "then": {
-            "not": {
-              "required": [
-                "apt"
-              ]
-            }
-          }
-        }
-      ],
       "properties": {
         "apt": {
           "additionalProperties": false,
-          "description": "Apt-specific installation options. Requires `manager: apt` when set.",
+          "description": "Apt-specific installation options.",
           "examples": [
             "{installRecommends:false,fixBroken:true}"
           ],
@@ -171,91 +97,16 @@
           },
           "type": "object"
         },
-        "dnf": {
-          "additionalProperties": false,
-          "description": "Dnf-specific installation options. Requires `manager: dnf` when set.",
-          "examples": [
-            "{skipBroken:true,allowErasing:true}"
-          ],
-          "properties": {
-            "allowErasing": {
-              "description": "Allow erasing installed packages to resolve dependencies.",
-              "examples": [
-                "true"
-              ],
-              "type": "boolean"
-            },
-            "best": {
-              "description": "Prefer best available versions. Omit to use the distribution default.",
-              "examples": [
-                "false"
-              ],
-              "type": "boolean"
-            },
-            "cacheOnly": {
-              "description": "Use only cached metadata and packages.",
-              "examples": [
-                "true"
-              ],
-              "type": "boolean"
-            },
-            "disableGpgCheck": {
-              "description": "Disable GPG signature checking for this transaction.",
-              "examples": [
-                "true"
-              ],
-              "type": "boolean"
-            },
-            "excludePackages": {
-              "description": "Package name patterns to exclude from the transaction.",
-              "examples": [
-                "[kernel*]"
-              ],
-              "items": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "installWeakDeps": {
-              "description": "Install weak dependencies. Omit to use the distribution default.",
-              "examples": [
-                "false"
-              ],
-              "type": "boolean"
-            },
-            "skipBroken": {
-              "description": "Skip unavailable packages or packages with broken dependencies.",
-              "examples": [
-                "true"
-              ],
-              "type": "boolean"
-            }
-          },
-          "type": "object"
-        },
         "excludeRepos": {
-          "description": "Repository selectors to exclude from package resolution.",
+          "description": "Apt source list files to exclude from package resolution.",
           "examples": [
-            "[updates]"
+            "[/etc/apt/sources.list.d/updates.list]"
           ],
           "items": {
             "minLength": 1,
             "type": "string"
           },
           "type": "array"
-        },
-        "manager": {
-          "description": "Package manager to use. `auto` resolves from the runtime OS family.",
-          "enum": [
-            "auto",
-            "apt",
-            "dnf"
-          ],
-          "examples": [
-            "auto"
-          ],
-          "type": "string"
         },
         "packages": {
           "description": "Package names to install.",
@@ -269,9 +120,9 @@
           "type": "array"
         },
         "restrictToRepos": {
-          "description": "Limit package manager visibility to these repository selectors.",
+          "description": "Limit apt visibility to these source list files.",
           "examples": [
-            "[offline-kubernetes]"
+            "[/etc/apt/sources.list.d/offline.list]"
           ],
           "items": {
             "minLength": 1,
@@ -327,7 +178,7 @@
     "kind",
     "spec"
   ],
-  "title": "InstallPackageStep",
+  "title": "InstallAptPackageStep",
   "type": "object",
   "x-deck-visibility": "public"
 }
