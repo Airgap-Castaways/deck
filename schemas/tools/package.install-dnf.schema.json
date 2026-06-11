@@ -1,8 +1,8 @@
 {
-  "$id": "https://deck.local/schemas/tools/package.install.schema.json",
+  "$id": "https://deck.local/schemas/tools/package.install-dnf.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Install packages on the local node.",
+  "description": "Install packages on RHEL-family nodes with dnf.",
   "properties": {
     "apiVersion": {
       "const": "deck/v1alpha1",
@@ -12,7 +12,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "InstallPackage"
+      "const": "InstallDnfPackage"
     },
     "metadata": {
       "additionalProperties": true,
@@ -36,144 +36,13 @@
       "type": "integer"
     },
     "spec": {
-      "$id": "https://github.com/Airgap-Castaways/deck/internal/stepspec/install-package",
+      "$id": "https://github.com/Airgap-Castaways/deck/internal/stepspec/install-dnf-package",
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "required": [
-              "apt"
-            ]
-          },
-          "then": {
-            "properties": {
-              "manager": {
-                "const": "apt"
-              }
-            },
-            "required": [
-              "manager"
-            ]
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "dnf"
-            ]
-          },
-          "then": {
-            "properties": {
-              "manager": {
-                "const": "dnf"
-              }
-            },
-            "required": [
-              "manager"
-            ]
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "manager": {
-                "const": "apt"
-              }
-            },
-            "required": [
-              "manager"
-            ]
-          },
-          "then": {
-            "not": {
-              "required": [
-                "dnf"
-              ]
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "manager": {
-                "const": "dnf"
-              }
-            },
-            "required": [
-              "manager"
-            ]
-          },
-          "then": {
-            "not": {
-              "required": [
-                "apt"
-              ]
-            }
-          }
-        }
-      ],
       "properties": {
-        "apt": {
-          "additionalProperties": false,
-          "description": "Apt-specific installation options. Requires `manager: apt` when set.",
-          "examples": [
-            "{installRecommends:false,fixBroken:true}"
-          ],
-          "properties": {
-            "allowDowngrade": {
-              "description": "Allow installing a lower package version than the installed version.",
-              "examples": [
-                "true"
-              ],
-              "type": "boolean"
-            },
-            "defaultRelease": {
-              "description": "Default apt release used for package selection.",
-              "examples": [
-                "jammy"
-              ],
-              "minLength": 1,
-              "type": "string"
-            },
-            "dpkgOptions": {
-              "description": "Additional dpkg force options passed through apt-get.",
-              "examples": [
-                "[force-confdef,force-confold]"
-              ],
-              "items": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "failOnAutoremove": {
-              "description": "Fail if apt would remove packages as part of dependency resolution.",
-              "examples": [
-                "true"
-              ],
-              "type": "boolean"
-            },
-            "fixBroken": {
-              "description": "Attempt to correct broken dependencies during apt installation.",
-              "examples": [
-                "true"
-              ],
-              "type": "boolean"
-            },
-            "installRecommends": {
-              "description": "Install recommended packages. Omit to use the operating system default.",
-              "examples": [
-                "false"
-              ],
-              "type": "boolean"
-            }
-          },
-          "type": "object"
-        },
         "dnf": {
           "additionalProperties": false,
-          "description": "Dnf-specific installation options. Requires `manager: dnf` when set.",
+          "description": "Dnf-specific installation options.",
           "examples": [
             "{skipBroken:true,allowErasing:true}"
           ],
@@ -235,7 +104,7 @@
           "type": "object"
         },
         "excludeRepos": {
-          "description": "Repository selectors to exclude from package resolution.",
+          "description": "Dnf repository IDs to exclude from package resolution.",
           "examples": [
             "[updates]"
           ],
@@ -244,18 +113,6 @@
             "type": "string"
           },
           "type": "array"
-        },
-        "manager": {
-          "description": "Package manager to use. `auto` resolves from the runtime OS family.",
-          "enum": [
-            "auto",
-            "apt",
-            "dnf"
-          ],
-          "examples": [
-            "auto"
-          ],
-          "type": "string"
         },
         "packages": {
           "description": "Package names to install.",
@@ -269,7 +126,7 @@
           "type": "array"
         },
         "restrictToRepos": {
-          "description": "Limit package manager visibility to these repository selectors.",
+          "description": "Limit dnf visibility to these repository IDs.",
           "examples": [
             "[offline-kubernetes]"
           ],
@@ -327,7 +184,7 @@
     "kind",
     "spec"
   ],
-  "title": "InstallPackageStep",
+  "title": "InstallDnfPackageStep",
   "type": "object",
   "x-deck-visibility": "public"
 }

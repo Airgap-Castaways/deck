@@ -76,6 +76,8 @@ Use this group for package workflows that start with prepare-time package stagin
 | [ConfigureRepository](step-kinds/configure-repository.md) | Write deb or rpm repository definitions. |
 | [RefreshRepository](step-kinds/refresh-repository.md) | Refresh package metadata with repo filtering. |
 | [InstallPackage](step-kinds/install-package.md) | Install packages on the local node. |
+| [InstallAptPackage](step-kinds/install-apt-package.md) | Install packages on Debian-family nodes with apt. |
+| [InstallDnfPackage](step-kinds/install-dnf-package.md) | Install packages on RHEL-family nodes with dnf. |
 
 
 ### Container Images

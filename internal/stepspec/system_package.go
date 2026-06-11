@@ -315,6 +315,53 @@ type InstallPackageSource struct {
 	Path string `json:"path"`
 }
 
+type InstallPackageManager string
+
+type InstallAptPackageOptions struct {
+	// Attempt to correct broken dependencies during apt installation.
+	// @deck.example true
+	FixBroken bool `json:"fixBroken"`
+	// Install recommended packages. Omit to use the operating system default.
+	// @deck.example false
+	InstallRecommends *bool `json:"installRecommends"`
+	// Additional dpkg force options passed through apt-get.
+	// @deck.example [force-confdef,force-confold]
+	DPKGOptions []string `json:"dpkgOptions"`
+	// Default apt release used for package selection.
+	// @deck.example jammy
+	DefaultRelease string `json:"defaultRelease"`
+	// Allow installing a lower package version than the installed version.
+	// @deck.example true
+	AllowDowngrade bool `json:"allowDowngrade"`
+	// Fail if apt would remove packages as part of dependency resolution.
+	// @deck.example true
+	FailOnAutoremove bool `json:"failOnAutoremove"`
+}
+
+type InstallDnfPackageOptions struct {
+	// Skip unavailable packages or packages with broken dependencies.
+	// @deck.example true
+	SkipBroken bool `json:"skipBroken"`
+	// Allow erasing installed packages to resolve dependencies.
+	// @deck.example true
+	AllowErasing bool `json:"allowErasing"`
+	// Install weak dependencies. Omit to use the distribution default.
+	// @deck.example false
+	InstallWeakDeps *bool `json:"installWeakDeps"`
+	// Disable GPG signature checking for this transaction.
+	// @deck.example true
+	DisableGPGCheck bool `json:"disableGpgCheck"`
+	// Prefer best available versions. Omit to use the distribution default.
+	// @deck.example false
+	Best *bool `json:"best"`
+	// Use only cached metadata and packages.
+	// @deck.example true
+	CacheOnly bool `json:"cacheOnly"`
+	// Package name patterns to exclude from the transaction.
+	// @deck.example [kernel*]
+	ExcludePackages []string `json:"excludePackages"`
+}
+
 // Install packages on the local node.
 // @deck.when Use this during apply to install packages from configured local or mirrored repositories.
 // @deck.example
@@ -326,6 +373,9 @@ type InstallPackageSource struct {
 //	  type: local-repo
 //	  path: /opt/deck/repos/kubernetes
 type InstallPackage struct {
+	// Package manager to use. `auto` resolves from the runtime OS family.
+	// @deck.example auto
+	Manager InstallPackageManager `json:"manager"`
 	// Local repository source used for the installation.
 	// @deck.example {type:local-repo,path:/opt/deck/repos/kubernetes}
 	Source *InstallPackageSource `json:"source"`
@@ -338,6 +388,75 @@ type InstallPackage struct {
 	// Repository selectors to exclude from package resolution.
 	// @deck.example [updates]
 	ExcludeRepos []string `json:"excludeRepos"`
+	// Apt-specific installation options. Requires `manager: apt` when set.
+	// @deck.example {installRecommends:false,fixBroken:true}
+	Apt InstallAptPackageOptions `json:"apt"`
+	// Dnf-specific installation options. Requires `manager: dnf` when set.
+	// @deck.example {skipBroken:true,allowErasing:true}
+	Dnf InstallDnfPackageOptions `json:"dnf"`
+	// Maximum total duration for package installation.
+	// @deck.example 20m
+	Timeout string `json:"timeout"`
+}
+
+// Install packages on Debian-family nodes with apt.
+// @deck.when Use this during apply when the workflow targets Debian or Ubuntu hosts and needs apt-specific install behavior.
+// @deck.example
+// kind: InstallAptPackage
+// spec:
+//
+//	packages: [kubelet, kubeadm, kubectl]
+//	restrictToRepos:
+//	  - /etc/apt/sources.list.d/offline.list
+//	apt:
+//	  installRecommends: false
+type InstallAptPackage struct {
+	// Local repository source used for the installation.
+	// @deck.example {type:local-repo,path:/opt/deck/repos/kubernetes}
+	Source *InstallPackageSource `json:"source"`
+	// Package names to install.
+	// @deck.example [kubelet,kubeadm,kubectl]
+	Packages []string `json:"packages"`
+	// Limit apt visibility to these source list files.
+	// @deck.example [/etc/apt/sources.list.d/offline.list]
+	RestrictToRepos []string `json:"restrictToRepos"`
+	// Apt source list files to exclude from package resolution.
+	// @deck.example [/etc/apt/sources.list.d/updates.list]
+	ExcludeRepos []string `json:"excludeRepos"`
+	// Apt-specific installation options.
+	// @deck.example {installRecommends:false,fixBroken:true}
+	Apt InstallAptPackageOptions `json:"apt"`
+	// Maximum total duration for package installation.
+	// @deck.example 20m
+	Timeout string `json:"timeout"`
+}
+
+// Install packages on RHEL-family nodes with dnf.
+// @deck.when Use this during apply when the workflow targets RHEL, Rocky, Fedora, or compatible hosts and needs dnf-specific install behavior.
+// @deck.example
+// kind: InstallDnfPackage
+// spec:
+//
+//	packages: [kubelet, kubeadm, kubectl]
+//	restrictToRepos: [offline-kubernetes]
+//	dnf:
+//	  skipBroken: true
+type InstallDnfPackage struct {
+	// Local repository source used for the installation.
+	// @deck.example {type:local-repo,path:/opt/deck/repos/kubernetes}
+	Source *InstallPackageSource `json:"source"`
+	// Package names to install.
+	// @deck.example [kubelet,kubeadm,kubectl]
+	Packages []string `json:"packages"`
+	// Limit dnf visibility to these repository IDs.
+	// @deck.example [offline-kubernetes]
+	RestrictToRepos []string `json:"restrictToRepos"`
+	// Dnf repository IDs to exclude from package resolution.
+	// @deck.example [updates]
+	ExcludeRepos []string `json:"excludeRepos"`
+	// Dnf-specific installation options.
+	// @deck.example {skipBroken:true,allowErasing:true}
+	Dnf InstallDnfPackageOptions `json:"dnf"`
 	// Maximum total duration for package installation.
 	// @deck.example 20m
 	Timeout string `json:"timeout"`

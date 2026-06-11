@@ -400,6 +400,205 @@ phases:
 		}
 	})
 
+	t.Run("tool schema valid InstallPackage with apt manager block", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: install-packages
+        apiVersion: deck/v1alpha1
+        kind: InstallPackage
+        spec:
+          manager: apt
+          packages: [containerd]
+          apt:
+            fixBroken: true
+            installRecommends: false
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects InstallPackage manager block without manager", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: install-packages
+        apiVersion: deck/v1alpha1
+        kind: InstallPackage
+        spec:
+          packages: [containerd]
+          apt:
+            fixBroken: true
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil || !strings.Contains(err.Error(), "E_SCHEMA_INVALID") {
+			t.Fatalf("expected schema validation error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects InstallPackage mismatched manager block", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: install-packages
+        apiVersion: deck/v1alpha1
+        kind: InstallPackage
+        spec:
+          manager: dnf
+          packages: [containerd]
+          apt:
+            fixBroken: true
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil || !strings.Contains(err.Error(), "E_SCHEMA_INVALID") {
+			t.Fatalf("expected schema validation error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema valid InstallAptPackage", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: install-apt-packages
+        apiVersion: deck/v1alpha1
+        kind: InstallAptPackage
+        spec:
+          packages: [containerd]
+          apt:
+            installRecommends: false
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects InstallAptPackage manager field", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: install-apt-packages
+        apiVersion: deck/v1alpha1
+        kind: InstallAptPackage
+        spec:
+          manager: apt
+          packages: [containerd]
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil || !strings.Contains(err.Error(), "E_SCHEMA_INVALID") {
+			t.Fatalf("expected schema validation error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects InstallAptPackage dnf block", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: install-apt-packages
+        apiVersion: deck/v1alpha1
+        kind: InstallAptPackage
+        spec:
+          packages: [containerd]
+          dnf:
+            skipBroken: true
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil || !strings.Contains(err.Error(), "E_SCHEMA_INVALID") {
+			t.Fatalf("expected schema validation error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema valid InstallDnfPackage", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: install-dnf-packages
+        apiVersion: deck/v1alpha1
+        kind: InstallDnfPackage
+        spec:
+          packages: [containerd]
+          dnf:
+            skipBroken: true
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		if err := File(path); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("tool schema rejects InstallDnfPackage apt block", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "workflow.yaml")
+		content := []byte(`version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: install-dnf-packages
+        apiVersion: deck/v1alpha1
+        kind: InstallDnfPackage
+        spec:
+          packages: [containerd]
+          apt:
+            fixBroken: true
+`)
+		if err := os.WriteFile(path, content, 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+
+		err := File(path)
+		if err == nil || !strings.Contains(err.Error(), "E_SCHEMA_INVALID") {
+			t.Fatalf("expected schema validation error, got %v", err)
+		}
+	})
+
 	t.Run("tool schema rejects Package download without backend distro repo", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "workflow.yaml")

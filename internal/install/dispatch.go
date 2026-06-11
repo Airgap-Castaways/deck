@@ -37,6 +37,8 @@ var installStepHandlers = workflowexec.MustStepRoleHandlers("apply", map[string]
 	"ExtractArchive":               installExtractArchive,
 	"InitKubeadm":                  installInitKubeadm,
 	"Input":                        installInput,
+	"InstallAptPackage":            installPackages,
+	"InstallDnfPackage":            installPackages,
 	"InstallPackage":               installPackages,
 	"JoinKubeadm":                  installJoinKubeadm,
 	"KernelModule":                 installKernelModule,
@@ -87,8 +89,8 @@ func specWithStepTimeout(rendered map[string]any, stepTimeout string) map[string
 	return cloned
 }
 
-func installPackages(ctx context.Context, _ config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
-	return nil, runInstallPackages(ctx, effectiveSpec)
+func installPackages(ctx context.Context, step config.Step, _ map[string]any, effectiveSpec map[string]any, _ ExecutionContext) (map[string]any, error) {
+	return nil, runInstallPackagesForKind(ctx, step.Kind, effectiveSpec)
 }
 
 func installWriteFile(_ context.Context, _ config.Step, rendered map[string]any, _ map[string]any, _ ExecutionContext) (map[string]any, error) {
