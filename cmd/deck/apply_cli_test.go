@@ -217,6 +217,8 @@ phases:
 }
 
 func TestApplySourceLocatorRootScenario(t *testing.T) {
+	stateHome := filepath.Join(t.TempDir(), "state")
+	t.Setenv("XDG_STATE_HOME", stateHome)
 	root := t.TempDir()
 	workflowDir := filepath.Join(root, "workflows")
 	scenarioDir := filepath.Join(workflowDir, "scenarios")
@@ -227,6 +229,7 @@ func TestApplySourceLocatorRootScenario(t *testing.T) {
 	if err := os.MkdirAll(varsDir, 0o755); err != nil {
 		t.Fatalf("mkdir vars: %v", err)
 	}
+	createValidBundleManifest(t, root)
 	if err := os.WriteFile(filepath.Join(workflowDir, "vars.yaml"), []byte("mode: base\n"), 0o644); err != nil {
 		t.Fatalf("write base vars: %v", err)
 	}
@@ -257,6 +260,31 @@ phases:
 	}
 	if !strings.Contains(applyOut, "root-vars-match Command PLAN") {
 		t.Fatalf("expected root scenario apply plan, got %q", applyOut)
+	}
+	if _, err := runWithCapturedStdout([]string{"apply", "--root", root, "--source", "server", "--scenario", "apply", "-f", "vars/site.yaml"}); err != nil {
+		t.Fatalf("apply with root and source server failed: %v", err)
+	}
+	runsRoot := filepath.Join(stateHome, "deck", "runs")
+	runEntries, err := os.ReadDir(runsRoot)
+	if err != nil {
+		t.Fatalf("read runs root: %v", err)
+	}
+	if len(runEntries) != 1 {
+		t.Fatalf("expected one run directory, got %d", len(runEntries))
+	}
+	runRecordPath := filepath.Join(runsRoot, runEntries[0].Name(), "record.json")
+	rawRunRecord, err := os.ReadFile(runRecordPath)
+	if err != nil {
+		t.Fatalf("read run record: %v", err)
+	}
+	var runRecord struct {
+		WorkflowSource string `json:"workflow_source"`
+	}
+	if err := json.Unmarshal(rawRunRecord, &runRecord); err != nil {
+		t.Fatalf("decode run record: %v\n%s", err, string(rawRunRecord))
+	}
+	if runRecord.WorkflowSource != scenarioSourceLocal {
+		t.Fatalf("expected local workflow source metadata, got %#v", runRecord)
 	}
 	stateOut, err := runWithCapturedStdout([]string{"state", "show", "--root", root, "--scenario", "apply", "-f", "vars/site.yaml"})
 	if err != nil {

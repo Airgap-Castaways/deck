@@ -179,7 +179,7 @@ func newPlanVarsCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars overlay path relative to the selected workflow root (workflows/), repeatable")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	registerScenarioSourceCompletion(cmd, "source", false)
-	registerScenarioNameCompletionWithSourceLocator(cmd, "scenario", "source", "", "server", false)
+	registerScenarioNameCompletionWithSourceLocator(cmd, "scenario", "source", "root", "server", false)
 	return cmd
 }
 
@@ -366,9 +366,12 @@ func runApplyWithOptions(env *cliEnv, ctx context.Context, opts applyOptions) er
 		return err
 	}
 	workflowSource := inferWorkflowSource(workflowPath, "")
-	if strings.TrimSpace(opts.server) != "" {
+	switch {
+	case strings.TrimSpace(opts.server) != "":
 		workflowSource = scenarioSourceServer
-	} else if opts.sourceExplicit {
+	case strings.TrimSpace(opts.root) != "":
+		workflowSource = scenarioSourceLocal
+	case opts.sourceExplicit:
 		workflowSource = inferWorkflowSource(workflowPath, strings.TrimSpace(opts.source))
 	}
 	invocationID := newInvocationID("apply")

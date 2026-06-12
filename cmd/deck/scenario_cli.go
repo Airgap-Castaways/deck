@@ -374,7 +374,7 @@ func registerScenarioNameCompletionWithSourceLocator(cmd *cobra.Command, flagNam
 		localRoot := "."
 		if localRootFlagName != "" {
 			flag := cmd.Flags().Lookup(localRootFlagName)
-			if flag != nil && strings.TrimSpace(flag.Value.String()) != "" {
+			if flag != nil && cmd.Flags().Changed(localRootFlagName) && strings.TrimSpace(flag.Value.String()) != "" {
 				localRoot = strings.TrimSpace(flag.Value.String())
 			}
 		}
