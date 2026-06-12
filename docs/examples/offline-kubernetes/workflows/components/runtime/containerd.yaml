@@ -1,0 +1,143 @@
+steps:
+  - id: stop-kubelet-before-runtime-change
+    kind: ManageService
+    spec:
+      name: kubelet
+      state: stopped
+      ignoreMissing: true
+  - id: stop-containerd-before-runtime-change
+    kind: ManageService
+    spec:
+      name: "{{ .vars.runtime.containerd.serviceName }}"
+      state: stopped
+      ignoreMissing: true
+  - id: ensure-containerd-install-dir
+    kind: EnsureDirectory
+    spec:
+      path: "{{ .vars.runtime.containerd.installDir }}"
+      mode: "0755"
+  - id: extract-containerd
+    kind: ExtractArchive
+    timeout: 20m
+    spec:
+      source:
+        url: http://{{ .vars.server.url }}/files/bin/linux/{{ .runtime.host.arch }}/containerd.tar.gz
+      path: "{{ .vars.runtime.containerd.installDir }}"
+  - id: install-runc
+    kind: CopyFile
+    spec:
+      source:
+        url: http://{{ .vars.server.url }}/files/bin/linux/{{ .runtime.host.arch }}/runc
+      path: "{{ .vars.runtime.containerd.runcPath }}"
+      mode: "0755"
+  - id: extract-cni-plugins
+    kind: ExtractArchive
+    spec:
+      source:
+        url: http://{{ .vars.server.url }}/files/bin/linux/{{ .runtime.host.arch }}/cni-plugins.tgz
+      path: /opt/cni/bin
+      mode: "0755"
+  - id: ensure-containerd-config-dir
+    kind: EnsureDirectory
+    spec:
+      path: "{{ .vars.runtime.containerd.configDir }}"
+      mode: "0755"
+  - id: ensure-containerd-conf-d-dir
+    kind: EnsureDirectory
+    spec:
+      path: "{{ .vars.runtime.containerd.confDir }}"
+      mode: "0755"
+  - id: ensure-containerd-root-dir
+    kind: EnsureDirectory
+    spec:
+      path: "{{ .vars.runtime.containerd.root }}"
+      mode: "0711"
+  - id: ensure-containerd-state-dir
+    kind: EnsureDirectory
+    spec:
+      path: "{{ .vars.runtime.containerd.state }}"
+      mode: "0755"
+  - id: write-containerd-main-config
+    kind: WriteFile
+    spec:
+      path: "{{ .vars.runtime.containerd.configPath }}"
+      mode: "0644"
+      template: |
+        version = 3
+        root = "{{ .vars.runtime.containerd.root }}"
+        state = "{{ .vars.runtime.containerd.state }}"
+        imports = ["{{ .vars.runtime.containerd.confDir }}/*.toml"]
+
+        [grpc]
+          address = "{{ .vars.runtime.containerd.socket }}"
+  - id: write-containerd-cri-config
+    kind: WriteFile
+    spec:
+      path: "{{ .vars.runtime.containerd.confDir }}/10-cri-base.toml"
+      mode: "0644"
+      template: |
+        [plugins]
+          [plugins."io.containerd.cri.v1.images"]
+            sandbox_image = "{{ .vars.images.pause }}"
+
+            [plugins."io.containerd.cri.v1.images".registry]
+              config_path = "{{ .vars.runtime.containerd.certsDir }}"
+
+          [plugins."io.containerd.cri.v1.runtime"]
+            [plugins."io.containerd.cri.v1.runtime".containerd]
+              default_runtime_name = "{{ .vars.runtime.containerd.defaultRuntime }}"
+
+              [plugins."io.containerd.cri.v1.runtime".containerd.runtimes]
+                [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.runc]
+                  runtime_type = "io.containerd.runc.v2"
+
+                  [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.runc.options]
+                    BinaryName = "{{ .vars.runtime.containerd.runcPath }}"
+                    SystemdCgroup = true
+  - id: write-containerd-systemd-unit
+    kind: WriteSystemdUnit
+    spec:
+      path: "{{ .vars.runtime.containerd.unitPath }}"
+      mode: "0644"
+      template: |
+        [Unit]
+        Description=containerd container runtime for Kubernetes
+        Documentation=https://containerd.io
+        After=network.target local-fs.target
+
+        [Service]
+        Environment=PATH={{ .vars.runtime.containerd.binDir }}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        ExecStart={{ .vars.runtime.containerd.containerdPath }} --config {{ .vars.runtime.containerd.configPath }}
+        Type=notify
+        Delegate=yes
+        KillMode=process
+        Restart=always
+        RestartSec=5
+        LimitNPROC=infinity
+        LimitCORE=infinity
+        LimitNOFILE=infinity
+        TasksMax=infinity
+        OOMScoreAdjust=-999
+
+        [Install]
+        WantedBy=multi-user.target
+      daemonReload: true
+  - id: start-containerd
+    kind: ManageService
+    spec:
+      name: "{{ .vars.runtime.containerd.serviceName }}"
+      enabled: true
+      state: restarted
+      daemonReload: true
+  - id: wait-containerd-service
+    kind: WaitForService
+    spec:
+      name: "{{ .vars.runtime.containerd.serviceName }}"
+      timeout: 5m
+      interval: 2s
+  - id: wait-containerd-cri
+    kind: WaitForCommand
+    spec:
+      timeout: 5m
+      interval: 2s
+      command: [crictl, --runtime-endpoint, "{{ .vars.runtime.criSocket }}", info]

@@ -1,0 +1,60 @@
+steps:
+  - id: stop-apt-daily-services
+    kind: ManageService
+    spec:
+      names:
+        - apt-daily.service
+        - apt-daily-upgrade.service
+        - unattended-upgrades.service
+      state: stopped
+      ifExists: true
+      ignoreMissing: true
+  - id: disable-apt-daily-timers
+    kind: ManageService
+    spec:
+      names:
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+      enabled: false
+      state: stopped
+      ifExists: true
+      ignoreMissing: true
+  - id: ensure-apt-conf-dir
+    kind: EnsureDirectory
+    spec:
+      path: /etc/apt/apt.conf.d
+      mode: "0755"
+  - id: disable-apt-automatic-updates
+    kind: WriteFile
+    spec:
+      path: /etc/apt/apt.conf.d/99-disable-automatic-updates
+      mode: "0644"
+      content: |
+        // Managed by deck: Kubernetes nodes should not change packages or reboot unexpectedly.
+        APT::Periodic::Enable "0";
+        APT::Periodic::Update-Package-Lists "0";
+        APT::Periodic::Download-Upgradeable-Packages "0";
+        APT::Periodic::Unattended-Upgrade "0";
+        APT::Periodic::AutocleanInterval "0";
+        Unattended-Upgrade::Automatic-Reboot "false";
+        Unattended-Upgrade::Automatic-Reboot-WithUsers "false";
+  - id: configure-offline-apt-repo
+    kind: ConfigureRepository
+    spec:
+      format: deb
+      path: /etc/apt/sources.list.d/deck-offline.list
+      replaceExisting: true
+      disableExisting: true
+      repositories:
+        - type: deb
+          trusted: true
+          baseurl: http://{{ .vars.server.url }}/packages/deb/{{ .vars.release }}
+          suite: ./
+  - id: refresh-offline-apt-repo
+    kind: RefreshRepository
+    spec:
+      manager: apt
+      clean: true
+      update: true
+      restrictToRepos:
+        - /etc/apt/sources.list.d/deck-offline.list

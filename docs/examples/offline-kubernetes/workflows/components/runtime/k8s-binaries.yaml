@@ -1,0 +1,99 @@
+steps:
+  - id: install-kubelet
+    kind: CopyFile
+    spec:
+      source:
+        url: http://{{ .vars.server.url }}/files/bin/linux/{{ .runtime.host.arch }}/kubelet
+      path: /usr/bin/kubelet
+      mode: "0755"
+  - id: install-kubeadm
+    kind: CopyFile
+    spec:
+      source:
+        url: http://{{ .vars.server.url }}/files/bin/linux/{{ .runtime.host.arch }}/kubeadm
+      path: /usr/bin/kubeadm
+      mode: "0755"
+  - id: install-kubectl
+    kind: CopyFile
+    spec:
+      source:
+        url: http://{{ .vars.server.url }}/files/bin/linux/{{ .runtime.host.arch }}/kubectl
+      path: /usr/bin/kubectl
+      mode: "0755"
+  - id: install-crictl
+    kind: ExtractArchive
+    spec:
+      source:
+        url: http://{{ .vars.server.url }}/files/bin/linux/{{ .runtime.host.arch }}/crictl.tar.gz
+      path: /usr/bin
+      include:
+        - crictl
+      mode: "0755"
+  - id: configure-crictl-for-k8s-containerd
+    kind: WriteFile
+    spec:
+      path: /etc/crictl.yaml
+      mode: "0644"
+      template: |
+        runtime-endpoint: "{{ .vars.runtime.criSocket }}"
+        image-endpoint: "{{ .vars.runtime.criSocket }}"
+        timeout: 10
+        debug: false
+  - id: install-nerdctl
+    kind: ExtractArchive
+    spec:
+      source:
+        url: http://{{ .vars.server.url }}/files/bin/linux/{{ .runtime.host.arch }}/nerdctl.tar.gz
+      path: /usr/local/bin
+      include:
+        - nerdctl
+      mode: "0755"
+  - id: ensure-nerdctl-config-dir
+    kind: EnsureDirectory
+    spec:
+      path: /etc/nerdctl
+      mode: "0755"
+  - id: configure-nerdctl-for-k8s-containerd
+    kind: WriteFile
+    spec:
+      path: /etc/nerdctl/nerdctl.toml
+      mode: "0644"
+      template: |
+        address = "{{ .vars.runtime.containerd.socket }}"
+        namespace = "k8s.io"
+        hosts_dir = ["{{ .vars.runtime.containerd.certsDir }}"]
+  - id: install-helm-archive
+    kind: ExtractArchive
+    spec:
+      source:
+        url: http://{{ .vars.server.url }}/files/bin/linux/{{ .runtime.host.arch }}/helm.tar.gz
+      path: /usr/local/lib/deck-tools/helm
+      include:
+        - linux-{{ .runtime.host.arch }}/helm
+      mode: "0755"
+  - id: link-helm
+    kind: CreateSymlink
+    spec:
+      path: /usr/local/bin/helm
+      target: /usr/local/lib/deck-tools/helm/linux-{{ .runtime.host.arch }}/helm
+      force: true
+      createParent: true
+      requireTarget: true
+  - id: install-helmfile
+    kind: ExtractArchive
+    spec:
+      source:
+        url: http://{{ .vars.server.url }}/files/bin/linux/{{ .runtime.host.arch }}/helmfile.tar.gz
+      path: /usr/local/bin
+      include:
+        - helmfile
+      mode: "0755"
+  - id: install-k9s
+    kind: ExtractArchive
+    spec:
+      source:
+        url: http://{{ .vars.server.url }}/files/bin/linux/{{ .runtime.host.arch }}/k9s.tar.gz
+      path: /usr/local/bin
+      include:
+        - k9s
+      mode: "0755"
