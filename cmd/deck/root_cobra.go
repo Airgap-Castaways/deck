@@ -60,6 +60,7 @@ func newRootCommand(env *cliEnv) *cobra.Command {
 		withGroup(newVersionCommand(env), commandGroupAdditional),
 		withGroup(newCompletionCommand(), commandGroupAdditional),
 		withGroup(newCacheCommand(env), commandGroupAdditional),
+		newGenDocsCommand(env),
 	} {
 		if child != nil {
 			cmd.AddCommand(child)
