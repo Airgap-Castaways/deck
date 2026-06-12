@@ -3,7 +3,11 @@ steps:
     kind: InitKubeadm
     timeout: 30m
     spec:
-      outputJoinFile: /tmp/deck/join-worker.txt
+      # Required by InitKubeadm; written locally on the control-plane only.
+      # The announced worker join (announce-join.yaml) is generated fresh via
+      # `kubeadm token create`, so this file is not served or fetched. Reset
+      # cleans this path (vars.join.file).
+      outputJoinFile: "{{ .vars.join.file }}"
       skipIfAdminConfExists: true
       configFile: /tmp/deck/kubeadm-init.yaml
       configTemplate: |
