@@ -52,6 +52,44 @@ Remaining drift gap:
 - package reuse still does not detect upstream repository drift on its own; closing that gap likely requires repository snapshot metadata such as repodata/release fingerprints or explicit mirror version contracts.
 - image reuse now preserves fetched source digests in metadata, but mutable tag drift is not yet probed on reuse; a follow-up can compare saved digests against current registry manifests when remote access is allowed.
 
+## Apply-time manifest verification
+
+Whenever `deck apply` resolves a bundle root, it runs `bundle.VerifyManifest` before executing any workflow phase. A verification failure aborts the run immediately — no phase begins.
+
+### Invocations that trigger verification
+
+Verification runs whenever `opts.BundleRoot` is non-empty in `RunOptions` (`internal/install/runner.go:114`). The CLI populates `BundleRoot` in three ways:
+
+- **Plain `deck apply` in a workspace** — `ResolveBundleRoot` falls back to the current directory (`.`) when no explicit path is given; if the directory contains a `workflows/` tree it is used as the bundle root and verification runs.
+- **`deck apply --root <dir>`** — the explicit root is resolved and passed as `BundleRoot`; verification runs.
+- **`deck apply <bundle-path>`** — a positional bundle path (directory or `.tar` archive) is resolved and passed as `BundleRoot`; verification runs.
+
+Verification is skipped only when no bundle root is resolved: this happens for `deck apply --workflow <path>` with no positional bundle, and for `deck apply --scenario <name> --source server` with no positional bundle. For a local `--scenario` (or plain `deck apply`) with no `--root` and no positional path, deck resolves the current directory as the bundle root — verification runs if it contains a `workflows/` tree, otherwise the command errors.
+
+When a positional `.tar` bundle is given, deck extracts it to a cache directory (keyed by SHA-256 of the archive) before resolving the bundle root; verification then runs against the extracted directory.
+
+### What is verified
+
+`bundle.VerifyManifest` (`internal/bundle/verify.go:37`) reads `.deck/manifest.json` and checks every entry in it against the corresponding artifact in `outputs/{files,packages,images,bin}` (the `outputs/` prefix is optional — legacy bundles using bare `files/`, `packages/`, `images/`, `bin/` are also tracked). For each entry it confirms:
+
+- the artifact exists on disk (or inside the tar archive),
+- the SHA-256 digest matches the recorded value,
+- the file size matches when a non-zero size is recorded.
+
+After per-entry checks, the function also cross-checks that every package-repository index file (`Release`, `Packages.gz`, `repomd.xml`) and every image `.tar` present in the bundle is covered by a manifest entry.
+
+See [workspace-layout.md](workspace-layout.md) for the full list of paths tracked by the manifest.
+
+### Failure modes
+
+| Error code | Condition |
+|---|---|
+| `E_MANIFEST_MISSING` | `.deck/manifest.json` is absent from the bundle directory or tar archive |
+| `E_MANIFEST_EMPTY` | The manifest file exists but its `entries` array is empty |
+| `E_BUNDLE_INTEGRITY` | An artifact is missing, or its size or SHA-256 digest does not match the manifest, or a manifest entry path is structurally invalid, or a required offline artifact is present in the bundle but absent from the manifest |
+
+See [diagnostics/error-codes.md](diagnostics/error-codes.md) for the full error-code catalog.
+
 ## Core rule
 
 If the site needs it to run the workflow, place it in the canonical bundle inputs rather than assume it already exists on the target machine.
