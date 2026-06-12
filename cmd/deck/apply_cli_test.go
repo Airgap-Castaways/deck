@@ -802,15 +802,44 @@ func TestPlanJSONAndVerboseDiagnostics(t *testing.T) {
 	}
 }
 
-func TestApplyAndPlanFresh(t *testing.T) {
+func TestPlanFreshFlagRemoved(t *testing.T) {
+	for _, args := range [][]string{
+		{"plan", "--fresh"},
+		{"plan", "vars", "--fresh"},
+	} {
+		res := execute(args)
+		if res.err == nil {
+			t.Fatalf("expected %v to fail", args)
+		}
+		if !strings.Contains(res.stderr, "unknown flag: --fresh") {
+			t.Fatalf("expected unknown fresh flag for %v, got %q", args, res.stderr)
+		}
+	}
+}
+
+func TestApplyFreshRejectsDryRun(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	wfPath := filepath.Join(t.TempDir(), "apply-fresh-dry-run.yaml")
+	writeWorkflowYAML(t, wfPath, "version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: once\n        kind: Command\n        spec:\n          command: [\"true\"]\n")
+
+	res := execute([]string{"apply", "--workflow", wfPath, "--dry-run", "--fresh"})
+	if res.err == nil {
+		t.Fatalf("expected apply --dry-run --fresh to fail")
+	}
+	if !strings.Contains(res.stderr, "apply --fresh cannot be combined with --dry-run because --fresh clears apply state") {
+		t.Fatalf("expected dry-run fresh rejection, got %q", res.stderr)
+	}
+}
+
+func TestApplyFreshClearsState(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
 	wfPath := filepath.Join(t.TempDir(), "apply-fresh.yaml")
 	logPath := filepath.Join(t.TempDir(), "fresh.log")
 	writeWorkflowYAML(t, wfPath, fmt.Sprintf("version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: once\n        kind: Command\n        spec:\n          command: [\"sh\", \"-c\", \"echo run >> %s\"]\n", strings.ReplaceAll(logPath, "\\", "\\\\")))
 
-	if _, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath}); err != nil {
-		t.Fatalf("initial apply failed: %v", err)
-	}
+	statePath := statePathFromVerboseApply(t, []string{"apply", "--workflow", wfPath})
 	planOut, err := runWithCapturedStdout([]string{"plan", "--workflow", wfPath})
 	if err != nil {
 		t.Fatalf("plan failed: %v", err)
@@ -818,19 +847,86 @@ func TestApplyAndPlanFresh(t *testing.T) {
 	if !strings.Contains(planOut, "SKIP (completed)") {
 		t.Fatalf("expected completed phase skip in plan output, got %q", planOut)
 	}
-	freshPlan, err := runWithCapturedStdout([]string{"plan", "--workflow", wfPath, "--fresh"})
-	if err != nil {
-		t.Fatalf("fresh plan failed: %v", err)
+	stateKey := strings.TrimSuffix(filepath.Base(statePath), filepath.Ext(statePath))
+	fallbackStatePath := filepath.Join(home, ".local", "state", "deck", "state", stateKey+".json")
+	if err := os.MkdirAll(filepath.Dir(fallbackStatePath), 0o755); err != nil {
+		t.Fatalf("mkdir fallback state dir: %v", err)
 	}
-	if !strings.Contains(freshPlan, "once Command RUN") {
-		t.Fatalf("expected fresh plan to rerun step, got %q", freshPlan)
+	if err := os.WriteFile(fallbackStatePath, []byte("{\"phase\":\"completed\",\"completedPhases\":[\"install\"]}"), 0o600); err != nil {
+		t.Fatalf("write fallback state: %v", err)
+	}
+	legacyStatePath := filepath.Join(home, ".deck", "state", stateKey+".json")
+	if err := os.MkdirAll(filepath.Dir(legacyStatePath), 0o755); err != nil {
+		t.Fatalf("mkdir legacy state dir: %v", err)
+	}
+	if err := os.WriteFile(legacyStatePath, []byte("{\"phase\":\"completed\",\"completedPhases\":[\"install\"]}"), 0o600); err != nil {
+		t.Fatalf("write legacy state: %v", err)
 	}
 	if _, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--fresh"}); err != nil {
 		t.Fatalf("fresh apply failed: %v", err)
 	}
+	if _, err := os.Stat(fallbackStatePath); !os.IsNotExist(err) {
+		t.Fatalf("expected fallback state to be cleared, stat err: %v", err)
+	}
+	if _, err := os.Stat(legacyStatePath); !os.IsNotExist(err) {
+		t.Fatalf("expected legacy state to be cleared, stat err: %v", err)
+	}
 	raw, err := os.ReadFile(logPath)
 	if err != nil {
 		t.Fatalf("read fresh log: %v", err)
+	}
+	if got := strings.Count(strings.TrimSpace(string(raw)), "run"); got != 2 {
+		t.Fatalf("expected 2 executions after fresh apply, got %d (%q)", got, string(raw))
+	}
+}
+
+func TestApplyFreshWithStateDirClearsOnlySelectedState(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	stateDir := t.TempDir()
+	wfPath := filepath.Join(t.TempDir(), "apply-fresh-state-dir.yaml")
+	logPath := filepath.Join(t.TempDir(), "fresh-state-dir.log")
+	writeWorkflowYAML(t, wfPath, fmt.Sprintf("version: v1alpha1\nphases:\n  - name: install\n    steps:\n      - id: once\n        kind: Command\n        spec:\n          command: [\"sh\", \"-c\", \"echo run >> %s\"]\n", strings.ReplaceAll(logPath, "\\", "\\\\")))
+
+	statePath := statePathFromVerboseApply(t, []string{"apply", "--workflow", wfPath, "--state-dir", stateDir})
+	stateKey := strings.TrimSuffix(filepath.Base(statePath), filepath.Ext(statePath))
+	fallbackStatePath := filepath.Join(home, ".local", "state", "deck", "state", stateKey+".json")
+	if err := os.MkdirAll(filepath.Dir(fallbackStatePath), 0o755); err != nil {
+		t.Fatalf("mkdir fallback state dir: %v", err)
+	}
+	if err := os.WriteFile(fallbackStatePath, []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write fallback state: %v", err)
+	}
+	legacyStatePath := filepath.Join(home, ".deck", "state", stateKey+".json")
+	if err := os.MkdirAll(filepath.Dir(legacyStatePath), 0o755); err != nil {
+		t.Fatalf("mkdir legacy state dir: %v", err)
+	}
+	if err := os.WriteFile(legacyStatePath, []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write legacy state: %v", err)
+	}
+	unrelatedPath := filepath.Join(stateDir, "unrelated.json")
+	if err := os.WriteFile(unrelatedPath, []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write unrelated state: %v", err)
+	}
+	if _, err := runWithCapturedStdout([]string{"apply", "--workflow", wfPath, "--state-dir", stateDir, "--fresh"}); err != nil {
+		t.Fatalf("fresh apply failed: %v", err)
+	}
+	if _, err := os.Stat(statePath); err != nil {
+		t.Fatalf("expected selected state to be rewritten: %v", err)
+	}
+	if _, err := os.Stat(unrelatedPath); err != nil {
+		t.Fatalf("expected unrelated state to remain: %v", err)
+	}
+	if _, err := os.Stat(fallbackStatePath); err != nil {
+		t.Fatalf("expected fallback state to remain with explicit state dir: %v", err)
+	}
+	if _, err := os.Stat(legacyStatePath); err != nil {
+		t.Fatalf("expected legacy state to remain with explicit state dir: %v", err)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
 	}
 	if got := strings.Count(strings.TrimSpace(string(raw)), "run"); got != 2 {
 		t.Fatalf("expected 2 executions after fresh apply, got %d (%q)", got, string(raw))

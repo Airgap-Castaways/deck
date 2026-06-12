@@ -17,7 +17,6 @@ type diffOptions struct {
 	workflowPath  string
 	scenario      string
 	source        string
-	fresh         bool
 	stateDir      string
 	selectedPhase string
 	output        string
@@ -32,7 +31,6 @@ type planVarsOptions struct {
 	source        string
 	selectedPhase string
 	preparedRoot  string
-	fresh         bool
 	output        string
 	varOverrides  map[string]string
 	varsFiles     []string
@@ -63,10 +61,6 @@ func newPlanCommand(env *cliEnv) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fresh, err := cmdFlagBoolValue(cmd, "fresh")
-			if err != nil {
-				return err
-			}
 			output, err := cmdFlagValue(cmd, "output")
 			if err != nil {
 				return err
@@ -75,7 +69,6 @@ func newPlanCommand(env *cliEnv) *cobra.Command {
 				workflowPath:  workflowPath,
 				scenario:      scenario,
 				source:        source,
-				fresh:         fresh,
 				stateDir:      stateDir,
 				selectedPhase: selectedPhase,
 				output:        output,
@@ -89,7 +82,6 @@ func newPlanCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("scenario", "", "scenario name to plan")
 	cmd.Flags().String("source", scenarioSourceLocal, "scenario source (local|server)")
 	cmd.Flags().String("phase", "", "phase name to plan (defaults to all phases)")
-	cmd.Flags().Bool("fresh", false, "ignore saved apply state for this invocation")
 	cmd.Flags().StringVar(&stateDir, "state-dir", "", "directory for apply state files (overrides local .deck/state/apply or remote XDG state)")
 	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
 	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
@@ -132,10 +124,6 @@ func newPlanVarsCommand(env *cliEnv) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fresh, err := cmdFlagBoolValue(cmd, "fresh")
-			if err != nil {
-				return err
-			}
 			output, err := cmdFlagValue(cmd, "output")
 			if err != nil {
 				return err
@@ -147,7 +135,6 @@ func newPlanVarsCommand(env *cliEnv) *cobra.Command {
 				source:        source,
 				selectedPhase: selectedPhase,
 				preparedRoot:  preparedRoot,
-				fresh:         fresh,
 				output:        output,
 				varOverrides:  vars.AsMap(),
 				varsFiles:     varsFiles.Values(),
@@ -160,7 +147,6 @@ func newPlanVarsCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("source", scenarioSourceLocal, "scenario source for apply (local|server)")
 	cmd.Flags().String("phase", "", "phase name to inspect (defaults to all phases)")
 	cmd.Flags().String("root", workspacepaths.DefaultPreparedRoot("."), "prepared bundle output directory for --command prepare")
-	cmd.Flags().Bool("fresh", false, "ignore saved apply state for this invocation")
 	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
 	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
@@ -191,7 +177,6 @@ func runPlanVarsWithOptions(env *cliEnv, ctx context.Context, opts planVarsOptio
 		Scenario:        strings.TrimSpace(opts.scenario),
 		SelectedPhase:   strings.TrimSpace(opts.selectedPhase),
 		PreparedRoot:    strings.TrimSpace(opts.preparedRoot),
-		Fresh:           opts.fresh,
 		VarOverrides:    varsAsAnyMap(opts.varOverrides),
 		VarsFiles:       append([]string(nil), opts.varsFiles...),
 		Output:          resolvedOutput,
@@ -209,17 +194,16 @@ func runDiffWithOptions(env *cliEnv, ctx context.Context, opts diffOptions) erro
 		return err
 	}
 	selectedPhase := strings.TrimSpace(opts.selectedPhase)
-	return executeDiff(env, ctx, workflowPath, strings.TrimSpace(opts.scenario), selectedPhase, opts.output, opts.fresh, opts.stateDir, opts.varsFiles, varsAsAnyMap(opts.varOverrides))
+	return executeDiff(env, ctx, workflowPath, strings.TrimSpace(opts.scenario), selectedPhase, opts.output, opts.stateDir, opts.varsFiles, varsAsAnyMap(opts.varOverrides))
 }
 
-func executeDiff(env *cliEnv, ctx context.Context, workflowPath, scenario, selectedPhase, output string, fresh bool, stateDir string, varsFiles []string, varOverrides map[string]any) error {
+func executeDiff(env *cliEnv, ctx context.Context, workflowPath, scenario, selectedPhase, output string, stateDir string, varsFiles []string, varOverrides map[string]any) error {
 	stateDir = strings.TrimSpace(stateDir)
 	return applycli.RunPlanCommand(ctx, applycli.PlanCommandOptions{
 		WorkflowPath:     workflowPath,
 		Scenario:         scenario,
 		SelectedPhase:    selectedPhase,
 		Output:           output,
-		Fresh:            fresh,
 		StateDir:         stateDir,
 		StateDirExplicit: stateDir != "",
 		VarOverrides:     varOverrides,
@@ -307,7 +291,7 @@ func newApplyCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("scenario", "", "scenario name to execute")
 	cmd.Flags().String("source", scenarioSourceLocal, "scenario source (local|server)")
 	cmd.Flags().String("phase", "", "phase name to execute (defaults to all phases)")
-	cmd.Flags().Bool("fresh", false, "ignore saved apply state for this invocation")
+	cmd.Flags().Bool("fresh", false, "clear saved apply state before execution")
 	cmd.Flags().StringVar(&stateDir, "state-dir", "", "directory for apply state files (overrides local .deck/state/apply or remote XDG state)")
 	cmd.Flags().Bool("dry-run", false, "print apply plan without executing steps")
 	cmd.Flags().Bool("non-interactive", false, "fail or use defaults for operator interaction steps instead of prompting")
