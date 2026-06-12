@@ -73,12 +73,10 @@ const config: Config = {
     navbar: {
       logo: {
         src: 'img/logo.svg',
-        alt: 'deck',
-        // SVG uses currentColor — it adapts to the forced dark navbar
+        alt: 'deck mark',
         style: {height: '26px'},
       },
-      // Keep title empty since logo includes the wordmark
-      title: '',
+      title: 'deck',
       items: [
         {type: 'doc', docId: 'README', position: 'left', label: 'Docs'},
         {type: 'localeDropdown', position: 'right'},

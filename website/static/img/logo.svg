@@ -1,25 +1,13 @@
-<svg width="120" height="32" viewBox="0 0 120 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="deck">
-  <!-- Stacked layer mark: 3 layers with a gap/break between top two (air-gap visual) -->
-  <g fill="currentColor">
-    <!-- Top layer (online side) -->
-    <rect x="0" y="0" width="24" height="5" rx="1"/>
-    <!-- Air-gap break: deliberate 3px gap with no bar, just space -->
-    <!-- Middle layer (bundle) -->
-    <rect x="0" y="9" width="24" height="5" rx="1"/>
-    <!-- Bottom layer (target) -->
-    <rect x="0" y="18" width="24" height="5" rx="1"/>
-    <!-- Gap indicator: two tiny tick marks flanking the gap -->
-    <rect x="26" y="6.5" width="2" height="2" rx="0.5" opacity="0.5"/>
-    <rect x="26" y="14.5" width="2" height="2" rx="0.5" opacity="0.5"/>
-  </g>
-  <!-- Wordmark -->
-  <text
-    x="34"
-    y="22"
-    font-family="Archivo, 'Arial Narrow', sans-serif"
-    font-weight="800"
-    font-size="20"
-    letter-spacing="-0.5"
-    fill="currentColor"
-  >deck</text>
+<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="deck mark">
+  <!-- Three stacked layer bars — the air-gapped ops-console mark -->
+  <!-- Top bar: amber accent (signal / online side) -->
+  <rect x="0" y="0" width="22" height="5" rx="1" fill="#f5a524"/>
+  <!-- Air-gap: deliberate gap with no bar here (3 px space) -->
+  <!-- Middle bar: steel-white -->
+  <rect x="0" y="8" width="22" height="5" rx="1" fill="#e8edf3"/>
+  <!-- Bottom bar: steel-white -->
+  <rect x="0" y="16" width="22" height="5" rx="1" fill="#e8edf3"/>
+  <!-- Gap tick marks flanking the air-gap (between top and middle bar) -->
+  <rect x="24" y="5.5" width="2" height="2" rx="0.5" fill="#9aa7b8" opacity="0.7"/>
+  <rect x="24" y="13.5" width="2" height="2" rx="0.5" fill="#9aa7b8" opacity="0.7"/>
 </svg>

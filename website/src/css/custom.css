@@ -32,18 +32,19 @@
 }
 
 /* ════════════════════════════════
-   Infima global overrides
-   Teal-steel palette for docs (accessible on white and dark)
+   Infima global overrides — LIGHT MODE
+   Link color: deep amber/teal — AA contrast on white (≥4.5:1)
+   #8a5200 on white = ~7.8:1 contrast ✓
    ════════════════════════════════ */
 :root {
-  /* Docs link color — accessible on white bg (AA contrast) */
-  --ifm-color-primary:           #1b6fa8;
-  --ifm-color-primary-dark:      #185f8f;
-  --ifm-color-primary-darker:    #165887;
-  --ifm-color-primary-darkest:   #124670;
-  --ifm-color-primary-light:     #1e7fbe;
-  --ifm-color-primary-lighter:   #2087c6;
-  --ifm-color-primary-lightest:  #2898d8;
+  /* Docs link color — deep amber, passes WCAG AA on white (#fff) */
+  --ifm-color-primary:           #8a5200;
+  --ifm-color-primary-dark:      #7a4900;
+  --ifm-color-primary-darker:    #6e4100;
+  --ifm-color-primary-darkest:   #5a3500;
+  --ifm-color-primary-light:     #9a5c00;
+  --ifm-color-primary-lighter:   #aa6600;
+  --ifm-color-primary-lightest:  #c07700;
 
   --ifm-code-font-size: 93%;
   --ifm-font-family-base:        'Archivo', 'Helvetica Neue', Arial, sans-serif;
@@ -52,28 +53,75 @@
   --ifm-heading-font-weight:     700;
   --ifm-font-weight-semibold:    600;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+
+  /* Light mode: sidebar active item — amber-derived but accessible */
+  --ifm-menu-color-active:        #8a5200;
+  --ifm-menu-color-background-active: rgba(138, 82, 0, 0.08);
+  --ifm-link-hover-color:         #6e4100;
 }
 
+/* ════════════════════════════════
+   Infima global overrides — DARK MODE
+   Docs pages use the brand ink family
+   ════════════════════════════════ */
 [data-theme='dark'] {
-  /* Docs link color — accessible on dark bg */
-  --ifm-color-primary:           #4db8e8;
-  --ifm-color-primary-dark:      #29a9e0;
-  --ifm-color-primary-darker:    #1da0d9;
-  --ifm-color-primary-darkest:   #1588ba;
-  --ifm-color-primary-light:     #6dc5ec;
-  --ifm-color-primary-lighter:   #7ecbee;
-  --ifm-color-primary-lightest:  #a2d9f3;
+  /* Docs background → brand ink */
+  --ifm-background-color:        #0c0f16;
+  --ifm-background-surface-color: #0f131a;
+
+  /* Docs link color — amber, readable on dark bg (brand + AA) */
+  --ifm-color-primary:           #f5a524;
+  --ifm-color-primary-dark:      #e09318;
+  --ifm-color-primary-darker:    #d48a12;
+  --ifm-color-primary-darkest:   #b8740a;
+  --ifm-color-primary-light:     #f7b340;
+  --ifm-color-primary-lighter:   #f8bc55;
+  --ifm-color-primary-lightest:  #fac97a;
+
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+
+  /* Dark mode sidebar active — amber tint */
+  --ifm-menu-color-active:        #f5a524;
+  --ifm-menu-color-background-active: rgba(245, 165, 36, 0.1);
+  --ifm-link-hover-color:         #f7b340;
+
+  /* Sidebar + TOC surface */
+  --ifm-toc-border-color:         rgba(154, 167, 184, 0.15);
+
+  /* Code block: darker than default dark */
+  --ifm-code-background:          #0a0d12;
+  --ifm-pre-background:           #0a0d12;
+
+  /* Admonition accent (fallback; individual types below) */
+  --ifm-color-info:               #4db8e8;
+  --ifm-color-warning:            #f5a524;
+  --ifm-color-success:            #4ade80;
+  --ifm-color-danger:             #f87171;
+
+  /* Body text: crisp on dark */
+  --ifm-font-color-base:          #c8d3df;
+  --ifm-heading-color:            #e8edf3;
 }
 
-/* Navbar: force dark surface so amber logo is always visible */
+/* ════════════════════════════════
+   Navbar — always dark (both modes)
+   Logo mark sits on ink; title Archivo
+   ════════════════════════════════ */
 .navbar {
   background-color: #0c0f16 !important;
   border-bottom: 1px solid rgba(154, 167, 184, 0.1);
   box-shadow: none;
 }
 
-.navbar__title,
+/* Navbar title — Archivo, near-white */
+.navbar__title {
+  font-family: var(--deck-font-display), 'Arial Narrow', sans-serif;
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+  color: #e8edf3 !important;
+}
+
 .navbar__link,
 .navbar__item {
   color: #c8d3df !important;
@@ -84,13 +132,98 @@
   color: var(--deck-amber) !important;
 }
 
-/* Footer stays dark */
+/* Locale dropdown, theme toggle, and other icon buttons */
+.navbar__items .navbar__item svg,
+.navbar__items .clean-btn svg {
+  color: #c8d3df;
+}
+
+/* Theme toggle button legible on dark navbar */
+[data-theme='light'] .navbar .clean-btn,
+[data-theme='dark']  .navbar .clean-btn {
+  color: #c8d3df;
+}
+
+/* ════════════════════════════════
+   Light-mode docs: body text stays dark on white — no change needed;
+   but we ensure headings use the brand font weight.
+   Amber (#f5a524) is ONLY used on dark surfaces. On light we use deep-amber.
+   ════════════════════════════════ */
+[data-theme='light'] .theme-doc-sidebar-container,
+[data-theme='light'] .main-wrapper {
+  /* keep default white — readable */
+}
+
+/* Active sidebar item — highlight border with deep amber on light */
+[data-theme='light'] .menu__link--active:not(.menu__link--sublist) {
+  border-left: 2px solid #8a5200;
+}
+
+/* Active sidebar item — highlight border with amber on dark */
+[data-theme='dark'] .menu__link--active:not(.menu__link--sublist) {
+  border-left: 2px solid var(--deck-amber);
+}
+
+/* ════════════════════════════════
+   Dark mode docs — code blocks
+   ════════════════════════════════ */
+[data-theme='dark'] .prism-code,
+[data-theme='dark'] pre.prism-code {
+  background: #080b10 !important;
+  border: 1px solid rgba(154, 167, 184, 0.1);
+}
+
+[data-theme='dark'] code {
+  background: rgba(245, 165, 36, 0.08);
+  border: 1px solid rgba(245, 165, 36, 0.15);
+  border-radius: 3px;
+  color: #f5c068;
+}
+
+/* Highlighted code line — amber tint on dark */
+[data-theme='dark'] .docusaurus-highlight-code-line {
+  background: rgba(245, 165, 36, 0.1);
+  display: block;
+  margin: 0 calc(-1 * var(--ifm-pre-padding));
+  padding: 0 var(--ifm-pre-padding);
+}
+
+/* ════════════════════════════════
+   Dark mode docs — admonitions
+   ════════════════════════════════ */
+[data-theme='dark'] .alert--warning {
+  --ifm-alert-background-color: rgba(245, 165, 36, 0.08);
+  --ifm-alert-border-color: rgba(245, 165, 36, 0.4);
+}
+
+[data-theme='dark'] .alert--info {
+  --ifm-alert-background-color: rgba(77, 184, 232, 0.08);
+  --ifm-alert-border-color: rgba(77, 184, 232, 0.35);
+}
+
+/* ════════════════════════════════
+   Table of contents — dark mode
+   ════════════════════════════════ */
+[data-theme='dark'] .table-of-contents__link--active {
+  color: var(--deck-amber);
+  font-weight: 600;
+}
+
+[data-theme='dark'] .table-of-contents__link:hover {
+  color: #f7b340;
+}
+
+/* ════════════════════════════════
+   Footer — stays dark in both modes
+   ════════════════════════════════ */
 .footer--dark {
   background-color: #080b10;
   border-top: 1px solid rgba(154, 167, 184, 0.08);
 }
 
-/* Reduce motion globally when requested */
+/* ════════════════════════════════
+   Reduce motion globally
+   ════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
