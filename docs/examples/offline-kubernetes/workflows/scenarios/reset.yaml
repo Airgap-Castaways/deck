@@ -1,0 +1,17 @@
+version: v1alpha1
+phases:
+  - name: reset-kubernetes
+    imports:
+      - path: reset/kubeadm.yaml
+  - name: reset-cri
+    imports:
+      - path: reset/cri.yaml
+  - name: reset-network
+    imports:
+      - path: reset/network.yaml
+  - name: reset-artifacts
+    imports:
+      - path: reset/artifacts.yaml
+  - name: reset-scope
+    imports:
+      - path: reset/scope-notice.yaml

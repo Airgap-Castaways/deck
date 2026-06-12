@@ -1,0 +1,26 @@
+version: v1alpha1
+phases:
+  - name: host-prereqs
+    imports:
+      - path: node/verify-selection.yaml
+      - path: host-prereqs.yaml
+      - path: repo/offline-repo-debian.yaml
+        when: runtime.host.os.family == "debian"
+      - path: runtime/packages-debian.yaml
+        when: runtime.host.os.family == "debian"
+  - name: runtime
+    imports:
+      - path: runtime/k8s-binaries.yaml
+      - path: runtime/containerd.yaml
+      - path: runtime/kubelet.yaml
+  - name: image-source
+    imports:
+      - path: runtime/registry-mirror.yaml
+  - name: join
+    imports:
+      - path: join/input-join.yaml
+      - path: join/join-node.yaml
+      - path: kube/user-access.yaml
+  - name: verify
+    imports:
+      - path: verify/node.yaml
