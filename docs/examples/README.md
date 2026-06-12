@@ -103,8 +103,4 @@ See `offline-kubernetes/workflows/components/reset/scope-notice.yaml` for the in
 deck lint --root docs/examples/offline-kubernetes
 ```
 
-## Other examples
-
-- `vagrant-smoke-install.yaml`: a separate run-install smoke workflow for Vagrant-based testing.
-
 For walkthrough-oriented context, start with [Quick Start](../quick-start.md) and [Offline Kubernetes Tutorial](../offline-kubernetes.md).
