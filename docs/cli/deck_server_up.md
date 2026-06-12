@@ -12,7 +12,7 @@ deck server up [flags]
       --addr string             server listen address (default ":8080")
       --audit-max-files int     max retained rotated audit files (default 10)
       --audit-max-size-mb int   max audit log size in MB before rotation (default 50)
-  -d, --daemon                  run as a daemon (systemd service on Linux)
+  -d, --daemon                  run as a background daemon (systemd on Linux; detached process on macOS/Windows; see docs/server/daemon.md)
   -h, --help                    help for up
       --root string             server content root (default ".")
       --tls-cert string         TLS certificate path
