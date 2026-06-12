@@ -331,6 +331,26 @@ phases:
 
 Import paths are relative to `workflows/components/`. Write `k8s/prereq.yaml`, not `../components/k8s/prereq.yaml`.
 
+### Conditional imports (`imports[].when`)
+
+Each import entry accepts an optional `when` CEL condition. Deck AND-combines the import's `when` into every step loaded from that file. The combination form is `(import-when) && (step-when)`.
+
+- If the import has no `when`, steps keep their own `when` unchanged.
+- If a step has no `when` of its own, it inherits the import's `when` directly.
+- If both are present, the result is `(import-when) && (step-when)`.
+
+```yaml
+phases:
+  - name: gpu-setup
+    imports:
+      - path: gpu/setup.yaml
+        when: "vars.gpu == true"   # applied (AND) to every step imported from gpu/setup.yaml
+      - path: base.yaml
+        # no when — steps from base.yaml keep their own conditions unchanged
+```
+
+Use `vars.` to test static variables and `runtime.` to test runtime facts, the same as in a step-level `when`.
+
 Top-level `steps:` are still valid. Execution normalizes them into an implicit phase named `default`.
 
 ## Parallel batches
