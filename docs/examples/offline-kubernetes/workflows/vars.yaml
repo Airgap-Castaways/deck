@@ -1,0 +1,204 @@
+# Common defaults applied to all nodes. Per-node values are overridden in the hosts section below.
+all:
+    # Kubernetes version, OS, and architecture used by prepare/bootstrap/join
+    kubernetesVersion: v1.36.1
+    kubernetesMinor: v1.36
+    arch: amd64
+    release: ubuntu2404
+
+    # Container image used to build prepare packages. Must match the OS version in release.
+    releaseImage: ubuntu:24.04
+
+    # Cluster networking and API endpoint reflected in kubeadm configuration.
+    # Uses RFC 5737 TEST-NET addresses (192.0.2.0/24) — replace with real IPs before use.
+    cluster:
+        podCIDR: 10.244.0.0/16
+        serviceCIDR: 10.96.0.0/12
+        controlPlaneEndpoint: 192.0.2.10:6443
+        controlPlaneSAN: 192.0.2.10
+
+    # Server endpoint from which non-server nodes fetch the deck bundle and artifacts
+    server:
+        url: 192.0.2.10:5000
+
+    # Local registry endpoint for offline image pulls
+    registry:
+        host: 192.0.2.10:5000
+        scheme: http
+
+    # Kubernetes-dedicated containerd paths, isolated from any host Docker/containerd install
+    runtime:
+        criSocket: unix:///run/containerd-k8s/containerd.sock
+        containerd:
+            serviceName: containerd-k8s
+            unitPath: /etc/systemd/system/containerd-k8s.service
+            installDir: /opt/containerd-k8s
+            binDir: /opt/containerd-k8s/bin
+            containerdPath: /opt/containerd-k8s/bin/containerd
+            ctrPath: /opt/containerd-k8s/bin/ctr
+            runcPath: /opt/containerd-k8s/bin/runc
+            configDir: /etc/containerd-k8s
+            configPath: /etc/containerd-k8s/config.toml
+            confDir: /etc/containerd-k8s/conf.d
+            certsDir: /etc/containerd-k8s/certs.d
+            root: /data/containerd-k8s
+            state: /run/containerd-k8s
+            socket: /run/containerd-k8s/containerd.sock
+            defaultRuntime: runc
+            mirrorHosts:
+                - registry: registry.k8s.io
+                  server: https://registry.k8s.io
+                  host: "{{ .vars.registry.scheme }}://{{ .vars.registry.host }}"
+                  capabilities:
+                      - pull
+                      - resolve
+                  skipVerify: true
+                - registry: quay.io
+                  server: https://quay.io
+                  host: "{{ .vars.registry.scheme }}://{{ .vars.registry.host }}"
+                  capabilities:
+                      - pull
+                      - resolve
+                  skipVerify: true
+                - registry: docker.io
+                  server: https://registry-1.docker.io
+                  host: "{{ .vars.registry.scheme }}://{{ .vars.registry.host }}"
+                  capabilities:
+                      - pull
+                      - resolve
+                  skipVerify: true
+                - registry: ghcr.io
+                  server: https://ghcr.io
+                  host: "{{ .vars.registry.scheme }}://{{ .vars.registry.host }}"
+                  capabilities:
+                      - pull
+                      - resolve
+                  skipVerify: true
+
+    # Runtime tool and operations CLI versions
+    versions:
+        etcd: 3.6.11-0
+        containerd: 2.3.0
+        runc: 1.4.2
+        crictl: v1.36.0
+        cniPlugins: v1.9.1
+        nerdctl: 2.3.0
+        helm: v4.1.4
+        helmfile: 1.5.0
+        k9s: v0.50.18
+
+    # Core Kubernetes images used by kubeadm and runtime validation
+    images:
+        pause: registry.k8s.io/pause:3.10.2
+        etcd: registry.k8s.io/etcd:3.6.11-0
+        coreDNS: registry.k8s.io/coredns/coredns:v1.14.3
+        coreDNSRepository: registry.k8s.io/coredns
+        coreDNSTag: v1.14.3
+
+    # Path to the join command file written by kubeadm init on the control-plane node
+    join:
+        file: /tmp/deck/join.txt
+
+    operator:
+        user: ubuntu
+        home: /home/ubuntu
+
+    prepare:
+        # OS packages required before Kubernetes components are installed
+        packages:
+            debian:
+                - conntrack
+                - socat
+                - iptables
+                - ipset
+                - ethtool
+                - chrony
+                - nfs-common
+                - bash-completion
+                - curl
+                - vim
+                - tmux
+                - iproute2
+                - kmod
+                - procps
+                - coreutils
+                - grep
+                - mawk
+                - findutils
+
+        images:
+            # Images pulled and cached by kubeadm init
+            kubeadm:
+                - registry.k8s.io/kube-apiserver:{{ .vars.kubernetesVersion }}
+                - registry.k8s.io/kube-controller-manager:{{ .vars.kubernetesVersion }}
+                - registry.k8s.io/kube-scheduler:{{ .vars.kubernetesVersion }}
+                - registry.k8s.io/kube-proxy:{{ .vars.kubernetesVersion }}
+                - "{{ .vars.images.pause }}"
+                - "{{ .vars.images.etcd }}"
+                - "{{ .vars.images.coreDNS }}"
+
+            # CNI plugin images (Calico / Tigera only)
+            plugins:
+                - quay.io/calico/node:v3.32.0
+                - quay.io/calico/cni:v3.32.0
+                - quay.io/calico/kube-controllers:v3.32.0
+                - quay.io/calico/typha:v3.32.0
+                - quay.io/calico/apiserver:v3.32.0
+                - quay.io/calico/csi:v3.32.0
+                - quay.io/calico/node-driver-registrar:v3.32.0
+                - quay.io/calico/pod2daemon-flexvol:v3.32.0
+                - quay.io/calico/ctl:v3.32.0
+                - quay.io/tigera/operator:v1.42.0
+
+        # Binary artifacts downloaded by deck prepare and served from outputs/
+        binaries:
+            - source:
+                  url: https://dl.k8s.io/release/{{ .vars.kubernetesVersion }}/bin/linux/{{ .vars.arch }}/kubelet
+              outputPath: files/bin/linux/{{ .vars.arch }}/kubelet
+              mode: "0755"
+            - source:
+                  url: https://dl.k8s.io/release/{{ .vars.kubernetesVersion }}/bin/linux/{{ .vars.arch }}/kubeadm
+              outputPath: files/bin/linux/{{ .vars.arch }}/kubeadm
+              mode: "0755"
+            - source:
+                  url: https://dl.k8s.io/release/{{ .vars.kubernetesVersion }}/bin/linux/{{ .vars.arch }}/kubectl
+              outputPath: files/bin/linux/{{ .vars.arch }}/kubectl
+              mode: "0755"
+            - source:
+                  url: https://github.com/kubernetes-sigs/cri-tools/releases/download/{{ .vars.versions.crictl }}/crictl-{{ .vars.versions.crictl }}-linux-{{ .vars.arch }}.tar.gz
+              outputPath: files/bin/linux/{{ .vars.arch }}/crictl.tar.gz
+            - source:
+                  url: https://github.com/containerd/containerd/releases/download/v{{ .vars.versions.containerd }}/containerd-{{ .vars.versions.containerd }}-linux-{{ .vars.arch }}.tar.gz
+              outputPath: files/bin/linux/{{ .vars.arch }}/containerd.tar.gz
+            - source:
+                  url: https://github.com/opencontainers/runc/releases/download/v{{ .vars.versions.runc }}/runc.{{ .vars.arch }}
+              outputPath: files/bin/linux/{{ .vars.arch }}/runc
+              mode: "0755"
+            - source:
+                  url: https://github.com/containernetworking/plugins/releases/download/{{ .vars.versions.cniPlugins }}/cni-plugins-linux-{{ .vars.arch }}-{{ .vars.versions.cniPlugins }}.tgz
+              outputPath: files/bin/linux/{{ .vars.arch }}/cni-plugins.tgz
+            - source:
+                  url: https://github.com/containerd/nerdctl/releases/download/v{{ .vars.versions.nerdctl }}/nerdctl-{{ .vars.versions.nerdctl }}-linux-{{ .vars.arch }}.tar.gz
+              outputPath: files/bin/linux/{{ .vars.arch }}/nerdctl.tar.gz
+            - source:
+                  url: https://get.helm.sh/helm-{{ .vars.versions.helm }}-linux-{{ .vars.arch }}.tar.gz
+              outputPath: files/bin/linux/{{ .vars.arch }}/helm.tar.gz
+            - source:
+                  url: https://github.com/helmfile/helmfile/releases/download/v{{ .vars.versions.helmfile }}/helmfile_{{ .vars.versions.helmfile }}_linux_{{ .vars.arch }}.tar.gz
+              outputPath: files/bin/linux/{{ .vars.arch }}/helmfile.tar.gz
+            - source:
+                  url: https://github.com/derailed/k9s/releases/download/{{ .vars.versions.k9s }}/k9s_Linux_{{ .vars.arch }}.tar.gz
+              outputPath: files/bin/linux/{{ .vars.arch }}/k9s.tar.gz
+
+# Per-node overlays selected at deck runtime. Determines target node and role-based branching.
+hosts:
+    cp-1:
+        hostName: cp-1
+        ip: 192.0.2.10
+        role: control-plane
+        deckServer: true
+    worker-1:
+        hostName: worker-1
+        ip: 192.0.2.21
+        role: worker
+        deckServer: false
