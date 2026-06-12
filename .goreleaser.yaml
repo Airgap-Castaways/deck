@@ -64,6 +64,7 @@ release:
     Release artifacts for `deck` are attached below. Changes since the previous tag are grouped by type.
 
 changelog:
+  use: github
   format: "{{ .Message }}"
   sort: asc
   groups:
@@ -82,6 +83,7 @@ changelog:
     exclude:
       - '^Merge pull request'
       - '^Merge branch'
+      - '^Merge remote-tracking branch'
 
 brews:
   - ids:
