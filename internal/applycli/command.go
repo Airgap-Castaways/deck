@@ -279,13 +279,9 @@ func clearSelectedApplyState(request ExecutionRequest) error {
 	if !request.StateDirExplicit && request.Workflow != nil {
 		if xdgPath, err := install.XDGStatePath(request.Workflow); err == nil {
 			paths = append(paths, xdgPath)
-		} else {
-			return err
 		}
 		if legacyPath, err := install.LegacyStatePath(request.Workflow); err == nil {
 			paths = append(paths, legacyPath)
-		} else {
-			return err
 		}
 	}
 
