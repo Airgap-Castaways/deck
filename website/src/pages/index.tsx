@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
+import Translate, {translate} from '@docusaurus/Translate';
 import styles from './index.module.css';
 
 // ─── SVG icons ──────────────────────────────────────────────────────────────
@@ -86,39 +87,25 @@ function IconGitHub(): React.ReactElement {
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
-const FEATURES = [
-  {
-    icon: <IconBundle />,
-    num: '01',
-    title: 'Prepare → Bundle → Apply',
-    body: 'Download packages, images, files, and runtimes online; archive them into a verifiable bundle; apply the workflow locally on the air-gapped target. One declarative YAML, three deterministic phases.',
-  },
-  {
-    icon: <IconOfflineFirst />,
-    num: '02',
-    title: 'Offline-first',
-    body: 'Everything the target needs is captured in the bundle. No registry, no internet, no surprises at apply time. The bundle is the contract.',
-  },
-  {
-    icon: <IconStepKinds />,
-    num: '03',
-    title: '42 typed step kinds',
-    body: 'Files, packages, images, services, kubeadm, sysctl, systemd units, operator prompts — declared in YAML and validated against embedded schemas at prepare time.',
-  },
-  {
-    icon: <IconServer />,
-    num: '04',
-    title: 'Built-in content server',
-    body: 'Serve bundles, a browse UI, and a read-only OCI registry — audit-logged and optionally daemonized on Linux, macOS, and Windows.',
-  },
+const FEATURE_ICONS = [
+  <IconBundle />,
+  <IconOfflineFirst />,
+  <IconStepKinds />,
+  <IconServer />,
 ] as const;
+
+const FEATURE_NUMS = ['01', '02', '03', '04'] as const;
 
 // ─── Terminal card ────────────────────────────────────────────────────────────
 
 function Terminal(): React.ReactElement {
   return (
     <div className={styles.terminalWrap}>
-      <div className={styles.terminal} role="region" aria-label="Installation commands">
+      <div
+        className={styles.terminal}
+        role="region"
+        aria-label={translate({id: 'homepage.terminal.ariaLabel', message: 'Installation commands'})}
+      >
         <div className={styles.terminalBar}>
           <span className={styles.terminalDot} />
           <span className={styles.terminalDot} />
@@ -166,10 +153,16 @@ function FlowBand(): React.ReactElement {
   return (
     <section className={styles.flowBand}>
       <div className={styles.flowBandInner}>
-        <p className={styles.sectionLabel}>The pipeline</p>
-        <h2 className={styles.flowTitle}>Three phases. One bundle.</h2>
+        <p className={styles.sectionLabel}>
+          <Translate id="homepage.flow.sectionLabel">The pipeline</Translate>
+        </p>
+        <h2 className={styles.flowTitle}>
+          <Translate id="homepage.flow.title">Three phases. One bundle.</Translate>
+        </h2>
         <p className={styles.flowSubtitle}>
-          Declare once, execute identically on every air-gapped target — no runtime internet required.
+          <Translate id="homepage.flow.subtitle">
+            Declare once, execute identically on every air-gapped target — no runtime internet required.
+          </Translate>
         </p>
 
         <div className={styles.pipeline}>
@@ -178,10 +171,16 @@ function FlowBand(): React.ReactElement {
             <div className={styles.stageIconWrap}>
               <IconPrepare />
             </div>
-            <p className={styles.stageNum}>Online</p>
-            <h3 className={styles.stageTitle}>Prepare</h3>
+            <p className={styles.stageNum}>
+              <Translate id="homepage.flow.prepare.env">Online</Translate>
+            </p>
+            <h3 className={styles.stageTitle}>
+              <Translate id="homepage.flow.prepare.title">Prepare</Translate>
+            </h3>
             <p className={styles.stageBody}>
-              Resolve and download all artifacts — packages, OCI images, files, runtimes — against live registries.
+              <Translate id="homepage.flow.prepare.body">
+                Resolve and download all artifacts — packages, OCI images, files, runtimes — against live registries.
+              </Translate>
             </p>
           </div>
 
@@ -195,17 +194,29 @@ function FlowBand(): React.ReactElement {
             <div className={styles.stageIconWrap}>
               <IconBundle />
             </div>
-            <p className={styles.stageNum}>Online</p>
-            <h3 className={styles.stageTitle}>Bundle</h3>
+            <p className={styles.stageNum}>
+              <Translate id="homepage.flow.bundle.env">Online</Translate>
+            </p>
+            <h3 className={styles.stageTitle}>
+              <Translate id="homepage.flow.bundle.title">Bundle</Translate>
+            </h3>
             <p className={styles.stageBody}>
-              Archive prepared artifacts into a signed, self-verifying bundle file. Immutable, portable, auditable.
+              <Translate id="homepage.flow.bundle.body">
+                Archive prepared artifacts into a signed, self-verifying bundle file. Immutable, portable, auditable.
+              </Translate>
             </p>
           </div>
 
           {/* Air-gap break */}
-          <div className={styles.pipelineGap} role="separator" aria-label="air-gap boundary">
+          <div
+            className={styles.pipelineGap}
+            role="separator"
+            aria-label={translate({id: 'homepage.flow.airgap.ariaLabel', message: 'air-gap boundary'})}
+          >
             <div className={styles.gapLine} />
-            <span className={styles.gapLabel}>air-gap</span>
+            <span className={styles.gapLabel}>
+              <Translate id="homepage.flow.airgap.label">air-gap</Translate>
+            </span>
             <div className={styles.gapLine} />
           </div>
 
@@ -214,10 +225,16 @@ function FlowBand(): React.ReactElement {
             <div className={`${styles.stageIconWrap} ${styles.stageIconWrapGray}`}>
               <IconApply />
             </div>
-            <p className={`${styles.stageNum} ${styles.stageNumGray}`}>Air-gapped target</p>
-            <h3 className={styles.stageTitle}>Apply</h3>
+            <p className={`${styles.stageNum} ${styles.stageNumGray}`}>
+              <Translate id="homepage.flow.apply.env">Air-gapped target</Translate>
+            </p>
+            <h3 className={styles.stageTitle}>
+              <Translate id="homepage.flow.apply.title">Apply</Translate>
+            </h3>
             <p className={styles.stageBody}>
-              Unpack and execute the workflow on the disconnected machine — no registry, no internet required.
+              <Translate id="homepage.flow.apply.body">
+                Unpack and execute the workflow on the disconnected machine — no registry, no internet required.
+              </Translate>
             </p>
           </div>
         </div>
@@ -233,22 +250,68 @@ function FeaturesSection(): React.ReactElement {
     <section className={styles.featuresBand}>
       <div className={styles.featuresBandInner}>
         <div className={styles.featuresHeader}>
-          <p className={styles.sectionLabel}>Capabilities</p>
-          <h2 className={styles.featuresTitle}>Engineered for the gap</h2>
+          <p className={styles.sectionLabel}>
+            <Translate id="homepage.features.sectionLabel">Capabilities</Translate>
+          </p>
+          <h2 className={styles.featuresTitle}>
+            <Translate id="homepage.features.title">Engineered for the gap</Translate>
+          </h2>
           <p className={styles.featuresSubtitle}>
-            Every feature is designed for operational environments where connectivity is a privilege, not a given.
+            <Translate id="homepage.features.subtitle">
+              Every feature is designed for operational environments where connectivity is a privilege, not a given.
+            </Translate>
           </p>
         </div>
 
         <div className={styles.featuresGrid}>
-          {FEATURES.map((f) => (
-            <div key={f.num} className={styles.featureCard}>
-              <div className={styles.featureIconWrap}>{f.icon}</div>
-              <p className={styles.featureNum}>{f.num}</p>
-              <h3 className={styles.featureTitle}>{f.title}</h3>
-              <p className={styles.featureBody}>{f.body}</p>
-            </div>
-          ))}
+          <div className={styles.featureCard}>
+            <div className={styles.featureIconWrap}>{FEATURE_ICONS[0]}</div>
+            <p className={styles.featureNum}>{FEATURE_NUMS[0]}</p>
+            <h3 className={styles.featureTitle}>
+              <Translate id="homepage.feature.workflow.title">Prepare → Bundle → Apply</Translate>
+            </h3>
+            <p className={styles.featureBody}>
+              <Translate id="homepage.feature.workflow.body">
+                Download packages, images, files, and runtimes online; archive them into a verifiable bundle; apply the workflow locally on the air-gapped target. One declarative YAML, three deterministic phases.
+              </Translate>
+            </p>
+          </div>
+          <div className={styles.featureCard}>
+            <div className={styles.featureIconWrap}>{FEATURE_ICONS[1]}</div>
+            <p className={styles.featureNum}>{FEATURE_NUMS[1]}</p>
+            <h3 className={styles.featureTitle}>
+              <Translate id="homepage.feature.offline.title">Offline-first</Translate>
+            </h3>
+            <p className={styles.featureBody}>
+              <Translate id="homepage.feature.offline.body">
+                Everything the target needs is captured in the bundle. No registry, no internet, no surprises at apply time. The bundle is the contract.
+              </Translate>
+            </p>
+          </div>
+          <div className={styles.featureCard}>
+            <div className={styles.featureIconWrap}>{FEATURE_ICONS[2]}</div>
+            <p className={styles.featureNum}>{FEATURE_NUMS[2]}</p>
+            <h3 className={styles.featureTitle}>
+              <Translate id="homepage.feature.stepkinds.title">42 typed step kinds</Translate>
+            </h3>
+            <p className={styles.featureBody}>
+              <Translate id="homepage.feature.stepkinds.body">
+                Files, packages, images, services, kubeadm, sysctl, systemd units, operator prompts — declared in YAML and validated against embedded schemas at prepare time.
+              </Translate>
+            </p>
+          </div>
+          <div className={styles.featureCard}>
+            <div className={styles.featureIconWrap}>{FEATURE_ICONS[3]}</div>
+            <p className={styles.featureNum}>{FEATURE_NUMS[3]}</p>
+            <h3 className={styles.featureTitle}>
+              <Translate id="homepage.feature.server.title">Built-in content server</Translate>
+            </h3>
+            <p className={styles.featureBody}>
+              <Translate id="homepage.feature.server.body">
+                Serve bundles, a browse UI, and a read-only OCI registry — audit-logged and optionally daemonized on Linux, macOS, and Windows.
+              </Translate>
+            </p>
+          </div>
         </div>
       </div>
     </section>
@@ -261,19 +324,23 @@ function CtaBand(): React.ReactElement {
   return (
     <section className={styles.ctaBand}>
       <div className={styles.ctaBandInner}>
-        <p className={styles.sectionLabel}>Get started</p>
+        <p className={styles.sectionLabel}>
+          <Translate id="homepage.cta.sectionLabel">Get started</Translate>
+        </p>
         <h2 className={styles.ctaTitle}>
-          Ship to the gap.
+          <Translate id="homepage.cta.titleLine1">Ship to the gap.</Translate>
           <br />
-          No surprises.
+          <Translate id="homepage.cta.titleLine2">No surprises.</Translate>
         </h2>
         <p className={styles.ctaSubtitle}>
-          Structured, repeatable deployments for air-gapped Kubernetes and bare-metal clusters.
-          Define your workflow once; run it anywhere — connected or not.
+          <Translate id="homepage.cta.subtitle">
+            Structured, repeatable deployments for air-gapped Kubernetes and bare-metal clusters.
+            Define your workflow once; run it anywhere — connected or not.
+          </Translate>
         </p>
         <div className={styles.ctaButtons}>
           <Link className={styles.btnPrimary} to="/docs/quick-start">
-            Get Started
+            <Translate id="homepage.cta.getStarted">Get Started</Translate>
           </Link>
           <a
             className={styles.ctaGithubLink}
@@ -295,8 +362,11 @@ function CtaBand(): React.ReactElement {
 export default function Home(): React.ReactElement {
   return (
     <Layout
-      title="deck — air-gapped deployment workflows"
-      description="Prepare artifacts online. Archive into a verifiable bundle. Apply on the air-gapped target. Structured workflows for disconnected Kubernetes and bare-metal operations."
+      title={translate({id: 'homepage.meta.title', message: 'deck — air-gapped deployment workflows'})}
+      description={translate({
+        id: 'homepage.meta.description',
+        message: 'Prepare artifacts online. Archive into a verifiable bundle. Apply on the air-gapped target. Structured workflows for disconnected Kubernetes and bare-metal operations.',
+      })}
     >
       {/* Hero */}
       <header className={styles.hero}>
@@ -304,25 +374,31 @@ export default function Home(): React.ReactElement {
         <div className={styles.heroScanline} aria-hidden="true" />
 
         <div className={styles.heroInner}>
-          <p className={styles.eyebrow}>Air-gapped deployment workflows</p>
+          <p className={styles.eyebrow}>
+            <Translate id="homepage.hero.eyebrow">Air-gapped deployment workflows</Translate>
+          </p>
 
           <h1 className={styles.heroTitle}>
-            Deploy anywhere.
+            <Translate id="homepage.hero.headline">Deploy anywhere.</Translate>
             <br />
-            <span className={styles.heroTitleAccent}>Even the gap.</span>
+            <span className={styles.heroTitleAccent}>
+              <Translate id="homepage.hero.headlineAccent">Even the gap.</Translate>
+            </span>
           </h1>
 
           <p className={styles.heroTagline}>
-            Prepare artifacts online, archive into a verifiable bundle, apply on the disconnected
-            target — deterministic, repeatable, no internet at apply time.
+            <Translate id="homepage.hero.tagline">
+              Prepare artifacts online, archive into a verifiable bundle, apply on the disconnected
+              target — deterministic, repeatable, no internet at apply time.
+            </Translate>
           </p>
 
           <div className={styles.heroCtas}>
             <Link className={styles.btnPrimary} to="/docs/quick-start">
-              Get Started
+              <Translate id="homepage.hero.cta.getStarted">Get Started</Translate>
             </Link>
             <Link className={styles.btnSecondary} to="/docs">
-              Documentation
+              <Translate id="homepage.hero.cta.docs">Documentation</Translate>
             </Link>
           </div>
 
