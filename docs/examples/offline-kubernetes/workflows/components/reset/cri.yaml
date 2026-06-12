@@ -1,0 +1,37 @@
+steps:
+  # Stop all running pods and containers managed by the Kubernetes CRI, then
+  # restart containerd so the next join starts with a clean runtime state.
+  - id: cleanup-cri-pods-and-containers
+    kind: Command
+    spec:
+      timeout: 3m
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          runtime="{{ .vars.runtime.criSocket }}"
+          service="{{ .vars.runtime.containerd.serviceName }}"
+          ctr="{{ .vars.runtime.containerd.ctrPath }}"
+
+          # Use crictl to remove all containers and pods if the runtime is active.
+          if command -v crictl >/dev/null 2>&1 && systemctl is-active --quiet "${service}"; then
+            crictl --runtime-endpoint "${runtime}" ps -aq | xargs -r crictl --runtime-endpoint "${runtime}" rm -f || true
+            crictl --runtime-endpoint "${runtime}" pods -q | xargs -r crictl --runtime-endpoint "${runtime}" rmp -f || true
+          fi
+
+          # Fall back to ctr to kill any remaining tasks and delete containers.
+          if [[ -x "${ctr}" ]] && systemctl is-active --quiet "${service}"; then
+            "${ctr}" -a "{{ .vars.runtime.containerd.socket }}" -n k8s.io tasks ls -q | while read -r task_id; do
+              [[ -n "${task_id}" ]] || continue
+              "${ctr}" -a "{{ .vars.runtime.containerd.socket }}" -n k8s.io tasks kill "${task_id}" >/dev/null 2>&1 || true
+              "${ctr}" -a "{{ .vars.runtime.containerd.socket }}" -n k8s.io tasks rm -f "${task_id}" >/dev/null 2>&1 || true
+            done
+            "${ctr}" -a "{{ .vars.runtime.containerd.socket }}" -n k8s.io containers ls -q | while read -r container_id; do
+              [[ -n "${container_id}" ]] || continue
+              "${ctr}" -a "{{ .vars.runtime.containerd.socket }}" -n k8s.io containers rm "${container_id}" >/dev/null 2>&1 || true
+            done
+          fi
+
+          # Restart containerd so that subsequent operations start with a clean state.
+          systemctl restart "${service}" 2>/dev/null || true

@@ -1,0 +1,18 @@
+steps:
+  # Wait until the control-plane node reports all core system pods ready.
+  # The verify-join-artifacts-published step has been intentionally removed:
+  # join credentials are now distributed via encrypted Input/Message, not
+  # via plain-text files published under the bundle outputs directory.
+  - id: verify-bootstrap-control-plane
+    kind: CheckKubernetesCluster
+    spec:
+      timeout: 15m
+      interval: 10s
+      nodes:
+        total: 1
+      kubeSystem:
+        readyPrefixes:
+          - etcd-
+          - kube-apiserver-
+          - kube-controller-manager-
+          - kube-scheduler-

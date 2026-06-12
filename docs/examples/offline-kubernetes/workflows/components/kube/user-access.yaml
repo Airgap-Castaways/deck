@@ -1,0 +1,70 @@
+steps:
+  - id: ensure-operator-kube-dir
+    kind: EnsureDirectory
+    when: vars.role == "control-plane" || vars.role == "control-plane-worker"
+    spec:
+      path: "{{ .vars.operator.home }}/.kube"
+      mode: "0700"
+  - id: install-operator-kubeconfig
+    kind: CopyFile
+    when: vars.role == "control-plane" || vars.role == "control-plane-worker"
+    spec:
+      source:
+        path: /etc/kubernetes/admin.conf
+      path: "{{ .vars.operator.home }}/.kube/config"
+      mode: "0600"
+  - id: chown-operator-kubeconfig
+    kind: Command
+    when: vars.role == "control-plane" || vars.role == "control-plane-worker"
+    spec:
+      timeout: 30s
+      command:
+        - chown
+        - -R
+        - "{{ .vars.operator.user }}:{{ .vars.operator.user }}"
+        - "{{ .vars.operator.home }}/.kube"
+  - id: configure-operator-bash-kubectl
+    kind: Command
+    when: vars.role == "control-plane" || vars.role == "control-plane-worker"
+    spec:
+      timeout: 30s
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          bashrc="{{ .vars.operator.home }}/.bashrc"
+          marker_begin="# BEGIN deck kubectl helpers"
+          marker_end="# END deck kubectl helpers"
+          block="$(mktemp)"
+
+          # Build the kubectl helper block
+          {
+            printf '%s\n' '# BEGIN deck kubectl helpers'
+            printf '%s\n' 'alias k=kubectl'
+            printf '%s\n' 'if command -v kubectl >/dev/null 2>&1; then'
+            printf '%s\n' '  source <(kubectl completion bash)'
+            printf '%s\n' '  complete -o default -F __start_kubectl k'
+            printf '%s\n' 'fi'
+            printf '%s\n' '# END deck kubectl helpers'
+          } > "${block}"
+
+          touch "${bashrc}"
+          # Remove any existing kubectl helper block before re-inserting
+          if grep -qF "${marker_begin}" "${bashrc}"; then
+            tmp="$(mktemp)"
+            awk -v begin="${marker_begin}" -v end="${marker_end}" '
+              $0 == begin {skip=1; next}
+              $0 == end {skip=0; next}
+              skip != 1 {print}
+            ' "${bashrc}" > "${tmp}"
+            cat "${tmp}" > "${bashrc}"
+            rm -f "${tmp}"
+          fi
+
+          {
+            printf '\n'
+            cat "${block}"
+          } >> "${bashrc}"
+          rm -f "${block}"
+          chown "{{ .vars.operator.user }}:{{ .vars.operator.user }}" "${bashrc}"

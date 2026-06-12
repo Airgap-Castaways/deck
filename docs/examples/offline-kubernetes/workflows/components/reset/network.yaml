@@ -1,0 +1,67 @@
+steps:
+  # Remove virtual network links created by CNI plugins (Flannel, Calico, etc.).
+  - id: cleanup-cni-links
+    kind: Command
+    spec:
+      timeout: 1m
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          # Delete well-known CNI bridge and tunnel interfaces.
+          for link in cni0 flannel.1 vxlan.calico tunl0; do
+            ip link delete "${link}" >/dev/null 2>&1 || true
+          done
+          # Delete any remaining Calico per-workload veth interfaces (cali*).
+          ip -o link show | awk -F': ' '{print $2}' | cut -d@ -f1 | awk '/^cali/ {print}' | while read -r link; do
+            ip link delete "${link}" >/dev/null 2>&1 || true
+          done
+  # Flush iptables/ip6tables chains and IPVS rules added by Kubernetes and Calico.
+  - id: cleanup-kubernetes-network-rules
+    kind: Command
+    spec:
+      timeout: 2m
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+
+          # Helper: flush and delete KUBE-* and CALI-* chains for one iptables family.
+          cleanup_iptables_family() {
+            local bin="$1"
+            local save_bin="${bin}-save"
+            command -v "${bin}" >/dev/null 2>&1 || return 0
+            command -v "${save_bin}" >/dev/null 2>&1 || return 0
+
+            for table in filter nat mangle raw; do
+              # Delete individual rules that reference Kubernetes/Calico chains.
+              "${save_bin}" -t "${table}" 2>/dev/null |
+                awk -v bin="${bin}" -v table="${table}" '
+                  /^-A / && ($0 ~ /KUBE-|CALI-|cali-/) {
+                    sub(/^-A/, "-D")
+                    print bin " -t " table " " $0
+                  }
+                ' | bash >/dev/null 2>&1 || true
+
+              # Flush and delete the chains themselves.
+              "${save_bin}" -t "${table}" 2>/dev/null |
+                awk '/^:/ {
+                  chain=$1
+                  sub(/^:/, "", chain)
+                  if (chain ~ /^(KUBE-|CALI-|cali-)/) print chain
+                }' | while read -r chain; do
+                  "${bin}" -t "${table}" -F "${chain}" >/dev/null 2>&1 || true
+                  "${bin}" -t "${table}" -X "${chain}" >/dev/null 2>&1 || true
+                done
+            done
+          }
+
+          cleanup_iptables_family iptables
+          cleanup_iptables_family ip6tables
+
+          # Clear IPVS virtual servers if kube-proxy runs in IPVS mode.
+          if command -v ipvsadm >/dev/null 2>&1; then
+            ipvsadm --clear >/dev/null 2>&1 || true
+          fi
