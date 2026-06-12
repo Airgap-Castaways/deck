@@ -19,6 +19,8 @@ type stateWorkflowOptions struct {
 	workflowPath string
 	scenario     string
 	source       string
+	root         string
+	server       string
 	stateDir     string
 	output       string
 	varOverrides map[string]string
@@ -111,12 +113,14 @@ func addStateWorkflowFlags(cmd *cobra.Command, opts *stateWorkflowOptions, vars 
 	cmd.Flags().StringVar(&opts.workflowPath, "workflow", "", "path or URL to workflow file")
 	cmd.Flags().StringVar(&opts.scenario, "scenario", "", "scenario name")
 	cmd.Flags().StringVar(&opts.source, "source", scenarioSourceLocal, "scenario source (local|server)")
+	cmd.Flags().StringVar(&opts.root, "root", "", "local workflow root containing workflows/")
+	cmd.Flags().StringVar(&opts.server, "server", "", "remote workflow server URL")
 	cmd.Flags().StringVar(&opts.stateDir, "state-dir", "", "directory for apply state files (overrides local .deck/state/apply or remote XDG state)")
 	cmd.Flags().StringVarP(&opts.output, "output", "o", "text", "output format (text|json)")
-	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
+	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars overlay path relative to the selected workflow root (workflows/), repeatable")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	registerScenarioSourceCompletion(cmd, "source", false)
-	registerScenarioNameCompletion(cmd, "scenario", "source", "", false)
+	registerScenarioNameCompletionWithSourceLocator(cmd, "scenario", "source", "root", "server", false)
 }
 
 func runStateShow(env *cliEnv, ctx context.Context, opts stateWorkflowOptions) error {
@@ -185,7 +189,7 @@ func runStateClear(_ *cliEnv, ctx context.Context, opts stateClearOptions) error
 }
 
 func resolveStateRequest(ctx context.Context, opts stateWorkflowOptions) (applycli.ExecutionRequest, error) {
-	workflowPath, err := resolvePlanWorkflowPath(ctx, strings.TrimSpace(opts.workflowPath), strings.TrimSpace(opts.scenario), strings.TrimSpace(opts.source))
+	workflowPath, err := resolvePlanWorkflowPath(ctx, strings.TrimSpace(opts.workflowPath), strings.TrimSpace(opts.scenario), strings.TrimSpace(opts.source), strings.TrimSpace(opts.root), strings.TrimSpace(opts.server))
 	if err != nil {
 		return applycli.ExecutionRequest{}, err
 	}

@@ -146,6 +146,34 @@ func TestScenarioFlagCompletion(t *testing.T) {
 			t.Fatalf("expected scenario completion, got %q", res.stdout)
 		}
 	})
+
+	t.Run("plan vars root scenario names", func(t *testing.T) {
+		workspace := t.TempDir()
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+			t.Fatalf("mkdir scenarios: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "workflows", "scenarios", "apply.yaml"), []byte("version: v1alpha1\nsteps: []\n"), 0o644); err != nil {
+			t.Fatalf("write scenario: %v", err)
+		}
+
+		oldWD, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("getwd: %v", err)
+		}
+		if err := os.Chdir(workspace); err != nil {
+			t.Fatalf("chdir: %v", err)
+		}
+		defer func() { _ = os.Chdir(oldWD) }()
+
+		res := execute([]string{"__complete", "plan", "vars", "--root", root, "--scenario", "a"})
+		if res.err != nil {
+			t.Fatalf("expected completion success, got %v", res.err)
+		}
+		if !strings.Contains(res.stdout, "apply") {
+			t.Fatalf("expected plan vars scenario completion, got %q", res.stdout)
+		}
+	})
 }
 
 func TestRunTopLevelStubUsage(t *testing.T) {
