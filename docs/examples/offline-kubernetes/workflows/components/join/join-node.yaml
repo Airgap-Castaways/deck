@@ -1,0 +1,10 @@
+steps:
+  - id: join-worker
+    kind: JoinKubeadm
+    timeout: 20m
+    spec:
+      joinFile: "{{ .vars.join.file }}"
+      extraArgs:
+        - --cri-socket
+        - "{{ .vars.runtime.criSocket }}"
+        - --ignore-preflight-errors=Swap,FileExisting-crictl,FileExisting-conntrack,FileExisting-socat,ImagePull

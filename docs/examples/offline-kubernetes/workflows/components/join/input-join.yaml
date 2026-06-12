@@ -1,0 +1,41 @@
+steps:
+  # Operator pastes the encrypted join block produced during bootstrap.
+  - id: join-ciphertext
+    kind: Input
+    register:
+      joinCipher: value
+    spec:
+      message: "Paste the encrypted join block as a single line, no line breaks (the text between BEGIN/END ENCRYPTED JOIN)"
+      required: true
+  # Passphrase chosen at bootstrap; kept in memory, never persisted.
+  - id: join-passphrase
+    kind: Input
+    register:
+      joinPass: value
+    spec:
+      message: "Passphrase used to encrypt the join command"
+      secret: true
+      required: true
+  # Decrypt to the local join file consumed by JoinKubeadm. Both the
+  # ciphertext and passphrase are passed via env, never inlined in logs/state.
+  - id: decrypt-join-command
+    kind: Command
+    spec:
+      timeout: 1m
+      env:
+        DECK_JOIN_CIPHER: "{{ .runtime.joinCipher }}"
+        DECK_JOIN_PASS: "{{ .runtime.joinPass }}"
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          mkdir -p "$(dirname "{{ .vars.join.file }}")"
+          printf '%s' "${DECK_JOIN_CIPHER}" \
+            | openssl enc -d -aes-256-cbc -pbkdf2 -base64 -A -pass env:DECK_JOIN_PASS \
+            > "{{ .vars.join.file }}"
+          chmod 0600 "{{ .vars.join.file }}"
+          if [[ ! -s "{{ .vars.join.file }}" ]]; then
+            echo "decryption produced an empty join file; check the passphrase and that the ciphertext was pasted as one line" >&2
+            exit 1
+          fi
