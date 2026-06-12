@@ -30,6 +30,7 @@
 
 - **[Core Concepts](core-concepts/README.md)**: Why deck exists and how the architecture fits together.
 - **[Contributing](contributing/README.md)**: Development process, style, release, and compatibility notes.
+- **[Release Notes](releases/README.md)**: Per-release Korean highlights (`주요 변경 사항`) shipped with each version.
 
 ## Common paths
 

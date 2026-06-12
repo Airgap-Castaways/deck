@@ -94,6 +94,20 @@ jobs:
       - name: Validate GoReleaser config
         run: make release-check
 
+      - name: Load release highlights (optional)
+        run: |
+          HL_FILE="docs/releases/${GITHUB_REF_NAME}.md"
+          if [ -f "$HL_FILE" ]; then
+            {
+              echo "DECK_RELEASE_HIGHLIGHTS<<__DECK_EOF__"
+              cat "$HL_FILE"
+              echo "__DECK_EOF__"
+            } >> "$GITHUB_ENV"
+            echo "Loaded highlights from $HL_FILE"
+          else
+            echo "No highlights file at $HL_FILE; using default header"
+          fi
+
       - name: Publish release artifacts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

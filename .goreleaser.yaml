@@ -61,7 +61,10 @@ release:
   make_latest: true
   mode: replace
   header: |
-    Release artifacts for `deck` are attached below. Changes since the previous tag are grouped by type.
+    {{ if .Env.DECK_RELEASE_HIGHLIGHTS }}{{ .Env.DECK_RELEASE_HIGHLIGHTS }}
+
+    ---
+    {{ end }}Release artifacts for `deck` are attached below. Changes since the previous tag are grouped by type.
 
 changelog:
   use: github
