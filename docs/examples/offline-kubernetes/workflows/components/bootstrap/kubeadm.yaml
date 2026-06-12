@@ -1,0 +1,78 @@
+steps:
+  - id: kubeadm-init-first-control-plane
+    kind: InitKubeadm
+    timeout: 30m
+    spec:
+      outputJoinFile: /tmp/deck/join-worker.txt
+      skipIfAdminConfExists: true
+      configFile: /tmp/deck/kubeadm-init.yaml
+      configTemplate: |
+        apiVersion: kubeadm.k8s.io/v1beta4
+        kind: InitConfiguration
+        localAPIEndpoint:
+          advertiseAddress: "{{ .vars.ip }}"
+          bindPort: 6443
+        nodeRegistration:
+          criSocket: "{{ .vars.runtime.criSocket }}"
+          imagePullPolicy: Never
+        ---
+        apiVersion: kubeadm.k8s.io/v1beta4
+        kind: ClusterConfiguration
+        kubernetesVersion: "{{ .vars.kubernetesVersion }}"
+        controlPlaneEndpoint: "{{ .vars.cluster.controlPlaneEndpoint }}"
+        networking:
+          dnsDomain: cluster.local
+          serviceSubnet: "{{ .vars.cluster.serviceCIDR }}"
+          podSubnet: "{{ .vars.cluster.podCIDR }}"
+        dns:
+          imageRepository: "{{ .vars.images.coreDNSRepository }}"
+          imageTag: "{{ .vars.images.coreDNSTag }}"
+        apiServer:
+          certSANs:
+            - "{{ .vars.cluster.controlPlaneSAN }}"
+            - "{{ .vars.ip }}"
+          extraArgs:
+            - name: service-account-lookup
+              value: "true"
+            - name: profiling
+              value: "false"
+            - name: authorization-mode
+              value: Node,RBAC
+            - name: min-request-timeout
+              value: "30"
+            - name: tls-cipher-suites
+              value: TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        scheduler:
+          extraArgs:
+            - name: v
+              value: "5"
+            - name: profiling
+              value: "false"
+        controllerManager:
+          extraArgs:
+            - name: profiling
+              value: "false"
+            - name: bind-address
+              value: "127.0.0.1"
+            - name: feature-gates
+              value: RotateKubeletServerCertificate=true
+        etcd:
+          local:
+            imageTag: "{{ .vars.versions.etcd }}"
+            extraArgs:
+              - name: auto-tls
+                value: "false"
+        ---
+        apiVersion: kubelet.config.k8s.io/v1beta1
+        kind: KubeletConfiguration
+        eventRecordQPS: 0
+        protectKernelDefaults: true
+        streamingConnectionIdleTimeout: 5m
+        cgroupDriver: systemd
+        serverTLSBootstrap: false
+      ignorePreflightErrors:
+        - Swap
+        - FileExisting-crictl
+        - FileExisting-conntrack
+        - FileExisting-socat
+        - ImagePull
