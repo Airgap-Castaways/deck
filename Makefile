@@ -27,6 +27,7 @@ GENERATED_PATHS := \
 	docs/step-kinds.md \
 	docs/workflow-model.md \
 	docs/workspace-layout.md \
+	docs/cli \
 	schemas \
 	':(exclude)schemas/embed.go' \
 	':(exclude)schemas/embed_test.go'
@@ -40,6 +41,9 @@ test:
 
 generate:
 	$(GO) run ./cmd/schema-gen
+	@mkdir -p $(BIN_DIR)
+	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/deck
+	$(BIN) __gendocs docs/cli
 
 verify-generated: generate
 	git diff --exit-code -- $(GENERATED_PATHS)
