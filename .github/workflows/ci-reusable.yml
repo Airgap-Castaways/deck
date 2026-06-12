@@ -67,6 +67,7 @@ jobs:
         run: |
           make test
           ./bin/deck lint --root test
+          ./bin/deck lint --root docs/examples/offline-kubernetes
           ./bin/deck lint --workflow docs/examples/vagrant-smoke-install.yaml
           ./bin/deck lint --workflow test/workflows/scenarios/control-plane-bootstrap.yaml
           ./bin/deck lint --workflow test/workflows/scenarios/worker-join.yaml
