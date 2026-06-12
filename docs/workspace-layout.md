@@ -18,7 +18,7 @@ A `deck` workspace is organized into three main functional areas: **Workflows**,
 │   ├── packages/       # Prepared package payloads
 │   ├── images/         # Prepared image payloads
 │   └── bin/            # Prepared runtime binaries by os/arch
-└── .deck/              # (Internal) Checksums, manifest, and run history
+└── .deck/              # (Internal) Checksums and manifest
 ```
 
 ## Workflows (`workflows/`)
@@ -92,8 +92,8 @@ These directories hold the prepared source material that `apply` consumes.
 ## Internal Metadata (`.deck/`)
 
 This directory is managed by `deck` and should not be edited manually.
-- `manifest.json`: Tracks every file in the workspace for integrity and versioning.
-- `runs/`: Local execution history for the workspace.
+- `.deck/manifest.json` — digest manifest of canonical prepared outputs (`outputs/{files,packages,images,bin}`). `workflows/` and the deck launcher itself are not tracked. Used as the integrity baseline for `bundle verify` and at apply start.
+- `.deck/state/apply/` — phase-based apply state (see apply-state.md). Apply run logs (record.json / events.jsonl) are written to `$XDG_STATE_HOME/deck/runs/<run-id>/`, not inside the workspace.
 
 ## Related References
 

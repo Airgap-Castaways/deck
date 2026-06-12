@@ -433,7 +433,7 @@ Validating before transport is one of the main reasons to use a workflow model i
 
 ## Related references
 
-- `../concepts/why-deck.md`
+- `core-concepts/why-deck.md`
 - [Workspace Layout](workspace-layout.md#component-fragment-contract)
 - `bundle-layout.md`
 - `../../schemas/deck-workflow.schema.json`

@@ -27,11 +27,6 @@ GENERATED_PATHS := \
 	docs/step-kinds.md \
 	docs/workflow-model.md \
 	docs/workspace-layout.md \
-	docs/reference/groups \
-	docs/reference/step-kinds \
-	docs/reference/step-kinds.md \
-	docs/reference/typed-steps \
-	docs/reference/typed-steps.md \
 	schemas \
 	':(exclude)schemas/embed.go' \
 	':(exclude)schemas/embed_test.go'

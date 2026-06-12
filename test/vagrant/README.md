@@ -87,8 +87,6 @@ This document is for maintaining the Vagrant regression environment. The product
 
 ## Periodic CI
 
-- The scheduled workflow is `.github/workflows/vagrant-periodic.yml`
-- The nightly default scenario set is `k8s-control-plane-bootstrap` and `k8s-worker-join`
-- Manual `workflow_dispatch` can run the `full` set, including `k8s-node-reset` and `k8s-upgrade`
-- The runner must carry all of the following labels: `self-hosted`, `linux`, `vagrant`, `libvirt`
-- Each scenario job uploads `test/artifacts/runs/<scenario>/<run-id>/` and summarizes `result.json`, `run-summary.txt`, and `logs/error-*.log` in the step summary
+- The scheduled nightly workflow is `.github/workflows/hosted-e2e-nightly.yml`, which runs on GitHub-hosted `ubuntu-latest` runners using a container matrix (`ubuntu:24.04`, `rockylinux:9`).
+- This Vagrant harness is intended for self-hosted or manual runs only; it is not wired into the automated nightly schedule.
+- Manual `workflow_dispatch` is available on the nightly workflow for ad-hoc runs.

@@ -8,7 +8,7 @@
 - `main` is the branch for the next release in development.
 - Maintenance branches are created only when needed.
 
-The first planned release is `v0.1.0`.
+In the current 0.x series, patch-tagged releases (`v0.2.x`) may include both new features and fixes; strict semver guarantees begin at 1.0, which is not yet released.
 
 ## Pre-1.0 compatibility policy
 
