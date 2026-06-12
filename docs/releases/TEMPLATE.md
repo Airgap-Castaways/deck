@@ -2,8 +2,8 @@
 draft: true
 ---
 
-## 주요 변경 사항
+## Highlights
 
-- (사용자 관점의 핵심 변경 1)
-- (핵심 변경 2)
-- (호환성/업그레이드 주의사항이 있으면 명시)
+- (key user-facing change 1)
+- (key change 2)
+- (compatibility / upgrade notes, if any)

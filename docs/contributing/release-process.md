@@ -79,9 +79,9 @@ Sync-merge commits (`Merge pull request`, `Merge branch`, `Merge remote-tracking
 
 `Other` is a temporary catch-all for commit subjects that do not follow conventional-commit prefixes. Prefer `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, and `test:` in PR titles and squash commit subjects so the changelog stays well grouped.
 
-### Optional Korean highlights
+### Optional release highlights
 
-For releases where a human-written summary adds value, a maintainer can create `docs/releases/v<MAJOR>.<MINOR>.<PATCH>.md` before pushing the tag (copy `docs/releases/TEMPLATE.md`). The file must start with a `## 주요 변경 사항` heading followed by 3–6 user-facing bullet points.
+For releases where a human-written summary adds value, a maintainer can create `docs/releases/v<MAJOR>.<MINOR>.<PATCH>.md` before pushing the tag (copy `docs/releases/TEMPLATE.md`). The file must start with a `## Highlights` heading followed by 3–6 user-facing bullet points.
 
 When `.github/workflows/release.yml` runs, it checks for that file and — if present — loads it into the `DECK_RELEASE_HIGHLIGHTS` environment variable. GoReleaser's `release.header` renders the highlights above the auto-generated English changelog in the GitHub Release. If the file is absent the release proceeds with only the default header text.
 
