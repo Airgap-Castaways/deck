@@ -19,6 +19,7 @@
 - **[CLI Reference](cli.md)**: Command-line usage and flags.
 - **[Apply State](apply-state.md)**: Phase-based apply resume and `--fresh` behavior.
 - **[Apply Run Logs](apply-runlogs.md)**: Per-run `record.json` / `events.jsonl` diagnostics written under the XDG state root.
+- **[Error Codes](diagnostics/error-codes.md)**: Catalog of stable `CODE: message` diagnostics emitted by deck.
 - **[Bundle Layout](bundle-layout.md)**: Self-contained bundle format.
 - **[Server Audit Log](server-audit-log.md)**: Server audit log record shape.
 - **[Server Registry](server/registry.md)**: Read-only OCI `/v2` registry serving prepared images.
