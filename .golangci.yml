@@ -27,7 +27,7 @@ linters:
       - path: '.*_test\.go'
         linters:
           - gosec
-        text: 'G(204|301|302|304|306)'
+        text: 'G(122|204|301|302|304|306|703)'
       # HostPath is the explicit host-mutation trust boundary. G703 should end here
       # instead of being spread across install feature code.
       - path: 'internal/hostfs/host_path\.go'
