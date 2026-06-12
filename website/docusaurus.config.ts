@@ -4,7 +4,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'deck',
   tagline: 'Structured workflows for air-gapped operations',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/favicon.svg',
 
   url: 'https://airgap-castaways.github.io',
   baseUrl: '/deck/',
@@ -43,9 +43,42 @@ const config: Config = {
     ],
   ],
 
+  // Preconnect for faster font loading
+  headTags: [
+    {
+      tagName: 'link',
+      attributes: {rel: 'preconnect', href: 'https://fonts.googleapis.com'},
+    },
+    {
+      tagName: 'link',
+      attributes: {rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: 'anonymous'},
+    },
+  ],
+
+  // Font stylesheets
+  stylesheets: [
+    {
+      href: 'https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,75..125,100..900;1,75..125,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap',
+      type: 'text/css',
+    },
+  ],
+
   themeConfig: {
+    // Disable annoying default color-mode announcement; the landing is intrinsically dark
+    colorMode: {
+      defaultMode: 'dark',
+      disableSwitch: false,
+      respectPrefersColorScheme: true,
+    },
     navbar: {
-      title: 'deck',
+      logo: {
+        src: 'img/logo.svg',
+        alt: 'deck',
+        // SVG uses currentColor — it adapts to the forced dark navbar
+        style: {height: '26px'},
+      },
+      // Keep title empty since logo includes the wordmark
+      title: '',
       items: [
         {type: 'doc', docId: 'README', position: 'left', label: 'Docs'},
         {type: 'localeDropdown', position: 'right'},

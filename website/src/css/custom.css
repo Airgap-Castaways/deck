@@ -1,30 +1,100 @@
 /**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
+ * deck — global theme tokens
+ * Fonts: Archivo (display/body) + JetBrains Mono (code/labels)
+ * Palette: ink-black bg, amber signal accent, steel secondary
  */
 
-/* You can override the default Infima variables here. */
+/* ── Google Fonts are loaded via docusaurus.config.ts stylesheets ── */
+
+/* ════════════════════════════════
+   Landing-page design tokens
+   (used by index.module.css only)
+   ════════════════════════════════ */
 :root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
-  --ifm-code-font-size: 95%;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  --deck-ink:          #0a0d12;
+  --deck-ink-2:        #0f131a;
+  --deck-ink-3:        #151b24;
+  --deck-amber:        #f5a524;
+  --deck-amber-dim:    #c4801a;
+  --deck-amber-glow:   rgba(245, 165, 36, 0.15);
+  --deck-amber-glow-s: rgba(245, 165, 36, 0.06);
+  --deck-steel:        #9aa7b8;
+  --deck-steel-dim:    #5c6a7a;
+  --deck-steel-faint:  rgba(154, 167, 184, 0.08);
+  --deck-border:       rgba(154, 167, 184, 0.12);
+  --deck-border-amber: rgba(245, 165, 36, 0.3);
+  --deck-white:        #e8edf3;
+  --deck-white-dim:    #a8b4c2;
+
+  /* Font stacks */
+  --deck-font-display: 'Archivo', 'Arial Narrow', sans-serif;
+  --deck-font-mono:    'JetBrains Mono', 'Fira Code', monospace;
 }
 
-/* For readability concerns, you should choose a lighter palette in dark mode. */
+/* ════════════════════════════════
+   Infima global overrides
+   Teal-steel palette for docs (accessible on white and dark)
+   ════════════════════════════════ */
+:root {
+  /* Docs link color — accessible on white bg (AA contrast) */
+  --ifm-color-primary:           #1b6fa8;
+  --ifm-color-primary-dark:      #185f8f;
+  --ifm-color-primary-darker:    #165887;
+  --ifm-color-primary-darkest:   #124670;
+  --ifm-color-primary-light:     #1e7fbe;
+  --ifm-color-primary-lighter:   #2087c6;
+  --ifm-color-primary-lightest:  #2898d8;
+
+  --ifm-code-font-size: 93%;
+  --ifm-font-family-base:        'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --ifm-font-family-monospace:   'JetBrains Mono', 'Fira Code', monospace;
+  --ifm-heading-font-family:     'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --ifm-heading-font-weight:     700;
+  --ifm-font-weight-semibold:    600;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+}
+
 [data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
+  /* Docs link color — accessible on dark bg */
+  --ifm-color-primary:           #4db8e8;
+  --ifm-color-primary-dark:      #29a9e0;
+  --ifm-color-primary-darker:    #1da0d9;
+  --ifm-color-primary-darkest:   #1588ba;
+  --ifm-color-primary-light:     #6dc5ec;
+  --ifm-color-primary-lighter:   #7ecbee;
+  --ifm-color-primary-lightest:  #a2d9f3;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+/* Navbar: force dark surface so amber logo is always visible */
+.navbar {
+  background-color: #0c0f16 !important;
+  border-bottom: 1px solid rgba(154, 167, 184, 0.1);
+  box-shadow: none;
+}
+
+.navbar__title,
+.navbar__link,
+.navbar__item {
+  color: #c8d3df !important;
+}
+
+.navbar__link:hover,
+.navbar__link--active {
+  color: var(--deck-amber) !important;
+}
+
+/* Footer stays dark */
+.footer--dark {
+  background-color: #080b10;
+  border-top: 1px solid rgba(154, 167, 184, 0.08);
+}
+
+/* Reduce motion globally when requested */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
