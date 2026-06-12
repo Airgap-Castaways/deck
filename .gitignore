@@ -19,3 +19,8 @@ coverage.out
 /test/vagrant/.vagrant/
 /test/artifacts/
 /test/artifacts/cache/
+
+# Docusaurus
+/website/node_modules/
+/website/build/
+/website/.docusaurus/
