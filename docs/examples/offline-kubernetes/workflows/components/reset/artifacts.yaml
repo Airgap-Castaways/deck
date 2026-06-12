@@ -13,7 +13,7 @@ steps:
         - |
           set -euo pipefail
           # Remove the join command file and any cached image tarballs.
-          rm -f /tmp/deck/join.txt
+          rm -f "{{ .vars.join.file }}"
           rm -rf /tmp/deck/images
           # Reload systemd unit files in case any were modified during reset.
           systemctl daemon-reload

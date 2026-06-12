@@ -117,13 +117,13 @@ After the join phase the verify phase checks that the node has joined the cluste
 ## 6. Validate before transport and execution
 
 ```bash
-deck lint --root examples/offline-kubernetes
+deck lint --root docs/examples/offline-kubernetes
 ```
 
 For individual scenarios:
 
 ```bash
-deck lint --workflow examples/offline-kubernetes/workflows/scenarios/bootstrap.yaml
+deck lint --workflow docs/examples/offline-kubernetes/workflows/scenarios/bootstrap.yaml
 ```
 
 ## 7. Site server (optional)
