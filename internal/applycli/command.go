@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -18,7 +19,6 @@ type PlanCommandOptions struct {
 	Scenario         string
 	SelectedPhase    string
 	Output           string
-	Fresh            bool
 	StateDir         string
 	StateDirExplicit bool
 	VarOverrides     map[string]any
@@ -118,7 +118,6 @@ func RunPlanCommand(ctx context.Context, opts PlanCommandOptions) error {
 		NodeScopedVars:               true,
 		Hostname:                     opts.Hostname,
 		DetectHostname:               opts.DetectHostname,
-		Fresh:                        opts.Fresh,
 		StateDir:                     strings.TrimSpace(opts.StateDir),
 		StateDirExplicit:             opts.StateDirExplicit,
 		SelectedPhase:                strings.TrimSpace(opts.SelectedPhase),
@@ -181,6 +180,14 @@ func RunApplyCommand(ctx context.Context, opts ApplyCommandOptions) error {
 	}
 	if err := applyContextStateKey(&resolvedRequest, execContext); err != nil {
 		return err
+	}
+	if opts.DryRun && resolvedRequest.Fresh {
+		return fmt.Errorf("apply --fresh cannot be combined with --dry-run because --fresh clears apply state")
+	}
+	if resolvedRequest.Fresh {
+		if err := clearSelectedApplyState(resolvedRequest); err != nil {
+			return err
+		}
 	}
 	execContext.Paths.StateFile = resolvedRequest.StatePath
 	return Execute(ctx, ExecuteOptions{
@@ -264,6 +271,35 @@ func applyContextStateKey(request *ExecutionRequest, execContext workflowcontext
 		return err
 	}
 	request.StatePath = statePath
+	return nil
+}
+
+func clearSelectedApplyState(request ExecutionRequest) error {
+	paths := []string{strings.TrimSpace(request.StatePath)}
+	if !request.StateDirExplicit && request.Workflow != nil {
+		if xdgPath, err := install.XDGStatePath(request.Workflow); err == nil {
+			paths = append(paths, xdgPath)
+		} else {
+			return err
+		}
+		if legacyPath, err := install.LegacyStatePath(request.Workflow); err == nil {
+			paths = append(paths, legacyPath)
+		} else {
+			return err
+		}
+	}
+
+	seen := map[string]bool{}
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("clear apply state %s: %w", path, err)
+		}
+	}
 	return nil
 }
 

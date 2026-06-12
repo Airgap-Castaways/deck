@@ -356,7 +356,7 @@ Optional transport override example:
 - `prepare` expects a workflow tree rooted at `workflows/` with entrypoints under `workflows/scenarios/`.
 - scenario entrypoints live under `workflows/scenarios/`
 - `plan` and `apply` accept `--scenario` for named scenarios and `--workflow` for an explicit path or URL.
-- `plan` and `apply` support `--fresh` to ignore saved apply state for that invocation.
+- `apply` supports `--fresh` to clear the selected saved apply state before execution.
 - `plan`, `apply`, and `state` support `--state-dir` to use an explicit apply state directory.
 - `deck state show/list/clear` inspects and removes saved apply state.
 - `--source` controls whether `--scenario` resolves from the local workspace or the saved remote server.

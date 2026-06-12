@@ -112,12 +112,13 @@ Use [Workflow Model](workflow-model.md#parallel-batches) for the current batchin
 
 ## `--fresh`
 
-Use `--fresh` to ignore saved apply state for that invocation.
+Use `deck apply --fresh` to clear the selected saved apply state before execution.
 
-- `deck apply --fresh` reruns all phases and writes fresh state back to the normal path
-- `deck plan --fresh` shows a fresh-run view with no completed-phase skips or saved runtime vars
+- `deck apply --fresh` reruns all phases and writes fresh state back to the normal path.
+- Only the selected state key is cleared. Other state files in the same directory are preserved.
+- `deck apply --dry-run --fresh` is rejected because `--fresh` clears state.
 
-`--fresh` does not delete the state file before execution.
+`deck plan` is read-only and does not support `--fresh`. Use `deck state clear` for explicit state management without running apply.
 
 ## State management
 
