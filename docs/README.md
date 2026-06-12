@@ -20,6 +20,7 @@
 - **[Apply State](apply-state.md)**: Phase-based apply resume and `--fresh` behavior.
 - **[Bundle Layout](bundle-layout.md)**: Self-contained bundle format.
 - **[Server Audit Log](server-audit-log.md)**: Server audit log record shape.
+- **[Server Registry](server/registry.md)**: Read-only OCI `/v2` registry serving prepared images.
 
 ## Supporting sections
 
