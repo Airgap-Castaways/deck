@@ -31,6 +31,7 @@ func TestEnsureSelfSignedTLS(t *testing.T) {
 		block, _ := pem.Decode(raw)
 		if block == nil {
 			t.Fatalf("failed to decode cert pem")
+			return
 		}
 		cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
