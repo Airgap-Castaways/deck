@@ -1,3 +1,0 @@
-# file	mode
-# The offline-kubernetes/ workspace is linted via: deck lint --root docs/examples/offline-kubernetes
-vagrant-smoke-install.yaml	run-install
