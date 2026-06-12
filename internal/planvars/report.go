@@ -27,7 +27,6 @@ type Options struct {
 	Scenario        string
 	SelectedPhase   string
 	PreparedRoot    string
-	Fresh           bool
 	VarOverrides    map[string]any
 	VarsFiles       []string
 	Output          string
@@ -99,7 +98,6 @@ func buildApplyReport(ctx context.Context, opts Options) (Report, error) {
 		VarOverrides:                 opts.VarOverrides,
 		VarsFiles:                    append([]string(nil), opts.VarsFiles...),
 		NodeScopedVars:               true,
-		Fresh:                        opts.Fresh,
 		SelectedPhase:                strings.TrimSpace(opts.SelectedPhase),
 		DefaultPhase:                 "",
 		BuildExecutionWorkflow:       true,
