@@ -1,43 +1,42 @@
-import type {ReactNode} from 'react';
-import clsx from 'clsx';
+import React from 'react';
 import Link from '@docusaurus/Link';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
-import HomepageFeatures from '@site/src/components/HomepageFeatures';
-import Heading from '@theme/Heading';
-
+import CodeBlock from '@theme/CodeBlock';
 import styles from './index.module.css';
 
-function HomepageHeader() {
-  const {siteConfig} = useDocusaurusContext();
-  return (
-    <header className={clsx('hero hero--primary', styles.heroBanner)}>
-      <div className="container">
-        <Heading as="h1" className="hero__title">
-          {siteConfig.title}
-        </Heading>
-        <p className="hero__subtitle">{siteConfig.tagline}</p>
-        <div className={styles.buttons}>
-          <Link
-            className="button button--secondary button--lg"
-            to="/docs/README">
-            Get Started
-          </Link>
-        </div>
-      </div>
-    </header>
-  );
-}
+const FEATURES: {title: string; body: string}[] = [
+  {title: 'Prepare → Bundle → Apply', body: 'Download packages, images, files, and runtimes online; archive them into a verifiable bundle; apply the workflow locally on the air-gapped target.'},
+  {title: 'Offline-first', body: 'Everything the target needs is captured in the bundle. No registry, no internet, no surprises at apply time.'},
+  {title: '42 typed step kinds', body: 'Files, packages, images, services, kubeadm, sysctl, systemd units, operator prompts — declared in YAML and validated against embedded schemas.'},
+  {title: 'Built-in content server', body: 'Serve bundles, a browse UI, and a read-only OCI registry — audit-logged and optionally daemonized on Linux, macOS, and Windows.'},
+];
 
-export default function Home(): ReactNode {
-  const {siteConfig} = useDocusaurusContext();
+export default function Home(): React.ReactElement {
   return (
-    <Layout
-      title={`Hello from ${siteConfig.title}`}
-      description="Structured workflows for air-gapped operations">
-      <HomepageHeader />
-      <main>
-        <HomepageFeatures />
+    <Layout title="deck" description="Structured workflows for air-gapped operations">
+      <header className={styles.hero}>
+        <div className="container">
+          <h1 className={styles.heroTitle}>deck</h1>
+          <p className={styles.heroTagline}>Structured workflows for air-gapped and operationally constrained environments.</p>
+          <div className={styles.heroButtons}>
+            <Link className="button button--primary button--lg" to="/docs/quick-start">Get Started</Link>
+            <Link className="button button--secondary button--lg" to="/docs">Documentation</Link>
+          </div>
+          <div className={styles.install}>
+            <CodeBlock language="bash">{`brew install Airgap-Castaways/tap/deck
+deck init && deck lint && deck prepare && deck bundle build`}</CodeBlock>
+          </div>
+        </div>
+      </header>
+      <main className="container">
+        <section className={styles.features}>
+          {FEATURES.map((f) => (
+            <div key={f.title} className={styles.feature}>
+              <h3>{f.title}</h3>
+              <p>{f.body}</p>
+            </div>
+          ))}
+        </section>
       </main>
     </Layout>
   );
