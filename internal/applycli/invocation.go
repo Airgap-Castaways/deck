@@ -12,8 +12,10 @@ type InvocationOptions struct {
 	WorkflowPath     string
 	Scenario         string
 	Source           string
+	Root             string
+	Server           string
 	PositionalArgs   []string
-	ResolveScenario  func(source, scenario, localRoot string) (string, error)
+	ResolveScenario  func(source, scenario, localRoot, server string) (string, error)
 	DefaultLocalRoot string
 }
 
@@ -24,9 +26,21 @@ func ResolvePlanWorkflowPath(ctx context.Context, opts InvocationOptions) (strin
 	resolvedWorkflow := strings.TrimSpace(opts.WorkflowPath)
 	resolvedScenario := strings.TrimSpace(opts.Scenario)
 	resolvedSource := strings.TrimSpace(opts.Source)
+	server := strings.TrimRight(strings.TrimSpace(opts.Server), "/")
 	localRoot := strings.TrimSpace(opts.DefaultLocalRoot)
+	if strings.TrimSpace(opts.Root) != "" {
+		localRoot = strings.TrimSpace(opts.Root)
+	}
 	if localRoot == "" {
 		localRoot = "."
+	}
+	if err := validateSourceLocator(strings.TrimSpace(opts.Root), server); err != nil {
+		return "", err
+	}
+	if server != "" {
+		resolvedSource = "server"
+	} else if strings.TrimSpace(opts.Root) != "" {
+		resolvedSource = "local"
 	}
 	if resolvedWorkflow != "" && resolvedScenario != "" {
 		return "", fmt.Errorf("plan accepts either --workflow or --scenario, not both")
@@ -38,7 +52,10 @@ func ResolvePlanWorkflowPath(ctx context.Context, opts InvocationOptions) (strin
 		if opts.ResolveScenario == nil {
 			return "", fmt.Errorf("scenario resolver is nil")
 		}
-		return opts.ResolveScenario(resolvedSource, resolvedScenario, localRoot)
+		return opts.ResolveScenario(resolvedSource, resolvedScenario, localRoot, server)
+	}
+	if server != "" {
+		return "", fmt.Errorf("plan with --server requires --scenario or --workflow")
 	}
 	if resolvedSource == "server" {
 		return "", fmt.Errorf("plan with --source server requires --scenario or --workflow")
@@ -53,9 +70,22 @@ func ResolveApplyWorkflowAndBundle(ctx context.Context, opts InvocationOptions) 
 	resolvedWorkflow := strings.TrimSpace(opts.WorkflowPath)
 	resolvedScenario := strings.TrimSpace(opts.Scenario)
 	resolvedSource := strings.TrimSpace(opts.Source)
+	server := strings.TrimRight(strings.TrimSpace(opts.Server), "/")
+	root := strings.TrimSpace(opts.Root)
 	positionalWorkflow, positionalBundle, err := parseApplyPositionals(opts.PositionalArgs)
 	if err != nil {
 		return "", "", err
+	}
+	if err := validateSourceLocator(root, server); err != nil {
+		return "", "", err
+	}
+	if root != "" && strings.TrimSpace(positionalBundle) != "" {
+		return "", "", fmt.Errorf("apply accepts either --root or a positional bundle path, not both")
+	}
+	if server != "" {
+		resolvedSource = "server"
+	} else if root != "" {
+		resolvedSource = "local"
 	}
 	if resolvedWorkflow != "" && resolvedScenario != "" {
 		return "", "", fmt.Errorf("apply accepts either --workflow or --scenario, not both")
@@ -64,6 +94,9 @@ func ResolveApplyWorkflowAndBundle(ctx context.Context, opts InvocationOptions) 
 		return "", "", fmt.Errorf("apply accepts at most one workflow reference")
 	}
 	if resolvedWorkflow == "" && resolvedScenario == "" && resolvedSource == "server" {
+		if server != "" {
+			return "", "", fmt.Errorf("apply with --server requires --scenario or --workflow")
+		}
 		return "", "", fmt.Errorf("apply with --source server requires --scenario or --workflow")
 	}
 	if (resolvedWorkflow != "" || resolvedScenario != "") && len(opts.PositionalArgs) > 1 {
@@ -87,9 +120,35 @@ func ResolveApplyWorkflowAndBundle(ctx context.Context, opts InvocationOptions) 
 		return resolvedWorkflow, bundleRoot, nil
 	}
 
-	bundleRoot, err := ResolveBundleRoot(positionalBundle)
-	if err != nil {
-		return "", "", err
+	if resolvedSource == "server" && resolvedScenario != "" {
+		bundleRoot := ""
+		if strings.TrimSpace(positionalBundle) != "" {
+			bundleRoot, err = ResolveBundleRoot(positionalBundle)
+			if err != nil {
+				return "", "", err
+			}
+		}
+		if opts.ResolveScenario == nil {
+			return "", "", fmt.Errorf("scenario resolver is nil")
+		}
+		workflowPath, err := opts.ResolveScenario(resolvedSource, resolvedScenario, ".", server)
+		if err != nil {
+			return "", "", err
+		}
+		return workflowPath, bundleRoot, nil
+	}
+
+	bundleRoot := ""
+	if root != "" {
+		bundleRoot, err = ResolveBundleRoot(root)
+		if err != nil {
+			return "", "", err
+		}
+	} else {
+		bundleRoot, err = ResolveBundleRoot(positionalBundle)
+		if err != nil {
+			return "", "", err
+		}
 	}
 	if resolvedScenario != "" {
 		if opts.ResolveScenario == nil {
@@ -99,7 +158,7 @@ func ResolveApplyWorkflowAndBundle(ctx context.Context, opts InvocationOptions) 
 		if resolvedSource == "local" {
 			localRoot = bundleRoot
 		}
-		workflowPath, err := opts.ResolveScenario(resolvedSource, resolvedScenario, localRoot)
+		workflowPath, err := opts.ResolveScenario(resolvedSource, resolvedScenario, localRoot, server)
 		if err != nil {
 			return "", "", err
 		}
@@ -110,6 +169,13 @@ func ResolveApplyWorkflowAndBundle(ctx context.Context, opts InvocationOptions) 
 		return "", "", err
 	}
 	return workflowPath, bundleRoot, nil
+}
+
+func validateSourceLocator(root string, server string) error {
+	if strings.TrimSpace(root) != "" && strings.TrimSpace(server) != "" {
+		return fmt.Errorf("--root and --server are mutually exclusive")
+	}
+	return nil
 }
 
 func parseApplyPositionals(positionalArgs []string) (string, string, error) {

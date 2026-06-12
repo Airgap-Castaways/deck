@@ -27,11 +27,13 @@ func displayValueOrDash(value string) string {
 	return trimmed
 }
 
-func resolvePlanWorkflowPath(ctx context.Context, workflowPath, scenario, source string) (string, error) {
+func resolvePlanWorkflowPath(ctx context.Context, workflowPath, scenario, source, root, server string) (string, error) {
 	return applycli.ResolvePlanWorkflowPath(ctx, applycli.InvocationOptions{
 		WorkflowPath:     workflowPath,
 		Scenario:         scenario,
 		Source:           source,
+		Root:             root,
+		Server:           server,
 		DefaultLocalRoot: ".",
 		ResolveScenario:  resolveScenarioWorkflowReference,
 	})
@@ -42,6 +44,8 @@ func resolveApplyWorkflowAndBundle(ctx context.Context, opts applyOptions, posit
 		WorkflowPath:    opts.workflowPath,
 		Scenario:        opts.scenario,
 		Source:          opts.source,
+		Root:            opts.root,
+		Server:          opts.server,
 		PositionalArgs:  positionalArgs,
 		ResolveScenario: resolveScenarioWorkflowReference,
 	})

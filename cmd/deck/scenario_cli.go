@@ -271,7 +271,7 @@ func normalizeScenarioName(raw string) (string, error) {
 	return filepath.ToSlash(trimmed), nil
 }
 
-func resolveScenarioWorkflowReference(source, scenario string, localRoot string) (string, error) {
+func resolveScenarioWorkflowReference(source, scenario string, localRoot string, server string) (string, error) {
 	resolvedScenario, err := normalizeScenarioName(scenario)
 	if err != nil {
 		return "", err
@@ -281,7 +281,7 @@ func resolveScenarioWorkflowReference(source, scenario string, localRoot string)
 		return "", err
 	}
 	if resolvedSource == scenarioSourceServer {
-		serverURL, _, err := resolveRequiredSourceURL("")
+		serverURL, _, err := resolveRequiredSourceURL(server)
 		if err != nil {
 			return "", err
 		}
@@ -349,13 +349,21 @@ func registerScenarioSourceCompletion(cmd *cobra.Command, flagName string, allow
 	})
 }
 
-func registerScenarioNameCompletion(cmd *cobra.Command, flagName, sourceFlagName, localRootFlagName string, allowAll bool) {
+func registerScenarioNameCompletionWithSourceLocator(cmd *cobra.Command, flagName, sourceFlagName, localRootFlagName, serverFlagName string, allowAll bool) {
 	_ = cmd.RegisterFlagCompletionFunc(flagName, func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		source := scenarioSourceLocal
 		if sourceFlagName != "" {
 			value := cmd.Flags().Lookup(sourceFlagName)
 			if value != nil {
 				source = value.Value.String()
+			}
+		}
+		explicitServer := ""
+		if serverFlagName != "" {
+			flag := cmd.Flags().Lookup(serverFlagName)
+			if flag != nil && strings.TrimSpace(flag.Value.String()) != "" {
+				explicitServer = strings.TrimSpace(flag.Value.String())
+				source = scenarioSourceServer
 			}
 		}
 		resolvedSource, err := normalizeScenarioSource(source, allowAll)
@@ -371,12 +379,12 @@ func registerScenarioNameCompletion(cmd *cobra.Command, flagName, sourceFlagName
 			}
 		}
 
-		items := completeScenarioNames(cmd.Context(), resolvedSource, localRoot, toComplete)
+		items := completeScenarioNames(cmd.Context(), resolvedSource, localRoot, explicitServer, toComplete)
 		return items, cobra.ShellCompDirectiveNoFileComp
 	})
 }
 
-func completeScenarioNames(ctx context.Context, source, localRoot, toComplete string) []string {
+func completeScenarioNames(ctx context.Context, source, localRoot, explicitServer, toComplete string) []string {
 	candidates := map[string]bool{}
 	if source == scenarioSourceLocal || source == scenarioSourceAll {
 		if entries, err := discoverLocalScenarioEntries(localRoot); err == nil {
@@ -388,7 +396,7 @@ func completeScenarioNames(ctx context.Context, source, localRoot, toComplete st
 		}
 	}
 	if source == scenarioSourceServer || source == scenarioSourceAll {
-		if serverURL, _, err := resolveSourceURL(""); err == nil && strings.TrimSpace(serverURL) != "" {
+		if serverURL, _, err := resolveSourceURL(explicitServer); err == nil && strings.TrimSpace(serverURL) != "" {
 			if entries, err := discoverServerScenarioEntries(ctx, serverURL); err == nil {
 				for _, entry := range entries {
 					if strings.HasPrefix(entry.Name, toComplete) {

@@ -38,7 +38,7 @@ func TestCompleteScenarioNamesMergesLocalAndServerForAll(t *testing.T) {
 		t.Fatalf("saveSourceDefaults: %v", err)
 	}
 
-	got := completeScenarioNames(context.Background(), scenarioSourceAll, root, "")
+	got := completeScenarioNames(context.Background(), scenarioSourceAll, root, "", "")
 	want := []string{"apply", "nested/only-local", "server-only"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected completion candidates\nwant: %#v\ngot:  %#v", want, got)
@@ -56,12 +56,12 @@ func TestCompleteScenarioNamesRemoteFailureFailsClosed(t *testing.T) {
 		t.Fatalf("saveSourceDefaults: %v", err)
 	}
 
-	got := completeScenarioNames(context.Background(), scenarioSourceServer, root, "")
+	got := completeScenarioNames(context.Background(), scenarioSourceServer, root, "", "")
 	if len(got) != 0 {
 		t.Fatalf("expected empty candidates on remote failure, got %#v", got)
 	}
 
-	got = completeScenarioNames(context.Background(), scenarioSourceAll, root, "")
+	got = completeScenarioNames(context.Background(), scenarioSourceAll, root, "", "")
 	if len(got) != 0 {
 		t.Fatalf("expected no noisy remote candidates when local is empty, got %#v", got)
 	}
@@ -85,7 +85,7 @@ func TestResolveScenarioWorkflowReferenceRespectsExplicitSource(t *testing.T) {
 		t.Fatalf("saveSourceDefaults: %v", err)
 	}
 
-	resolvedLocal, err := resolveScenarioWorkflowReference(scenarioSourceLocal, "apply", root)
+	resolvedLocal, err := resolveScenarioWorkflowReference(scenarioSourceLocal, "apply", root, "")
 	if err != nil {
 		t.Fatalf("resolve local scenario: %v", err)
 	}
@@ -93,13 +93,21 @@ func TestResolveScenarioWorkflowReferenceRespectsExplicitSource(t *testing.T) {
 		t.Fatalf("expected local path %q, got %q", localPath, resolvedLocal)
 	}
 
-	resolvedServer, err := resolveScenarioWorkflowReference(scenarioSourceServer, "apply", root)
+	resolvedServer, err := resolveScenarioWorkflowReference(scenarioSourceServer, "apply", root, "")
 	if err != nil {
 		t.Fatalf("resolve server scenario: %v", err)
 	}
 	wantServer := serverURL + "/workflows/scenarios/apply.yaml"
 	if resolvedServer != wantServer {
 		t.Fatalf("expected server path %q, got %q", wantServer, resolvedServer)
+	}
+
+	explicitServer, err := resolveScenarioWorkflowReference(scenarioSourceServer, "apply", root, "http://127.0.0.1:9090")
+	if err != nil {
+		t.Fatalf("resolve explicit server scenario: %v", err)
+	}
+	if explicitServer != "http://127.0.0.1:9090/workflows/scenarios/apply.yaml" {
+		t.Fatalf("expected explicit server to win, got %q", explicitServer)
 	}
 }
 

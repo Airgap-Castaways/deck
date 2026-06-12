@@ -124,7 +124,7 @@ vars:
 **CLI vars files** — overlay site or node values without editing `workflows/vars.yaml`:
 
 ```bash
-deck apply --scenario apply -f vars/site.yaml -f vars/cp1.yaml
+deck apply --root . --scenario apply -f vars/site.yaml -f vars/cp1.yaml
 ```
 
 Vars file paths are relative to the same `workflows/` location that contains `vars.yaml`.

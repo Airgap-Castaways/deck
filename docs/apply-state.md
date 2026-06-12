@@ -20,8 +20,8 @@ $XDG_STATE_HOME/deck/state/apply/<state-key>.json
 Use `--state-dir` to choose an explicit directory:
 
 ```bash
-deck apply --state-dir /var/lib/deck/state/apply --workflow https://example.invalid/apply.yaml
-deck plan --state-dir /var/lib/deck/state/apply --workflow https://example.invalid/apply.yaml
+deck apply --state-dir /var/lib/deck/state/apply --server https://example.invalid --scenario apply
+deck plan --state-dir /var/lib/deck/state/apply --server https://example.invalid --scenario apply
 ```
 
 When `--state-dir` is supplied, deck uses only `<dir>/<state-key>.json`. It does not infer workspace-local state, read old default paths, or run automatic migration.
@@ -124,9 +124,10 @@ Use `--fresh` to ignore saved apply state for that invocation.
 Use `deck state` to inspect and delete apply state:
 
 ```bash
-deck state show --workflow workflows/scenarios/apply.yaml
+deck state show --root . --scenario apply
+deck state show --server https://example.invalid --scenario apply
 deck state list
-deck state clear --workflow workflows/scenarios/apply.yaml --yes
+deck state clear --root . --scenario apply --yes
 deck state clear --all --yes
 ```
 

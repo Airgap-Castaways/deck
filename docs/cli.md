@@ -191,11 +191,29 @@ Use these when you want to test a different site value without editing `workflow
 
 ```bash
 deck prepare -f vars/site.yaml --var registryHost=mirror.local --var kubernetesVersion=v1.30.1
-deck plan --scenario apply -f vars/site.yaml -f vars/worker.yaml --var role=worker
-deck apply --scenario apply -f vars/site.yaml -f vars/cp1.yaml --var role=control-plane --var nodeIP=10.0.0.10
+deck plan --root . --scenario apply -f vars/site.yaml -f vars/worker.yaml --var role=worker
+deck apply --root . --scenario apply -f vars/site.yaml -f vars/cp1.yaml --var role=control-plane --var nodeIP=10.0.0.10
 ```
 
-Vars file paths are relative to the same `workflows/` location that contains `vars.yaml`. For example, `-f vars/site.yaml` reads `workflows/vars/site.yaml` for a local workflow tree.
+Vars file paths are relative to the selected workflow root. For example, `--root ./demo -f vars/site.yaml` reads `./demo/workflows/vars/site.yaml`, and `--server https://server -f vars/site.yaml` reads `https://server/workflows/vars/site.yaml`.
+
+### Workflow source locators
+
+For `plan`, `apply`, and `state`, prefer selecting the workflow source and the entrypoint separately:
+
+```bash
+deck apply --root ./demo --scenario apply
+deck plan --server https://server --scenario apply
+deck state show --server https://server --scenario apply
+```
+
+- `--root <path>` selects a local workflow tree or bundle root containing `workflows/`.
+- `--server <url>` selects a remote workflow server and resolves scenarios under `<url>/workflows/scenarios/`.
+- `--scenario <name>` selects `workflows/scenarios/<name>.yaml` under the selected source.
+- `--workflow <path-or-url>` remains available as an explicit workflow-file escape hatch.
+- `--root` and `--server` are mutually exclusive.
+- `--workflow` and `--scenario` are mutually exclusive.
+- Existing `--source server --scenario <name>` still works with `DECK_SERVER` or `deck server remote set`, but `--server <url> --scenario <name>` is the clearer inline form.
 
 ### Node-scoped workflow variables
 
@@ -262,12 +280,12 @@ deck prepare --bundle-binary-source release --bundle-binary-version v0.1.0 --bun
 deck prepare -f vars/site.yaml --var registryHost=mirror.local --var kubernetesVersion=v1.30.1
 deck plan vars --command prepare -f vars/site.yaml --var registryHost=mirror.local
 deck bundle build --out ./bundle.tar
-deck plan --scenario apply --source local
-deck plan --scenario apply --source local -o json
-deck plan --scenario apply --source local -f vars/worker.yaml --var role=worker
-deck plan vars --scenario apply --source local -f vars/worker.yaml --var role=worker
-deck apply --scenario apply --source local
-deck apply --scenario apply --source local -f vars/cp1.yaml --var role=control-plane --var nodeIP=10.0.0.10
+deck plan --root . --scenario apply
+deck plan --root . --scenario apply -o json
+deck plan --root . --scenario apply -f vars/worker.yaml --var role=worker
+deck plan vars --root . --scenario apply -f vars/worker.yaml --var role=worker
+deck apply --root . --scenario apply
+deck apply --root . --scenario apply -f vars/cp1.yaml --var role=control-plane --var nodeIP=10.0.0.10
 deck cache clean --older-than 30d --dry-run
 ```
 
@@ -294,7 +312,7 @@ deck server health --server http://127.0.0.1:8080 -o json
 deck server logs --root ./bundle --source file -o json --v=1
 deck bundle verify --file ./bundle -o json
 deck cache list -o json --v=1
-deck plan --scenario apply --source server
+deck plan --server http://127.0.0.1:8080 --scenario apply
 
 deck ask config set --provider openai --model gpt-5.4 --endpoint https://api.openai.com/v1 --api-key "$DECK_ASK_API_KEY"
 deck ask status --provider openai
@@ -359,7 +377,8 @@ Optional transport override example:
 - `plan` and `apply` support `--fresh` to ignore saved apply state for that invocation.
 - `plan`, `apply`, and `state` support `--state-dir` to use an explicit apply state directory.
 - `deck state show/list/clear` inspects and removes saved apply state.
-- `--source` controls whether `--scenario` resolves from the local workspace or the saved remote server.
+- `--root` and `--server` are the preferred source locators for local and remote scenario execution.
+- `--source` remains supported for compatibility and controls whether `--scenario` resolves from the local workspace or the saved remote server.
 - local workflow apply state stays under `./.deck/state/apply/`; remote workflow apply state uses the user-local XDG state root under `deck/state/apply/`.
 - workspace-local metadata stays under `./.deck/`, while user-global config, remote workflow state, cache, and run history use standard XDG locations.
 - `ask` workspace context lives under `./.deck/ask/`, while saved ask config defaults live under `~/.config/deck/config.json` as the top-level `ask` object.

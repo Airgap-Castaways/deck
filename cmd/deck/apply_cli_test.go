@@ -216,6 +216,182 @@ phases:
 	}
 }
 
+func TestApplySourceLocatorRootScenario(t *testing.T) {
+	root := t.TempDir()
+	workflowDir := filepath.Join(root, "workflows")
+	scenarioDir := filepath.Join(workflowDir, "scenarios")
+	varsDir := filepath.Join(workflowDir, "vars")
+	if err := os.MkdirAll(scenarioDir, 0o755); err != nil {
+		t.Fatalf("mkdir scenarios: %v", err)
+	}
+	if err := os.MkdirAll(varsDir, 0o755); err != nil {
+		t.Fatalf("mkdir vars: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "vars.yaml"), []byte("mode: base\n"), 0o644); err != nil {
+		t.Fatalf("write base vars: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(varsDir, "site.yaml"), []byte("mode: site\n"), 0o644); err != nil {
+		t.Fatalf("write site vars: %v", err)
+	}
+	writeWorkflowYAML(t, filepath.Join(scenarioDir, "apply.yaml"), `version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: root-vars-match
+        kind: Command
+        when: vars.mode == "site"
+        spec:
+          command: ["true"]
+`)
+
+	planOut, err := runWithCapturedStdout([]string{"plan", "--root", root, "--scenario", "apply", "-f", "vars/site.yaml"})
+	if err != nil {
+		t.Fatalf("plan with root failed: %v", err)
+	}
+	if !strings.Contains(planOut, "root-vars-match Command RUN") {
+		t.Fatalf("expected root scenario vars overlay, got %q", planOut)
+	}
+	applyOut, err := runWithCapturedStdout([]string{"apply", "--root", root, "--scenario", "apply", "--dry-run", "-f", "vars/site.yaml"})
+	if err != nil {
+		t.Fatalf("apply dry-run with root failed: %v", err)
+	}
+	if !strings.Contains(applyOut, "root-vars-match Command PLAN") {
+		t.Fatalf("expected root scenario apply plan, got %q", applyOut)
+	}
+	stateOut, err := runWithCapturedStdout([]string{"state", "show", "--root", root, "--scenario", "apply", "-f", "vars/site.yaml"})
+	if err != nil {
+		t.Fatalf("state show with root failed: %v", err)
+	}
+	if !strings.Contains(stateOut, "status=running") || !strings.Contains(stateOut, filepath.Join(root, "workflows", "scenarios", "apply.yaml")) {
+		t.Fatalf("unexpected root state output: %q", stateOut)
+	}
+}
+
+func TestApplySourceLocatorServerScenario(t *testing.T) {
+	stateHome := filepath.Join(t.TempDir(), "state")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", stateHome)
+	t.Setenv("DECK_SERVER_CONFIG_PATH", filepath.Join(t.TempDir(), "source.json"))
+	workflowBody := `version: v1alpha1
+phases:
+  - name: install
+    steps:
+      - id: server-vars-match
+        kind: Command
+        when: vars.mode == "site"
+        spec:
+          command: ["true"]
+`
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/workflows/scenarios/apply.yaml":
+			_, _ = w.Write([]byte(workflowBody))
+		case "/workflows/vars.yaml":
+			_, _ = w.Write([]byte("mode: base\n"))
+		case "/workflows/vars/site.yaml":
+			_, _ = w.Write([]byte("mode: site\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	planOut, err := runWithCapturedStdout([]string{"plan", "--server", ts.URL, "--scenario", "apply", "-f", "vars/site.yaml"})
+	if err != nil {
+		t.Fatalf("plan with server failed: %v", err)
+	}
+	if !strings.Contains(planOut, "server-vars-match Command RUN") {
+		t.Fatalf("expected server scenario vars overlay, got %q", planOut)
+	}
+	if err := saveSourceDefaults(sourceDefaults{URL: ts.URL}); err != nil {
+		t.Fatalf("save source defaults: %v", err)
+	}
+	compatPlanOut, err := runWithCapturedStdout([]string{"plan", "--source", "server", "--scenario", "apply", "-f", "vars/site.yaml"})
+	if err != nil {
+		t.Fatalf("compat plan with source server failed: %v", err)
+	}
+	if !strings.Contains(compatPlanOut, "server-vars-match Command RUN") {
+		t.Fatalf("expected source server compatibility, got %q", compatPlanOut)
+	}
+	varsRes := execute([]string{"plan", "vars", "--server", ts.URL, "--scenario", "apply", "-f", "vars/site.yaml", "-o", "json"})
+	if varsRes.err != nil {
+		t.Fatalf("plan vars with server failed: %v", varsRes.err)
+	}
+	if !strings.Contains(varsRes.stdout, `"workflowPath": "`+ts.URL+`/workflows/scenarios/apply.yaml"`) || !strings.Contains(varsRes.stdout, `"mode": "site"`) {
+		t.Fatalf("unexpected plan vars output: %q", varsRes.stdout)
+	}
+	applyOut, err := runWithCapturedStdout([]string{"apply", "--server", ts.URL, "--scenario", "apply", "--dry-run", "-f", "vars/site.yaml"})
+	if err != nil {
+		t.Fatalf("apply dry-run with server failed: %v", err)
+	}
+	if !strings.Contains(applyOut, "server-vars-match Command PLAN") {
+		t.Fatalf("expected server scenario apply plan, got %q", applyOut)
+	}
+	if _, err := runWithCapturedStdout([]string{"apply", "--server", ts.URL, "--scenario", "apply", "-f", "vars/site.yaml"}); err != nil {
+		t.Fatalf("apply with server failed: %v", err)
+	}
+	runsRoot := filepath.Join(stateHome, "deck", "runs")
+	runEntries, err := os.ReadDir(runsRoot)
+	if err != nil {
+		t.Fatalf("read runs root: %v", err)
+	}
+	if len(runEntries) != 1 {
+		t.Fatalf("expected one run directory, got %d", len(runEntries))
+	}
+	runRecordPath := filepath.Join(runsRoot, runEntries[0].Name(), "record.json")
+	rawRunRecord, err := os.ReadFile(runRecordPath)
+	if err != nil {
+		t.Fatalf("read run record: %v", err)
+	}
+	var runRecord struct {
+		WorkflowRef    string `json:"workflow_ref"`
+		WorkflowSource string `json:"workflow_source"`
+	}
+	if err := json.Unmarshal(rawRunRecord, &runRecord); err != nil {
+		t.Fatalf("decode run record: %v\n%s", err, string(rawRunRecord))
+	}
+	if runRecord.WorkflowRef != ts.URL+"/workflows/scenarios/apply.yaml" || runRecord.WorkflowSource != scenarioSourceServer {
+		t.Fatalf("expected server workflow source metadata, got %#v", runRecord)
+	}
+	stateOut, err := runWithCapturedStdout([]string{"state", "show", "--server", ts.URL, "--scenario", "apply", "-f", "vars/site.yaml"})
+	if err != nil {
+		t.Fatalf("state show with server failed: %v", err)
+	}
+	if !strings.Contains(stateOut, "status=running") || !strings.Contains(stateOut, "workflow="+ts.URL+"/workflows/scenarios/apply.yaml") {
+		t.Fatalf("unexpected server state output: %q", stateOut)
+	}
+}
+
+func TestApplySourceLocatorRejectsInvalidCombinations(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "workflows", "scenarios"), 0o755); err != nil {
+		t.Fatalf("mkdir scenarios: %v", err)
+	}
+	writeWorkflowYAML(t, filepath.Join(root, "workflows", "scenarios", "apply.yaml"), "version: v1alpha1\nphases: []\n")
+
+	res := execute([]string{"plan", "--root", root, "--server", "https://example.invalid", "--scenario", "apply"})
+	if res.err == nil || !strings.Contains(res.err.Error(), "--root and --server are mutually exclusive") {
+		t.Fatalf("expected root/server conflict, got err=%v stderr=%q", res.err, res.stderr)
+	}
+	res = execute([]string{"apply", "--server", "https://example.invalid"})
+	if res.err == nil || !strings.Contains(res.err.Error(), "apply with --server requires --scenario or --workflow") {
+		t.Fatalf("expected server entry error, got err=%v stderr=%q", res.err, res.stderr)
+	}
+	res = execute([]string{"apply", "--root", root, "--scenario", "apply", root})
+	if res.err == nil || !strings.Contains(res.err.Error(), "apply accepts either --root or a positional bundle path") {
+		t.Fatalf("expected root/positional conflict, got err=%v stderr=%q", res.err, res.stderr)
+	}
+	workflowPath := filepath.Join(root, "workflows", "scenarios", "apply.yaml")
+	res = execute([]string{"plan", "--workflow", workflowPath, "--scenario", "apply"})
+	if res.err == nil || !strings.Contains(res.err.Error(), "plan accepts either --workflow or --scenario") {
+		t.Fatalf("expected plan workflow/scenario conflict, got err=%v stderr=%q", res.err, res.stderr)
+	}
+	res = execute([]string{"apply", "--workflow", workflowPath, "--scenario", "apply"})
+	if res.err == nil || !strings.Contains(res.err.Error(), "apply accepts either --workflow or --scenario") {
+		t.Fatalf("expected apply workflow/scenario conflict, got err=%v stderr=%q", res.err, res.stderr)
+	}
+}
+
 func TestPlanVarsApplyShowsEffectiveInputs(t *testing.T) {
 	root := t.TempDir()
 	workflowDir := filepath.Join(root, "workflows")

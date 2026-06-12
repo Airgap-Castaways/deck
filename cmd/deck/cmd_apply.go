@@ -17,6 +17,8 @@ type diffOptions struct {
 	workflowPath  string
 	scenario      string
 	source        string
+	root          string
+	server        string
 	fresh         bool
 	stateDir      string
 	selectedPhase string
@@ -30,8 +32,10 @@ type planVarsOptions struct {
 	workflowPath  string
 	scenario      string
 	source        string
+	server        string
 	selectedPhase string
 	preparedRoot  string
+	rootExplicit  bool
 	fresh         bool
 	output        string
 	varOverrides  map[string]string
@@ -42,6 +46,8 @@ func newPlanCommand(env *cliEnv) *cobra.Command {
 	vars := &varFlag{}
 	varsFiles := &stringSliceFlag{}
 	var stateDir string
+	var root string
+	var server string
 	cmd := &cobra.Command{
 		Use:     "plan",
 		Aliases: []string{"diff"},
@@ -75,6 +81,8 @@ func newPlanCommand(env *cliEnv) *cobra.Command {
 				workflowPath:  workflowPath,
 				scenario:      scenario,
 				source:        source,
+				root:          root,
+				server:        server,
 				fresh:         fresh,
 				stateDir:      stateDir,
 				selectedPhase: selectedPhase,
@@ -88,14 +96,16 @@ func newPlanCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("workflow", "", "path or URL to workflow file")
 	cmd.Flags().String("scenario", "", "scenario name to plan")
 	cmd.Flags().String("source", scenarioSourceLocal, "scenario source (local|server)")
+	cmd.Flags().StringVar(&root, "root", "", "local workflow root containing workflows/")
+	cmd.Flags().StringVar(&server, "server", "", "remote workflow server URL")
 	cmd.Flags().String("phase", "", "phase name to plan (defaults to all phases)")
 	cmd.Flags().Bool("fresh", false, "ignore saved apply state for this invocation")
 	cmd.Flags().StringVar(&stateDir, "state-dir", "", "directory for apply state files (overrides local .deck/state/apply or remote XDG state)")
 	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
-	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
+	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars overlay path relative to the selected workflow root (workflows/), repeatable")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	registerScenarioSourceCompletion(cmd, "source", false)
-	registerScenarioNameCompletion(cmd, "scenario", "source", "", false)
+	registerScenarioNameCompletionWithSourceLocator(cmd, "scenario", "source", "root", "server", false)
 	cmd.AddCommand(newPlanVarsCommand(env))
 	return cmd
 }
@@ -103,6 +113,7 @@ func newPlanCommand(env *cliEnv) *cobra.Command {
 func newPlanVarsCommand(env *cliEnv) *cobra.Command {
 	vars := &varFlag{}
 	varsFiles := &stringSliceFlag{}
+	var server string
 	cmd := &cobra.Command{
 		Use:   "vars",
 		Short: "Show effective vars, context, and initial runtime values",
@@ -145,8 +156,10 @@ func newPlanVarsCommand(env *cliEnv) *cobra.Command {
 				workflowPath:  workflowPath,
 				scenario:      scenario,
 				source:        source,
+				server:        server,
 				selectedPhase: selectedPhase,
 				preparedRoot:  preparedRoot,
+				rootExplicit:  cmd.Flags().Changed("root"),
 				fresh:         fresh,
 				output:        output,
 				varOverrides:  vars.AsMap(),
@@ -158,14 +171,15 @@ func newPlanVarsCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("workflow", "", "path or URL to apply workflow file")
 	cmd.Flags().String("scenario", "", "scenario name to inspect for apply")
 	cmd.Flags().String("source", scenarioSourceLocal, "scenario source for apply (local|server)")
+	cmd.Flags().StringVar(&server, "server", "", "remote workflow server URL for --command apply")
 	cmd.Flags().String("phase", "", "phase name to inspect (defaults to all phases)")
-	cmd.Flags().String("root", workspacepaths.DefaultPreparedRoot("."), "prepared bundle output directory for --command prepare")
+	cmd.Flags().String("root", workspacepaths.DefaultPreparedRoot("."), "workflow root for --command apply or prepared bundle output directory for --command prepare")
 	cmd.Flags().Bool("fresh", false, "ignore saved apply state for this invocation")
 	cmd.Flags().StringP("output", "o", "text", "output format (text|json)")
-	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
+	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars overlay path relative to the selected workflow root (workflows/), repeatable")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	registerScenarioSourceCompletion(cmd, "source", false)
-	registerScenarioNameCompletion(cmd, "scenario", "source", "", false)
+	registerScenarioNameCompletionWithSourceLocator(cmd, "scenario", "source", "", "server", false)
 	return cmd
 }
 
@@ -180,7 +194,11 @@ func runPlanVarsWithOptions(env *cliEnv, ctx context.Context, opts planVarsOptio
 	}
 	workflowPath := strings.TrimSpace(opts.workflowPath)
 	if command == planvars.CommandApply {
-		workflowPath, err = resolvePlanWorkflowPath(ctx, workflowPath, strings.TrimSpace(opts.scenario), strings.TrimSpace(opts.source))
+		root := ""
+		if opts.rootExplicit {
+			root = strings.TrimSpace(opts.preparedRoot)
+		}
+		workflowPath, err = resolvePlanWorkflowPath(ctx, workflowPath, strings.TrimSpace(opts.scenario), strings.TrimSpace(opts.source), root, strings.TrimSpace(opts.server))
 		if err != nil {
 			return err
 		}
@@ -204,7 +222,7 @@ func runDiffWithOptions(env *cliEnv, ctx context.Context, opts diffOptions) erro
 	if err := env.commandStarted("plan"); err != nil {
 		return err
 	}
-	workflowPath, err := resolvePlanWorkflowPath(ctx, strings.TrimSpace(opts.workflowPath), strings.TrimSpace(opts.scenario), strings.TrimSpace(opts.source))
+	workflowPath, err := resolvePlanWorkflowPath(ctx, strings.TrimSpace(opts.workflowPath), strings.TrimSpace(opts.scenario), strings.TrimSpace(opts.source), strings.TrimSpace(opts.root), strings.TrimSpace(opts.server))
 	if err != nil {
 		return err
 	}
@@ -235,6 +253,9 @@ type applyOptions struct {
 	workflowPath   string
 	scenario       string
 	source         string
+	sourceExplicit bool
+	root           string
+	server         string
 	selectedPhase  string
 	fresh          bool
 	stateDir       string
@@ -249,6 +270,8 @@ func newApplyCommand(env *cliEnv) *cobra.Command {
 	vars := &varFlag{}
 	varsFiles := &stringSliceFlag{}
 	var stateDir string
+	var root string
+	var server string
 	cmd := &cobra.Command{
 		Use:   "apply [workflow] [bundle]",
 		Short: "Execute an apply file against a bundle",
@@ -291,6 +314,9 @@ func newApplyCommand(env *cliEnv) *cobra.Command {
 				workflowPath:   workflowPath,
 				scenario:       scenario,
 				source:         source,
+				sourceExplicit: cmd.Flags().Changed("source"),
+				root:           root,
+				server:         server,
 				selectedPhase:  selectedPhase,
 				fresh:          fresh,
 				stateDir:       stateDir,
@@ -306,15 +332,17 @@ func newApplyCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("workflow", "", "path or URL to workflow file")
 	cmd.Flags().String("scenario", "", "scenario name to execute")
 	cmd.Flags().String("source", scenarioSourceLocal, "scenario source (local|server)")
+	cmd.Flags().StringVar(&root, "root", "", "local workflow root containing workflows/")
+	cmd.Flags().StringVar(&server, "server", "", "remote workflow server URL")
 	cmd.Flags().String("phase", "", "phase name to execute (defaults to all phases)")
 	cmd.Flags().Bool("fresh", false, "ignore saved apply state for this invocation")
 	cmd.Flags().StringVar(&stateDir, "state-dir", "", "directory for apply state files (overrides local .deck/state/apply or remote XDG state)")
 	cmd.Flags().Bool("dry-run", false, "print apply plan without executing steps")
 	cmd.Flags().Bool("non-interactive", false, "fail or use defaults for operator interaction steps instead of prompting")
-	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars file overlay relative to workflows/ (repeatable)")
+	cmd.Flags().VarP(varsFiles, "vars-file", "f", "vars overlay path relative to the selected workflow root (workflows/), repeatable")
 	cmd.Flags().Var(vars, "var", "set variable override (key=value), repeatable")
 	registerScenarioSourceCompletion(cmd, "source", false)
-	registerScenarioNameCompletion(cmd, "scenario", "source", "", false)
+	registerScenarioNameCompletionWithSourceLocator(cmd, "scenario", "source", "root", "server", false)
 	return cmd
 }
 
@@ -337,11 +365,17 @@ func runApplyWithOptions(env *cliEnv, ctx context.Context, opts applyOptions) er
 	if err != nil {
 		return err
 	}
+	workflowSource := inferWorkflowSource(workflowPath, "")
+	if strings.TrimSpace(opts.server) != "" {
+		workflowSource = scenarioSourceServer
+	} else if opts.sourceExplicit {
+		workflowSource = inferWorkflowSource(workflowPath, strings.TrimSpace(opts.source))
+	}
 	invocationID := newInvocationID("apply")
 	return applycli.RunApplyCommand(ctx, applycli.ApplyCommandOptions{
 		WorkflowPath:     workflowPath,
 		BundleRoot:       bundleRoot,
-		WorkflowSource:   inferWorkflowSource(workflowPath, strings.TrimSpace(opts.source)),
+		WorkflowSource:   workflowSource,
 		Scenario:         strings.TrimSpace(opts.scenario),
 		SelectedPhase:    opts.selectedPhase,
 		Fresh:            opts.fresh,
