@@ -1,0 +1,42 @@
+version: v1alpha1
+phases:
+  # Docker daemon check: placed first because the packages phase requires a container runtime
+  - name: packages
+    steps:
+      - id: download-ubuntu-runtime-packages
+        kind: DownloadPackage
+        spec:
+          packages: "{{ .vars.prepare.packages.debian }}"
+          distro:
+            family: debian
+            release: "{{ .vars.release }}"
+          repo:
+            type: deb-flat
+            generate: true
+          backend:
+            mode: container
+            runtime: auto
+            image: "{{ .vars.releaseImage }}"
+          outputDir: packages/deb/{{ .vars.release }}
+  - name: binaries
+    maxParallelism: 4
+    steps:
+      - id: download-runtime-and-kubernetes-binaries
+        kind: DownloadFile
+        parallelGroup: prepare-binaries
+        spec:
+          items: "{{ .vars.prepare.binaries }}"
+  - name: images
+    steps:
+      - id: download-kubeadm-images
+        kind: DownloadImage
+        timeout: 60m
+        spec:
+          images: "{{ .vars.prepare.images.kubeadm }}"
+          outputDir: images/kubeadm
+      - id: download-plugin-images
+        kind: DownloadImage
+        timeout: 60m
+        spec:
+          images: "{{ .vars.prepare.images.plugins }}"
+          outputDir: images/plugins
