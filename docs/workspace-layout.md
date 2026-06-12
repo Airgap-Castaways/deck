@@ -93,7 +93,7 @@ These directories hold the prepared source material that `apply` consumes.
 
 This directory is managed by `deck` and should not be edited manually.
 - `.deck/manifest.json` — digest manifest of canonical prepared outputs (`outputs/{files,packages,images,bin}`). `workflows/` and the deck launcher itself are not tracked. Used as the integrity baseline for `bundle verify` and at apply start.
-- `.deck/state/apply/` — phase-based apply state (see apply-state.md). Apply run logs (record.json / events.jsonl) are written to `$XDG_STATE_HOME/deck/runs/<run-id>/`, not inside the workspace.
+- `.deck/state/apply/` — phase-based apply state (see [apply-state.md](apply-state.md)). Apply run logs (record.json / events.jsonl) are written to `$XDG_STATE_HOME/deck/runs/<run-id>/`, not inside the workspace (see [apply-runlogs.md](apply-runlogs.md)).
 
 ## Related References
 
