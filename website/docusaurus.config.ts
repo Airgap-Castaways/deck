@@ -4,7 +4,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'deck',
   tagline: 'Structured workflows for air-gapped operations',
-  favicon: 'img/favicon.svg',
+  favicon: 'img/mascot.png',
 
   url: 'https://airgap-castaways.github.io',
   baseUrl: '/deck/',
@@ -58,23 +58,22 @@ const config: Config = {
   // Font stylesheets
   stylesheets: [
     {
-      href: 'https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,75..125,100..900;1,75..125,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap',
+      href: 'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,100..900,0..100,0..1;1,9..144,100..900,0..100,0..1&family=Hanken+Grotesk:ital,wght@0,100..900;1,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap',
       type: 'text/css',
     },
   ],
 
   themeConfig: {
-    // Disable annoying default color-mode announcement; the landing is intrinsically dark
     colorMode: {
-      defaultMode: 'dark',
+      defaultMode: 'light',
       disableSwitch: false,
       respectPrefersColorScheme: true,
     },
     navbar: {
       logo: {
-        src: 'img/logo.svg',
-        alt: 'deck mark',
-        style: {height: '26px'},
+        src: 'img/mascot.png',
+        alt: 'deck',
+        style: {height: '30px', width: 'auto'},
       },
       title: 'deck',
       items: [
@@ -84,7 +83,7 @@ const config: Config = {
       ],
     },
     footer: {
-      style: 'dark',
+      style: 'light',
       links: [],
       copyright: `Apache-2.0 · Airgap-Castaways`,
     },

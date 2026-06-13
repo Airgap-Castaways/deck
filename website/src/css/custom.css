@@ -1,188 +1,226 @@
 /**
- * deck — global theme tokens
- * Fonts: Archivo (display/body) + JetBrains Mono (code/labels)
- * Palette: ink-black bg, amber signal accent, steel secondary
+ * deck — global warm brand theme
+ * Fonts: Fraunces (display/headings) + Hanken Grotesk (body) + JetBrains Mono (code)
+ * Palette: kraft-amber, cream paper, sprout-green, warm ink
+ * Loaded via docusaurus.config.ts stylesheets
  */
-
-/* ── Google Fonts are loaded via docusaurus.config.ts stylesheets ── */
 
 /* ════════════════════════════════
    Landing-page design tokens
    (used by index.module.css only)
    ════════════════════════════════ */
 :root {
-  --deck-ink:          #0a0d12;
-  --deck-ink-2:        #0f131a;
-  --deck-ink-3:        #151b24;
-  --deck-amber:        #f5a524;
-  --deck-amber-dim:    #c4801a;
-  --deck-amber-glow:   rgba(245, 165, 36, 0.15);
-  --deck-amber-glow-s: rgba(245, 165, 36, 0.06);
-  --deck-steel:        #9aa7b8;
-  --deck-steel-dim:    #5c6a7a;
-  --deck-steel-faint:  rgba(154, 167, 184, 0.08);
-  --deck-border:       rgba(154, 167, 184, 0.12);
-  --deck-border-amber: rgba(245, 165, 36, 0.3);
-  --deck-white:        #e8edf3;
-  --deck-white-dim:    #a8b4c2;
+  --deck-paper:        #faf3e6;
+  --deck-paper-warm:   #fdf7ec;
+  --deck-kraft:        #d99a4e;
+  --deck-kraft-deep:   #c8822f;
+  --deck-wood:         #8a5a2b;
+  --deck-sprout:       #7cb342;
+  --deck-sprout-deep:  #6aa83a;
+  --deck-blush:        #f3a7a0;
+  --deck-ink:          #3a2a1a;
+  --deck-ink-2:        #2c2016;
+  --deck-ink-muted:    #6b4e2e;
 
   /* Font stacks */
-  --deck-font-display: 'Archivo', 'Arial Narrow', sans-serif;
+  --deck-font-display: 'Fraunces', Georgia, serif;
+  --deck-font-body:    'Hanken Grotesk', 'Helvetica Neue', Arial, sans-serif;
   --deck-font-mono:    'JetBrains Mono', 'Fira Code', monospace;
 }
 
 /* ════════════════════════════════
    Infima global overrides — LIGHT MODE
-   Link color: deep amber/teal — AA contrast on white (≥4.5:1)
-   #8a5200 on white = ~7.8:1 contrast ✓
+   Palette: warm craft / cream paper
+   Link color: deep wood-brown #7a4520 on white → ~7.1:1 WCAG AA ✓
    ════════════════════════════════ */
 :root {
-  /* Docs link color — deep amber, passes WCAG AA on white (#fff) */
-  --ifm-color-primary:           #8a5200;
-  --ifm-color-primary-dark:      #7a4900;
-  --ifm-color-primary-darker:    #6e4100;
-  --ifm-color-primary-darkest:   #5a3500;
-  --ifm-color-primary-light:     #9a5c00;
-  --ifm-color-primary-lighter:   #aa6600;
-  --ifm-color-primary-lightest:  #c07700;
+  /* Primary = deep wood-brown — passes AA on white (≥ 4.5:1) */
+  --ifm-color-primary:           #7a4520;
+  --ifm-color-primary-dark:      #6b3c1b;
+  --ifm-color-primary-darker:    #603617;
+  --ifm-color-primary-darkest:   #4f2c12;
+  --ifm-color-primary-light:     #894e25;
+  --ifm-color-primary-lighter:   #97572a;
+  --ifm-color-primary-lightest:  #aa6534;
 
   --ifm-code-font-size: 93%;
-  --ifm-font-family-base:        'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --ifm-font-family-base:        'Hanken Grotesk', 'Helvetica Neue', Arial, sans-serif;
   --ifm-font-family-monospace:   'JetBrains Mono', 'Fira Code', monospace;
-  --ifm-heading-font-family:     'Archivo', 'Helvetica Neue', Arial, sans-serif;
-  --ifm-heading-font-weight:     700;
+  --ifm-heading-font-family:     'Fraunces', Georgia, serif;
+  --ifm-heading-font-weight:     800;
   --ifm-font-weight-semibold:    600;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+  --docusaurus-highlighted-code-line-bg: rgba(138, 90, 43, 0.07);
 
-  /* Light mode: sidebar active item — amber-derived but accessible */
-  --ifm-menu-color-active:        #8a5200;
-  --ifm-menu-color-background-active: rgba(138, 82, 0, 0.08);
-  --ifm-link-hover-color:         #6e4100;
+  /* Light mode: sidebar active item */
+  --ifm-menu-color-active:        #7a4520;
+  --ifm-menu-color-background-active: rgba(122, 69, 32, 0.07);
+  --ifm-link-hover-color:         #5a3210;
+
+  /* Light background: warm cream tint on doc surfaces */
+  --ifm-background-color:        #fffdf8;
+  --ifm-background-surface-color: #fdf8f0;
 }
 
 /* ════════════════════════════════
    Infima global overrides — DARK MODE
-   Docs pages use the brand ink family
+   Warm espresso dark — NOT cold ink
+   Link color: kraft-amber #d99a4e on espresso → ~6.5:1 WCAG AA ✓
    ════════════════════════════════ */
 [data-theme='dark'] {
-  /* Docs background → brand ink */
-  --ifm-background-color:        #0c0f16;
-  --ifm-background-surface-color: #0f131a;
+  /* Warm espresso dark backgrounds */
+  --ifm-background-color:        #1e1510;
+  --ifm-background-surface-color: #261b12;
 
-  /* Docs link color — amber, readable on dark bg (brand + AA) */
-  --ifm-color-primary:           #f5a524;
-  --ifm-color-primary-dark:      #e09318;
-  --ifm-color-primary-darker:    #d48a12;
-  --ifm-color-primary-darkest:   #b8740a;
-  --ifm-color-primary-light:     #f7b340;
-  --ifm-color-primary-lighter:   #f8bc55;
-  --ifm-color-primary-lightest:  #fac97a;
+  /* Primary = warm kraft-amber — readable on dark bg */
+  --ifm-color-primary:           #d99a4e;
+  --ifm-color-primary-dark:      #c8862e;
+  --ifm-color-primary-darker:    #bc7b27;
+  --ifm-color-primary-darkest:   #a06720;
+  --ifm-color-primary-light:     #e4ab62;
+  --ifm-color-primary-lighter:   #edb875;
+  --ifm-color-primary-lightest:  #f5c98a;
 
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  --docusaurus-highlighted-code-line-bg: rgba(217, 154, 78, 0.1);
 
-  /* Dark mode sidebar active — amber tint */
-  --ifm-menu-color-active:        #f5a524;
-  --ifm-menu-color-background-active: rgba(245, 165, 36, 0.1);
-  --ifm-link-hover-color:         #f7b340;
+  /* Sidebar active — kraft-amber tint */
+  --ifm-menu-color-active:        #d99a4e;
+  --ifm-menu-color-background-active: rgba(217, 154, 78, 0.1);
+  --ifm-link-hover-color:         #e4ab62;
 
-  /* Sidebar + TOC surface */
-  --ifm-toc-border-color:         rgba(154, 167, 184, 0.15);
+  /* TOC border */
+  --ifm-toc-border-color:         rgba(217, 154, 78, 0.15);
 
-  /* Code block: darker than default dark */
-  --ifm-code-background:          #0a0d12;
-  --ifm-pre-background:           #0a0d12;
+  /* Code block: warm dark */
+  --ifm-code-background:          #160f09;
+  --ifm-pre-background:           #160f09;
 
-  /* Admonition accent (fallback; individual types below) */
-  --ifm-color-info:               #4db8e8;
-  --ifm-color-warning:            #f5a524;
-  --ifm-color-success:            #4ade80;
-  --ifm-color-danger:             #f87171;
+  /* Admonition accents */
+  --ifm-color-info:               #60b8d8;
+  --ifm-color-warning:            #d99a4e;
+  --ifm-color-success:            #7cb342;
+  --ifm-color-danger:             #e87070;
 
-  /* Body text: crisp on dark */
-  --ifm-font-color-base:          #c8d3df;
-  --ifm-heading-color:            #e8edf3;
+  /* Body text: warm cream on dark espresso */
+  --ifm-font-color-base:          #e0cdb8;
+  --ifm-heading-color:            #f0e4d0;
 }
 
 /* ════════════════════════════════
-   Navbar — always dark (both modes)
-   Logo mark sits on ink; title Archivo
+   Navbar — warm light (cream/kraft)
+   Legible in both colour modes;
+   links warm-ink, hover sprout-green/amber
    ════════════════════════════════ */
 .navbar {
-  background-color: #0c0f16 !important;
-  border-bottom: 1px solid rgba(154, 167, 184, 0.1);
-  box-shadow: none;
+  background-color: #fdf8f0 !important;
+  border-bottom: 1.5px solid rgba(200, 130, 47, 0.18);
+  box-shadow: 0 1px 8px rgba(138, 90, 43, 0.06);
 }
 
-/* Navbar title — Archivo, near-white */
+/* Navbar title — Fraunces, warm ink */
 .navbar__title {
-  font-family: var(--deck-font-display), 'Arial Narrow', sans-serif;
+  font-family: 'Fraunces', Georgia, serif !important;
+  font-optical-sizing: auto;
+  font-variation-settings: 'SOFT' 100, 'WONK' 1;
   font-weight: 800;
-  font-size: 1.05rem;
-  letter-spacing: -0.02em;
-  color: #e8edf3 !important;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+  color: #2c2016 !important;
 }
 
 .navbar__link,
 .navbar__item {
-  color: #c8d3df !important;
+  color: #5a3a1a !important;
+  font-family: 'Hanken Grotesk', 'Helvetica Neue', Arial, sans-serif;
 }
 
 .navbar__link:hover,
 .navbar__link--active {
-  color: var(--deck-amber) !important;
+  color: #6aa83a !important;
 }
 
-/* Locale dropdown, theme toggle, and other icon buttons */
+/* Navbar logo: mascot sizing */
+.navbar__logo {
+  height: 30px !important;
+  width: auto !important;
+}
+
+/* Icon buttons (locale dropdown, theme toggle) legible on light navbar */
 .navbar__items .navbar__item svg,
 .navbar__items .clean-btn svg {
-  color: #c8d3df;
+  color: #6b4e2e;
 }
 
-/* Theme toggle button legible on dark navbar */
 [data-theme='light'] .navbar .clean-btn,
 [data-theme='dark']  .navbar .clean-btn {
-  color: #c8d3df;
+  color: #6b4e2e;
+}
+
+/* Dark mode: keep navbar warm rather than switching to cold dark */
+[data-theme='dark'] .navbar {
+  background-color: #211610 !important;
+  border-bottom: 1.5px solid rgba(200, 130, 47, 0.15);
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme='dark'] .navbar__title {
+  color: #f0e4d0 !important;
+}
+
+[data-theme='dark'] .navbar__link,
+[data-theme='dark'] .navbar__item {
+  color: #d4b896 !important;
+}
+
+[data-theme='dark'] .navbar__link:hover,
+[data-theme='dark'] .navbar__link--active {
+  color: #7cb342 !important;
+}
+
+[data-theme='dark'] .navbar__items .navbar__item svg,
+[data-theme='dark'] .navbar__items .clean-btn svg {
+  color: #d4b896;
+}
+
+[data-theme='dark'] .navbar .clean-btn {
+  color: #d4b896;
 }
 
 /* ════════════════════════════════
-   Light-mode docs: body text stays dark on white — no change needed;
-   but we ensure headings use the brand font weight.
-   Amber (#f5a524) is ONLY used on dark surfaces. On light we use deep-amber.
+   Light-mode docs
+   Warm cream background, warm-ink text
    ════════════════════════════════ */
-[data-theme='light'] .theme-doc-sidebar-container,
-[data-theme='light'] .main-wrapper {
-  /* keep default white — readable */
-}
 
-/* Active sidebar item — highlight border with deep amber on light */
+/* Active sidebar item — warm wood border */
 [data-theme='light'] .menu__link--active:not(.menu__link--sublist) {
-  border-left: 2px solid #8a5200;
-}
-
-/* Active sidebar item — highlight border with amber on dark */
-[data-theme='dark'] .menu__link--active:not(.menu__link--sublist) {
-  border-left: 2px solid var(--deck-amber);
+  border-left: 2px solid #7a4520;
 }
 
 /* ════════════════════════════════
-   Dark mode docs — code blocks
+   Dark mode docs
    ════════════════════════════════ */
+
+/* Active sidebar item — kraft-amber border */
+[data-theme='dark'] .menu__link--active:not(.menu__link--sublist) {
+  border-left: 2px solid #d99a4e;
+}
+
+/* Code blocks — warm dark */
 [data-theme='dark'] .prism-code,
 [data-theme='dark'] pre.prism-code {
-  background: #080b10 !important;
-  border: 1px solid rgba(154, 167, 184, 0.1);
+  background: #130d07 !important;
+  border: 1px solid rgba(200, 130, 47, 0.12);
 }
 
 [data-theme='dark'] code {
-  background: rgba(245, 165, 36, 0.08);
-  border: 1px solid rgba(245, 165, 36, 0.15);
+  background: rgba(217, 154, 78, 0.1);
+  border: 1px solid rgba(217, 154, 78, 0.18);
   border-radius: 3px;
-  color: #f5c068;
+  color: #e4b87a;
 }
 
-/* Highlighted code line — amber tint on dark */
+/* Highlighted line — kraft tint */
 [data-theme='dark'] .docusaurus-highlight-code-line {
-  background: rgba(245, 165, 36, 0.1);
+  background: rgba(217, 154, 78, 0.1);
   display: block;
   margin: 0 calc(-1 * var(--ifm-pre-padding));
   padding: 0 var(--ifm-pre-padding);
@@ -192,33 +230,72 @@
    Dark mode docs — admonitions
    ════════════════════════════════ */
 [data-theme='dark'] .alert--warning {
-  --ifm-alert-background-color: rgba(245, 165, 36, 0.08);
-  --ifm-alert-border-color: rgba(245, 165, 36, 0.4);
+  --ifm-alert-background-color: rgba(217, 154, 78, 0.08);
+  --ifm-alert-border-color: rgba(217, 154, 78, 0.35);
 }
 
 [data-theme='dark'] .alert--info {
-  --ifm-alert-background-color: rgba(77, 184, 232, 0.08);
-  --ifm-alert-border-color: rgba(77, 184, 232, 0.35);
+  --ifm-alert-background-color: rgba(96, 184, 216, 0.08);
+  --ifm-alert-border-color: rgba(96, 184, 216, 0.3);
+}
+
+[data-theme='dark'] .alert--success {
+  --ifm-alert-background-color: rgba(124, 179, 66, 0.08);
+  --ifm-alert-border-color: rgba(124, 179, 66, 0.3);
 }
 
 /* ════════════════════════════════
-   Table of contents — dark mode
+   Table of contents
    ════════════════════════════════ */
 [data-theme='dark'] .table-of-contents__link--active {
-  color: var(--deck-amber);
+  color: #d99a4e;
   font-weight: 600;
 }
 
 [data-theme='dark'] .table-of-contents__link:hover {
-  color: #f7b340;
+  color: #e4ab62;
+}
+
+[data-theme='light'] .table-of-contents__link--active {
+  color: #7a4520;
+  font-weight: 600;
+}
+
+[data-theme='light'] .table-of-contents__link:hover {
+  color: #5a3210;
 }
 
 /* ════════════════════════════════
-   Footer — stays dark in both modes
+   Footer — warm, matches brand
    ════════════════════════════════ */
 .footer--dark {
-  background-color: #080b10;
-  border-top: 1px solid rgba(154, 167, 184, 0.08);
+  background-color: #160f08;
+  border-top: 1px solid rgba(200, 130, 47, 0.12);
+}
+
+[data-theme='light'] .footer {
+  background-color: #f5ead5;
+  border-top: 1.5px dashed rgba(200, 130, 47, 0.25);
+}
+
+[data-theme='light'] .footer__title,
+[data-theme='light'] .footer__item,
+[data-theme='light'] .footer__link-item,
+[data-theme='light'] .footer__copyright {
+  color: #6b4e2e;
+}
+
+[data-theme='light'] .footer__link-item:hover {
+  color: #3a2a1a;
+}
+
+/* ════════════════════════════════
+   Heading font globally in docs
+   ════════════════════════════════ */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-optical-sizing: auto;
+  font-variation-settings: 'SOFT' 100, 'WONK' 1;
 }
 
 /* ════════════════════════════════

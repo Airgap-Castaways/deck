@@ -1,78 +1,80 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
-import Translate, {translate} from '@docusaurus/Translate';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import styles from './index.module.css';
 
-// ─── SVG icons ──────────────────────────────────────────────────────────────
+// ─── Craft SVG icons ────────────────────────────────────────────────────────
 
-function IconPrepare(): React.ReactElement {
+function IconParcel(): React.ReactElement {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 3L3 7.5v9L12 21l9-4.5v-9L12 3z" stroke="#f5a524" strokeWidth="1.5" strokeLinejoin="round"/>
-      <path d="M3 7.5l9 4.5m0 0l9-4.5M12 12v9" stroke="#f5a524" strokeWidth="1.5" strokeLinecap="round"/>
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+      {/* Box body */}
+      <rect x="5" y="12" width="26" height="20" rx="2" fill="#fde8c4" stroke="#8a5a2b" strokeWidth="1.5"/>
+      {/* Box lid */}
+      <rect x="3" y="8" width="30" height="6" rx="1.5" fill="#f5d49a" stroke="#8a5a2b" strokeWidth="1.5"/>
+      {/* Twine horizontal */}
+      <line x1="5" y1="21" x2="31" y2="21" stroke="#8a5a2b" strokeWidth="1.2" strokeDasharray="3 2"/>
+      {/* Twine bow */}
+      <path d="M15 10 Q18 7 21 10 Q18 12 15 10Z" fill="none" stroke="#8a5a2b" strokeWidth="1.2"/>
+      {/* Sprout */}
+      <path d="M18 8 Q18 5 21 4" stroke="#7cb342" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+      <ellipse cx="21.5" cy="3.5" rx="1.5" ry="1.2" fill="#7cb342"/>
     </svg>
   );
 }
 
-function IconBundle(): React.ReactElement {
+function IconScroll(): React.ReactElement {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="3" y="5" width="18" height="3" rx="1" stroke="#f5a524" strokeWidth="1.5"/>
-      <rect x="3" y="10.5" width="18" height="3" rx="1" stroke="#f5a524" strokeWidth="1.5"/>
-      <rect x="3" y="16" width="18" height="3" rx="1" stroke="#f5a524" strokeWidth="1.5"/>
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+      {/* Scroll body */}
+      <rect x="7" y="6" width="22" height="26" rx="3" fill="#fde8c4" stroke="#8a5a2b" strokeWidth="1.5"/>
+      {/* Scroll curl top */}
+      <path d="M7 9 Q7 6 10 6 Q10 9 7 9Z" fill="#f5d49a" stroke="#8a5a2b" strokeWidth="1"/>
+      <path d="M29 9 Q29 6 26 6 Q26 9 29 9Z" fill="#f5d49a" stroke="#8a5a2b" strokeWidth="1"/>
+      {/* Lines of text */}
+      <line x1="12" y1="14" x2="24" y2="14" stroke="#c8822f" strokeWidth="1.2" strokeLinecap="round"/>
+      <line x1="12" y1="18" x2="24" y2="18" stroke="#c8822f" strokeWidth="1.2" strokeLinecap="round"/>
+      <line x1="12" y1="22" x2="20" y2="22" stroke="#c8822f" strokeWidth="1.2" strokeLinecap="round"/>
+      {/* Checkmark */}
+      <path d="M12 27 l2 2 4-4" stroke="#7cb342" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
     </svg>
   );
 }
 
-function IconApply(): React.ReactElement {
+function IconCube(): React.ReactElement {
   return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" stroke="#9aa7b8" strokeWidth="1.5"/>
-      <path d="M9 12l2.5 2.5L15 9" stroke="#9aa7b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M12 3v2M12 19v2M3 12H1M23 12h-2" stroke="#9aa7b8" strokeWidth="1.5" strokeLinecap="round" opacity="0.4"/>
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+      {/* Cube face front */}
+      <path d="M8 15 L18 9 L28 15 L28 27 L18 33 L8 27 Z" fill="#daeeff" stroke="#5592c8" strokeWidth="1.5" strokeLinejoin="round"/>
+      {/* Cube top face */}
+      <path d="M8 15 L18 21 L28 15 L18 9 Z" fill="#f0f8ff" stroke="#5592c8" strokeWidth="1.5" strokeLinejoin="round"/>
+      {/* Cube right face */}
+      <path d="M28 15 L28 27 L18 33 L18 21 Z" fill="#b8d8f5" stroke="#5592c8" strokeWidth="1.5" strokeLinejoin="round"/>
+      {/* Cube left face accent */}
+      <path d="M8 15 L8 27 L18 33 L18 21 Z" fill="#cce4f7" stroke="#5592c8" strokeWidth="1.5" strokeLinejoin="round"/>
     </svg>
   );
 }
 
-function IconOfflineFirst(): React.ReactElement {
+function IconStamp(): React.ReactElement {
   return (
-    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
-      <path d="M4 11h14M4 7h14M4 15h8" stroke="#f5a524" strokeWidth="1.5" strokeLinecap="round"/>
-      <circle cx="17" cy="15" r="3" stroke="#f5a524" strokeWidth="1.5"/>
-      <path d="M17 13.5v2h1.5" stroke="#f5a524" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-
-function IconStepKinds(): React.ReactElement {
-  return (
-    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
-      <rect x="2" y="2" width="8" height="8" rx="1.5" stroke="#f5a524" strokeWidth="1.5"/>
-      <rect x="12" y="2" width="8" height="8" rx="1.5" stroke="#f5a524" strokeWidth="1.5"/>
-      <rect x="2" y="12" width="8" height="8" rx="1.5" stroke="#f5a524" strokeWidth="1.5"/>
-      <rect x="12" y="12" width="8" height="8" rx="1.5" stroke="#f5a524" strokeWidth="1.5" opacity="0.4"/>
-      <path d="M14 16h4M16 14v4" stroke="#f5a524" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
-  );
-}
-
-function IconServer(): React.ReactElement {
-  return (
-    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
-      <rect x="2" y="3" width="18" height="5" rx="1.5" stroke="#f5a524" strokeWidth="1.5"/>
-      <rect x="2" y="10" width="18" height="5" rx="1.5" stroke="#f5a524" strokeWidth="1.5"/>
-      <circle cx="17" cy="5.5" r="1" fill="#f5a524"/>
-      <circle cx="17" cy="12.5" r="1" fill="#f5a524"/>
-      <path d="M7 18l2 2 6-6" stroke="#f5a524" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-
-function IconPipelineArrow(): React.ReactElement {
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M4 10h12M12 5l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+      {/* Stamp body */}
+      <rect x="6" y="6" width="24" height="18" rx="2" fill="#fde8c4" stroke="#8a5a2b" strokeWidth="1.5"/>
+      {/* Stamp perforation top */}
+      {[8, 11, 14, 17, 20, 23, 26].map((x) => (
+        <circle key={x} cx={x} cy={6} r={1} fill="#faf3e6" stroke="#c8822f" strokeWidth="0.8"/>
+      ))}
+      {/* Stamp perforation bottom */}
+      {[8, 11, 14, 17, 20, 23, 26].map((x) => (
+        <circle key={x + 100} cx={x} cy={24} r={1} fill="#faf3e6" stroke="#c8822f" strokeWidth="0.8"/>
+      ))}
+      {/* Checkmark */}
+      <path d="M13 15 l3 3 7-7" stroke="#7cb342" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      {/* Label */}
+      <rect x="6" y="26" width="24" height="6" rx="1" fill="#f5d49a" stroke="#8a5a2b" strokeWidth="1.2"/>
+      <line x1="10" y1="29" x2="26" y2="29" stroke="#c8822f" strokeWidth="0.8" strokeLinecap="round"/>
     </svg>
   );
 }
@@ -85,62 +87,60 @@ function IconGitHub(): React.ReactElement {
   );
 }
 
-// ─── Data ────────────────────────────────────────────────────────────────────
-
-const FEATURE_ICONS = [
-  <IconBundle />,
-  <IconOfflineFirst />,
-  <IconStepKinds />,
-  <IconServer />,
-] as const;
-
-const FEATURE_NUMS = ['01', '02', '03', '04'] as const;
-
-// ─── Terminal card ────────────────────────────────────────────────────────────
-
-function Terminal(): React.ReactElement {
+function IconArrow(): React.ReactElement {
   return (
-    <div className={styles.terminalWrap}>
-      <div
-        className={styles.terminal}
-        role="region"
-        aria-label={translate({id: 'homepage.terminal.ariaLabel', message: 'Installation commands'})}
-      >
-        <div className={styles.terminalBar}>
-          <span className={styles.terminalDot} />
-          <span className={styles.terminalDot} />
-          <span className={styles.terminalDot} />
-          <span className={styles.terminalTitle}>deck — terminal</span>
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+      <path d="M4 11h14M12 5l6 6-6 6" stroke="#c8822f" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+// ─── Shipping-label install snippet ─────────────────────────────────────────
+
+function ShippingLabel(): React.ReactElement {
+  return (
+    <div className={styles.labelWrap}>
+      <div className={styles.label} role="region" aria-label="Installation commands">
+        {/* Label header band */}
+        <div className={styles.labelHeader}>
+          <span className={styles.labelTag}>QUICK START</span>
+          <span className={styles.labelDashes}>- - - - - - - -</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" className={styles.labelSprout}>
+            <path d="M8 14 Q8 8 12 4" stroke="#7cb342" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+            <ellipse cx="12.5" cy="3.5" rx="2.5" ry="2" fill="#7cb342"/>
+            <path d="M8 14 Q8 9 4 6" stroke="#7cb342" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+            <ellipse cx="3.5" cy="5.5" rx="2" ry="1.8" fill="#6aa83a"/>
+          </svg>
         </div>
-        <div className={styles.terminalBody}>
-          <div className={styles.terminalLine}>
-            <span className={styles.terminalPrompt}>$</span>
-            <span className={styles.terminalCmd}>brew install Airgap-Castaways/tap/deck</span>
+        {/* Install lines */}
+        <div className={styles.labelBody}>
+          <div className={styles.codeRow}>
+            <span className={styles.codePrompt}>$</span>
+            <span className={styles.codeText}>brew install Airgap-Castaways/tap/deck</span>
           </div>
-          <div className={styles.terminalLine}>
-            <span className={styles.terminalPrompt} style={{opacity: 0.3}}>·</span>
-            <span className={styles.terminalComment}># online machine — prepare artifacts</span>
+          <div className={styles.codeComment}># on your online machine — pull artifacts</div>
+          <div className={styles.codeRow}>
+            <span className={styles.codePrompt}>$</span>
+            <span className={styles.codeText}>deck init &amp;&amp; deck lint &amp;&amp; deck prepare</span>
           </div>
-          <div className={styles.terminalLine}>
-            <span className={styles.terminalPrompt}>$</span>
-            <span className={styles.terminalCmd}>deck init &amp;&amp; deck lint &amp;&amp; deck prepare</span>
+          <div className={styles.codeComment}># seal the bundle</div>
+          <div className={styles.codeRow}>
+            <span className={styles.codePrompt}>$</span>
+            <span className={styles.codeText}>deck bundle build</span>
           </div>
-          <div className={styles.terminalLine}>
-            <span className={styles.terminalPrompt} style={{opacity: 0.3}}>·</span>
-            <span className={styles.terminalComment}># archive into a verifiable bundle</span>
+          <div className={styles.codeComment}># on the air-gapped target</div>
+          <div className={styles.codeRow}>
+            <span className={styles.codePrompt}>$</span>
+            <span className={styles.codeText}>deck apply</span>
+            <span className={styles.labelCursor} aria-hidden="true" />
           </div>
-          <div className={styles.terminalLine}>
-            <span className={styles.terminalPrompt}>$</span>
-            <span className={styles.terminalCmd}>deck bundle build</span>
-          </div>
-          <div className={styles.terminalLine}>
-            <span className={styles.terminalPrompt} style={{color: '#9aa7b8'}}>$</span>
-            <span className={styles.terminalCmd} style={{color: '#7a8898'}}>
-              deck apply &nbsp;
-              <span className={styles.terminalComment}># air-gapped target</span>
-            </span>
-            <span className={styles.terminalCursor} aria-hidden="true" />
-          </div>
+        </div>
+        {/* Stamp corner */}
+        <div className={styles.labelStamp} aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+            <circle cx="20" cy="20" r="18" stroke="#7cb342" strokeWidth="1.5" strokeDasharray="3 2" fill="none"/>
+            <path d="M12 20 l5 5 11-11" stroke="#7cb342" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+          </svg>
         </div>
       </div>
     </div>
@@ -153,88 +153,62 @@ function FlowBand(): React.ReactElement {
   return (
     <section className={styles.flowBand}>
       <div className={styles.flowBandInner}>
-        <p className={styles.sectionLabel}>
-          <Translate id="homepage.flow.sectionLabel">The pipeline</Translate>
-        </p>
-        <h2 className={styles.flowTitle}>
-          <Translate id="homepage.flow.title">Three phases. One bundle.</Translate>
-        </h2>
-        <p className={styles.flowSubtitle}>
-          <Translate id="homepage.flow.subtitle">
-            Declare once, execute identically on every air-gapped target — no runtime internet required.
-          </Translate>
+        <p className={styles.sectionLabel}>The crate's journey</p>
+        <h2 className={styles.sectionTitle}>Prepare. Bundle. Apply.</h2>
+        <p className={styles.sectionSubtitle}>
+          Pack everything on a connected machine, seal the crate, carry it across the gap,
+          and open it on the target — no internet required at delivery.
         </p>
 
         <div className={styles.pipeline}>
-          {/* Stage 1 — Prepare */}
-          <div className={`${styles.pipelineStage} ${styles.pipelineOnline}`}>
+          {/* Stage 1 */}
+          <div className={`${styles.pipelineStage} ${styles.stageOnline}`}>
             <div className={styles.stageIconWrap}>
-              <IconPrepare />
+              <IconParcel />
             </div>
-            <p className={styles.stageNum}>
-              <Translate id="homepage.flow.prepare.env">Online</Translate>
-            </p>
-            <h3 className={styles.stageTitle}>
-              <Translate id="homepage.flow.prepare.title">Prepare</Translate>
-            </h3>
+            <span className={styles.stageBadge}>Online</span>
+            <h3 className={styles.stageTitle}>Prepare</h3>
             <p className={styles.stageBody}>
-              <Translate id="homepage.flow.prepare.body">
-                Resolve and download all artifacts — packages, OCI images, files, runtimes — against live registries.
-              </Translate>
+              Resolve and download every artifact — packages, OCI images, files, runtimes —
+              against live registries while you still have the connection.
             </p>
           </div>
 
           {/* Arrow */}
-          <div className={styles.stageArrow}>
-            <IconPipelineArrow />
+          <div className={styles.stageArrow} aria-hidden="true">
+            <IconArrow />
           </div>
 
-          {/* Stage 2 — Bundle */}
-          <div className={`${styles.pipelineStage} ${styles.pipelineOnline}`}>
+          {/* Stage 2 */}
+          <div className={`${styles.pipelineStage} ${styles.stageOnline}`}>
             <div className={styles.stageIconWrap}>
-              <IconBundle />
+              <IconScroll />
             </div>
-            <p className={styles.stageNum}>
-              <Translate id="homepage.flow.bundle.env">Online</Translate>
-            </p>
-            <h3 className={styles.stageTitle}>
-              <Translate id="homepage.flow.bundle.title">Bundle</Translate>
-            </h3>
+            <span className={styles.stageBadge}>Online</span>
+            <h3 className={styles.stageTitle}>Bundle</h3>
             <p className={styles.stageBody}>
-              <Translate id="homepage.flow.bundle.body">
-                Archive prepared artifacts into a signed, self-verifying bundle file. Immutable, portable, auditable.
-              </Translate>
+              Archive prepared artifacts into a signed, self-verifying bundle. Immutable,
+              portable, auditable — the crate is sealed with everything inside.
             </p>
           </div>
 
           {/* Air-gap break */}
-          <div
-            className={styles.pipelineGap}
-            role="separator"
-            aria-label={translate({id: 'homepage.flow.airgap.ariaLabel', message: 'air-gap boundary'})}
-          >
+          <div className={styles.pipelineGap} role="separator" aria-label="air-gap boundary">
             <div className={styles.gapLine} />
-            <span className={styles.gapLabel}>
-              <Translate id="homepage.flow.airgap.label">air-gap</Translate>
-            </span>
+            <span className={styles.gapLabel}>air-gap</span>
             <div className={styles.gapLine} />
           </div>
 
-          {/* Stage 3 — Apply */}
-          <div className={`${styles.pipelineStage} ${styles.pipelineOffline}`}>
-            <div className={`${styles.stageIconWrap} ${styles.stageIconWrapGray}`}>
-              <IconApply />
+          {/* Stage 3 */}
+          <div className={`${styles.pipelineStage} ${styles.stageOffline}`}>
+            <div className={`${styles.stageIconWrap} ${styles.stageIconWrapOffline}`}>
+              <IconCube />
             </div>
-            <p className={`${styles.stageNum} ${styles.stageNumGray}`}>
-              <Translate id="homepage.flow.apply.env">Air-gapped target</Translate>
-            </p>
-            <h3 className={styles.stageTitle}>
-              <Translate id="homepage.flow.apply.title">Apply</Translate>
-            </h3>
+            <span className={`${styles.stageBadge} ${styles.stageBadgeOffline}`}>Air-gapped target</span>
+            <h3 className={styles.stageTitle}>Apply</h3>
             <p className={styles.stageBody}>
-              <Translate id="homepage.flow.apply.body">
-                Unpack and execute the workflow on the disconnected machine — no registry, no internet required.
-              </Translate>
+              Unpack and run the workflow on the disconnected machine. No registry,
+              no internet, no surprises. The bundle is the contract.
             </p>
           </div>
         </div>
@@ -245,73 +219,54 @@ function FlowBand(): React.ReactElement {
 
 // ─── Feature grid ─────────────────────────────────────────────────────────────
 
+const FEATURES = [
+  {
+    icon: <IconParcel />,
+    num: '01',
+    title: 'Prepare → Bundle → Apply',
+    body: 'Download packages, images, files, and runtimes online; archive them into a verifiable bundle; apply the workflow locally on the air-gapped target. One declarative YAML, three deterministic phases.',
+  },
+  {
+    icon: <IconCube />,
+    num: '02',
+    title: 'Offline-first',
+    body: 'Everything the target needs is captured in the bundle. No registry, no internet, no surprises at apply time. The bundle is the contract.',
+  },
+  {
+    icon: <IconScroll />,
+    num: '03',
+    title: '42 typed step kinds',
+    body: 'Files, packages, images, services, kubeadm, sysctl, systemd units, operator prompts — declared in YAML and validated against embedded schemas at prepare time.',
+  },
+  {
+    icon: <IconStamp />,
+    num: '04',
+    title: 'Built-in content server',
+    body: 'Serve bundles, a browse UI, and a read-only OCI registry — audit-logged and optionally daemonised on Linux, macOS, and Windows.',
+  },
+] as const;
+
 function FeaturesSection(): React.ReactElement {
   return (
     <section className={styles.featuresBand}>
       <div className={styles.featuresBandInner}>
         <div className={styles.featuresHeader}>
-          <p className={styles.sectionLabel}>
-            <Translate id="homepage.features.sectionLabel">Capabilities</Translate>
-          </p>
-          <h2 className={styles.featuresTitle}>
-            <Translate id="homepage.features.title">Engineered for the gap</Translate>
-          </h2>
-          <p className={styles.featuresSubtitle}>
-            <Translate id="homepage.features.subtitle">
-              Every feature is designed for operational environments where connectivity is a privilege, not a given.
-            </Translate>
+          <p className={styles.sectionLabel}>Capabilities</p>
+          <h2 className={styles.sectionTitle}>Packed for the gap</h2>
+          <p className={styles.sectionSubtitle}>
+            Every feature is designed for operational environments where connectivity is a privilege, not a given.
           </p>
         </div>
 
         <div className={styles.featuresGrid}>
-          <div className={styles.featureCard}>
-            <div className={styles.featureIconWrap}>{FEATURE_ICONS[0]}</div>
-            <p className={styles.featureNum}>{FEATURE_NUMS[0]}</p>
-            <h3 className={styles.featureTitle}>
-              <Translate id="homepage.feature.workflow.title">Prepare → Bundle → Apply</Translate>
-            </h3>
-            <p className={styles.featureBody}>
-              <Translate id="homepage.feature.workflow.body">
-                Download packages, images, files, and runtimes online; archive them into a verifiable bundle; apply the workflow locally on the air-gapped target. One declarative YAML, three deterministic phases.
-              </Translate>
-            </p>
-          </div>
-          <div className={styles.featureCard}>
-            <div className={styles.featureIconWrap}>{FEATURE_ICONS[1]}</div>
-            <p className={styles.featureNum}>{FEATURE_NUMS[1]}</p>
-            <h3 className={styles.featureTitle}>
-              <Translate id="homepage.feature.offline.title">Offline-first</Translate>
-            </h3>
-            <p className={styles.featureBody}>
-              <Translate id="homepage.feature.offline.body">
-                Everything the target needs is captured in the bundle. No registry, no internet, no surprises at apply time. The bundle is the contract.
-              </Translate>
-            </p>
-          </div>
-          <div className={styles.featureCard}>
-            <div className={styles.featureIconWrap}>{FEATURE_ICONS[2]}</div>
-            <p className={styles.featureNum}>{FEATURE_NUMS[2]}</p>
-            <h3 className={styles.featureTitle}>
-              <Translate id="homepage.feature.stepkinds.title">42 typed step kinds</Translate>
-            </h3>
-            <p className={styles.featureBody}>
-              <Translate id="homepage.feature.stepkinds.body">
-                Files, packages, images, services, kubeadm, sysctl, systemd units, operator prompts — declared in YAML and validated against embedded schemas at prepare time.
-              </Translate>
-            </p>
-          </div>
-          <div className={styles.featureCard}>
-            <div className={styles.featureIconWrap}>{FEATURE_ICONS[3]}</div>
-            <p className={styles.featureNum}>{FEATURE_NUMS[3]}</p>
-            <h3 className={styles.featureTitle}>
-              <Translate id="homepage.feature.server.title">Built-in content server</Translate>
-            </h3>
-            <p className={styles.featureBody}>
-              <Translate id="homepage.feature.server.body">
-                Serve bundles, a browse UI, and a read-only OCI registry — audit-logged and optionally daemonized on Linux, macOS, and Windows.
-              </Translate>
-            </p>
-          </div>
+          {FEATURES.map((f) => (
+            <div key={f.num} className={styles.featureCard}>
+              <div className={styles.featureIconWrap}>{f.icon}</div>
+              <p className={styles.featureNum}>{f.num}</p>
+              <h3 className={styles.featureTitle}>{f.title}</h3>
+              <p className={styles.featureBody}>{f.body}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -324,23 +279,18 @@ function CtaBand(): React.ReactElement {
   return (
     <section className={styles.ctaBand}>
       <div className={styles.ctaBandInner}>
-        <p className={styles.sectionLabel}>
-          <Translate id="homepage.cta.sectionLabel">Get started</Translate>
-        </p>
+        <p className={styles.sectionLabel}>Get started</p>
         <h2 className={styles.ctaTitle}>
-          <Translate id="homepage.cta.titleLine1">Ship to the gap.</Translate>
-          <br />
-          <Translate id="homepage.cta.titleLine2">No surprises.</Translate>
+          Ship to the gap.<br />
+          <span className={styles.ctaTitleAccent}>No surprises.</span>
         </h2>
         <p className={styles.ctaSubtitle}>
-          <Translate id="homepage.cta.subtitle">
-            Structured, repeatable deployments for air-gapped Kubernetes and bare-metal clusters.
-            Define your workflow once; run it anywhere — connected or not.
-          </Translate>
+          Structured, repeatable deployments for air-gapped Kubernetes and bare-metal clusters.
+          Define your workflow once; run it anywhere — connected or not.
         </p>
         <div className={styles.ctaButtons}>
           <Link className={styles.btnPrimary} to="/docs/quick-start">
-            <Translate id="homepage.cta.getStarted">Get Started</Translate>
+            Get Started
           </Link>
           <a
             className={styles.ctaGithubLink}
@@ -360,49 +310,52 @@ function CtaBand(): React.ReactElement {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home(): React.ReactElement {
+  const mascotUrl = useBaseUrl('img/mascot.png');
+
   return (
     <Layout
-      title={translate({id: 'homepage.meta.title', message: 'deck — air-gapped deployment workflows'})}
-      description={translate({
-        id: 'homepage.meta.description',
-        message: 'Prepare artifacts online. Archive into a verifiable bundle. Apply on the air-gapped target. Structured workflows for disconnected Kubernetes and bare-metal operations.',
-      })}
+      title="deck — air-gapped deployment workflows"
+      description="Structured workflows for air-gapped operations: prepare, bundle, and apply in one binary. Pack artifacts online, seal the crate, deliver across the gap."
     >
       {/* Hero */}
       <header className={styles.hero}>
+        {/* Paper grain overlay */}
         <div className={styles.heroGrain} aria-hidden="true" />
-        <div className={styles.heroScanline} aria-hidden="true" />
 
         <div className={styles.heroInner}>
-          <p className={styles.eyebrow}>
-            <Translate id="homepage.hero.eyebrow">Air-gapped deployment workflows</Translate>
-          </p>
+          {/* Mascot — the centerpiece */}
+          <div className={styles.mascotWrap}>
+            <img
+              src={mascotUrl}
+              alt="deck mascot — a friendly wooden crate ready to deliver"
+              className={styles.mascot}
+              width="340"
+              height="340"
+            />
+          </div>
+
+          <p className={styles.eyebrow}>Air-gapped deployment workflows</p>
 
           <h1 className={styles.heroTitle}>
-            <Translate id="homepage.hero.headline">Deploy anywhere.</Translate>
-            <br />
-            <span className={styles.heroTitleAccent}>
-              <Translate id="homepage.hero.headlineAccent">Even the gap.</Translate>
-            </span>
+            Everything packed.<br />
+            <span className={styles.heroTitleAccent}>Ready for the gap.</span>
           </h1>
 
           <p className={styles.heroTagline}>
-            <Translate id="homepage.hero.tagline">
-              Prepare artifacts online, archive into a verifiable bundle, apply on the disconnected
-              target — deterministic, repeatable, no internet at apply time.
-            </Translate>
+            Structured workflows for air-gapped operations: prepare, bundle, and apply
+            in one binary. Pack artifacts online, seal the crate, deliver across the gap.
           </p>
 
           <div className={styles.heroCtas}>
             <Link className={styles.btnPrimary} to="/docs/quick-start">
-              <Translate id="homepage.hero.cta.getStarted">Get Started</Translate>
+              Get Started
             </Link>
             <Link className={styles.btnSecondary} to="/docs">
-              <Translate id="homepage.hero.cta.docs">Documentation</Translate>
+              Documentation
             </Link>
           </div>
 
-          <Terminal />
+          <ShippingLabel />
         </div>
       </header>
 
