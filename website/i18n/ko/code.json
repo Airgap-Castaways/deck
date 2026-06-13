@@ -1,91 +1,4 @@
 {
-  "homepage.terminal.ariaLabel": {
-    "message": "설치 명령어"
-  },
-  "homepage.flow.sectionLabel": {
-    "message": "파이프라인"
-  },
-  "homepage.flow.title": {
-    "message": "세 단계. 하나의 번들."
-  },
-  "homepage.flow.subtitle": {
-    "message": "한 번 선언하면 모든 에어갭 대상에서 동일하게 실행됩니다 — 런타임 인터넷 불필요."
-  },
-  "homepage.flow.prepare.env": {
-    "message": "온라인"
-  },
-  "homepage.flow.prepare.title": {
-    "message": "Prepare"
-  },
-  "homepage.flow.prepare.body": {
-    "message": "패키지, OCI 이미지, 파일, 런타임 등 모든 아티팩트를 라이브 레지스트리에서 내려받습니다."
-  },
-  "homepage.flow.bundle.env": {
-    "message": "온라인"
-  },
-  "homepage.flow.bundle.title": {
-    "message": "Bundle"
-  },
-  "homepage.flow.bundle.body": {
-    "message": "준비된 아티팩트를 서명된 자가 검증 번들 파일로 아카이브합니다. 불변·이식 가능·감사 추적 가능."
-  },
-  "homepage.flow.airgap.ariaLabel": {
-    "message": "에어갭 경계"
-  },
-  "homepage.flow.airgap.label": {
-    "message": "air-gap"
-  },
-  "homepage.flow.apply.env": {
-    "message": "에어갭 대상"
-  },
-  "homepage.flow.apply.title": {
-    "message": "Apply"
-  },
-  "homepage.flow.apply.body": {
-    "message": "단절된 머신에서 워크플로를 압축 해제하고 실행합니다 — 레지스트리 및 인터넷 불필요."
-  },
-  "homepage.features.sectionLabel": {
-    "message": "핵심 기능"
-  },
-  "homepage.features.title": {
-    "message": "에어갭을 위해 설계된 도구"
-  },
-  "homepage.features.subtitle": {
-    "message": "모든 기능은 연결성이 당연하지 않은 운영 환경을 위해 설계되었습니다."
-  },
-  "homepage.cta.sectionLabel": {
-    "message": "시작하기"
-  },
-  "homepage.cta.subtitle": {
-    "message": "에어갭 Kubernetes 및 베어메탈 클러스터를 위한 구조화된 반복 가능 배포. 워크플로를 한 번 정의하고 어디서든 — 연결 여부와 무관하게 — 실행하세요."
-  },
-  "homepage.cta.getStarted": {
-    "message": "시작하기"
-  },
-  "homepage.meta.title": {
-    "message": "deck — 에어갭 배포 워크플로"
-  },
-  "homepage.meta.description": {
-    "message": "온라인에서 아티팩트를 준비하고, 검증 가능한 번들로 아카이브한 뒤, 에어갭 대상에 적용하세요. 단절된 Kubernetes 및 베어메탈 운영을 위한 구조화된 워크플로."
-  },
-  "homepage.hero.eyebrow": {
-    "message": "에어갭 배포 워크플로"
-  },
-  "homepage.hero.headline": {
-    "message": "어디서든 배포하세요."
-  },
-  "homepage.hero.headlineAccent": {
-    "message": "에어갭도 예외 없이."
-  },
-  "homepage.hero.tagline": {
-    "message": "온라인에서 아티팩트를 준비하고, 검증 가능한 번들로 아카이브한 뒤, 단절된 대상에 적용합니다 — 결정론적이고 반복 가능하며, apply 시 인터넷이 필요 없습니다."
-  },
-  "homepage.hero.cta.getStarted": {
-    "message": "시작하기"
-  },
-  "homepage.hero.cta.docs": {
-    "message": "문서"
-  },
   "theme.ErrorPageContent.title": {
     "message": "페이지에 오류가 발생하였습니다.",
     "description": "The title of the fallback page when the page crashed"
@@ -343,11 +256,11 @@
   },
   "theme.navbar.mobileDropdown.collapseButton.expandAriaLabel": {
     "message": "Expand the dropdown",
-    "description": "The ARIA label of the button to expand the mobile dropdown navbar item"
+    "description": "The ARIA label of the button to expand the mobile navbar dropdown item"
   },
   "theme.navbar.mobileDropdown.collapseButton.collapseAriaLabel": {
     "message": "Collapse the dropdown",
-    "description": "The ARIA label of the button to collapse the mobile dropdown navbar item"
+    "description": "The ARIA label of the button to collapse the mobile navbar dropdown item"
   },
   "theme.docs.sidebar.expandButtonTitle": {
     "message": "사이드바 열기",
@@ -412,35 +325,5 @@
   "theme.tags.tagsPageTitle": {
     "message": "태그",
     "description": "The title of the tag list page"
-  },
-  "homepage.feature.workflow.title": {
-    "message": "Prepare → Bundle → Apply"
-  },
-  "homepage.feature.workflow.body": {
-    "message": "패키지, 이미지, 파일, 런타임을 온라인에서 내려받고 검증 가능한 번들로 아카이브한 뒤, 에어갭 대상에서 로컬로 워크플로를 적용합니다. 선언형 YAML 하나, 세 가지 결정론적 단계."
-  },
-  "homepage.feature.offline.title": {
-    "message": "오프라인 우선"
-  },
-  "homepage.feature.offline.body": {
-    "message": "대상이 필요한 모든 것이 번들에 포함됩니다. 레지스트리도, 인터넷도, apply 시 예상치 못한 상황도 없습니다. 번들이 계약입니다."
-  },
-  "homepage.feature.stepkinds.title": {
-    "message": "42가지 타입 스텝 종류"
-  },
-  "homepage.feature.stepkinds.body": {
-    "message": "파일, 패키지, 이미지, 서비스, kubeadm, sysctl, systemd 유닛, 운영자 프롬프트 — YAML로 선언하고 prepare 시 내장 스키마로 검증됩니다."
-  },
-  "homepage.feature.server.title": {
-    "message": "내장 콘텐츠 서버"
-  },
-  "homepage.feature.server.body": {
-    "message": "번들 서빙, 탐색 UI, 읽기 전용 OCI 레지스트리 제공 — 감사 로그 기록, Linux·macOS·Windows에서 선택적 데몬 실행 가능."
-  },
-  "homepage.cta.titleLine1": {
-    "message": "에어갭으로 배포하세요."
-  },
-  "homepage.cta.titleLine2": {
-    "message": "예상치 못한 상황은 없습니다."
   }
 }

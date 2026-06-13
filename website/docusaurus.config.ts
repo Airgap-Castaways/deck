@@ -43,6 +43,8 @@ const config: Config = {
     ],
   ],
 
+  clientModules: ['./src/clientModules/localeAutoRedirect.ts'],
+
   // Preconnect for faster font loading
   headTags: [
     {
