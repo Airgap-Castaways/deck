@@ -1,20 +1,20 @@
 # CLI Reference
 
-> Full per-command flag and argument reference is auto-generated under [the CLI reference](cli/deck.md). This page covers the overview and shared conventions only.
+> Full per-command flag and argument reference is auto-generated under [the CLI reference](cli/deck.md). This page covers the overview and shared conventions only. For task-oriented guidance, see the [guides](guides/authoring-workflows.md).
 
-The `deck` CLI is intentionally small.
+The `deck` CLI is intentionally small. It supports a simple operator flow: author the workflow, lint it, prepare bundle contents, build the bundle, and run locally.
 
-It supports a simple operator flow: author the workflow, lint it, prepare bundle contents, build the bundle, and run locally.
+## Overview
 
-## Default local flow
+### Default local flow
 
 - `init`: create starter workflow files under `workflows/`
 - `lint`: validate a workflow file or workspace against the workflow and step schemas (`-o text|json`)
 - `prepare`: gather artifacts into `outputs/`, write a local `deck` launcher, and write `.deck/manifest.json`
 - `bundle build`: package the current workspace into a transportable archive
-- `apply`: execute the `apply` workflow locally
+- `apply`: execute the apply scenario locally
 
-## Additional helpers
+### Additional helpers
 
 - `plan`: inspect which apply steps would run or skip before execution (`-o text|json`)
 - `list`: list available scenarios from the local workspace or the saved remote server
@@ -27,7 +27,7 @@ It supports a simple operator flow: author the workflow, lint it, prepare bundle
 - `version`: show the current `deck` build version and metadata (`-o text|json`)
 - `completion`: generate shell completion for bash, zsh, fish, and PowerShell
 
-## Authoring helper
+### Authoring helper
 
 - `ask`: experimental helper to question, explain, review, draft, or refine workflows from the current workspace using an LLM-backed authoring assistant
 
@@ -142,10 +142,6 @@ deck state show --server https://server --scenario apply
 
 Local workflow apply state stays under `./.deck/state/apply/`; remote workflow apply state uses the user-local XDG state root under `deck/state/apply/`. Workspace-local metadata stays under `./.deck/`, while user-global config, remote workflow state, cache, and run history use standard XDG locations.
 
-## Runtime binary selection
-
-When preparing, `--bundle-binary-source=auto` (the default) resolves to `release`; on dev builds it fetches the latest GitHub Release unless `--bundle-binary-dir` selects local binaries. `--bundle-binary-source=local` without `--bundle-binary-dir` uses the current executable for the current host tuple. The selected binary is published atomically into `outputs/bin/`.
-
 ## Variable overrides
 
 `lint`, `prepare`, `plan`, and `apply` support repeatable `-f, --vars-file` YAML overlays. `prepare`, `plan`, and `apply` also support repeatable `--var key=value` overrides for one invocation.
@@ -156,6 +152,10 @@ When preparing, `--bundle-binary-source=auto` (the default) resolves to `release
 - `--var` overrides are applied last and have the highest precedence.
 
 Vars file paths are relative to the selected workflow root. For example, `--root ./demo -f vars/site.yaml` reads `./demo/workflows/vars/site.yaml`.
+
+## Runtime binary selection
+
+When preparing, `--bundle-binary-source=auto` (the default) resolves to `release`; on dev builds it fetches the latest GitHub Release unless `--bundle-binary-dir` selects local binaries. `--bundle-binary-source=local` without `--bundle-binary-dir` uses the current executable for the current host tuple. The selected binary is published atomically into `outputs/bin/`.
 
 ## Shell completion
 

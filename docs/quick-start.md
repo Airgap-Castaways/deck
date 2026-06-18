@@ -26,7 +26,7 @@ This creates a starter layout with two entry workflows and a prepared output tre
 
 ## 2. Add or edit steps
 
-`deck init` creates a fixed `workflows/prepare.yaml` entry workflow, an `apply.yaml` scenario under `workflows/scenarios/`, and reusable fragments under `workflows/components/`. Preparation work goes in `workflows/prepare.yaml`; work that runs on the target machine goes in `workflows/scenarios/apply.yaml`.
+`deck init` creates two entry workflows with distinct roles: `workflows/prepare.yaml` runs in your connected environment to fetch artifacts, while `workflows/scenarios/apply.yaml` runs on the target machine to apply them. Start by editing `apply.yaml` for what the target node needs to do; edit `prepare.yaml` to control what gets downloaded into the bundle. Reusable fragments shared across scenarios live under `workflows/components/`.
 
 Prefer typed steps. They make the procedure easier to read and lint as it grows.
 
@@ -73,7 +73,9 @@ deck bundle build --out ./bundle.tar
 deck apply
 ```
 
-`apply` executes the workflow locally on the machine that needs the change. Run it from a workspace or unpacked bundle root that contains `workflows/`. No SSH, no controller, no external reach-back required.
+`apply` executes the scenario locally on the machine that needs the change. Run it from a workspace or unpacked bundle root that contains `workflows/`. No SSH, no controller, no external reach-back required.
+
+On success you will see phase and step progress on stderr, with a final completion summary. A run that completes cleanly exits 0 and leaves saved apply state under `.deck/state/apply/` — useful for auditing what ran and for resuming at phase boundaries if the run is interrupted. If anything fails, `deck apply` exits non-zero and prints the failing step with its error. See [Troubleshooting](troubleshooting.md) if the run does not progress as expected.
 
 ## 6. Optional: add site assistance
 

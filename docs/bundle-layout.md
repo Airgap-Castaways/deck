@@ -54,23 +54,27 @@ Remaining drift gap:
 
 ## Apply-time manifest verification
 
-Whenever `deck apply` resolves a bundle root, it runs `bundle.VerifyManifest` before executing any workflow phase. A verification failure aborts the run immediately — no phase begins.
+Whenever `deck apply` resolves a bundle root, it verifies the bundle manifest before executing any workflow phase. A verification failure aborts the run immediately — no phase begins.
 
 ### Invocations that trigger verification
 
-Verification runs whenever `opts.BundleRoot` is non-empty in `RunOptions` (`internal/install/runner.go:114`). The CLI populates `BundleRoot` in three ways:
+Verification runs automatically in three cases:
 
-- **Plain `deck apply` in a workspace** — `ResolveBundleRoot` falls back to the current directory (`.`) when no explicit path is given; if the directory contains a `workflows/` tree it is used as the bundle root and verification runs.
-- **`deck apply --root <dir>`** — the explicit root is resolved and passed as `BundleRoot`; verification runs.
-- **`deck apply <bundle-path>`** — a positional bundle path (directory or `.tar` archive) is resolved and passed as `BundleRoot`; verification runs.
+- **Plain `deck apply` in a workspace** — when no explicit path is given, deck uses the current directory as the bundle root if it contains a `workflows/` tree; verification runs against it.
+- **`deck apply --root <dir>`** — the explicit root is used as the bundle root; verification runs.
+- **`deck apply <bundle-path>`** — a positional directory or `.tar` archive is used as the bundle root; verification runs. When a `.tar` archive is given, deck extracts it to a keyed cache directory first, then verifies the extracted contents.
 
-Verification is skipped only when no bundle root is resolved: this happens for `deck apply --workflow <path>` with no positional bundle, and for `deck apply --scenario <name> --source server` with no positional bundle. For a local `--scenario` (or plain `deck apply`) with no `--root` and no positional path, deck resolves the current directory as the bundle root — verification runs if it contains a `workflows/` tree, otherwise the command errors.
+Verification is skipped only when no bundle root is resolved — for example, when `--workflow <path>` is supplied without a positional bundle, or when `--scenario <name> --source server` is supplied without a positional bundle.
 
-When a positional `.tar` bundle is given, deck extracts it to a cache directory (keyed by SHA-256 of the archive) before resolving the bundle root; verification then runs against the extracted directory.
+To verify a bundle explicitly before transfer or apply, run:
+
+```bash
+deck bundle verify --file ./bundle.tar
+```
 
 ### What is verified
 
-`bundle.VerifyManifest` (`internal/bundle/verify.go:37`) reads `.deck/manifest.json` and checks every entry in it against the corresponding artifact in `outputs/{files,packages,images,bin}` (the `outputs/` prefix is optional — legacy bundles using bare `files/`, `packages/`, `images/`, `bin/` are also tracked). For each entry it confirms:
+Verification reads `.deck/manifest.json` and checks every entry against the corresponding artifact in `outputs/{files,packages,images,bin}` (the `outputs/` prefix is optional — legacy bundles using bare `files/`, `packages/`, `images/`, `bin/` paths are also tracked). For each entry it confirms:
 
 - the artifact exists on disk (or inside the tar archive),
 - the SHA-256 digest matches the recorded value,
@@ -88,7 +92,7 @@ See [workspace-layout.md](workspace-layout.md) for the full list of paths tracke
 | `E_MANIFEST_EMPTY` | The manifest file exists but its `entries` array is empty |
 | `E_BUNDLE_INTEGRITY` | An artifact is missing, or its size or SHA-256 digest does not match the manifest, or a manifest entry path is structurally invalid, or a required offline artifact is present in the bundle but absent from the manifest |
 
-See [diagnostics/error-codes.md](diagnostics/error-codes.md) for the full error-code catalog.
+See [diagnostics/error-codes.md](diagnostics/error-codes.md) for the full error-code catalog and [troubleshooting.md](troubleshooting.md) for resolution steps.
 
 ## Core rule
 

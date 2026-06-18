@@ -59,7 +59,13 @@ The bundle includes `outputs/packages/`, `outputs/images/`, `outputs/files/`, `o
 
 ## 3. Transfer the bundle into the air-gapped site
 
-Move `bundle.tar` through the approved path for your environment — removable media, controlled gateway, or another site-approved handoff. Unpack on the target side before running apply.
+Move `bundle.tar` through the approved path for your environment. Common mechanisms include USB or removable media handed through a physical checkpoint, a secure gateway or file-drop service that bridges the boundary, or rsync over a controlled jump host with an outbound-only transfer rule. Whichever path you use, **verify the bundle on the target side before running apply** — a truncated or corrupted transfer will produce an integrity failure mid-run rather than before it starts:
+
+```bash
+deck bundle verify --file ./bundle.tar
+```
+
+If verification fails (error code `E_BUNDLE_INTEGRITY`), re-transfer the archive and verify again before proceeding. See [diagnostics/error-codes.md](diagnostics/error-codes.md) for error details. Only after verification passes should you unpack and run `deck apply`.
 
 ## 4. Bootstrap the control-plane node
 
