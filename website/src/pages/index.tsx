@@ -317,53 +317,56 @@ export default function Home(): React.ReactElement {
       title="deck — air-gapped deployment workflows"
       description="Structured workflows for air-gapped operations: prepare, bundle, and apply in one binary. Pack artifacts online, seal the crate, deliver across the gap."
     >
-      {/* Hero */}
-      <header className={styles.hero}>
-        {/* Paper grain overlay */}
-        <div className={styles.heroGrain} aria-hidden="true" />
+      {/* Landing page wrapper: shares CSS custom properties across all sections
+          in both light / dark mode so hero, flow-band, features and CTA all
+          inherit a single token set. */}
+      <div className={styles.page}>
+        {/* Hero */}
+        <header className={styles.hero}>
+          <div className={styles.heroGrain} aria-hidden="true" />
 
-        <div className={styles.heroInner}>
-          {/* Mascot — the centerpiece */}
-          <div className={styles.mascotWrap}>
-            <img
-              src={mascotUrl}
-              alt="deck mascot — a friendly wooden crate ready to deliver"
-              className={styles.mascot}
-              width="340"
-              height="340"
-            />
+          <div className={styles.heroInner}>
+            <div className={styles.mascotWrap}>
+              <img
+                src={mascotUrl}
+                alt="deck mascot — a friendly wooden crate ready to deliver"
+                className={styles.mascot}
+                width="340"
+                height="340"
+              />
+            </div>
+
+            <p className={styles.eyebrow}>Air-gapped deployment workflows</p>
+
+            <h1 className={styles.heroTitle}>
+              Everything packed.<br />
+              <span className={styles.heroTitleAccent}>Ready for the gap.</span>
+            </h1>
+
+            <p className={styles.heroTagline}>
+              Structured workflows for air-gapped operations: prepare, bundle, and apply
+              in one binary. Pack artifacts online, seal the crate, deliver across the gap.
+            </p>
+
+            <div className={styles.heroCtas}>
+              <Link className={styles.btnPrimary} to="/docs/quick-start">
+                Get Started
+              </Link>
+              <Link className={styles.btnSecondary} to="/docs">
+                Documentation
+              </Link>
+            </div>
+
+            <ShippingLabel />
           </div>
+        </header>
 
-          <p className={styles.eyebrow}>Air-gapped deployment workflows</p>
-
-          <h1 className={styles.heroTitle}>
-            Everything packed.<br />
-            <span className={styles.heroTitleAccent}>Ready for the gap.</span>
-          </h1>
-
-          <p className={styles.heroTagline}>
-            Structured workflows for air-gapped operations: prepare, bundle, and apply
-            in one binary. Pack artifacts online, seal the crate, deliver across the gap.
-          </p>
-
-          <div className={styles.heroCtas}>
-            <Link className={styles.btnPrimary} to="/docs/quick-start">
-              Get Started
-            </Link>
-            <Link className={styles.btnSecondary} to="/docs">
-              Documentation
-            </Link>
-          </div>
-
-          <ShippingLabel />
-        </div>
-      </header>
-
-      <main>
-        <FlowBand />
-        <FeaturesSection />
-        <CtaBand />
-      </main>
+        <main>
+          <FlowBand />
+          <FeaturesSection />
+          <CtaBand />
+        </main>
+      </div>
     </Layout>
   );
 }

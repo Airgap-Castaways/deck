@@ -113,6 +113,12 @@ function polish(content) {
   return claude(instruction, content);
 }
 
+// Strip accidental ```markdown ... ``` fences the model sometimes wraps output in.
+function stripFence(text) {
+  const m = text.match(/^\s*```(?:markdown)?\n([\s\S]*?)\n```\s*$/);
+  return m ? m[1] : text;
+}
+
 // Merge our provenance keys into a SINGLE frontmatter block. Docusaurus only
 // parses the first block, so stacking would silently drop source keys (slug,
 // sidebar_label). For frontmatter-less sources the model sometimes prepends a
@@ -163,7 +169,7 @@ for (const src of sources) {
   const srcText = readFileSync(abs, 'utf8');
   const srcHadFm = /^---\n[\s\S]*?\n---/.test(srcText);
   const meta = `source: ${src}\nsource_hash: ${hash}`;
-  const raw = polish(translate(srcText));
+  const raw = stripFence(polish(translate(srcText)));
   const content = normalizeParticles(mergeFrontmatter(raw, meta, srcHadFm));
   mkdirSync(dirname(out), {recursive: true});
   writeFileSync(out, content);

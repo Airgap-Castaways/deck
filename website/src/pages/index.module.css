@@ -5,23 +5,9 @@
  * CSS-only animation. Scoped to landing. Does not bleed into docs.
  */
 
-/* ─────────────────────────────────────────
+/* ═══════════════════════════════════════════
    Design tokens (landing-only)
-   ───────────────────────────────────────── */
-.hero {
-  --paper:        #faf3e6;
-  --paper-warm:   #fdf7ec;
-  --kraft:        #d99a4e;
-  --kraft-deep:   #c8822f;
-  --wood:         #8a5a2b;
-  --sprout:       #7cb342;
-  --sprout-deep:  #6aa83a;
-  --blush:        #f3a7a0;
-  --ink:          #3a2a1a;
-  --ink-2:        #2c2016;
-  --ink-muted:    #6b4e2e;
-  --ink-faint:    rgba(58, 42, 26, 0.55);
-}
+   ─────────────────────────────────────────── */
 
 /* ─────────────────────────────────────────
    Keyframes
@@ -56,9 +42,42 @@
   50%       { stroke-dashoffset: 6; }
 }
 
-/* ─────────────────────────────────────────
+/* ═══════════════════════════════════════════
+   shared page wrapper (inherits tokens)
+   ═══════════════════════════════════════════ */
+.page {
+  --paper:        #faf3e6;
+  --paper-warm:   #fdf7ec;
+  --kraft:        #d99a4e;
+  --kraft-deep:   #c8822f;
+  --wood:         #8a5a2b;
+  --sprout:       #7cb342;
+  --sprout-deep:  #6aa83a;
+  --blush:        #f3a7a0;
+  --ink:          #3a2a1a;
+  --ink-2:        #2c2016;
+  --ink-muted:    #6b4e2e;
+  --ink-faint:    rgba(58, 42, 26, 0.55);
+}
+
+[data-theme='dark'] .page {
+  --paper:        #1b1410;
+  --paper-warm:   #1e1812;
+  --kraft:        #e0a85e;
+  --kraft-deep:   #d99a4e;
+  --wood:         #d4b896;
+  --sprout:       #8cc853;
+  --sprout-deep:  #7cb342;
+  --blush:        #3a2c24;
+  --ink:          #f0e4d0;
+  --ink-2:        #fdf7f0;
+  --ink-muted:    #d4b896;
+  --ink-faint:    rgba(240, 228, 208, 0.55);
+}
+
+/* ═══════════════════════════════════════════
    Hero — warm kraft paper atmosphere
-   ───────────────────────────────────────── */
+   ═══════════════════════════════════════════ */
 .hero {
   position: relative;
   min-height: 100vh;
@@ -261,26 +280,26 @@
   font-weight: 700;
   font-size: 0.95rem;
   padding: 0.8rem 2rem;
-  background: var(--kraft-deep);
+  background: #c8822f;
   color: #fff9f0;
   border-radius: 6px;
   text-decoration: none;
-  box-shadow: 0 2px 0 var(--wood), 0 8px 24px rgba(138, 90, 43, 0.2);
+  box-shadow: 0 2px 0 #8a5a2b, 0 8px 24px rgba(138, 90, 43, 0.2);
   transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
-  border: 1.5px solid var(--wood);
+  border: 1.5px solid #8a5a2b;
 }
 
 .btnPrimary:hover {
   background: #b87028;
   transform: translateY(-2px);
-  box-shadow: 0 4px 0 var(--wood), 0 12px 32px rgba(138, 90, 43, 0.3);
+  box-shadow: 0 4px 0 #8a5a2b, 0 12px 32px rgba(138, 90, 43, 0.3);
   text-decoration: none;
   color: #fff9f0;
 }
 
 .btnPrimary:active {
   transform: translateY(0);
-  box-shadow: 0 1px 0 var(--wood), 0 4px 12px rgba(138, 90, 43, 0.2);
+  box-shadow: 0 1px 0 #8a5a2b, 0 4px 12px rgba(138, 90, 43, 0.2);
 }
 
 .btnSecondary {
@@ -292,19 +311,42 @@
   font-size: 0.95rem;
   padding: 0.8rem 2rem;
   background: transparent;
-  color: var(--wood);
-  border: 1.5px solid var(--kraft);
+  color: #8a5a2b;
+  border: 1.5px solid #d99a4e;
   border-radius: 6px;
   text-decoration: none;
   transition: border-color 0.2s, background 0.2s, color 0.2s, transform 0.15s;
 }
 
 .btnSecondary:hover {
-  border-color: var(--wood);
+  border-color: #8a5a2b;
   background: rgba(138, 90, 43, 0.05);
-  color: var(--ink);
+  color: #3a2a1a;
   transform: translateY(-2px);
   text-decoration: none;
+}
+
+[data-theme='dark'] .btnPrimary {
+  background: #d99a4e;
+  color: #1e1510;
+  box-shadow: 0 2px 0 #c89a6e, 0 8px 24px rgba(0, 0, 0, 0.3);
+  border-color: #c89a6e;
+}
+
+[data-theme='dark'] .btnPrimary:hover {
+  background: #e4ab62;
+  box-shadow: 0 4px 0 #c89a6e, 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme='dark'] .btnSecondary {
+  color: #e0cdb8;
+  border-color: #d99a4e;
+}
+
+[data-theme='dark'] .btnSecondary:hover {
+  color: #f0e4d0;
+  background: rgba(217, 154, 78, 0.1);
+  border-color: #e4ab62;
 }
 
 /* ─────────────────────────────────────────
@@ -854,9 +896,233 @@
   text-decoration: none;
 }
 
-/* ─────────────────────────────────────────
+/* ═══════════════════════════════════════════
+   DARK MODE overrides (warm espresso, NOT cold gray)
+   ═══════════════════════════════════════════ */
+
+[data-theme='dark'] .hero {
+  background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)' opacity='0.04'/%3E%3C/svg%3E"),
+    linear-gradient(160deg, #211610 0%, #1b1410 50%, #18100a 100%);
+}
+
+[data-theme='dark'] .hero::before {
+  background: radial-gradient(ellipse at center, rgba(217, 154, 78, 0.08) 0%, transparent 70%);
+}
+
+[data-theme='dark'] .heroTitle {
+  color: var(--ink-2);
+}
+
+[data-theme='dark'] .heroTagline {
+  color: var(--ink-muted);
+}
+
+[data-theme='dark'] .heroTitleAccent {
+  color: var(--kraft-deep);
+}
+
+[data-theme='dark'] .heroTitleAccent::after {
+  opacity: 0.9;
+}
+
+/* ── Label snippet (dark) ── */
+[data-theme='dark'] .label {
+  background: #140f0a;
+  border-color: var(--kraft);
+  box-shadow: 0 0 0 3px rgba(217, 154, 78, 0.06),
+    0 8px 28px rgba(0, 0, 0, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.25);
+  border-left-color: var(--kraft);
+}
+
+[data-theme='dark'] .labelHeader {
+  background: #1a1310;
+  border-bottom-color: rgba(200, 130, 47, 0.3);
+}
+
+[data-theme='dark'] .labelTag {
+  color: var(--wood);
+}
+
+[data-theme='dark'] .labelDashes {
+  color: rgba(212, 184, 150, 0.25);
+}
+
+[data-theme='dark'] .codeComment {
+  color: rgba(240, 228, 208, 0.45);
+}
+
+[data-theme='dark'] .codeText {
+  color: var(--ink);
+}
+
+/* ── Flow band (dark) ── */
+[data-theme='dark'] .flowBand {
+  background-image:
+    repeating-linear-gradient(-45deg, transparent, transparent 20px, rgba(217, 154, 78, 0.03) 20px, rgba(217, 154, 78, 0.03) 21px),
+    linear-gradient(#1e1812, #1e1812);
+  border-top-color: rgba(200, 130, 47, 0.15);
+  border-bottom-color: rgba(200, 130, 47, 0.15);
+}
+
+[data-theme='dark'] .stageOnline {
+  background: rgba(30, 24, 18, 0.85);
+  border-color: rgba(200, 130, 47, 0.25);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme='dark'] .stageOffline {
+  background: rgba(30, 42, 22, 0.35);
+  border-color: rgba(124, 179, 66, 0.25);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme='dark'] .stageIconWrap {
+  background: #1e1812;
+  border-color: rgba(200, 130, 47, 0.3);
+}
+
+[data-theme='dark'] .stageIconWrapOffline {
+  background: #1a2512;
+  border-color: rgba(124, 179, 66, 0.3);
+}
+
+[data-theme='dark'] .stageTitle {
+  color: var(--ink);
+}
+
+[data-theme='dark'] .stageBody {
+  color: var(--ink-muted);
+}
+
+[data-theme='dark'] .stageBadge {
+  color: var(--kraft-deep);
+  background: rgba(217, 154, 78, 0.1);
+  border-color: rgba(217, 154, 78, 0.25);
+}
+
+[data-theme='dark'] .stageBadgeOffline {
+  color: var(--sprout-deep);
+  background: rgba(124, 179, 66, 0.12);
+  border-color: rgba(124, 179, 66, 0.3);
+}
+
+[data-theme='dark'] .pipelineGap .gapLine {
+  background: repeating-linear-gradient(to bottom, var(--sprout) 0, var(--sprout) 5px, transparent 5px, transparent 11px);
+}
+
+[data-theme='dark'] .pipelineGap .gapLabel {
+  background: #1e1812;
+}
+
+[data-theme='dark'] .stageArrow svg path {
+  stroke: var(--kraft-deep);
+}
+
+/* ── Feature cards (dark) ── */
+[data-theme='dark'] .featuresBand {
+  background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)' opacity='0.04'/%3E%3C/svg%3E");
+  background-color: var(--paper);
+}
+
+[data-theme='dark'] .featureCard {
+  background: #140f0a;
+  border-color: rgba(200, 130, 47, 0.22);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme='dark'] .featureCard:hover {
+  border-color: rgba(217, 154, 78, 0.4);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme='dark'] .featureCard:hover::before {
+  opacity: 0.9;
+}
+
+[data-theme='dark'] .featureCard::after {
+  background: radial-gradient(ellipse at top left, rgba(217, 154, 78, 0.1) 0%, transparent 65%);
+}
+
+[data-theme='dark'] .featureIconWrap {
+  background: #1e1812;
+  border-color: rgba(200, 130, 47, 0.3);
+}
+
+[data-theme='dark'] .featureNum {
+  color: var(--kraft);
+}
+
+[data-theme='dark'] .featureTitle {
+  color: var(--ink);
+}
+
+[data-theme='dark'] .featureBody {
+  color: var(--ink-muted);
+}
+
+/* ── CTA band (dark) ── */
+[data-theme='dark'] .ctaBand {
+  background-image:
+    repeating-linear-gradient(-45deg, transparent, transparent 20px, rgba(217, 154, 78, 0.03) 20px, rgba(217, 154, 78, 0.03) 21px),
+    linear-gradient(#1e1812, #1e1812);
+  border-top-color: rgba(200, 130, 47, 0.15);
+}
+
+[data-theme='dark'] .ctaBand::before {
+  background: radial-gradient(ellipse at center, rgba(217, 154, 78, 0.07) 0%, transparent 70%);
+}
+
+[data-theme='dark'] .ctaTitle {
+  color: var(--ink-2);
+}
+
+[data-theme='dark'] .ctaSubtitle {
+  color: var(--ink-muted);
+}
+
+[data-theme='dark'] .ctaGithubLink {
+  color: var(--wood);
+  border-bottom-color: rgba(212, 184, 150, 0.3);
+}
+
+[data-theme='dark'] .ctaGithubLink:hover {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+/* ── Shared section overrides (dark) ── */
+[data-theme='dark'] .sectionLabel {
+  color: var(--sprout-deep);
+}
+
+[data-theme='dark'] .sectionTitle {
+  color: var(--ink-2);
+}
+
+[data-theme='dark'] .sectionSubtitle {
+  color: var(--ink-muted);
+}
+
+[data-theme='dark'] .eyebrow {
+  color: var(--wood);
+}
+
+[data-theme='dark'] .eyebrow::before,
+[data-theme='dark'] .eyebrow::after {
+  background: var(--kraft-deep);
+  opacity: 0.6;
+}
+
+[data-theme='dark'] .heroTitleAccent {
+  color: var(--kraft-deep);
+}
+
+/* ═══════════════════════════════════════════
    Responsive
-   ───────────────────────────────────────── */
+   ═══════════════════════════════════════════ */
 @media (max-width: 860px) {
   .hero {
     min-height: auto;
