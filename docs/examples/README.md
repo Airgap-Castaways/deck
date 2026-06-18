@@ -79,7 +79,7 @@ offline-kubernetes/
    Paste the ciphertext as a single line when prompted, then enter the passphrase chosen at bootstrap. The worker decrypts the join command locally and never writes it to logs or apply state.
 6. **Verify** — both scenarios include a verify phase that checks cluster and node readiness.
 
-### Encrypted-join pattern
+### Encrypted-join pattern {#encrypted-join-pattern}
 
 Bootstrap prints the join command only in encrypted form via `openssl enc -aes-256-cbc -pbkdf2`. The passphrase is entered interactively by the bootstrap operator and is never stored. The worker operator pastes the ciphertext (`Input` step) and enters the passphrase (`Input`, secret) separately. Decryption happens locally on the worker and the plaintext is written to a temp file used by `JoinKubeadm`, then removed. No plaintext join credentials traverse the network.
 

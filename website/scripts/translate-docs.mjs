@@ -67,10 +67,28 @@ for (const src of sources) {
   const hash = gitHash(src);
   const out = koPathFor(src);
   if (!force && recordedHash(out) === hash) { skipped++; console.log(`unchanged: ${src}`); continue; }
-  const body = translate(readFileSync(abs, 'utf8'));
-  const fm = `---\nsource: ${src}\nsource_hash: ${hash}\n---\n`;
+  const srcText = readFileSync(abs, 'utf8');
+  const raw = translate(srcText);
+  const meta = `source: ${src}\nsource_hash: ${hash}`;
+  // Emit exactly ONE frontmatter block — Docusaurus only parses the first, so a
+  // stacked second block silently drops source keys like `slug`. Branch on
+  // whether the SOURCE actually had frontmatter: only then do we trust (and
+  // merge) the model's echoed frontmatter. When the source had none, the model
+  // sometimes prepends a stray `---`; strip that lone artifact rather than
+  // treating arbitrary later `---` thematic breaks as a frontmatter block.
+  const srcHadFm = /^---\n[\s\S]*?\n---/.test(srcText);
+  let content;
+  if (srcHadFm) {
+    const m = raw.match(/^---\n([\s\S]*?)\n---\n?/);
+    content = m
+      ? `---\n${meta}\n${m[1]}\n---\n${raw.slice(m[0].length)}`
+      : `---\n${meta}\n---\n${raw}`;
+  } else {
+    const body = raw.replace(/^---\n/, '');
+    content = `---\n${meta}\n---\n${body}`;
+  }
   mkdirSync(dirname(out), {recursive: true});
-  writeFileSync(out, fm + body);
+  writeFileSync(out, content);
   translated++;
   console.log(`translated: ${src} -> ${relative(REPO, out)}`);
 }

@@ -24,7 +24,7 @@ Use `--create` or `--edit` when you want to make authoring intent explicit. Use 
 
 For command-level syntax and subcommands, see [CLI Reference](cli.md).
 
-Contributors working on the internal pipeline should see [Ask Agent Runtime](contributing/ask-agent-runtime.md). For background on why the runtime looks this way, see [Ask History](contributing/ask-history.md).
+Contributors working on the internal pipeline should see [Ask Agent Runtime](https://github.com/Airgap-Castaways/deck/blob/main/docs/contributing/ask-agent-runtime.md). For background on why the runtime looks this way, see [Ask History](https://github.com/Airgap-Castaways/deck/blob/main/docs/contributing/ask-history.md).
 
 ## How it works
 
@@ -298,7 +298,7 @@ When the request still has blockers or unresolved clarifications, `deck ask` may
 - Saved ask config defaults live under `~/.config/deck/config.json` as the top-level `ask` object.
 - Generated workflow files stay within the normal deck workflow tree such as `workflows/prepare.yaml`, `workflows/scenarios/`, `workflows/components/`, and `workflows/vars.yaml`.
 
-## Diagnostics and troubleshooting
+## Diagnostics and troubleshooting {#diagnostics-and-troubleshooting}
 
 Global `--v=<n>` controls terminal diagnostics on stderr:
 

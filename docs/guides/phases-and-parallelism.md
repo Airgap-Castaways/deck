@@ -76,7 +76,7 @@ phases:
 ```
 
 This five-phase structure comes directly from the
-[offline-kubernetes example](../examples/offline-kubernetes/workflows/scenarios/bootstrap.yaml).
+[offline-kubernetes example](https://github.com/Airgap-Castaways/deck/blob/main/docs/examples/offline-kubernetes/workflows/scenarios/bootstrap.yaml).
 Reading the phase names alone gives an operator a useful mental model of the
 deployment flow before they open a single component file.
 

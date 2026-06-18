@@ -19,7 +19,7 @@ Phase imports resolve from `workflows/components/`. Write component-relative pat
 `workflows/components/` files are step fragments. They contain only `steps:` and may reference shared `vars.*`, but shared defaults should stay in `workflows/vars.yaml` or the importing scenario `vars:` block.
 
 <!-- BEGIN GENERATED:WORKFLOW_SCHEMA_CONTRACT -->
-## Workflow Schema Contract
+## Workflow Schema Contract {#workflow-schema-contract}
 
 Top-level workflow authoring reference for deck workflows.
 
@@ -63,7 +63,7 @@ steps:
 - Each step still validates against its own kind-specific schema after the top-level workflow schema passes.
 <!-- END GENERATED:WORKFLOW_SCHEMA_CONTRACT -->
 
-## Variables
+## Variables {#variables}
 
 For a guided walkthrough, see [Variables and templating](guides/variables-and-templating.md).
 
@@ -160,7 +160,7 @@ Vars file paths are relative to the same `workflows/` location that contains `va
 Node-scoped vars are static inputs selected before planning and state hashing; `runtime.host` remains the runtime fact namespace for detected OS, architecture, and kernel data.
 
 <!-- BEGIN GENERATED:SYSTEM_VARIABLES -->
-### Built-In Runtime Fields
+### Built-In Runtime Fields {#built-in-runtime-fields}
 
 `runtime.host` is a built-in reserved runtime namespace in both prepare and apply. Use it for detected host facts such as OS family, distro ID, version, architecture, and kernel release. Do not model detected local host facts as static `vars` values.
 
@@ -176,7 +176,7 @@ Node-scoped vars are static inputs selected before planning and state hashing; `
 | `runtime.host.arch` | `string` | Normalized host architecture such as `amd64` or `arm64`. |
 | `runtime.host.kernel.release` | `string` | Kernel release from `/proc/sys/kernel/osrelease`. |
 
-### Execution Context Fields
+### Execution Context Fields {#execution-context-fields}
 
 `context` is available in both `when` expressions and templates. Canonical fields are:
 
@@ -227,7 +227,7 @@ When a prepare download step does not set an explicit output location, deck uses
 - `DownloadImage`: `images/`
 - `DownloadPackage`: `packages/`, or `packages/deb/<release>` and `packages/rpm/<release>` when `repo.type` is set
 
-## Step Envelope Contract
+## Step Envelope Contract {#step-envelope-contract}
 
 Every workflow step uses the same outer envelope before kind-specific `spec` validation runs.
 
@@ -253,7 +253,7 @@ Shared envelope rules:
 - if a step runs inside a parallel batch, its `register` outputs become visible only after the full batch succeeds
 - `spec` is always validated again against the selected step kind after the shared envelope passes
 
-### `when` — conditional execution
+### `when` — conditional execution {#when--conditional-execution}
 
 For a guided walkthrough, see [Conditions with when (CEL)](guides/conditions-and-cel.md).
 
@@ -286,7 +286,7 @@ steps:
 
 Use `CheckHost` when the workflow should fail fast on host suitability checks such as `swap`, `kernelModules`, or required binaries. `CheckHost` validates those conditions, but `runtime.host` exists even when the workflow does not include a `CheckHost` step.
 
-### `register` — capture step output
+### `register` — capture step output {#register--capture-step-output}
 
 For a guided walkthrough, see [Capturing step output with register](guides/capturing-output.md).
 
@@ -310,7 +310,7 @@ steps:
 
 `register` can only export output names that the selected step kind explicitly declares. For example, `InitKubeadm` can export `joinFile`, while steps with no declared outputs reject non-empty `register` mappings during validation.
 
-## Phases
+## Phases {#phases}
 
 For a guided walkthrough, see [Phases and parallelism](guides/phases-and-parallelism.md).
 
@@ -361,7 +361,7 @@ Use `vars.` to test static variables and `runtime.` to test runtime facts, the s
 
 Top-level `steps:` are still valid. Execution normalizes them into an implicit phase named `default`.
 
-## Parallel batches
+## Parallel batches {#parallel-batches}
 
 Use `parallelGroup` when a few consecutive steps are safe to run together.
 
@@ -434,7 +434,7 @@ The public step kind reference is organized by workflow phase and task-oriented 
 
 Use [Step Kinds](step-kinds.md) for the current phase/group index and exact supported kind inventory.
 
-## Prepare semantics
+## Prepare semantics {#prepare-semantics}
 
 `prepare` uses the same step grammar as `apply`, but command context determines which kinds are valid.
 

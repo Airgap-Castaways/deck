@@ -283,4 +283,4 @@ New capabilities should follow the same shape.
 - [Workflow Model](../workflow-model.md)
 - [Bundle Layout](../bundle-layout.md)
 - [CLI Reference](../cli.md)
-- [Internals (contributor reference)](../contributing/internals.md)
+- [Internals (contributor reference)](https://github.com/Airgap-Castaways/deck/blob/main/docs/contributing/internals.md)

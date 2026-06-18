@@ -113,7 +113,7 @@ deck apply --root . --scenario bootstrap --var kubernetesVersion=v1.36.1
 `--var` takes the highest precedence and is intended for one-off debugging or
 staged rollouts, not for permanent configuration.
 
-## Node-scoped vars
+## Node-scoped vars {#node-scoped-vars}
 
 When `vars.yaml` contains a `hosts:` section, deck selects the entry that
 matches the local hostname at execution time and deep-merges it into the

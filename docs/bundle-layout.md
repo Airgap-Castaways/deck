@@ -52,7 +52,7 @@ Remaining drift gap:
 - package reuse still does not detect upstream repository drift on its own; closing that gap likely requires repository snapshot metadata such as repodata/release fingerprints or explicit mirror version contracts.
 - image reuse now preserves fetched source digests in metadata, but mutable tag drift is not yet probed on reuse; a follow-up can compare saved digests against current registry manifests when remote access is allowed.
 
-## Apply-time manifest verification
+## Apply-time manifest verification {#apply-time-manifest-verification}
 
 Whenever `deck apply` resolves a bundle root, it verifies the bundle manifest before executing any workflow phase. A verification failure aborts the run immediately — no phase begins.
 

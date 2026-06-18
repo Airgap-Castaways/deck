@@ -57,7 +57,7 @@ For per-command `ask` flags and subcommands, see [deck ask](cli/deck_ask.md).
 
 `deck cache list -o json` and `deck server logs -o json` keep machine-readable output on stdout while `--v=<n>` sends path and count diagnostics to stderr.
 
-## Verbosity (`--v`)
+## Verbosity (`--v`) {#verbosity---v}
 
 Global `--v=<n>` writes diagnostics to stderr without changing stdout result contracts. Supported levels are 0–3:
 
@@ -122,7 +122,7 @@ Example JSON diagnostics:
 {"ts":"2026-04-02T09:20:00Z","level":"info","component":"prepare","event":"step_started","phase":"prepare","batch":"prepare:downloads","step":"download-runc","kind":"DownloadFile","attempt":1,"status":"started"}
 ```
 
-## Workflow source locators
+## Workflow source locators {#workflow-source-locators}
 
 For `plan`, `apply`, and `state`, prefer selecting the workflow source and the entrypoint separately:
 

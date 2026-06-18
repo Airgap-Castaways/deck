@@ -28,7 +28,7 @@ The `workflows/` directory contains all your operational logic.
 ### Prepare Entrypoint (`workflows/prepare.yaml`)
 `workflows/prepare.yaml` is the fixed entry workflow for `deck prepare`.
 
-### Scenarios (`workflows/scenarios/`)
+### Scenarios (`workflows/scenarios/`) {#scenarios-workflowsscenarios}
 Scenarios are the primary entrypoints for `deck apply`.
 - Each file here must be a complete workflow with `version` and either `steps` or `phases`.
 - Typical filenames: `apply.yaml`, `bootstrap.yaml`, `worker-join.yaml`.
@@ -41,7 +41,7 @@ Components are **Component Fragments**—reusable sets of steps that are importe
 - **Example**: `workflows/components/k8s/runtime.yaml` is imported as `k8s/runtime.yaml`.
 
 <!-- BEGIN GENERATED:COMPONENT_FRAGMENT_CONTRACT -->
-#### Component Fragment Contract
+#### Component Fragment Contract {#component-fragment-contract}
 
 Reference for reusable workflow component fragments located under `workflows/components/`.
 
