@@ -50,5 +50,6 @@ Follow this path to get productive quickly:
 1. [Installation](installation.md) — install the binary, verify it, and set up shell completion.
 2. [Quick Start](quick-start.md) — create a workspace, lint it, build a bundle, and apply it locally in a few commands.
 3. [Core concepts](core-concepts/why-deck.md) — understand why the prepare/bundle/apply split matters and what principles drive the design.
-4. [Workflow model](workflow-model.md) — learn the YAML structure, variables, phases, and step envelope fields.
-5. [Step kinds](step-kinds.md) — browse the full catalog of typed step kinds organized by phase and task.
+4. [Guides](guides/authoring-workflows.md) — task-focused how-tos for authoring workflows, variables and templating, conditions, phases and parallelism, capturing output, and running the server.
+5. [Workflow model](workflow-model.md) — the reference for the YAML structure, variables, phases, and step envelope fields.
+6. [Step kinds](step-kinds.md) — browse the full catalog of typed step kinds organized by phase and task.
