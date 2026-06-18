@@ -7,6 +7,7 @@ Guidelines and conventions for contributing to deck.
 - [Ask History](ask-history.md): Short background on the earlier ask designs and the lessons that shaped the current runtime.
 - [Comment-Driven Step Metadata](comment-driven-step-metadata.md): Source-of-truth rules for public step docs, schema annotations, and ask metadata.
 - [Tool Definition Schema](tool-definition-schema.md): Generated reference for contributor-facing `ToolDefinition` manifest fields and rules.
+- [Internals](internals.md): Internal Go package layout, ask authoring internals, trust boundaries, and contributor extension guide.
 - [Legacy Compatibility](legacy-compatibility.md): Compatibility shim inventory, tests, and removal gates.
 - [Release Process](release-process.md): How tagged releases publish tarballs, Linux packages, and the Homebrew tap.
 - [Versioning](versioning.md): How we handle versioning and releases.

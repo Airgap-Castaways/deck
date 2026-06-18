@@ -210,28 +210,13 @@ Some documentation metadata is layered on top so examples and field descriptions
 
 ## Ask authoring architecture
 
-`deck ask` follows the same source-of-truth direction. It is not meant to be a parallel workflow-definition system.
-
-For authoring routes, the intended shape is route classification first, clarify when blocking ambiguity remains, then bounded tool loop. In practice, that means:
-
-- code classifies whether the request is question, explain, review, draft, refine, or clarify
-- code runs preflight for scope, target inference, and blocking clarifications
-- the model operates on real workspace files through a bounded tool loop (read, write, edit, validate, schema)
-- code enforces write scope, validation gates, and candidate state management
-- code auto-repairs schema and role violations after each validation
-- code writes accepted candidate files to disk only after successful finish
-
-The important architectural boundary is that ask may project canonical facts for prompting and assembly, but it should not own a second copy of step validity, field enums, or workspace path rules.
-
-At the code level, `internal/askcontext` is the main home for those canonical ask facts: command metadata, prompt/source-of-truth bundles, and schema-derived authoring context live there, while orchestration stays in `internal/askcli`. That split keeps the metadata surface easier to discover without changing ask behavior.
+`deck ask` is an AI-assisted authoring helper that operates on real workspace files through a bounded tool loop. It follows the same source-of-truth direction as the rest of the system — it may project canonical facts for prompting, but it does not own a second copy of step validity, field enums, or workspace path rules. It requires an LLM provider configured in your environment. For usage and configuration, see [Using deck ask](../ask.md).
 
 ## Site-local helper model
 
 When a site needs a shared local source inside the air gap, `deck server` can expose prepared bundle content and audit what it serves. That helper remains secondary to the core local execution path.
 
 ## Safety and trust boundaries
-
-Recent refactoring has pushed `deck` toward helper-local trust boundaries.
 
 The principle is simple: feature code should describe intent, while sensitive operations stay localized in small helper layers that are easier to audit.
 
@@ -279,21 +264,6 @@ This keeps the system easier to recover and reason about during real operations.
 
 It is a structured workflow runner for a narrower class of operational problems where disconnected execution, explicit handoff, and operator clarity matter more than broad platform coverage.
 
-## How the codebase maps to the architecture
-
-The code layout roughly follows these boundaries:
-
-- `cmd/`: CLI entrypoints
-- `internal/config` and `internal/workflowexec`: workflow contracts, decoding, and execution rules
-- `internal/ask*`: routed AI-assisted question, review, planning, draft, refine, compile, and repair flow
-- `internal/prepare` and `internal/preparecli`: connected-side preparation logic
-- `internal/install`: target-side host mutation and apply behavior
-- `internal/bundle`: bundle collection, import, merge, and verify logic
-- `internal/server`: optional site-local HTTP server
-- `internal/fsutil`, `internal/filemode`, `internal/hostfs`, `internal/executil`: safety-oriented helper boundaries
-
-The exact package layout may continue to evolve, but the architectural direction stays the same: thin CLI layer, typed workflow boundary, explicit trust boundaries, and minimal hidden behavior.
-
 ## Extending the system
 
 New capabilities should follow the same shape.
@@ -308,7 +278,9 @@ New capabilities should follow the same shape.
 
 ## Related references
 
-- [Why Deck?](why-deck.md)
+- [Why deck?](why-deck.md)
+- [The deck lifecycle](lifecycle.md)
 - [Workflow Model](../workflow-model.md)
 - [Bundle Layout](../bundle-layout.md)
 - [CLI Reference](../cli.md)
+- [Internals (contributor reference)](../contributing/internals.md)
