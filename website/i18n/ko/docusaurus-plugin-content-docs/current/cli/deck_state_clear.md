@@ -5,7 +5,7 @@ source_hash: 5a1b2dc663add82076f2f59243b5c05d377ad4f4
 ```markdown
 ## deck state clear
 
-적용 상태를 삭제합니다
+적용 상태를 삭제합니다.
 
 ```
 deck state clear [flags]
@@ -37,5 +37,5 @@ deck state clear [flags]
 
 ### SEE ALSO
 
-* [deck state](deck_state.md)	 - 저장된 적용 상태를 검사하고 삭제합니다
+* [deck state](deck_state.md)	 - 저장된 적용 상태를 확인하고 삭제합니다
 ```

@@ -10,7 +10,7 @@ source_hash: c7cf2639e33ff4dfa70b2c052826abfc9abc215f
 
 ## `when:`이 하는 일
 
-워크플로의 모든 스텝은 선택적인 `when:` 필드를 받습니다. 이 값은 deck가
+워크플로의 모든 스텝은 선택적인 `when:` 필드를 받습니다. 이 값은 deck이
 스텝 실행 전에 평가하는 [CEL](https://cel.dev) 표현식입니다:
 
 - `when:`이 `true`로 평가되거나 (또는 없을 경우), 스텝은 정상적으로
@@ -18,7 +18,7 @@ source_hash: c7cf2639e33ff4dfa70b2c052826abfc9abc215f
 - `when:`이 `false`로 평가되면, 스텝은 **건너뜁니다** — 이는 오류로
   취급되지 않으며, 다음 스텝으로 실행이 계속됩니다.
 - `when:`이 평가에 실패하면 (예를 들어, 참조된 변수의 타입이 잘못된
-  경우), deck는 `E_CONDITION_EVAL`을 보고하고 중단합니다.
+  경우), deck은 `E_CONDITION_EVAL`을 보고하고 중단합니다.
 
 `when:`은 정당한 선택성을 표현하는 데 사용하세요 — 특정 호스트 유형,
 역할에서만, 또는 특정 조건이 충족된 후에만 실행되어야 하는 스텝 등입니다.
@@ -131,7 +131,7 @@ steps:
 
 ### `context.*` — deck 실행 메타데이터
 
-`context.*`는 현재 호출에 대한 deck가 제공하는 메타데이터를 담습니다. 이
+`context.*`는 현재 호출에 대한 deck이 제공하는 메타데이터를 담습니다. 이
 값들은 명령이 시작될 때 결정되며 실행 중에는 변경되지 않습니다.
 
 | 필드 | 사용 가능 시점 | 설명 |
@@ -271,7 +271,7 @@ deck plan vars
 값으로 해석되었는지, `runtime.host.os.family`가 대상 호스트의 OS와
 일치하는지 확인하세요.
 
-`when:` 표현식이 런타임에 실패하면 deck는 `E_CONDITION_EVAL`을 보고하고
+`when:` 표현식이 런타임에 실패하면 deck은 `E_CONDITION_EVAL`을 보고하고
 실행을 멈춥니다. 조건 관련 코드 전체 목록은 error codes 레퍼런스를
 참고하세요.
 
@@ -284,7 +284,7 @@ and/or, 문자열 포함 여부(`has()`).
 
 **타입 규칙은 엄격합니다.** `vars.deckServer == true`는 `deckServer`가
 `vars.yaml`에서 불리언일 때 동작합니다. 만약 문자열 `"true"`라면, 비교는
-조용히 실패하고 스텝은 건너뜁니다. deck가 해석한 Go 타입을 확인하려면
+조용히 실패하고 스텝은 건너뜁니다. deck이 해석한 Go 타입을 확인하려면
 `deck plan vars`를 확인하세요.
 
 **미정의 변수 처리.** `vars.role`이 전혀 설정되지 않은 경우 — `all:`에

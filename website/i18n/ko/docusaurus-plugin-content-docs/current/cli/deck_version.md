@@ -2,9 +2,9 @@
 source: docs/cli/deck_version.md
 source_hash: 0c79ccb90cf5ffffd1e1b0e71a1c4d5977cabbde
 ---
-# deck version
+## deck version
 
-deck 빌드 버전 표시
+deck 빌드 버전을 표시합니다
 
 ```
 deck version [flags]

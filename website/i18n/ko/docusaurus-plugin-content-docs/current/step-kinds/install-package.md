@@ -15,7 +15,7 @@ source_hash: 50e2df83e45604dabd2397cf2bd8a913863e0298
 
 ## When To Use
 
-적용 단계에서 구성된 로컬 또는 미러링된 레지스트리로부터 패키지를 설치할 때 사용합니다.
+apply 단계에서 미리 구성한 로컬 저장소나 미러 저장소로부터 패키지를 설치할 때 사용합니다.
 
 ## Example
 
@@ -32,13 +32,13 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.apt` | `object` | no | `` | `` | Apt 전용 설치 옵션. 설정 시 `manager: apt`가 필요합니다. | `{installRecommends:false,fixBroken:true}` |
-| `spec.dnf` | `object` | no | `` | `` | Dnf 전용 설치 옵션. 설정 시 `manager: dnf`가 필요합니다. | `{skipBroken:true,allowErasing:true}` |
-| `spec.excludeRepos` | `array<string>` | no | `` | `` | 패키지 해석에서 제외할 레지스트리 선택자. | `[updates]` |
-| `spec.manager` | `string` | no | `` | `auto, apt, dnf` | 사용할 패키지 관리자. `auto`는 런타임 OS 계열에서 해석합니다. | `auto` |
-| `spec.packages` | `array<string>` | yes | `` | `` | 설치할 패키지 이름. | `[kubelet,kubeadm,kubectl]` |
-| `spec.restrictToRepos` | `array<string>` | no | `` | `` | 패키지 관리자의 가시성을 이 레지스트리 선택자로 제한합니다. | `[offline-kubernetes]` |
-| `spec.source` | `object` | no | `` | `` | 설치에 사용되는 로컬 레지스트리 소스. | `{type:local-repo,path:/opt/deck/repos/kubernetes}` |
+| `spec.apt` | `object` | no | `` | `` | apt 전용 설치 옵션입니다. 사용하려면 `manager: apt`로 지정해야 합니다. | `{installRecommends:false,fixBroken:true}` |
+| `spec.dnf` | `object` | no | `` | `` | dnf 전용 설치 옵션입니다. 사용하려면 `manager: dnf`로 지정해야 합니다. | `{skipBroken:true,allowErasing:true}` |
+| `spec.excludeRepos` | `array<string>` | no | `` | `` | 패키지 해석에서 제외할 저장소 선택자입니다. | `[updates]` |
+| `spec.manager` | `string` | no | `` | `auto, apt, dnf` | 사용할 패키지 관리자입니다. `auto`는 런타임 OS 계열에 따라 자동으로 결정합니다. | `auto` |
+| `spec.packages` | `array<string>` | yes | `` | `` | 설치할 패키지 이름입니다. | `[kubelet,kubeadm,kubectl]` |
+| `spec.restrictToRepos` | `array<string>` | no | `` | `` | 패키지 관리자가 사용할 저장소를 지정한 선택자로 한정합니다. | `[offline-kubernetes]` |
+| `spec.source` | `object` | no | `` | `` | 설치에 사용할 로컬 저장소 소스입니다. | `{type:local-repo,path:/opt/deck/repos/kubernetes}` |
 
 ## Nested Objects
 
@@ -46,36 +46,36 @@ spec:
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.apt.allowDowngrade` | `boolean` | no | `` | `` | 설치된 버전보다 낮은 패키지 버전의 설치를 허용합니다. | `true` |
-| `spec.apt.defaultRelease` | `string` | no | `` | `` | 패키지 선택에 사용되는 기본 apt 릴리스. | `jammy` |
-| `spec.apt.dpkgOptions` | `array<string>` | no | `` | `` | apt-get을 통해 전달되는 추가 dpkg force 옵션. | `[force-confdef,force-confold]` |
-| `spec.apt.failOnAutoremove` | `boolean` | no | `` | `` | 의존성 해석 과정에서 apt가 패키지를 제거하게 되면 실패 처리합니다. | `true` |
-| `spec.apt.fixBroken` | `boolean` | no | `` | `` | apt 설치 중 손상된 의존성을 수정하도록 시도합니다. | `true` |
-| `spec.apt.installRecommends` | `boolean` | no | `` | `` | 권장 패키지를 설치합니다. 운영체제 기본값을 사용하려면 생략하세요. | `false` |
+| `spec.apt.allowDowngrade` | `boolean` | no | `` | `` | 이미 설치된 버전보다 낮은 버전의 패키지 설치를 허용합니다. | `true` |
+| `spec.apt.defaultRelease` | `string` | no | `` | `` | 패키지 선택에 사용할 기본 apt 릴리스입니다. | `jammy` |
+| `spec.apt.dpkgOptions` | `array<string>` | no | `` | `` | apt-get을 거쳐 전달하는 추가 dpkg force 옵션입니다. | `[force-confdef,force-confold]` |
+| `spec.apt.failOnAutoremove` | `boolean` | no | `` | `` | 의존성을 해석하는 과정에서 apt가 패키지를 제거하려고 하면 실패 처리합니다. | `true` |
+| `spec.apt.fixBroken` | `boolean` | no | `` | `` | apt 설치 중 깨진 의존성을 바로잡습니다. | `true` |
+| `spec.apt.installRecommends` | `boolean` | no | `` | `` | 권장 패키지를 함께 설치합니다. 생략하면 운영체제 기본값을 따릅니다. | `false` |
 
 ### `spec.dnf`
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.dnf.allowErasing` | `boolean` | no | `` | `` | 의존성을 해석하기 위해 설치된 패키지의 삭제를 허용합니다. | `true` |
-| `spec.dnf.best` | `boolean` | no | `` | `` | 사용 가능한 최선 버전을 우선합니다. 배포판 기본값을 사용하려면 생략하세요. | `false` |
+| `spec.dnf.allowErasing` | `boolean` | no | `` | `` | 의존성을 해결하기 위해 이미 설치된 패키지의 제거를 허용합니다. | `true` |
+| `spec.dnf.best` | `boolean` | no | `` | `` | 가능한 한 최신 버전을 우선합니다. 생략하면 배포판 기본값을 따릅니다. | `false` |
 | `spec.dnf.cacheOnly` | `boolean` | no | `` | `` | 캐시된 메타데이터와 패키지만 사용합니다. | `true` |
-| `spec.dnf.disableGpgCheck` | `boolean` | no | `` | `` | 이 트랜잭션에 대해 GPG 서명 검사를 비활성화합니다. | `true` |
-| `spec.dnf.excludePackages` | `array<string>` | no | `` | `` | 트랜잭션에서 제외할 패키지 이름 패턴. | `[kernel*]` |
-| `spec.dnf.installWeakDeps` | `boolean` | no | `` | `` | 약한 의존성을 설치합니다. 배포판 기본값을 사용하려면 생략하세요. | `false` |
-| `spec.dnf.skipBroken` | `boolean` | no | `` | `` | 사용할 수 없는 패키지 또는 의존성이 손상된 패키지를 건너뜁니다. | `true` |
+| `spec.dnf.disableGpgCheck` | `boolean` | no | `` | `` | 이 트랜잭션에 한해 GPG 서명 검사를 비활성화합니다. | `true` |
+| `spec.dnf.excludePackages` | `array<string>` | no | `` | `` | 트랜잭션에서 제외할 패키지 이름 패턴입니다. | `[kernel*]` |
+| `spec.dnf.installWeakDeps` | `boolean` | no | `` | `` | 약한 의존성을 함께 설치합니다. 생략하면 배포판 기본값을 따릅니다. | `false` |
+| `spec.dnf.skipBroken` | `boolean` | no | `` | `` | 사용할 수 없거나 의존성이 깨진 패키지를 건너뜁니다. | `true` |
 
 ### `spec.source`
 
 | Key | Type | Required | Default | Enum | Description | Example |
 |---|---|---:|---|---|---|---|
-| `spec.source.path` | `string` | yes | `` | `` | 미리 준비된 로컬 패키지 레지스트리의 파일시스템 경로. | `/opt/deck/repos/kubernetes` |
-| `spec.source.type` | `string` | yes | `` | `` | 소스 유형. 현재 `local-repo`만 지원됩니다. | `local-repo` |
+| `spec.source.path` | `string` | yes | `` | `` | 미리 준비한 로컬 패키지 저장소의 파일 시스템 경로입니다. | `/opt/deck/repos/kubernetes` |
+| `spec.source.type` | `string` | yes | `` | `` | 소스 유형입니다. 현재는 `local-repo`만 지원합니다. | `local-repo` |
 
 
 ## Notes
 
-- 적용 단계에서 `InstallPackage`를 사용하여 구성된 로컬 또는 미러링된 레지스트리로부터 패키지를 설치합니다.
+- 미리 구성한 로컬 저장소나 미러 저장소로부터 패키지를 설치하려면 apply 단계에서 `InstallPackage`를 사용합니다.
 
 ## Related
 

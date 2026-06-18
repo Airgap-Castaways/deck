@@ -27,7 +27,7 @@ deck server [flags]
 
 * [deck](deck.md)	 - deck
 * [deck server down](deck_server_down.md)	 - 로컬 서버 데몬을 중지합니다
-* [deck server health](deck_server_health.md)	 - 명시한 서버 또는 저장된 원격 서버 URL을 점검합니다
-* [deck server logs](deck_server_logs.md)	 - 파일 또는 저널에서 로컬 서버 감사 로그를 읽습니다
+* [deck server health](deck_server_health.md)	 - 지정한 서버나 저장된 원격 서버 URL의 상태를 점검합니다
+* [deck server logs](deck_server_logs.md)	 - 파일이나 저널에서 로컬 서버 감사 로그를 읽습니다
 * [deck server remote](deck_server_remote.md)	 - 시나리오 조회에 사용할 저장된 원격 서버 URL을 관리합니다
 * [deck server up](deck_server_up.md)	 - 로컬 번들 서버를 시작합니다

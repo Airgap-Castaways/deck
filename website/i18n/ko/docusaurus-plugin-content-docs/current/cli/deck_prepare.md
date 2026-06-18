@@ -2,16 +2,15 @@
 source: docs/cli/deck_prepare.md
 source_hash: e08107b0da18edcfdff3b0fb71c060cf1a28501e
 ---
-```markdown
 ## deck prepare
 
-번들 콘텐츠를 outputs/ 아래에 준비합니다
+outputs/ 디렉터리에 번들 콘텐츠를 준비합니다.
 
 ```
 deck prepare [flags]
 ```
 
-### Options
+### 옵션
 
 ```
       --bundle-binary strings           runtime binary target tuple (os/arch), repeatable
@@ -28,14 +27,13 @@ deck prepare [flags]
   -f, --vars-file strings               vars file overlay relative to workflows/ (repeatable)
 ```
 
-### Options inherited from parent commands
+### 상위 명령에서 상속된 옵션
 
 ```
       --log-format string   diagnostic log format (text|json) (default "text")
       --v int               diagnostic verbosity level (0-3; higher is more detailed)
 ```
 
-### SEE ALSO
+### 관련 항목
 
 * [deck](deck.md)	 - deck
-```

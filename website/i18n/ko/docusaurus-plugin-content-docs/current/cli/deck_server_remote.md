@@ -4,7 +4,7 @@ source_hash: cae8f21db40e4dfbf8be34adb5ef95432b0ab9d3
 ---
 ## deck server remote
 
-시나리오 조회를 위해 저장된 원격 서버 URL을 관리합니다
+시나리오 조회에 사용할 원격 서버 URL을 저장하고 관리합니다.
 
 ```
 deck server remote [flags]
@@ -26,6 +26,6 @@ deck server remote [flags]
 ### SEE ALSO
 
 * [deck server](deck_server.md)	 - 로컬 콘텐츠 서버를 실행하고 원격 조회 기본값을 관리합니다
-* [deck server remote set](deck_server_remote_set.md)	 - 시나리오 조회를 위한 기본 원격 서버 URL을 저장합니다
-* [deck server remote show](deck_server_remote_show.md)	 - 적용 중인 저장된 원격 서버 URL을 표시합니다
-* [deck server remote unset](deck_server_remote_unset.md)	 - 저장된 원격 서버 URL을 지웁니다
+* [deck server remote set](deck_server_remote_set.md)	 - 시나리오 조회에 사용할 기본 원격 서버 URL을 저장합니다
+* [deck server remote show](deck_server_remote_show.md)	 - 현재 적용 중인 원격 서버 URL을 표시합니다
+* [deck server remote unset](deck_server_remote_unset.md)	 - 저장된 원격 서버 URL을 삭제합니다

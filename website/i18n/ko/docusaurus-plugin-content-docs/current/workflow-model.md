@@ -4,7 +4,7 @@ source_hash: 528e4c25fc2b3108945e5321f545b59ff9e543e2
 ---
 # 워크플로 모델
 
-`deck`는 더 큰 절차도 검토 가능한 상태로 유지하기 위해 YAML 워크플로 모델을 사용합니다. 목표는 DSL을 만드는 것이 아니라, 점점 커지는 셸 스크립트보다 에어갭(망분리) 운영 작업에 더 명확한 구조를 부여하는 것입니다. 여기서 타입이 지정된 스텝은 의도를 표현하고, 이름이 붙은 단계는 운영자가 세부 내용을 모두 읽기 전에 절차가 무엇을 하는지 보여 줍니다.
+`deck`은 더 큰 절차도 검토 가능한 상태로 유지하기 위해 YAML 워크플로 모델을 사용합니다. 목표는 DSL을 만드는 것이 아니라, 점점 커지는 셸 스크립트보다 에어갭(망분리) 운영 작업에 더 명확한 구조를 부여하는 것입니다. 여기서 타입이 지정된 스텝은 의도를 표현하고, 이름이 붙은 단계는 운영자가 세부 내용을 모두 읽기 전에 절차가 무엇을 하는지 보여 줍니다.
 
 ## 최상위 필드
 
@@ -62,7 +62,7 @@ steps:
 - 워크플로는 최상위 `phases`와 최상위 `steps`를 동시에 정의할 수 없습니다.
 - 최상위 `steps`는 `default`라는 이름의 암묵적 단계로 실행됩니다.
 - import는 `phases[].imports` 아래에서만 지원되며 `workflows/components/`에서 해석됩니다.
-- 스텝이 `apiVersion`을 생략하면, deck는 스키마 및 역할 검사가 실행되기 전에 최상위 워크플로 `version`에서 이를 해석합니다.
+- 스텝이 `apiVersion`을 생략하면, deck은 스키마 및 역할 검사가 실행되기 전에 최상위 워크플로 `version`에서 이를 해석합니다.
 - 워크플로 모드는 파일 내 `role` 필드가 아니라 명령 컨텍스트나 파일 위치로 결정됩니다.
 - 각 스텝은 최상위 워크플로 스키마를 통과한 후에도 여전히 자신의 종류별 스키마에 대해 검증됩니다.
 <!-- END GENERATED:WORKFLOW_SCHEMA_CONTRACT -->
@@ -80,7 +80,7 @@ steps:
 3. 노드 범위 선택 전에 공유 vars로 병합되는 CLI `-f, --vars-file` 오버레이
 4. `workflows/vars.yaml` 공유 기본값
 
-`deck lint`, `deck prepare`, `deck plan`, `deck apply`는 `workflows/vars.yaml`에서 노드 범위 공유 변수도 지원합니다. `hosts:`가 존재하면 deck는 실행 시점에 로컬 호스트명을 감지하고, 선택적인 `all:` 값을 공유 기본값으로 적용하며, 일치하는 호스트 항목을 최상위 `vars`로 병합합니다. 호스트명이 목록에 없으면, 실행은 일반 `vars.yaml` 값과 `all:` 값으로 계속됩니다.
+`deck lint`, `deck prepare`, `deck plan`, `deck apply`는 `workflows/vars.yaml`에서 노드 범위 공유 변수도 지원합니다. `hosts:`가 존재하면 deck은 실행 시점에 로컬 호스트명을 감지하고, 선택적인 `all:` 값을 공유 기본값으로 적용하며, 일치하는 호스트 항목을 최상위 `vars`로 병합합니다. 호스트명이 목록에 없으면, 실행은 일반 `vars.yaml` 값과 `all:` 값으로 계속됩니다.
 
 노드 범위 `vars.yaml` 예시:
 
@@ -99,7 +99,7 @@ hosts:
     role: worker
 ```
 
-`deck lint`, `deck prepare`, `deck plan`, `deck apply`의 경우, deck는 먼저 `workflows/vars.yaml`과 `prepare`, `plan`, `apply`에 제공된 `-f, --vars-file` 오버레이로부터 공유 vars 문서를 구성합니다. 나중의 vars 파일은 `vars.yaml`과 동일한 깊은 병합 동작으로 앞선 파일을 오버라이드합니다. 유효한 변수 우선순위는 다음과 같습니다:
+`deck lint`, `deck prepare`, `deck plan`, `deck apply`의 경우, deck은 먼저 `workflows/vars.yaml`과 `prepare`, `plan`, `apply`에 제공된 `-f, --vars-file` 오버레이로부터 공유 vars 문서를 구성합니다. 나중의 vars 파일은 `vars.yaml`과 동일한 깊은 병합 동작으로 앞선 파일을 오버라이드합니다. 유효한 변수 우선순위는 다음과 같습니다:
 
 1. 일반 공유 vars 값. `hosts:`가 존재할 때는 `all`과 `hosts`를 제외
 2. 공유 vars `all:` 값
@@ -109,7 +109,7 @@ hosts:
 
 호스트명 매칭은 감지된 호스트명을 먼저 시도하고, 그다음 첫 `.` 앞의 짧은 호스트명을 시도합니다. 호스트 항목이 없어도 치명적이지 않습니다. 호스트별 필드로 분기하는 워크플로는 `role: ""`처럼 `all:`에 안전한 기본값을 제공한 뒤, `vars.role == "control-plane"` 같은 조건을 사용해야 합니다.
 
-런타임 값은 `register` 출력과 `runtime.host` 같은 내장 런타임 팩트를 통해 별도로 흘러옵니다. `context.*` 아래의 실행 컨텍스트 값은 deck가 제공하며 명령 실행 시점에 해석되는 메타데이터로, 명령 이름, 워크플로 소스, 워크플로 경로, 번들 루트, 출력 루트, 상태 파일 등이 있습니다.
+런타임 값은 `register` 출력과 `runtime.host` 같은 내장 런타임 팩트를 통해 별도로 흘러옵니다. `context.*` 아래의 실행 컨텍스트 값은 deck이 제공하며 명령 실행 시점에 해석되는 메타데이터로, 명령 이름, 워크플로 소스, 워크플로 경로, 번들 루트, 출력 루트, 상태 파일 등이 있습니다.
 
 `prepare`나 `apply`를 실행하기 전에 입력 스냅샷을 확인하려면 `deck plan vars`를 사용하세요. 이는 유효한 `vars`, 해석된 `context`, 실행 전에 알려진 초기 `runtime` 값, 그리고 워크플로 스텝에 의해 등록될 수 있는 계획된 런타임 키를 출력합니다. 등록된 런타임 값은 이를 생성하는 스텝이 실행되기 전에는 예측되지 않습니다.
 
@@ -197,7 +197,7 @@ vars 파일 경로는 `vars.yaml`이 포함된 동일한 `workflows/` 위치를 
 
 기존 템플릿을 위해 레거시 별칭이 계속 제공됩니다: `context.bundleRoot`는 `context.paths.bundleRoot`에 매핑되고, `context.stateFile`은 `context.paths.stateFile`에 매핑됩니다.
 
-apply 상태 키가 계산될 때, deck는 다른 컨텍스트 값에서 파생된 필드를 제외한 실행 컨텍스트의 핑거프린트를 포함합니다. 그러한 파생 필드로는 `context.workflow.isServer`와, 상태 키 자체에서 파생되는 `context.paths.stateFile`이 있습니다.
+apply 상태 키가 계산될 때, deck은 다른 컨텍스트 값에서 파생된 필드를 제외한 실행 컨텍스트의 핑거프린트를 포함합니다. 그러한 파생 필드로는 `context.workflow.isServer`와, 상태 키 자체에서 파생되는 `context.paths.stateFile`이 있습니다.
 <!-- END GENERATED:SYSTEM_VARIABLES -->
 
 ## 최소 워크플로
@@ -225,7 +225,7 @@ steps:
       mode: "0755"
 ```
 
-prepare 다운로드 스텝이 명시적인 출력 위치를 설정하지 않으면, deck는 스텝 종류의 기본 준비 경로를 사용합니다:
+prepare 다운로드 스텝이 명시적인 출력 위치를 설정하지 않으면, deck은 스텝 종류의 기본 준비 경로를 사용합니다:
 
 - `DownloadFile`: `files/<basename>`
 - `DownloadImage`: `images/`
@@ -243,7 +243,7 @@ prepare 다운로드 스텝이 명시적인 출력 위치를 설정하지 않으
 
 선택적 공유 필드:
 
-- `apiVersion`: 스텝 api 버전; 생략 시 deck가 최상위 워크플로 `version`에서 해석
+- `apiVersion`: 스텝 api 버전; 생략 시 deck이 최상위 워크플로 `version`에서 해석
 - `when`: CEL 표현식; false로 평가되면 스텝이 건너뜀
 - `parallelGroup`: 동일한 값을 가진 연속된 스텝은 단계 내에서 하나의 배치로 실행될 수 있음
 - `retry`: 실패 시 재시도 횟수
@@ -261,7 +261,7 @@ prepare 다운로드 스텝이 명시적인 출력 위치를 설정하지 않으
 
 단계별 안내는 [when을 사용한 조건 (CEL)](guides/conditions-and-cel.md)을 참고하세요.
 
-`when`은 CEL 표현식을 받습니다. `vars:`나 `vars.yaml`에 정의된 입력 변수를 참조하려면 `vars.`를, 런에서 앞서 등록된 스텝 출력과 `runtime.host` 아래의 내장 호스트 팩트를 참조하려면 `runtime.`을, deck가 제공하는 실행 메타데이터를 참조하려면 `context.`를 사용하세요.
+`when`은 CEL 표현식을 받습니다. `vars:`나 `vars.yaml`에 정의된 입력 변수를 참조하려면 `vars.`를, 런에서 앞서 등록된 스텝 출력과 `runtime.host` 아래의 내장 호스트 팩트를 참조하려면 `runtime.`을, deck이 제공하는 실행 메타데이터를 참조하려면 `context.`를 사용하세요.
 
 ```yaml
 steps:

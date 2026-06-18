@@ -8,7 +8,7 @@ source_hash: 4223f04f91a7e3d16a14cfa1ab423be8963fc49b
 
 ## deck 에러를 읽는 법
 
-deck는 에러를 `CODE: message` 형식으로 렌더링합니다. 예를 들면 다음과 같습니다:
+deck은 에러를 `CODE: message` 형식으로 렌더링합니다. 예를 들면 다음과 같습니다:
 
 ```
 E_BUNDLE_INTEGRITY: artifact outputs/files/kubeadm.conf: sha256 mismatch (expected a3f1…, got 9b2d…)
@@ -216,7 +216,7 @@ deck apply --root . --scenario apply --fresh
 
 ### 상태가 초기화될 수 있는 이유 (새 상태 키)
 
-워크플로 파일 내용, 유효한 vars, 또는 실행 컨텍스트가 변경되면, deck는 다른 상태 키를 계산합니다. 기존 상태는 삭제되지 않으며 — 단지 새 키로는 더 이상 매칭되지 않을 뿐입니다. 이는 워크플로를 편집한 후 재개한 실행이 처음부터 시작됨을 의미합니다.
+워크플로 파일 내용, 유효한 vars, 또는 실행 컨텍스트가 변경되면, deck은 다른 상태 키를 계산합니다. 기존 상태는 삭제되지 않으며 — 단지 새 키로는 더 이상 매칭되지 않을 뿐입니다. 이는 워크플로를 편집한 후 재개한 실행이 처음부터 시작됨을 의미합니다.
 
 적용 전에 `deck plan --root . --scenario apply`를 사용하여 해석된 상태 키와 어떤 스텝이 실행되거나 건너뛰어질지 확인하세요. 디스크에 있는 모든 상태 파일을 보려면 `deck state list`를 사용하세요.
 
@@ -244,7 +244,7 @@ deck state clear --all --yes
 
 **증상:** `E_TEMPLATE_SINGLE_BRACE: step "write-config": template uses {vars.name}; use {{.vars.name}}`
 
-**원인:** 템플릿 표현식이 요구되는 이중 중괄호 문법 대신 단일 중괄호 문법(`{var}`)을 사용합니다. deck는 문자열 보간에 Go 템플릿을 사용합니다.
+**원인:** 템플릿 표현식이 요구되는 이중 중괄호 문법 대신 단일 중괄호 문법(`{var}`)을 사용합니다. deck은 문자열 보간에 Go 템플릿을 사용합니다.
 
 **해결:** `{vars.name}`을 `{{ .vars.name }}`으로 바꾸세요. 앞에 붙는 점에 유의하세요: 템플릿 내에서 vars는 `.vars.NAME`으로, 런타임 값은 `.runtime.NAME`으로, 컨텍스트 값은 `.context.NAME`으로 접근합니다.
 

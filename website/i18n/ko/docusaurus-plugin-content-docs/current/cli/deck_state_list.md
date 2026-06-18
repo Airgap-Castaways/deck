@@ -2,9 +2,10 @@
 source: docs/cli/deck_state_list.md
 source_hash: dd61c5342e9ffc2bca4db8b4148ab51af5e2798e
 ---
+```markdown
 ## deck state list
 
-적용 상태 파일 목록을 표시합니다
+적용 상태 파일 목록을 출력합니다
 
 ```
 deck state list [flags]
@@ -27,4 +28,5 @@ deck state list [flags]
 
 ### SEE ALSO
 
-* [deck state](deck_state.md)	 - 저장된 적용 상태를 검사하고 지웁니다
+* [deck state](deck_state.md)	 - 저장된 적용 상태를 확인하고 정리합니다
+```

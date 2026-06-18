@@ -2,9 +2,7 @@
 source: docs/cli/deck_server_logs.md
 source_hash: 0c41248e4d73a6fa120ca2c82b20e47194209321
 ---
-### deck server logs
-
-파일 또는 저널에서 로컬 서버 감사 로그를 읽습니다
+로컬 서버의 감사 로그를 파일이나 journal에서 읽습니다.
 
 ```
 deck server logs [flags]

@@ -2,6 +2,7 @@
 source: docs/cli/deck_server_up.md
 source_hash: 8419af28e3efdd01b6ca3f0e3aeecb53fd305800
 ---
+```markdown
 ## deck server up
 
 로컬 번들 서버를 시작합니다
@@ -35,3 +36,4 @@ deck server up [flags]
 ### SEE ALSO
 
 * [deck server](deck_server.md)	 - 로컬 콘텐츠 서버를 실행하고 원격 조회 기본값을 관리합니다
+```

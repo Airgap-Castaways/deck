@@ -4,7 +4,7 @@ source_hash: 1aec181528a979cd584705b3c78023dd0036475c
 ---
 ## deck server remote show
 
-저장된 유효 원격 서버 URL을 표시합니다
+저장된 원격 서버 URL에 실제로 적용되는 값을 표시합니다
 
 ```
 deck server remote show [flags]
@@ -25,4 +25,4 @@ deck server remote show [flags]
 
 ### SEE ALSO
 
-* [deck server remote](deck_server_remote.md)	 - 시나리오 조회를 위한 저장된 원격 서버 URL 관리
+* [deck server remote](deck_server_remote.md)	 - 시나리오 조회에 사용할 저장된 원격 서버 URL을 관리합니다
