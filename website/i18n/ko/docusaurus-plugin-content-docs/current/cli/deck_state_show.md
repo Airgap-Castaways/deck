@@ -2,7 +2,6 @@
 source: docs/cli/deck_state_show.md
 source_hash: 1c8d76f033ddb83fbd07134c68dc39ab35941c1a
 ---
-```markdown
 ## deck state show
 
 워크플로 입력으로 선택한 적용 상태를 표시합니다
@@ -36,4 +35,3 @@ deck state show [flags]
 ### SEE ALSO
 
 * [deck state](deck_state.md)	 - 저장된 적용 상태를 확인하고 비웁니다
-```

@@ -2,7 +2,6 @@
 source: docs/guides/running-the-server.md
 source_hash: 37c1f4a27031995b740b6e3202a7cc823d5e048c
 ---
-```markdown
 # 콘텐츠 서버 실행하기
 
 `deck server up`은 준비된 번들 루트를 공유 HTTP 엔드포인트로 바꿔 줍니다. 에어갭(망분리) 사이트의 모든 노드는 외부 네트워크 없이도 이 엔드포인트에서 번들을 내려받고, 사용 가능한 시나리오를 둘러보며, containerd가 동일한 소스에서 컨테이너 이미지를 가져오도록 할 수 있습니다.
@@ -275,4 +274,3 @@ deck server down
 - [Server Audit Log](../server-audit-log.md) — 감사 기록 스키마
 - [Offline Kubernetes example](../examples/README.md) — 전체 멀티 노드 안내
 - [CLI Reference — deck server up](../cli/deck_server_up.md)
-```

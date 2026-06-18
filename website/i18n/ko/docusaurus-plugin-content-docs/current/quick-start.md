@@ -2,7 +2,6 @@
 source: docs/quick-start.md
 source_hash: acc02d4dea6bf8b93cd509442a52ab253c6919e0
 ---
-```markdown
 # 빠른 시작
 
 이 튜토리얼은 기본 `deck` 흐름을 처음부터 끝까지 따라갑니다.
@@ -107,4 +106,3 @@ TLS와 데몬 플래그는 [CLI 레퍼런스](cli.md)를, `.deck/logs/server-aud
 - [번들 레이아웃](bundle-layout.md)
 - [CLI 레퍼런스](cli.md)
 - [deck ask 사용하기](ask.md)
-```

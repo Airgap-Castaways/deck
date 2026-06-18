@@ -2,7 +2,6 @@
 source: docs/server-audit-log.md
 source_hash: 620f8dc9fb0796fe8bbfadcafd8da8c258559a9f
 ---
-```markdown
 # 서버 감사 로그
 
 `deck server up`은 감사 레코드를 번들 루트 아래의 JSONL 로그 파일에 기록합니다.
@@ -65,5 +64,4 @@ source_hash: 620f8dc9fb0796fe8bbfadcafd8da8c258559a9f
 
 ```bash
 deck server logs --source file --path <root>/.deck/logs/server-audit.log
-```
 ```
