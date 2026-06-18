@@ -55,12 +55,21 @@ const config: Config = {
       tagName: 'link',
       attributes: {rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: 'anonymous'},
     },
+    {
+      tagName: 'link',
+      attributes: {rel: 'preconnect', href: 'https://cdn.jsdelivr.net'},
+    },
   ],
 
-  // Font stylesheets
+  // Font stylesheets. Pretendard supplies modern Korean glyphs (Latin keeps
+  // Fraunces/Hanken; Korean falls through to Pretendard in the font stacks).
   stylesheets: [
     {
       href: 'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,100..900,0..100,0..1;1,9..144,100..900,0..100,0..1&family=Hanken+Grotesk:ital,wght@0,100..900;1,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap',
+      type: 'text/css',
+    },
+    {
+      href: 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css',
       type: 'text/css',
     },
   ],
