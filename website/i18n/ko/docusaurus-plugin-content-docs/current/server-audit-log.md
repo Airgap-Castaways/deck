@@ -1,10 +1,11 @@
 ---
 source: docs/server-audit-log.md
-source_hash: 5e01e9b395b71b006683b1373b3ed35076101859
+source_hash: 620f8dc9fb0796fe8bbfadcafd8da8c258559a9f
 ---
+```markdown
 # 서버 감사 로그
 
-`deck server up`은 번들 루트 아래의 JSONL 로그 파일에 감사 레코드를 기록합니다.
+`deck server up`은 감사 레코드를 번들 루트 아래의 JSONL 로그 파일에 기록합니다.
 
 ## 위치
 
@@ -14,9 +15,9 @@ source_hash: 5e01e9b395b71b006683b1373b3ed35076101859
 <root>/.deck/logs/server-audit.log
 ```
 
-## 현재 생성되는 레코드 형태
+## 현재 방출되는 레코드 형태
 
-`deck server up`은 현재 구조화된 최상위 필드를 갖는 감사 스키마 버전 `2` 레코드를 생성합니다.
+`deck server up`은 현재 구조화된 최상위 필드를 갖는 감사 스키마 버전 `2` 레코드를 방출합니다.
 
 공통 필드:
 
@@ -51,17 +52,18 @@ source_hash: 5e01e9b395b71b006683b1373b3ed35076101859
 ## 호환성 참고
 
 - 현재 `deck server up`은 위의 구조화된 버전 2 형태를 기록합니다
-- `deck server logs`는 `source`, `event_type`, 또는 중첩된 `extra`와 같은 필드를 사용했던 이전 레거시 레코드도 여전히 정규화할 수 있습니다
-- 원시 감사 파일을 읽는 다운스트림 소비자는 앞으로 버전 2 최상위 구조를 기대해야 합니다
+- `deck server logs`는 `source`, `event_type`, 또는 중첩된 `extra`와 같은 필드를 사용하던 이전 레거시 레코드도 여전히 정규화할 수 있습니다
+- 원시 감사 파일을 읽는 다운스트림 소비자는 앞으로 버전 2 최상위 구조를 예상해야 합니다
 
 ## 로테이션
 
-- `deck server up`은 감사 로그가 구성된 크기 제한을 초과하면 로테이션합니다
-- 기본값: 최대 크기 `50` MB, 보관 파일 `10`개
+- `deck server up`은 감사 로그가 설정된 크기 제한을 초과하면 로테이션합니다
+- 기본값: 최대 크기 `50` MB, 보존 파일 `10`개
 - 관련 플래그: `--audit-max-size-mb`, `--audit-max-files`
 
 ## 로그 보기
 
 ```bash
 deck server logs --source file --path <root>/.deck/logs/server-audit.log
+```
 ```
