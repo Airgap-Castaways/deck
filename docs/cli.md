@@ -1,4 +1,4 @@
-# CLI Reference
+# CLI reference
 
 > Full per-command flag and argument reference is auto-generated under [the CLI reference](cli/deck.md). This page covers the overview and shared conventions only. For task-oriented guidance, see the [guides](guides/authoring-workflows.md).
 

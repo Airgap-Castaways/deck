@@ -1,4 +1,4 @@
-# Why deck?
+# Why deck
 
 `deck` started from a narrow but recurring operational problem: air-gapped Linux maintenance work. When you can't assume internet access, when SSH is heavily restricted, and when your procedures have grown beyond what a simple shell script can safely handle, you need a different approach.
 

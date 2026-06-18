@@ -1,4 +1,4 @@
-# Apply Run Logs
+# Apply run logs
 
 Every `deck apply` invocation writes a run log for diagnostics and audit purposes. Run logs are written outside the workspace under the XDG state root and are never included in bundles.
 

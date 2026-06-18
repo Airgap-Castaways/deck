@@ -65,6 +65,8 @@ steps:
 
 ## Variables
 
+For a guided walkthrough, see [Variables and templating](guides/variables-and-templating.md).
+
 Variables, runtime values, and execution context come from distinct sources:
 
 Static `vars` flow from four sources, in order of precedence:
@@ -253,6 +255,8 @@ Shared envelope rules:
 
 ### `when` — conditional execution
 
+For a guided walkthrough, see [Conditions with when (CEL)](guides/conditions-and-cel.md).
+
 `when` takes a CEL expression. Use `vars.` to reference input variables defined in `vars:` or `vars.yaml`, `runtime.` to reference step outputs registered earlier in the run plus built-in host facts under `runtime.host`, and `context.` to reference deck-supplied execution metadata.
 
 ```yaml
@@ -284,6 +288,8 @@ Use `CheckHost` when the workflow should fail fast on host suitability checks su
 
 ### `register` — capture step output
 
+For a guided walkthrough, see [Capturing step output with register](guides/capturing-output.md).
+
 `register` maps a runtime variable name to a step output key. The exported value is available to later steps via `runtime.` in CEL and `.runtime` in templates. If the step runs inside a parallel batch, the value becomes visible after the full batch succeeds.
 
 ```yaml
@@ -305,6 +311,8 @@ steps:
 `register` can only export output names that the selected step kind explicitly declares. For example, `InitKubeadm` can export `joinFile`, while steps with no declared outputs reject non-empty `register` mappings during validation.
 
 ## Phases
+
+For a guided walkthrough, see [Phases and parallelism](guides/phases-and-parallelism.md).
 
 Use phases when the procedure has natural boundaries — a host-prereqs block that must complete before a runtime block, for example. For simple apply workflows with a handful of steps, flat `steps:` is fine.
 

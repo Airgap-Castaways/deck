@@ -1,4 +1,4 @@
-# Workspace Layout
+# Workspace layout
 
 This document describes the standard directory structure of a `deck` project. Use `deck init` to scaffold this layout automatically.
 

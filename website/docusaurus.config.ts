@@ -88,7 +88,7 @@ const config: Config = {
       },
       title: 'deck',
       items: [
-        {type: 'doc', docId: 'README', position: 'left', label: 'Docs'},
+        {type: 'doc', docId: 'introduction', position: 'left', label: 'Docs'},
         {type: 'localeDropdown', position: 'right'},
         {href: 'https://github.com/Airgap-Castaways/deck', label: 'GitHub', position: 'right'},
       ],

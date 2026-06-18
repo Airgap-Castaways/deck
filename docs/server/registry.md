@@ -1,4 +1,4 @@
-# Server Registry
+# Server registry
 
 `deck server up` exposes a read-only OCI Distribution v2 registry at the `/v2` prefix. It serves the container image archives that `deck prepare` downloaded into the bundle, so that runtimes such as `containerd`, `docker`, or `crane` can pull images directly from the local server without any external network access.
 

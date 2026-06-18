@@ -1,4 +1,4 @@
-# Apply State
+# Apply state
 
 `deck apply` stores progress in a state file derived from the workflow `StateKey`.
 

@@ -1,4 +1,4 @@
-# Server Daemon Mode
+# Server daemon mode
 
 `deck server up --daemon` starts the content server in the background. The
 mechanism differs by platform: Linux uses a transient systemd service; macOS

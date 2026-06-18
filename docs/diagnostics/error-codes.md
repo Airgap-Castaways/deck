@@ -1,4 +1,4 @@
-# Diagnostics: Error Codes
+# Diagnostics: error codes
 
 deck renders CLI errors in the form `CODE: message` (see `internal/errcode`). The codes below are stable, machine-readable identifiers you can match against in scripts and logs.
 

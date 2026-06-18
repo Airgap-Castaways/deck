@@ -1,3 +1,7 @@
+---
+sidebar_label: "Using deck ask"
+---
+
 # deck ask
 
 `deck ask` is an experimental workflow assistant for the current workspace. It can answer questions, explain or review existing workflow files, create new workflow YAML, and refine an existing workflow when the request is clearly authoring work.

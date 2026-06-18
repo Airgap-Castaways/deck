@@ -1,4 +1,4 @@
-# Bundle Layout
+# Bundle layout
 
 `deck prepare` writes a self-contained workspace under the current directory. `deck bundle build` archives that workspace into a single tarball you carry into the site.
 

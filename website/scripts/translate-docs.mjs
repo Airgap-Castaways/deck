@@ -11,7 +11,7 @@ const KO = join(REPO, 'website/i18n/ko/docusaurus-plugin-content-docs/current');
 const GLOSSARY = join(REPO, 'website/i18n/TERMINOLOGY.md');
 
 const CORE = [
-  'docs/README.md', 'docs/quick-start.md', 'docs/workflow-model.md',
+  'docs/introduction.md', 'docs/quick-start.md', 'docs/workflow-model.md',
   'docs/cli.md', 'docs/apply-state.md', 'docs/offline-kubernetes.md',
   'docs/core-concepts/why-deck.md', 'docs/core-concepts/architecture.md',
 ];

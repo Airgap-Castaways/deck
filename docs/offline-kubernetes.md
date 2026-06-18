@@ -1,3 +1,7 @@
+---
+sidebar_label: "Tutorial: Offline Kubernetes"
+---
+
 # Offline Kubernetes Tutorial
 
 This tutorial shows how `deck` fits a Kubernetes maintenance session in the environment it is built for: no internet, no SSH-driven orchestration, and a local operator on each node.

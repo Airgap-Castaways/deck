@@ -1,3 +1,7 @@
+---
+sidebar_label: "Examples"
+---
+
 # Examples
 
 The files in this directory are starting points for real procedures. They show how typed steps express operational intent and how phases keep larger workflows scannable.
