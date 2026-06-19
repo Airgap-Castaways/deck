@@ -35,7 +35,7 @@ Shell scripts are easy to start and can run almost anywhere. They become a probl
 
 Deck ships as a single binary with a small, focused surface area:
 
-- **42 typed step kinds** — covering file writes, package installs, service management, sysctl, kernel modules, container image loading, kubeadm lifecycle, and more. Use [`deck ask`](ask.md) as an authoring assistant when you are drafting or reviewing workflows.
+- **Typed step kinds** — covering file writes, package installs, service management, sysctl, kernel modules, container image loading, kubeadm lifecycle, and more. Use [`deck ask`](ask.md) as an authoring assistant when you are drafting or reviewing workflows.
 - **CEL `when` conditions** — skip or guard any step with a typed expression evaluated at runtime.
 - **Phases and parallelism** — named phases make a procedure readable at a glance; `parallelGroup` runs independent steps concurrently within a phase.
 - **Variables and templating** — a shared `vars.yaml` plus per-invocation `--var` overrides keep site-specific values out of the step definitions.

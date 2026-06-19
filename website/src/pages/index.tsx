@@ -235,7 +235,7 @@ const FEATURES = [
   {
     icon: <IconScroll />,
     num: '03',
-    title: '42 typed step kinds',
+    title: 'Typed step kinds',
     body: 'Files, packages, images, services, kubeadm, sysctl, systemd units, operator prompts — declared in YAML and validated against embedded schemas at prepare time.',
   },
   {
