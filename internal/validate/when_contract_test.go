@@ -31,20 +31,16 @@ steps:
 }
 
 func TestDocsExamplesValidate(t *testing.T) {
-	paths, err := filepath.Glob(filepath.Join("..", "..", "docs", "examples", "*.yaml"))
+	// The documented example is the offline-kubernetes workspace. Validate it as
+	// a workspace so scenarios and component fragments resolve against shared
+	// vars and imports, rather than as standalone files.
+	root := filepath.Join("..", "..", "docs", "examples", "offline-kubernetes")
+	paths, err := Workspace(root)
 	if err != nil {
-		t.Fatalf("glob examples: %v", err)
+		t.Fatalf("validate offline-kubernetes workspace: %v", err)
 	}
 	if len(paths) == 0 {
-		t.Fatalf("no docs examples found")
-	}
-	for _, path := range paths {
-		path := path
-		t.Run(filepath.Base(path), func(t *testing.T) {
-			if err := File(path); err != nil {
-				t.Fatalf("validate example %s: %v", path, err)
-			}
-		})
+		t.Fatalf("no docs example workflows found in %s", root)
 	}
 }
 

@@ -62,6 +62,13 @@ linters:
         linters:
           - gosec
         text: 'G304'
+      # The i18n drift test recomputes git blob SHA-1 ids in pure Go to avoid
+      # shelling out to git. git blob ids are SHA-1 by definition — a content
+      # address, not a security primitive.
+      - path: 'internal/doccheck/i18n_drift_test\.go'
+        linters:
+          - gosec
+        text: 'G(401|505)'
 
 formatters:
   enable:

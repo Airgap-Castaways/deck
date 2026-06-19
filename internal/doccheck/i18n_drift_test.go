@@ -1,21 +1,32 @@
 package doccheck
 
 import (
+	"crypto/sha1"
+	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// gitHashObject returns `git hash-object <path>` (the git blob SHA) for a file.
+// gitHashObject returns the git blob SHA-1 for a file, computed in pure Go.
+// This matches `git hash-object <path>` (blob header + content) without
+// spawning an external git process — faster, portable, and one fewer external
+// dependency in the test environment. The translator (translate-docs.mjs)
+// records the same hash via `git hash-object`, so the two stay in sync.
 func gitHashObject(t *testing.T, path string) string {
 	t.Helper()
-	out, err := exec.Command("git", "hash-object", path).Output()
+	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("git hash-object %s: %v", path, err)
+		t.Fatalf("read file for hash %s: %v", path, err)
 	}
-	return strings.TrimSpace(string(out))
+	// git blob IDs are SHA-1 by definition; this is a content address, not a
+	// security control. hash.Hash.Write never returns an error.
+	h := sha1.New()
+	_, _ = io.WriteString(h, fmt.Sprintf("blob %d\x00", len(data)))
+	_, _ = h.Write(data)
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 // readSourceHash extracts `source:` and `source_hash:` from a translated file's
