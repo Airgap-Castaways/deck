@@ -1,0 +1,29 @@
+steps:
+  - id: verify-selected-node
+    kind: Command
+    spec:
+      timeout: 30s
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          selected_node="{{ or (index .vars "hostName") "" }}"
+          expected_ip="{{ or (index .vars "ip") "" }}"
+          expected_role="{{ or (index .vars "role") "" }}"
+          expected_hostname="${selected_node}"
+          actual_hostname="$(hostname -s 2>/dev/null || hostname 2>/dev/null || true)"
+          actual_ips="$(ip -4 -o addr show scope global | awk '{split($4, ip, "/"); printf "%s ", ip[1]}')"
+
+          if [[ -z "${selected_node}" || -z "${expected_ip}" || -z "${expected_role}" ]]; then
+            echo "host-specific vars were not selected; ensure local hostname exists under vars.hosts" >&2
+            echo "selected hostName=${selected_node} ip=${expected_ip} role=${expected_role}" >&2
+            exit 1
+          fi
+
+          if [[ " ${actual_ips} " != *" ${expected_ip} "* && "${actual_hostname}" != "${expected_hostname}" ]]; then
+            echo "selected node ${selected_node} does not match this host" >&2
+            echo "expected ip=${expected_ip} or hostname=${expected_hostname}" >&2
+            echo "actual hostname=${actual_hostname} ips=${actual_ips}" >&2
+            exit 1
+          fi

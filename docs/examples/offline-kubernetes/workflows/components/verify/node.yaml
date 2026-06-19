@@ -1,0 +1,36 @@
+steps:
+  # Confirm kubelet has written its config file — sign that kubelet started
+  # and successfully fetched config from the API server.
+  - id: verify-kubelet-config
+    kind: WaitForFile
+    spec:
+      path: /var/lib/kubelet/config.yaml
+      type: file
+      nonEmpty: true
+      timeout: 5m
+      interval: 5s
+  # Confirm the kubelet systemd unit is active.
+  - id: verify-kubelet-service
+    kind: WaitForService
+    spec:
+      name: kubelet
+      timeout: 5m
+      interval: 5s
+  # Confirm the Kubernetes-dedicated containerd instance is active.
+  - id: verify-containerd-service
+    kind: WaitForService
+    spec:
+      name: "{{ .vars.runtime.containerd.serviceName }}"
+      timeout: 5m
+      interval: 5s
+  # Verify runc is configured as the default runtime.
+  - id: verify-runc-default-runtime
+    kind: Command
+    spec:
+      timeout: 30s
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          grep -R 'default_runtime_name = "runc"' "{{ .vars.runtime.containerd.confDir }}" "{{ .vars.runtime.containerd.configPath }}"

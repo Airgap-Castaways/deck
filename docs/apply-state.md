@@ -1,8 +1,8 @@
-# Apply State
+# Apply state
 
 `deck apply` stores progress in a state file derived from the workflow `StateKey`.
 
-## Where state is stored
+## Where state is stored {#where-state-is-stored}
 
 Local workflow state is stored in the workspace:
 
@@ -39,15 +39,11 @@ Default state is user-scoped.
 - Repeated privileged remote workflow runs should use an explicit system state directory such as `/var/lib/deck/state/apply`.
 - If privileged and unprivileged commands both need to inspect state, choose explicit directory permissions deliberately.
 
-## What identifies saved state
+## What identifies saved state {#what-identifies-saved-state}
 
-- resolved workflow bytes after imports expand
-- effective vars for the run
-- the apply execution context fingerprint
+The state key is a fingerprint of three things: the resolved workflow bytes after imports expand, the effective vars for the run, and the apply execution context. This means that changing the workflow file, supplying different `--var` overrides or `-f` vars files, or changing the bundle root will produce a **new** state key — and any prior resume progress stored under the old key will be orphaned, not resumed. The old state file is not deleted or treated as corrupt; it simply will not be selected the next time deck computes a different key.
 
-This keeps state isolated by the final workflow fingerprint and input vars.
-
-Workflow, vars, or context changes produce a different state key. Old state is not treated as corrupt or invalid; it is simply no longer selected by the new key.
+If you are unsure which state file a given invocation will use, run `deck state show` with the same flags you intend to pass to `deck apply` — it prints the resolved state key and file path without running anything. See [troubleshooting.md](troubleshooting.md) if saved state is not being picked up as expected.
 
 ## Migration
 
@@ -73,7 +69,7 @@ Migration copies state instead of deleting old files. If both old XDG state and 
 
 At `--v>=1`, deck reports migration as `event=state_migrated source=<old> target=<new>`.
 
-## Phase-based resume
+## Phase-based resume {#phase-based-resume}
 
 Apply now resumes at phase boundaries, not step boundaries.
 
@@ -94,7 +90,7 @@ Apply now resumes at phase boundaries, not step boundaries.
 
 New state files use a versioned v2 JSON shape. Older v1 files remain readable and are normalized internally.
 
-## Parallel batches inside a phase
+## Parallel batches inside a phase {#parallel-batches-inside-a-phase}
 
 When a phase uses explicit `parallelGroup` batches:
 

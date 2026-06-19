@@ -103,7 +103,7 @@ func newServerUpCommand(env *cliEnv) *cobra.Command {
 	cmd.Flags().String("tls-cert", "", "TLS certificate path")
 	cmd.Flags().String("tls-key", "", "TLS private key path")
 	cmd.Flags().Bool("tls-self-signed", false, "auto-generate and use self-signed TLS cert")
-	cmd.Flags().BoolP("daemon", "d", false, "run as a daemon (systemd service on Linux)")
+	cmd.Flags().BoolP("daemon", "d", false, "run as a background daemon (systemd on Linux; detached process on macOS/Windows; see docs/server/daemon.md)")
 	cmd.Flags().String("unit", "deck-server", "daemon unit/name")
 	return cmd
 }

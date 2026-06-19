@@ -19,7 +19,7 @@ Phase imports resolve from `workflows/components/`. Write component-relative pat
 `workflows/components/` files are step fragments. They contain only `steps:` and may reference shared `vars.*`, but shared defaults should stay in `workflows/vars.yaml` or the importing scenario `vars:` block.
 
 <!-- BEGIN GENERATED:WORKFLOW_SCHEMA_CONTRACT -->
-## Workflow Schema Contract
+## Workflow Schema Contract {#workflow-schema-contract}
 
 Top-level workflow authoring reference for deck workflows.
 
@@ -63,7 +63,9 @@ steps:
 - Each step still validates against its own kind-specific schema after the top-level workflow schema passes.
 <!-- END GENERATED:WORKFLOW_SCHEMA_CONTRACT -->
 
-## Variables
+## Variables {#variables}
+
+For a guided walkthrough, see [Variables and templating](guides/variables-and-templating.md).
 
 Variables, runtime values, and execution context come from distinct sources:
 
@@ -158,7 +160,7 @@ Vars file paths are relative to the same `workflows/` location that contains `va
 Node-scoped vars are static inputs selected before planning and state hashing; `runtime.host` remains the runtime fact namespace for detected OS, architecture, and kernel data.
 
 <!-- BEGIN GENERATED:SYSTEM_VARIABLES -->
-### Built-In Runtime Fields
+### Built-In Runtime Fields {#built-in-runtime-fields}
 
 `runtime.host` is a built-in reserved runtime namespace in both prepare and apply. Use it for detected host facts such as OS family, distro ID, version, architecture, and kernel release. Do not model detected local host facts as static `vars` values.
 
@@ -174,7 +176,7 @@ Node-scoped vars are static inputs selected before planning and state hashing; `
 | `runtime.host.arch` | `string` | Normalized host architecture such as `amd64` or `arm64`. |
 | `runtime.host.kernel.release` | `string` | Kernel release from `/proc/sys/kernel/osrelease`. |
 
-### Execution Context Fields
+### Execution Context Fields {#execution-context-fields}
 
 `context` is available in both `when` expressions and templates. Canonical fields are:
 
@@ -225,7 +227,7 @@ When a prepare download step does not set an explicit output location, deck uses
 - `DownloadImage`: `images/`
 - `DownloadPackage`: `packages/`, or `packages/deb/<release>` and `packages/rpm/<release>` when `repo.type` is set
 
-## Step Envelope Contract
+## Step Envelope Contract {#step-envelope-contract}
 
 Every workflow step uses the same outer envelope before kind-specific `spec` validation runs.
 
@@ -251,7 +253,9 @@ Shared envelope rules:
 - if a step runs inside a parallel batch, its `register` outputs become visible only after the full batch succeeds
 - `spec` is always validated again against the selected step kind after the shared envelope passes
 
-### `when` — conditional execution
+### `when` — conditional execution {#when--conditional-execution}
+
+For a guided walkthrough, see [Conditions with when (CEL)](guides/conditions-and-cel.md).
 
 `when` takes a CEL expression. Use `vars.` to reference input variables defined in `vars:` or `vars.yaml`, `runtime.` to reference step outputs registered earlier in the run plus built-in host facts under `runtime.host`, and `context.` to reference deck-supplied execution metadata.
 
@@ -282,7 +286,9 @@ steps:
 
 Use `CheckHost` when the workflow should fail fast on host suitability checks such as `swap`, `kernelModules`, or required binaries. `CheckHost` validates those conditions, but `runtime.host` exists even when the workflow does not include a `CheckHost` step.
 
-### `register` — capture step output
+### `register` — capture step output {#register--capture-step-output}
+
+For a guided walkthrough, see [Capturing step output with register](guides/capturing-output.md).
 
 `register` maps a runtime variable name to a step output key. The exported value is available to later steps via `runtime.` in CEL and `.runtime` in templates. If the step runs inside a parallel batch, the value becomes visible after the full batch succeeds.
 
@@ -304,7 +310,9 @@ steps:
 
 `register` can only export output names that the selected step kind explicitly declares. For example, `InitKubeadm` can export `joinFile`, while steps with no declared outputs reject non-empty `register` mappings during validation.
 
-## Phases
+## Phases {#phases}
+
+For a guided walkthrough, see [Phases and parallelism](guides/phases-and-parallelism.md).
 
 Use phases when the procedure has natural boundaries — a host-prereqs block that must complete before a runtime block, for example. For simple apply workflows with a handful of steps, flat `steps:` is fine.
 
@@ -331,9 +339,29 @@ phases:
 
 Import paths are relative to `workflows/components/`. Write `k8s/prereq.yaml`, not `../components/k8s/prereq.yaml`.
 
+### Conditional imports (`imports[].when`)
+
+Each import entry accepts an optional `when` CEL condition. Deck AND-combines the import's `when` into every step loaded from that file. The combination form is `(import-when) && (step-when)`.
+
+- If the import has no `when`, steps keep their own `when` unchanged.
+- If a step has no `when` of its own, it inherits the import's `when` directly.
+- If both are present, the result is `(import-when) && (step-when)`.
+
+```yaml
+phases:
+  - name: gpu-setup
+    imports:
+      - path: gpu/setup.yaml
+        when: "vars.gpu == true"   # applied (AND) to every step imported from gpu/setup.yaml
+      - path: base.yaml
+        # no when — steps from base.yaml keep their own conditions unchanged
+```
+
+Use `vars.` to test static variables and `runtime.` to test runtime facts, the same as in a step-level `when`.
+
 Top-level `steps:` are still valid. Execution normalizes them into an implicit phase named `default`.
 
-## Parallel batches
+## Parallel batches {#parallel-batches}
 
 Use `parallelGroup` when a few consecutive steps are safe to run together.
 
@@ -406,7 +434,7 @@ The public step kind reference is organized by workflow phase and task-oriented 
 
 Use [Step Kinds](step-kinds.md) for the current phase/group index and exact supported kind inventory.
 
-## Prepare semantics
+## Prepare semantics {#prepare-semantics}
 
 `prepare` uses the same step grammar as `apply`, but command context determines which kinds are valid.
 
@@ -433,7 +461,7 @@ Validating before transport is one of the main reasons to use a workflow model i
 
 ## Related references
 
-- `../concepts/why-deck.md`
+- `core-concepts/why-deck.md`
 - [Workspace Layout](workspace-layout.md#component-fragment-contract)
 - `bundle-layout.md`
 - `../../schemas/deck-workflow.schema.json`

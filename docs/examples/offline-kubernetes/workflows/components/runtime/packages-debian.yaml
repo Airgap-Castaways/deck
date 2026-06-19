@@ -1,0 +1,7 @@
+steps:
+  - id: install-runtime-dependencies-debian
+    kind: InstallPackage
+    spec:
+      packages: "{{ .vars.prepare.packages.debian }}"
+      restrictToRepos:
+        - /etc/apt/sources.list.d/deck-offline.list

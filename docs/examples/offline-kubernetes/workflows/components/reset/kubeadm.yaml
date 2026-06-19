@@ -1,0 +1,24 @@
+steps:
+  # Run kubeadm reset to tear down Kubernetes state on this node.
+  # Removes etcd data, PKI, CNI config, and kubelet state files;
+  # stops and optionally restarts kubelet after the reset completes.
+  - id: reset-kubeadm-state
+    kind: ResetKubeadm
+    timeout: 10m
+    spec:
+      force: true
+      ignoreErrors: true
+      criSocket: "{{ .vars.runtime.criSocket }}"
+      stopKubelet: true
+      stopKubeletAfterReset: true
+      removePaths:
+        - /etc/kubernetes
+        - /var/lib/etcd
+        - /var/lib/cni
+        - /etc/cni/net.d
+        - /var/lib/kubelet/pki
+      removeFiles:
+        - /var/lib/kubelet/config.yaml
+        - /var/lib/kubelet/kubeadm-flags.env
+        - "{{ .vars.operator.home }}/.kube/config"
+      waitForMissingManifestsGlob: /etc/kubernetes/manifests/*.yaml

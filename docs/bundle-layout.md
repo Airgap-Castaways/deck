@@ -1,4 +1,4 @@
-# Bundle Layout
+# Bundle layout
 
 `deck prepare` writes a self-contained workspace under the current directory. `deck bundle build` archives that workspace into a single tarball you carry into the site.
 
@@ -51,6 +51,48 @@ Remaining drift gap:
 
 - package reuse still does not detect upstream repository drift on its own; closing that gap likely requires repository snapshot metadata such as repodata/release fingerprints or explicit mirror version contracts.
 - image reuse now preserves fetched source digests in metadata, but mutable tag drift is not yet probed on reuse; a follow-up can compare saved digests against current registry manifests when remote access is allowed.
+
+## Apply-time manifest verification {#apply-time-manifest-verification}
+
+Whenever `deck apply` resolves a bundle root, it verifies the bundle manifest before executing any workflow phase. A verification failure aborts the run immediately — no phase begins.
+
+### Invocations that trigger verification
+
+Verification runs automatically in three cases:
+
+- **Plain `deck apply` in a workspace** — when no explicit path is given, deck uses the current directory as the bundle root if it contains a `workflows/` tree; verification runs against it.
+- **`deck apply --root <dir>`** — the explicit root is used as the bundle root; verification runs.
+- **`deck apply <bundle-path>`** — a positional directory or `.tar` archive is used as the bundle root; verification runs. When a `.tar` archive is given, deck extracts it to a keyed cache directory first, then verifies the extracted contents.
+
+Verification is skipped only when no bundle root is resolved — for example, when `--workflow <path>` is supplied without a positional bundle, or when `--scenario <name> --source server` is supplied without a positional bundle.
+
+To verify a bundle explicitly before transfer or apply, run:
+
+```bash
+deck bundle verify --file ./bundle.tar
+```
+
+### What is verified
+
+Verification reads `.deck/manifest.json` and checks every entry against the corresponding artifact in `outputs/{files,packages,images,bin}` (the `outputs/` prefix is optional — legacy bundles using bare `files/`, `packages/`, `images/`, `bin/` paths are also tracked). For each entry it confirms:
+
+- the artifact exists on disk (or inside the tar archive),
+- the SHA-256 digest matches the recorded value,
+- the file size matches when a non-zero size is recorded.
+
+After per-entry checks, the function also cross-checks that every package-repository index file (`Release`, `Packages.gz`, `repomd.xml`) and every image `.tar` present in the bundle is covered by a manifest entry.
+
+See [workspace-layout.md](workspace-layout.md) for the full list of paths tracked by the manifest.
+
+### Failure modes
+
+| Error code | Condition |
+|---|---|
+| `E_MANIFEST_MISSING` | `.deck/manifest.json` is absent from the bundle directory or tar archive |
+| `E_MANIFEST_EMPTY` | The manifest file exists but its `entries` array is empty |
+| `E_BUNDLE_INTEGRITY` | An artifact is missing, or its size or SHA-256 digest does not match the manifest, or a manifest entry path is structurally invalid, or a required offline artifact is present in the bundle but absent from the manifest |
+
+See [diagnostics/error-codes.md](diagnostics/error-codes.md) for the full error-code catalog and [troubleshooting.md](troubleshooting.md) for resolution steps.
 
 ## Core rule
 

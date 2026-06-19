@@ -1,0 +1,19 @@
+steps:
+  # Remove temporary join and image artifacts created during bootstrap.
+  # Paths for old plaintext join tokens and certificate-upload logs from the
+  # bundle outputs directory are intentionally omitted: join credentials are
+  # now distributed via encrypted Input/Message and those paths no longer exist.
+  - id: cleanup-deck-join-artifacts
+    kind: Command
+    spec:
+      timeout: 30s
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          # Remove the join command file and any cached image tarballs.
+          rm -f "{{ .vars.join.file }}"
+          rm -rf /tmp/deck/images
+          # Reload systemd unit files in case any were modified during reset.
+          systemctl daemon-reload

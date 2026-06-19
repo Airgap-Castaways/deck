@@ -248,7 +248,7 @@ func containsString(values []string, want string) bool {
 }
 
 func RenderWorkflowSchemaPartial(schemaPath string, schema map[string]any, meta PageMetadata) []byte {
-	return renderCoreSchemaSection("## Workflow Schema Contract", schemaPath, schema, meta, true)
+	return renderCoreSchemaSection("## Workflow Schema Contract {#workflow-schema-contract}", schemaPath, schema, meta, true)
 }
 
 func RenderToolDefinitionSchemaPartial(schemaPath string, schema map[string]any, meta PageMetadata) []byte {
@@ -256,15 +256,15 @@ func RenderToolDefinitionSchemaPartial(schemaPath string, schema map[string]any,
 }
 
 func RenderComponentFragmentSchemaPartial(schemaPath string, schema map[string]any, meta PageMetadata) []byte {
-	return renderCoreSchemaSection("#### Component Fragment Contract", schemaPath, schema, meta, false)
+	return renderCoreSchemaSection("#### Component Fragment Contract {#component-fragment-contract}", schemaPath, schema, meta, false)
 }
 
 func RenderSystemVariablesPartial() []byte {
 	var buf bytes.Buffer
-	buf.WriteString("### Built-In Runtime Fields\n\n")
+	buf.WriteString("### Built-In Runtime Fields {#built-in-runtime-fields}\n\n")
 	buf.WriteString("`runtime.host` is a built-in reserved runtime namespace in both prepare and apply. Use it for detected host facts such as OS family, distro ID, version, architecture, and kernel release. Do not model detected local host facts as static `vars` values.\n\n")
 	buf.WriteString(renderRuntimeFieldTable(workflowexec.RuntimeHostFieldDefinitions()))
-	buf.WriteString("\n### Execution Context Fields\n\n")
+	buf.WriteString("\n### Execution Context Fields {#execution-context-fields}\n\n")
 	buf.WriteString("`context` is available in both `when` expressions and templates. Canonical fields are:\n\n")
 	buf.WriteString(renderContextFieldTable(workflowcontext.FieldDefinitions()))
 	buf.WriteString("\nLegacy aliases remain available for existing templates: `context.bundleRoot` maps to `context.paths.bundleRoot`, and `context.stateFile` maps to `context.paths.stateFile`.\n\n")

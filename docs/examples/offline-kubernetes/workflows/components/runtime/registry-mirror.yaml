@@ -1,0 +1,17 @@
+steps:
+  - id: configure-containerd-registry-mirrors
+    kind: WriteContainerdRegistryHosts
+    spec:
+      path: "{{ .vars.runtime.containerd.certsDir }}"
+      registryHosts: "{{ .vars.runtime.containerd.mirrorHosts }}"
+  - id: restart-containerd-after-registry-mirror
+    kind: ManageService
+    spec:
+      name: "{{ .vars.runtime.containerd.serviceName }}"
+      state: restarted
+  - id: wait-containerd-after-registry-mirror
+    kind: WaitForService
+    spec:
+      name: "{{ .vars.runtime.containerd.serviceName }}"
+      timeout: 5m
+      interval: 2s

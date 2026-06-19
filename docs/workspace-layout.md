@@ -1,4 +1,4 @@
-# Workspace Layout
+# Workspace layout
 
 This document describes the standard directory structure of a `deck` project. Use `deck init` to scaffold this layout automatically.
 
@@ -18,7 +18,7 @@ A `deck` workspace is organized into three main functional areas: **Workflows**,
 │   ├── packages/       # Prepared package payloads
 │   ├── images/         # Prepared image payloads
 │   └── bin/            # Prepared runtime binaries by os/arch
-└── .deck/              # (Internal) Checksums, manifest, and run history
+└── .deck/              # (Internal) Checksums and manifest
 ```
 
 ## Workflows (`workflows/`)
@@ -28,7 +28,7 @@ The `workflows/` directory contains all your operational logic.
 ### Prepare Entrypoint (`workflows/prepare.yaml`)
 `workflows/prepare.yaml` is the fixed entry workflow for `deck prepare`.
 
-### Scenarios (`workflows/scenarios/`)
+### Scenarios (`workflows/scenarios/`) {#scenarios-workflowsscenarios}
 Scenarios are the primary entrypoints for `deck apply`.
 - Each file here must be a complete workflow with `version` and either `steps` or `phases`.
 - Typical filenames: `apply.yaml`, `bootstrap.yaml`, `worker-join.yaml`.
@@ -41,7 +41,7 @@ Components are **Component Fragments**—reusable sets of steps that are importe
 - **Example**: `workflows/components/k8s/runtime.yaml` is imported as `k8s/runtime.yaml`.
 
 <!-- BEGIN GENERATED:COMPONENT_FRAGMENT_CONTRACT -->
-#### Component Fragment Contract
+#### Component Fragment Contract {#component-fragment-contract}
 
 Reference for reusable workflow component fragments located under `workflows/components/`.
 
@@ -92,8 +92,8 @@ These directories hold the prepared source material that `apply` consumes.
 ## Internal Metadata (`.deck/`)
 
 This directory is managed by `deck` and should not be edited manually.
-- `manifest.json`: Tracks every file in the workspace for integrity and versioning.
-- `runs/`: Local execution history for the workspace.
+- `.deck/manifest.json` — digest manifest of canonical prepared outputs (`outputs/{files,packages,images,bin}`). `workflows/` and the deck launcher itself are not tracked. Used as the integrity baseline for `bundle verify` and at apply start.
+- `.deck/state/apply/` — phase-based apply state (see [apply-state.md](apply-state.md)). Apply run logs (record.json / events.jsonl) are written to `$XDG_STATE_HOME/deck/runs/<run-id>/`, not inside the workspace (see [apply-runlogs.md](apply-runlogs.md)).
 
 ## Related References
 

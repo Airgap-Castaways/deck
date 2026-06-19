@@ -19,7 +19,7 @@ DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 DIRTY ?= $(shell if [ -n "$$(git status --short 2>/dev/null)" ]; then printf true; else printf false; fi)
 LDFLAGS ?= -X $(BUILDINFO_PKG).Version=$(VERSION) -X $(BUILDINFO_PKG).Commit=$(COMMIT) -X $(BUILDINFO_PKG).Date=$(DATE) -X $(BUILDINFO_PKG).Dirty=$(DIRTY)
 
-.PHONY: build test lint vuln generate verify-generated print-build-meta ensure-goreleaser release-check release-snapshot release-publish
+.PHONY: build test lint vuln generate verify-generated print-build-meta ensure-goreleaser release-check release-snapshot release-publish docs-install docs-serve docs-build docs-deploy docs-check docs-translate
 
 GENERATED_PATHS := \
 	docs/contributing/tool-definition-schema.md \
@@ -27,11 +27,7 @@ GENERATED_PATHS := \
 	docs/step-kinds.md \
 	docs/workflow-model.md \
 	docs/workspace-layout.md \
-	docs/reference/groups \
-	docs/reference/step-kinds \
-	docs/reference/step-kinds.md \
-	docs/reference/typed-steps \
-	docs/reference/typed-steps.md \
+	docs/cli \
 	schemas \
 	':(exclude)schemas/embed.go' \
 	':(exclude)schemas/embed_test.go'
@@ -45,6 +41,9 @@ test:
 
 generate:
 	$(GO) run ./cmd/schema-gen
+	@mkdir -p $(BIN_DIR)
+	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/deck
+	$(BIN) __gendocs docs/cli
 
 verify-generated: generate
 	git diff --exit-code -- $(GENERATED_PATHS)
@@ -66,6 +65,24 @@ vuln: $(GOVULNCHECK)
 
 print-build-meta:
 	@printf 'VERSION=%s\nCOMMIT=%s\nDATE=%s\nDIRTY=%s\n' "$(VERSION)" "$(COMMIT)" "$(DATE)" "$(DIRTY)"
+
+docs-install:
+	cd website && npm ci
+
+docs-serve:
+	cd website && npm run start
+
+docs-build:
+	cd website && npm run build
+
+docs-deploy:
+	cd website && GIT_USER=$${GIT_USER:?set GIT_USER to your GitHub username} npm run deploy
+
+docs-check:
+	$(GO) test ./internal/doccheck/ -run 'TestI18nKoDrift|TestDocsRelativeLinksResolve|TestAllErrorCodesDocumented'
+
+docs-translate:
+	node website/scripts/translate-docs.mjs $(ARGS)
 
 ensure-goreleaser:
 	@mkdir -p "$(BIN_DIR)"

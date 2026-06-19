@@ -1,0 +1,10 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="32" height="32" rx="6" fill="#0a0d12"/>
+  <!-- Three stacked layers, amber accent on top (online), muted for middle/bottom -->
+  <rect x="4" y="3"  width="24" height="5.5" rx="1" fill="#f5a524"/>
+  <rect x="4" y="13.5" width="24" height="5.5" rx="1" fill="#4a5568"/>
+  <rect x="4" y="23" width="24" height="5.5" rx="1" fill="#4a5568"/>
+  <!-- gap dashes -->
+  <rect x="13" y="10"  width="6" height="1.2" rx="0.4" fill="#f5a524" opacity="0.4"/>
+  <rect x="13" y="11.6" width="6" height="1.2" rx="0.4" fill="#f5a524" opacity="0.2"/>
+</svg>

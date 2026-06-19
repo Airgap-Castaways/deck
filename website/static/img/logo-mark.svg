@@ -1,0 +1,10 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="deck mark">
+  <!-- Three stacked layers with an air-gap break between layers 1 and 2 -->
+  <rect x="4" y="2"  width="24" height="6" rx="1.5" fill="currentColor"/>
+  <!-- gap here — no bar at y=10-13, visually representing the air-gap -->
+  <rect x="4" y="14" width="24" height="6" rx="1.5" fill="currentColor"/>
+  <rect x="4" y="23" width="24" height="6" rx="1.5" fill="currentColor"/>
+  <!-- Small break/gap indicator dashes -->
+  <rect x="14" y="10" width="4" height="1.5" rx="0.5" fill="currentColor" opacity="0.35"/>
+  <rect x="14" y="12" width="4" height="1.5" rx="0.5" fill="currentColor" opacity="0.35"/>
+</svg>

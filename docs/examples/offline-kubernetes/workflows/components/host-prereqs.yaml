@@ -1,0 +1,87 @@
+steps:
+  - id: disable-swap
+    kind: Swap
+    spec:
+      disable: true
+      persist: true
+  - id: load-kubernetes-kernel-modules
+    kind: KernelModule
+    spec:
+      names:
+        - overlay
+        - br_netfilter
+      load: true
+      persist: true
+      persistFile: /etc/modules-load.d/kubernetes.conf
+  - id: ensure-security-limits-dir
+    kind: EnsureDirectory
+    spec:
+      path: /etc/security/limits.d
+      mode: "0755"
+  - id: write-kubernetes-security-limits
+    kind: WriteFile
+    spec:
+      path: /etc/security/limits.d/99-kubernetes.conf
+      mode: "0644"
+      content: |
+        # Raise process and file descriptor limits to avoid "Too many open files" failures.
+        * soft nofile 65535
+        * hard nofile 65535
+        * soft nproc 65535
+        * hard nproc 65535
+        * soft stack unlimited
+        * hard stack unlimited
+  - id: write-kubernetes-sysctl
+    kind: WriteFile
+    spec:
+      path: /etc/sysctl.d/99-kubernetes-cri.conf
+      mode: "0644"
+      content: |
+        # Enable IPv4 forwarding so Kubernetes pod routing can forward traffic between interfaces.
+        net.ipv4.ip_forward = 1
+
+        # Let iptables-based kube-proxy/CNI rules see bridged IPv4 traffic.
+        net.bridge.bridge-nf-call-iptables = 1
+
+        # Keep IPv6 bridge filtering aligned for future dual-stack use; validate necessity in IPv4-only tests.
+        net.bridge.bridge-nf-call-ip6tables = 1
+
+        # Allow the kernel to overcommit memory; this avoids conservative allocation failures for Kubernetes components.
+        vm.overcommit_memory = 1
+
+        # Reboot automatically after a kernel panic so an unattended node can return to service.
+        kernel.panic = 10
+
+        # Treat kernel oops events as fatal and follow the panic reboot policy for node recovery.
+        kernel.panic_on_oops = 1
+  - id: apply-kubernetes-sysctl
+    kind: Sysctl
+    spec:
+      writeFile: /etc/sysctl.d/99-kubernetes-cri.conf
+      apply: true
+      values:
+        net.ipv4.ip_forward: 1
+        net.bridge.bridge-nf-call-iptables: 1
+        net.bridge.bridge-nf-call-ip6tables: 1
+        vm.overcommit_memory: 1
+        kernel.panic: 10
+        kernel.panic_on_oops: 1
+  - id: write-inotify-sysctl
+    kind: WriteFile
+    spec:
+      path: /etc/sysctl.d/99-inotify.conf
+      mode: "0644"
+      content: |
+        # Raise inotify limits for large file watch workloads.
+        fs.inotify.max_user_watches = 524288
+        fs.inotify.max_user_instances = 8192
+        fs.inotify.max_queued_events = 16384
+  - id: apply-inotify-sysctl
+    kind: Sysctl
+    spec:
+      writeFile: /etc/sysctl.d/99-inotify.conf
+      apply: true
+      values:
+        fs.inotify.max_user_watches: 524288
+        fs.inotify.max_user_instances: 8192
+        fs.inotify.max_queued_events: 16384

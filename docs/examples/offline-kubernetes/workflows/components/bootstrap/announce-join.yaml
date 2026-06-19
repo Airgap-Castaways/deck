@@ -1,0 +1,40 @@
+steps:
+  # Ask the operator for a passphrase used to encrypt the worker join command.
+  # The value is kept in memory (register) and never written to apply state.
+  - id: join-passphrase
+    kind: Input
+    register:
+      joinPass: value
+    spec:
+      message: "Passphrase to encrypt the worker join command (share it with worker operators out-of-band)"
+      secret: true
+      required: true
+  # Generate a worker join command and print it ONLY in encrypted form.
+  # The ciphertext is safe to show in logs; it is useless without the passphrase.
+  - id: announce-encrypted-join
+    kind: Command
+    spec:
+      timeout: 2m
+      env:
+        DECK_JOIN_PASS: "{{ .runtime.joinPass }}"
+      command:
+        - bash
+        - -lc
+        - |
+          set -euo pipefail
+          join_cmd="$(kubeadm token create --print-join-command --kubeconfig /etc/kubernetes/admin.conf)"
+          cipher="$(printf '%s\n' "${join_cmd}" \
+            | openssl enc -aes-256-cbc -pbkdf2 -salt -base64 -A -pass env:DECK_JOIN_PASS)"
+          printf '\n----- BEGIN ENCRYPTED JOIN -----\n%s\n----- END ENCRYPTED JOIN -----\n\n' "${cipher}"
+  # Operator-facing instructions for using the ciphertext above.
+  - id: announce-join-instructions
+    kind: Message
+    spec:
+      level: info
+      message: |
+        A worker join command was printed above as an encrypted block.
+        To add a worker:
+          1. Copy the text between BEGIN/END ENCRYPTED JOIN.
+          2. On the worker, run the join scenario:  deck apply scenarios/join.yaml --server {{ .vars.server.url }}
+          3. Paste the ciphertext when prompted, then enter the passphrase you chose here.
+        The passphrase is never shown; share it through a separate trusted channel.

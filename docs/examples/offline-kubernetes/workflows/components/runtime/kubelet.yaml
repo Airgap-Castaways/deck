@@ -1,0 +1,52 @@
+steps:
+  - id: ensure-kubelet-state-dir
+    kind: EnsureDirectory
+    spec:
+      path: /var/lib/kubelet
+      mode: "0755"
+  - id: ensure-kubelet-defaults-dir
+    kind: EnsureDirectory
+    spec:
+      path: /etc/default
+      mode: "0755"
+  - id: configure-kubelet-node-ip
+    kind: WriteFile
+    spec:
+      path: /etc/default/kubelet
+      mode: "0644"
+      content: |
+        KUBELET_EXTRA_ARGS=--node-ip={{ .vars.ip }}
+  - id: write-kubelet-systemd-unit
+    kind: WriteSystemdUnit
+    spec:
+      path: /etc/systemd/system/kubelet.service
+      mode: "0644"
+      content: |
+        [Unit]
+        Description=kubelet
+        Documentation=https://kubernetes.io/docs/
+        Wants=network-online.target
+        After=network-online.target
+
+        [Service]
+        EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+        EnvironmentFile=-/etc/default/kubelet
+        ExecStart=/usr/bin/kubelet \
+          --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf \
+          --kubeconfig=/etc/kubernetes/kubelet.conf \
+          --config=/var/lib/kubelet/config.yaml \
+          $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+        Restart=always
+        StartLimitInterval=0
+        RestartSec=10
+
+        [Install]
+        WantedBy=multi-user.target
+      daemonReload: true
+  - id: enable-kubelet
+    kind: ManageService
+    spec:
+      name: kubelet
+      enabled: true
+      state: started
+      daemonReload: true

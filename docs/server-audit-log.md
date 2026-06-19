@@ -1,4 +1,4 @@
-# Server Audit Log
+# Server audit log
 
 `deck server up` writes audit records to a JSONL log file under the bundle root.
 

@@ -30,7 +30,10 @@ func TestEnsureSelfSignedTLS(t *testing.T) {
 		}
 		block, _ := pem.Decode(raw)
 		if block == nil {
+			// staticcheck (SA5011) does not treat t.Fatalf as terminal, so the
+			// explicit return guards the block.Bytes dereference below.
 			t.Fatalf("failed to decode cert pem")
+			return
 		}
 		cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {

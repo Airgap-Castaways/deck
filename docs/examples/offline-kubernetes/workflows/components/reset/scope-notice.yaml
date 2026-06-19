@@ -1,0 +1,14 @@
+steps:
+  - id: reset-scope-notice
+    kind: Message
+    spec:
+      level: info
+      message: |
+        This reset returns the node to a re-joinable state. It does NOT:
+          - Remove the Node object from the cluster API.
+            On a control-plane node:  kubectl drain {{ or (index .vars "hostName") "<node>" }} --ignore-daemonsets --delete-emptydir-data
+                                      kubectl delete node {{ or (index .vars "hostName") "<node>" }}
+          - Uninstall the container runtime or Kubernetes binaries (kept for fast rejoin).
+            Full teardown:  systemctl disable --now {{ .vars.runtime.containerd.serviceName }}
+                            rm -rf {{ .vars.runtime.containerd.installDir }} {{ .vars.runtime.containerd.root }} {{ .vars.runtime.containerd.configDir }}
+          - Re-enable swap, remove the offline repo, or uninstall OS packages.

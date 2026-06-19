@@ -138,9 +138,9 @@ Run this baseline suite.
 ```bash
 tmpdir=$(mktemp -d)
 cd "$tmpdir"
-/home/opencode/workspace/deck/bin/deck ask --create "Create a minimal single-node apply-only offline kubeadm workflow for Kubernetes 1.35.1 using only init-kubeadm and check-kubernetes-cluster builders"
-/home/opencode/workspace/deck/bin/deck ask --create "Create a single-node apply-only workflow that installs Docker and enables the docker service on Ubuntu 24.04 using typed steps where possible."
-/home/opencode/workspace/deck/bin/deck ask --create "Create a 3-node offline kubeadm workflow with prepare and apply phases."
+./bin/deck ask --create "Create a minimal single-node apply-only offline kubeadm workflow for Kubernetes 1.35.1 using only init-kubeadm and check-kubernetes-cluster builders"
+./bin/deck ask --create "Create a single-node apply-only workflow that installs Docker and enables the docker service on Ubuntu 24.04 using typed steps where possible."
+./bin/deck ask --create "Create a 3-node offline kubeadm workflow with prepare and apply phases."
 ```
 
 #### Suite C: seeded-workspace refine checks
@@ -150,8 +150,8 @@ tmpdir=$(mktemp -d)
 mkdir -p "$tmpdir/workflows"
 cp -R test/workflows/. "$tmpdir/workflows/"
 cd "$tmpdir"
-/home/opencode/workspace/deck/bin/deck ask --edit "Refactor workflows/scenarios/control-plane-bootstrap.yaml to use workflows/vars.yaml for repeated values"
-/home/opencode/workspace/deck/bin/deck ask --edit "Keep workflows/scenarios/control-plane-bootstrap.yaml stable while extracting only clearly repeated structure into companion files when justified."
+./bin/deck ask --edit "Refactor workflows/scenarios/control-plane-bootstrap.yaml to use workflows/vars.yaml for repeated values"
+./bin/deck ask --edit "Keep workflows/scenarios/control-plane-bootstrap.yaml stable while extracting only clearly repeated structure into companion files when justified."
 ```
 
 If maintainability improves but this suite regresses, the change is not done yet.
