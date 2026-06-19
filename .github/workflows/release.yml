@@ -105,6 +105,9 @@ jobs:
             } >> "$GITHUB_ENV"
             echo "Loaded highlights from $HL_FILE"
           else
+            # Define the key as empty so GoReleaser's DECK_RELEASE_HIGHLIGHTS
+            # template lookup resolves instead of erroring on a missing key.
+            echo "DECK_RELEASE_HIGHLIGHTS=" >> "$GITHUB_ENV"
             echo "No highlights file at $HL_FILE; using default header"
           fi
 

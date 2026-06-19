@@ -70,7 +70,7 @@ release:
   make_latest: true
   mode: replace
   header: |
-    {{ if .Env.DECK_RELEASE_HIGHLIGHTS }}{{ .Env.DECK_RELEASE_HIGHLIGHTS }}
+    {{ if index .Env "DECK_RELEASE_HIGHLIGHTS" }}{{ .Env.DECK_RELEASE_HIGHLIGHTS }}
 
     ---
     {{ end }}Release artifacts for `deck` are attached below. Changes since the previous tag are grouped by type.
