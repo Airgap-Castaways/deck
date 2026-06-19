@@ -22,7 +22,10 @@ const config: Config = {
 
   markdown: {
     format: 'md',
+    mermaid: true,
   },
+
+  themes: ['@docusaurus/theme-mermaid'],
 
   presets: [
     [
@@ -79,6 +82,11 @@ const config: Config = {
       defaultMode: 'light',
       disableSwitch: false,
       respectPrefersColorScheme: true,
+    },
+    // Mermaid follows the active color mode; 'base' lets the warm brand palette
+    // (kraft amber / sprout green) come through via themeVariables in custom.css.
+    mermaid: {
+      theme: {light: 'base', dark: 'dark'},
     },
     navbar: {
       logo: {
