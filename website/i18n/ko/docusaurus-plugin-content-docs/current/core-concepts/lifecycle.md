@@ -1,6 +1,6 @@
 ---
 source: docs/core-concepts/lifecycle.md
-source_hash: e9f581bd00813225dee1989f7ae3f4f565889213
+source_hash: 95a762f8ae30ac80b038e4b27697a35fc6b5547f
 ---
 # deck 라이프사이클
 
@@ -11,11 +11,11 @@ source_hash: e9f581bd00813225dee1989f7ae3f4f565889213
 ```mermaid
 flowchart LR
     subgraph Online[Connected environment]
-        A[Author &amp; lint workflow]
+        A[Author and lint workflow]
         B[deck prepare]
         A --> B
     end
-    B --> C[deck bundle build\n→ bundle.tar]
+    B --> C["deck bundle build<br/>→ bundle.tar"]
     C --> D[Transfer across air gap]
     subgraph Offline[Air-gapped site]
         E[deck bundle verify]

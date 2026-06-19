@@ -7,11 +7,11 @@
 ```mermaid
 flowchart LR
     subgraph Online[Connected environment]
-        A[Author &amp; lint workflow]
+        A[Author and lint workflow]
         B[deck prepare]
         A --> B
     end
-    B --> C[deck bundle build\n→ bundle.tar]
+    B --> C["deck bundle build<br/>→ bundle.tar"]
     C --> D[Transfer across air gap]
     subgraph Offline[Air-gapped site]
         E[deck bundle verify]
