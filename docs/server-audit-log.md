@@ -44,6 +44,12 @@ Example request record:
 {"ts":"2026-04-03T05:00:00Z","schema_version":2,"component":"server","event":"request","level":"info","message":"http request handled","method":"GET","path":"/healthz","proto":"HTTP/1.1","status":200,"bytes":0,"remote_addr":"127.0.0.1:53422","duration_ms":1}
 ```
 
+The registry emits a `registry_alias_collision` event (`level: warn`) when a request targets a domain-stripped alias that maps to more than one canonical repository. The request is rejected with `404`, and the record lists the colliding repositories under `canonical_repos`. See [Alias collisions](server/registry.md#alias-collisions).
+
+```json
+{"ts":"2026-04-03T05:00:00Z","schema_version":2,"component":"server","event":"registry_alias_collision","level":"warn","message":"ambiguous registry alias rejected","alias":"calico/node","canonical_repos":["quay.io/calico/node","registry.example.com/calico/node"],"method":"GET","path":"/v2/calico/node/manifests/v1"}
+```
+
 ## Compatibility note
 
 - current `deck server up` writes the structured version-2 shape above
