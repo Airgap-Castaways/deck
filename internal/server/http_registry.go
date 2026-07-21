@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -31,6 +33,79 @@ type registryCatalogEntry struct {
 
 func (e registryCatalogEntry) isCanonical() bool {
 	return e.canonicalRepo == "" || e.repo == e.canonicalRepo
+}
+
+// registryAliasCollisionError indicates that a requested repository path is a
+// domain-stripped alias that maps to more than one distinct canonical
+// repository, so it cannot be resolved to a single image unambiguously.
+type registryAliasCollisionError struct {
+	alias          string
+	canonicalRepos []string
+}
+
+func (e *registryAliasCollisionError) Error() string {
+	return fmt.Sprintf("ambiguous repository alias %q maps to multiple images: %s", e.alias, strings.Join(e.canonicalRepos, ", "))
+}
+
+// selectRepoEntries applies the alias-collision policy for a requested repo
+// path and returns the catalog entries that should serve it:
+//   - a request matching a canonical repository serves only that repository's
+//     canonical entries (canonical is preferred over any alias);
+//   - a pure alias mapping to a single canonical repository serves normally;
+//   - a pure alias mapping to more than one canonical repository is ambiguous
+//     and yields a *registryAliasCollisionError with no entries.
+//
+// A repo with no matching entries returns (nil, nil) so callers can treat it
+// as not found.
+func selectRepoEntries(entries []registryCatalogEntry, repo string) ([]registryCatalogEntry, error) {
+	matches := make([]registryCatalogEntry, 0)
+	canonical := make([]registryCatalogEntry, 0)
+	distinct := make([]string, 0)
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		if entry.repo != repo {
+			continue
+		}
+		matches = append(matches, entry)
+		if entry.isCanonical() {
+			canonical = append(canonical, entry)
+		}
+		if !seen[entry.canonicalRepo] {
+			seen[entry.canonicalRepo] = true
+			distinct = append(distinct, entry.canonicalRepo)
+		}
+	}
+	if len(matches) == 0 {
+		return nil, nil
+	}
+	if len(canonical) > 0 {
+		// The requested path is itself a canonical repository; prefer it and
+		// ignore alias contributions from other canonical repositories.
+		return canonical, nil
+	}
+	if len(distinct) > 1 {
+		sort.Strings(distinct)
+		return nil, &registryAliasCollisionError{alias: repo, canonicalRepos: distinct}
+	}
+	return matches, nil
+}
+
+func (h *serverHandler) maybeAuditAliasCollision(r *http.Request, err error) {
+	var collErr *registryAliasCollisionError
+	if !errors.As(err, &collErr) {
+		return
+	}
+	if h.logger == nil {
+		return
+	}
+	entry := buildServerAuditRecord(time.Now().UTC(), auditEventRegistryAliasCollision, "warn", "ambiguous registry alias rejected")
+	addExtra(entry, map[string]any{
+		"alias":           collErr.alias,
+		"canonical_repos": collErr.canonicalRepos,
+		"method":          r.Method,
+		"path":            r.URL.RequestURI(),
+	})
+	_ = h.logger.Write(entry)
 }
 
 type registryResolvedImage struct {
@@ -99,6 +174,12 @@ func (h *serverHandler) handleRegistryCatalog(w http.ResponseWriter, r *http.Req
 			continue
 		}
 		seen[entry.repo] = true
+		// Omit ambiguous aliases (and anything else with nothing to serve)
+		// so the catalog never advertises a repo that would fail to resolve.
+		selected, selErr := selectRepoEntries(entries, entry.repo)
+		if selErr != nil || len(selected) == 0 {
+			continue
+		}
 		repos = append(repos, entry.repo)
 	}
 	sort.Strings(repos)
@@ -135,10 +216,16 @@ func (h *serverHandler) handleRegistryTags(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	selected, selErr := selectRepoEntries(entries, req.repo)
+	if selErr != nil {
+		h.maybeAuditAliasCollision(r, selErr)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 	tags := make([]string, 0)
 	seen := map[string]bool{}
-	for _, entry := range entries {
-		if entry.repo != req.repo || seen[entry.tag] {
+	for _, entry := range selected {
+		if seen[entry.tag] {
 			continue
 		}
 		seen[entry.tag] = true
@@ -203,6 +290,7 @@ func parseRegistryBlobRequest(urlPath string) (registryBlobRequest, bool) {
 func (h *serverHandler) handleRegistryManifest(w http.ResponseWriter, r *http.Request, req registryManifestRequest) {
 	resolved, err := h.resolveRegistryImage(req.repo, req.ref)
 	if err != nil {
+		h.maybeAuditAliasCollision(r, err)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -224,6 +312,7 @@ func (h *serverHandler) handleRegistryManifest(w http.ResponseWriter, r *http.Re
 func (h *serverHandler) handleRegistryBlob(w http.ResponseWriter, r *http.Request, req registryBlobRequest) {
 	resolved, err := h.resolveRegistryImage(req.repo, req.digest)
 	if err != nil {
+		h.maybeAuditAliasCollision(r, err)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -252,11 +341,9 @@ func (h *serverHandler) resolveRegistryImage(repo, ref string) (*registryResolve
 	if err != nil {
 		return nil, err
 	}
-	candidates := make([]registryCatalogEntry, 0)
-	for _, entry := range entries {
-		if entry.repo == repo {
-			candidates = append(candidates, entry)
-		}
+	candidates, err := selectRepoEntries(entries, repo)
+	if err != nil {
+		return nil, err
 	}
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("repo not found: %s", repo)

@@ -34,6 +34,8 @@ const (
 	auditSourceServer  = "server"
 	auditEventRequest  = "http_request"
 
+	auditEventRegistryAliasCollision = "registry_alias_collision"
+
 	defaultAuditMaxSizeMB = 50
 	defaultAuditMaxFiles  = 10
 )
