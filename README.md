@@ -50,7 +50,7 @@ For a detailed walkthrough, start with the [Quick Start Guide](docs/quick-start.
 
 Requirements:
 
-- Go 1.26.5 (Any OS for build and prepare)
+- Go 1.26.6 (Any OS for build and prepare)
 - Linux target environment (RHEL, Ubuntu) for the `apply` step
 
 Release downloads are published on the GitHub Releases page. Homebrew installs are provided through the Airgap Castaways tap rather than `homebrew-core`.
