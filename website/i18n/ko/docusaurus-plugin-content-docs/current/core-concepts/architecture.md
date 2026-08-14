@@ -54,7 +54,7 @@ source_hash: 8bc8022ff4416a5fc714942b78942c27db354ee8
 
 가장 단순한 `deck` 워크플로는 `prepare -> bundle -> apply`가 전부입니다.
 
-![deck 단일 노드 흐름](../diagrams/architecture-single-node.svg)
+![deck 단일 노드 흐름](/diagrams/architecture-single-node.svg)
 
 - 연결된 환경에서 운영자는 워크플로가 실행 시점에 필요로 할 아티팩트를 준비합니다.
 - 준비된 산출물, 워크플로 파일, 매니페스트, `deck` 바이너리를 하나의 번들로 묶습니다.
@@ -70,7 +70,7 @@ source_hash: 8bc8022ff4416a5fc714942b78942c27db354ee8
 
 실제로 그 서버는 `deck` 바이너리, 워크플로, 준비된 파일을 위한 로컬 웹 또는 파일 서버가 될 수 있으며, 준비된 이미지를 위한 pull 전용 컨테이너 레지스트리도 함께 노출할 수 있습니다. 이렇게 하면 전체 모델은 그대로 유지하면서 사이트 안에서의 오프라인 배포가 한결 쉬워집니다.
 
-![deck 다중 노드 흐름](../diagrams/architecture-multi-node.svg)
+![deck 다중 노드 흐름](/diagrams/architecture-multi-node.svg)
 
 - 연결된 환경에서 운영자는 단일 노드 흐름과 똑같이 아티팩트를 준비하고 번들을 빌드합니다.
 - 번들이 사이트로 넘어온 뒤, 한 노드가 서버 역할을 맡아 `deck server`를 실행할 수 있습니다.
