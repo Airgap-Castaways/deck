@@ -54,19 +54,7 @@ source_hash: aa2090c189df81c5599610963b5925a1a76d4470
 
 가장 단순한 `deck` 워크플로는 `prepare -> bundle -> apply`가 전부입니다.
 
-```mermaid
-flowchart LR
-    subgraph Online[Connected environment]
-        A[Prepare artifacts]
-        B[Build bundle]
-        A --> B
-    end
-    B --> C[Transfer bundle]
-    subgraph Offline[Air-gapped site]
-        D[Apply on node]
-    end
-    C --> D
-```
+![deck single-node flow](/diagrams/architecture-single-node.svg)
 
 - 연결된 환경에서 운영자는 워크플로가 실행 시점에 필요로 할 아티팩트를 준비합니다.
 - 준비된 산출물, 워크플로 파일, 매니페스트, `deck` 바이너리를 하나의 번들로 패키징합니다.
@@ -82,29 +70,7 @@ flowchart LR
 
 실무적으로 그 서버는 `deck` 바이너리, 워크플로, 준비된 파일을 위한 로컬 웹 서버 또는 파일 서버 역할을 할 수 있고, 준비된 이미지를 위한 pull 전용 컨테이너 레지스트리도 노출할 수 있습니다. 이렇게 하면 전체 모델은 그대로 두면서 사이트 내부의 오프라인 배포를 더 수월하게 만듭니다.
 
-```mermaid
-flowchart LR
-    subgraph Online[Connected environment]
-        A[Prepare artifacts]
-        B[Build bundle]
-        A --> B
-    end
-    B --> C[Transfer bundle]
-    subgraph Offline[Air-gapped site]
-        subgraph ServerNode[Server node]
-            direction TB
-            D[Run server]
-        end
-        subgraph ClientNodes[Client nodes]
-            direction TB
-            E[Pull deck]
-            F[Apply]
-            E --> F
-        end
-        D --> E
-    end
-    C --> D
-```
+![deck multi-node flow](/diagrams/architecture-multi-node.svg)
 
 - 연결된 환경에서 운영자는 단일 노드 흐름과 같은 방식으로 아티팩트를 준비하고 번들을 빌드합니다.
 - 번들이 사이트로 넘어온 뒤, 한 노드가 서버 역할을 맡아 `deck server`를 실행할 수 있습니다.

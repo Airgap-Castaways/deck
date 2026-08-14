@@ -8,21 +8,7 @@ source_hash: a329f5fff6d212ae2ae94f8f3c07235926908bf1
 
 ## 세 가지 단계
 
-```mermaid
-flowchart LR
-    subgraph Online[Connected environment]
-        A[Author and lint workflow]
-        B[deck prepare]
-        A --> B
-    end
-    B --> C["deck bundle build<br/>→ bundle.tar"]
-    C --> D[Transfer across air gap]
-    subgraph Offline[Air-gapped site]
-        E[deck bundle verify]
-        F[deck apply]
-        D --> E --> F
-    end
-```
+![deck lifecycle](/diagrams/lifecycle.svg)
 
 **Prepare**는 연결된 환경에서 실행됩니다. 운영자는 타입이 지정된 워크플로를 작성하고 린트한 다음, `deck prepare`를 실행하여 패키지, 이미지, 파일을 워크스페이스의 `outputs/` 트리로 다운로드합니다. 준비 작업은 apply에 사용되는 것과 동일한 타입 지정 워크플로 모델을 통해 선언됩니다. 별도의 임시 다운로드 스크립트는 없습니다.
 

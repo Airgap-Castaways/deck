@@ -4,21 +4,7 @@
 
 ## The three stages
 
-```mermaid
-flowchart LR
-    subgraph Online[Connected environment]
-        A[Author and lint workflow]
-        B[deck prepare]
-        A --> B
-    end
-    B --> C["deck bundle build<br/>→ bundle.tar"]
-    C --> D[Transfer across air gap]
-    subgraph Offline[Air-gapped site]
-        E[deck bundle verify]
-        F[deck apply]
-        D --> E --> F
-    end
-```
+![deck lifecycle](../diagrams/lifecycle.svg)
 
 **Prepare** runs in a connected environment. The operator authors a typed workflow, lints it, then runs `deck prepare` to download packages, images, and files into the workspace's `outputs/` tree. Preparation is declared through the same typed workflow model used for apply. There is no separate ad hoc download script.
 
