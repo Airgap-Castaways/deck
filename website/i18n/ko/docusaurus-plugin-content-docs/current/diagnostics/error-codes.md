@@ -6,7 +6,7 @@ source_hash: ba2281b9b3920f2dca9026ee8a8339cb77bd5f65
 
 deck은 CLI 에러를 `CODE: message` 형식으로 렌더링합니다(`internal/errcode` 참조). 아래 코드들은 안정적이고 기계가 읽을 수 있는 식별자로, 스크립트와 로그에서 매칭할 수 있습니다.
 
-> **기여자:** 소스에 새로운 `E_*` 코드를 추가할 때는 아래 적절한 섹션에 행을 추가하세요 — `internal/doccheck` 드리프트 테스트가 해당 코드가 문서화될 때까지 빌드를 실패시킵니다.
+> **기여자:** 소스에 새로운 `E_*` 코드를 추가할 때는 아래 적절한 섹션에 행을 추가하세요, `internal/doccheck` 드리프트 테스트가 해당 코드가 문서화될 때까지 빌드를 실패시킵니다.
 
 ## 번들
 
@@ -59,7 +59,7 @@ deck은 CLI 에러를 `CODE: message` 형식으로 렌더링합니다(`internal/
 | `E_PREPARE_CHECKHOST_FAILED` | 준비 단계 중 `CheckHost` 스텝이 실패함 | 준비 단계의 호스트 사전 검사 실행 |
 | `E_PREPARE_OUTPUT_ROOT_INVALID` | 스텝의 출력 경로가 허용된 출력 루트 디렉터리를 벗어남 | 준비 단계 병렬 스텝의 출력 경로 검증 |
 
-## 설치(적용) 단계 — 일반
+## 설치(적용) 단계: 일반
 
 | Code | 의미 | 컨텍스트 |
 |------|---------|---------|
@@ -72,7 +72,7 @@ deck은 CLI 에러를 `CODE: message` 형식으로 렌더링합니다(`internal/
 | `E_INSTALL_INTERACTION_FAILED` | 운영자 상호작용 스텝(prompt/input)이 실패함 | `Input`, `Confirm` 스텝 실행 |
 | `E_INSTALL_INTERACTION_UNSUPPORTED` | 상호작용 스텝이 메시지에 비밀 런타임 값을 렌더링하려고 함 | 운영자 상호작용 메시지 렌더링 |
 
-## 설치 — 패키지 관리
+## 설치: 패키지 관리
 
 | Code | 의미 | 컨텍스트 |
 |------|---------|---------|
@@ -84,7 +84,7 @@ deck은 CLI 에러를 `CODE: message` 형식으로 렌더링합니다(`internal/
 | `E_INSTALL_REPOCONFIG_PATH_REQUIRED` | `ConfigureRepository` 스텝에 `path` 필드가 없음 | `ConfigureRepository` 스텝 검증 |
 | `E_INSTALL_PACKAGECACHE_MANAGER_INVALID` | `RefreshRepository` 스텝이 유효하지 않은 패키지 관리자를 지정함 | `RefreshRepository` 스텝 검증 |
 
-## 설치 — 파일 작업
+## 설치: 파일 작업
 
 | Code | 의미 | 컨텍스트 |
 |------|---------|---------|
@@ -100,7 +100,7 @@ deck은 CLI 에러를 `CODE: message` 형식으로 렌더링합니다(`internal/
 | `E_INSTALL_SYMLINK_PATH_REQUIRED` | `CreateSymlink` 스텝에 `path` 필드가 없음 | `CreateSymlink` 스텝 검증 |
 | `E_INSTALL_SYMLINK_TARGET_REQUIRED` | `CreateSymlink` 스텝에 `target` 필드가 없음 | `CreateSymlink` 스텝 검증 |
 
-## 설치 — 시스템 구성
+## 설치: 시스템 구성
 
 | Code | 의미 | 컨텍스트 |
 |------|---------|---------|
@@ -114,7 +114,7 @@ deck은 CLI 에러를 `CODE: message` 형식으로 렌더링합니다(`internal/
 | `E_INSTALL_SYSTEMD_UNIT_CONTENT_CONFLICT` | `WriteSystemdUnit` 스텝이 인라인 콘텐츠와 소스 파일을 모두 지정함 | `WriteSystemdUnit` 스텝 검증 |
 | `E_INSTALL_SYSTEMD_UNIT_SERVICE_NAME_REQUIRED` | `WriteSystemdUnit` 스텝에 서비스 이름이 필요하지만 제공되지 않음 | `WriteSystemdUnit` 스텝 검증 |
 
-## 설치 — 명령 실행
+## 설치: 명령 실행
 
 | Code | 의미 | 컨텍스트 |
 |------|---------|---------|
@@ -122,7 +122,7 @@ deck은 CLI 에러를 `CODE: message` 형식으로 렌더링합니다(`internal/
 | `E_INSTALL_RUNCOMMAND_TIMEOUT` | `Command` 스텝이 구성된 타임아웃을 초과함 | `Command` 스텝 실행 |
 | `E_INSTALL_RUNCOMMAND_FAILED` | `Command` 스텝의 프로세스가 0이 아닌 상태로 종료됨 | `Command` 스텝 실행 |
 
-## 설치 — Wait 스텝
+## 설치: Wait 스텝
 
 | Code | 의미 | 컨텍스트 |
 |------|---------|---------|
@@ -133,7 +133,7 @@ deck은 CLI 에러를 `CODE: message` 형식으로 렌더링합니다(`internal/
 | `E_INSTALL_WAITPATH_POLL_INTERVAL_INVALID` | 경로 기반 wait 스텝이 유효하지 않은 폴링 간격을 지정함 | `WaitForFile`/`WaitForMissingFile` 스텝 검증 |
 | `E_INSTALL_WAITPATH_TIMEOUT` | 경로 기반 wait 스텝이 타임아웃됨 | `WaitForFile`/`WaitForMissingFile` 스텝 실행 |
 
-## 설치 — 이미지 검증
+## 설치: 이미지 검증
 
 | Code | 의미 | 컨텍스트 |
 |------|---------|---------|
@@ -141,7 +141,7 @@ deck은 CLI 에러를 `CODE: message` 형식으로 렌더링합니다(`internal/
 | `E_INSTALL_VERIFY_IMAGES_COMMAND_FAILED` | 이미지 검증 명령(예: `crictl`)이 실패함 | `VerifyImage` 스텝 실행 |
 | `E_INSTALL_VERIFY_IMAGES_NOT_FOUND` | 하나 이상의 필요한 이미지가 호스트에 존재하지 않음 | `VerifyImage` 스텝 실행 |
 
-## 설치 — 아티팩트
+## 설치: 아티팩트
 
 | Code | 의미 | 컨텍스트 |
 |------|---------|---------|
@@ -149,7 +149,7 @@ deck은 CLI 에러를 `CODE: message` 형식으로 렌더링합니다(`internal/
 | `E_INSTALL_ARTIFACT_ARCH_UNSUPPORTED` | 번들의 어떤 아티팩트도 호스트 아키텍처와 일치하지 않음 | 아티팩트 아키텍처 선택 |
 | `E_INSTALL_ARTIFACT_SOURCE_INVALID` | 아티팩트 소스 명세가 유효하지 않음 | 설치 중 아티팩트 소스 검증 |
 
-## 설치 — 쿠버네티스 (kubeadm)
+## 설치: 쿠버네티스 (kubeadm)
 
 | Code | 의미 | 컨텍스트 |
 |------|---------|---------|

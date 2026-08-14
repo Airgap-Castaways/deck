@@ -38,7 +38,7 @@ source_hash: 2caa540f377369bb4af0d577863bd90447c391b1
 - 일반적인 파일명: `apply.yaml`, `bootstrap.yaml`, `worker-join.yaml`.
 
 ### 컴포넌트 (`workflows/components/`)
-컴포넌트는 **컴포넌트 프래그먼트**입니다 — 시나리오로 임포트되는 재사용 가능한 스텝 집합입니다.
+컴포넌트는 **컴포넌트 프래그먼트**입니다, 시나리오로 임포트되는 재사용 가능한 스텝 집합입니다.
 - 여기에 있는 파일은 **Component Fragment Schema**를 따릅니다.
 - `steps:` 목록만 포함합니다.
 - 시나리오의 `phases[].imports`를 통해 임포트됩니다.
@@ -96,8 +96,8 @@ steps:
 ## 내부 메타데이터 (`.deck/`)
 
 이 디렉터리는 `deck`이 관리하며 수동으로 편집해서는 안 됩니다.
-- `.deck/manifest.json` — 정규화된 준비된 출력물(`outputs/{files,packages,images,bin}`)의 다이제스트 매니페스트. `workflows/`와 deck 런처 자체는 추적되지 않습니다. `bundle verify` 시점과 apply 시작 시점의 무결성 기준선으로 사용됩니다.
-- `.deck/state/apply/` — 단계 기반 apply 상태 (자세한 내용은 [apply-state.md](apply-state.md) 참조). Apply 실행 로그(record.json / events.jsonl)는 워크스페이스 내부가 아니라 `$XDG_STATE_HOME/deck/runs/<run-id>/`에 기록됩니다 (자세한 내용은 [apply-runlogs.md](apply-runlogs.md) 참조).
+- `.deck/manifest.json`, 정규화된 준비된 출력물(`outputs/{files,packages,images,bin}`)의 다이제스트 매니페스트. `workflows/`와 deck 런처 자체는 추적되지 않습니다. `bundle verify` 시점과 apply 시작 시점의 무결성 기준선으로 사용됩니다.
+- `.deck/state/apply/`, 단계 기반 apply 상태 (자세한 내용은 [apply-state.md](apply-state.md) 참조). Apply 실행 로그(record.json / events.jsonl)는 워크스페이스 내부가 아니라 `$XDG_STATE_HOME/deck/runs/<run-id>/`에 기록됩니다 (자세한 내용은 [apply-runlogs.md](apply-runlogs.md) 참조).
 
 ## 관련 레퍼런스
 

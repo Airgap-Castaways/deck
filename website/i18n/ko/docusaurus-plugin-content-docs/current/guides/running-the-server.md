@@ -269,8 +269,8 @@ deck server down
 
 ## 관련 참고 자료
 
-- [Server Registry](../server/registry.md) — OCI `/v2` 엔드포인트 상세
-- [Server Daemon Mode](../server/daemon.md) — systemd와 pid 파일 동작 방식
-- [Server Audit Log](../server-audit-log.md) — 감사 기록 스키마
-- [Offline Kubernetes example](../examples/README.md) — 전체 멀티 노드 안내
-- [CLI Reference — deck server up](../cli/deck_server_up.md)
+- [Server Registry](../server/registry.md): OCI `/v2` 엔드포인트 상세
+- [Server Daemon Mode](../server/daemon.md): systemd와 pid 파일 동작 방식
+- [Server Audit Log](../server-audit-log.md): 감사 기록 스키마
+- [Offline Kubernetes example](../examples/README.md): 전체 멀티 노드 안내
+- [CLI Reference, deck server up](../cli/deck_server_up.md)

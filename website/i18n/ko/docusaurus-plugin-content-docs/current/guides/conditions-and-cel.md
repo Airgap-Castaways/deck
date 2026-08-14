@@ -15,12 +15,12 @@ source_hash: 101a4499f3642509adae78dc9994027dbe94ad42
 
 - `when:`이 `true`로 평가되거나 (또는 없을 경우), 스텝은 정상적으로
   실행됩니다.
-- `when:`이 `false`로 평가되면, 스텝은 **건너뜁니다** — 이는 오류로
+- `when:`이 `false`로 평가되면, 스텝은 **건너뜁니다**: 이는 오류로
   취급되지 않으며, 다음 스텝으로 실행이 계속됩니다.
 - `when:`이 평가에 실패하면 (예를 들어, 참조된 변수의 타입이 잘못된
   경우), deck은 `E_CONDITION_EVAL`을 보고하고 중단합니다.
 
-`when:`은 정당한 선택성을 표현하는 데 사용하세요 — 특정 호스트 유형,
+`when:`은 정당한 선택성을 표현하는 데 사용하세요, 특정 호스트 유형,
 역할에서만, 또는 특정 조건이 충족된 후에만 실행되어야 하는 스텝 등입니다.
 전제 조건 실패를 가리는 데 사용하지 마세요. 강제적인 적합성 게이트에는
 `CheckHost`를 사용하세요.
@@ -28,10 +28,10 @@ source_hash: 101a4499f3642509adae78dc9994027dbe94ad42
 ## 사용 가능한 네임스페이스
 
 CEL 표현식은 세 가지 네임스페이스를 참조할 수 있습니다: `vars.*`,
-`runtime.*`, `context.*`. 이들은 중괄호 없이 사용하세요 — `when:`은 Go
+`runtime.*`, `context.*`. 이들은 중괄호 없이 사용하세요, `when:`은 Go
 템플릿 문법이 아닙니다.
 
-### `vars.*` — 정적 입력 변수
+### `vars.*`: 정적 입력 변수
 
 `vars.yaml`, `-f` 오버레이, 시나리오 `vars:` 블록, `--var` 플래그(우선순위
 오름차순)로부터 빌드된 완전히 병합된 변수 맵을 참조합니다. 노드 범위의
@@ -62,11 +62,11 @@ CEL 표현식은 세 가지 네임스페이스를 참조할 수 있습니다: `v
   when: vars.deckServer == true
 ```
 
-### `runtime.*` — 감지된 사실과 등록된 출력
+### `runtime.*`: 감지된 사실과 등록된 출력
 
 `runtime.*`는 두 종류의 값을 제공합니다:
 
-**`runtime.host` 아래의 내장 호스트 사실** — 어떤 스텝이 실행되기 전에
+**`runtime.host` 아래의 내장 호스트 사실**: 어떤 스텝이 실행되기 전에
 로컬 OS로부터 자동으로 채워집니다. 이를 채우기 위해 `CheckHost` 스텝이
 필요하지 않으며, 항상 사용할 수 있습니다.
 
@@ -106,7 +106,7 @@ CEL 표현식은 세 가지 네임스페이스를 참조할 수 있습니다: `v
   when: runtime.host.os.family == "rhel"
 ```
 
-**`runtime.<name>` 아래의 등록된 스텝 출력** — 앞선 스텝이 `register:`를
+**`runtime.<name>` 아래의 등록된 스텝 출력**: 앞선 스텝이 `register:`를
 사용해 출력을 내보낼 때 채워집니다. 등록된 값은 동일 단계의 모든 이후
 스텝, 또는 이후 단계에서 사용할 수 있습니다. 출력을 생성하는 스텝이
 `parallelGroup` 안에 있는 경우, 그 값은 전체 배치가 성공한 후에만
@@ -129,7 +129,7 @@ steps:
     when: runtime.joinCipher != ""   # gate on the registered value
 ```
 
-### `context.*` — deck 실행 메타데이터
+### `context.*`: deck 실행 메타데이터
 
 `context.*`는 현재 호출에 대한 deck이 제공하는 메타데이터를 담습니다. 이
 값들은 명령이 시작될 때 결정되며 실행 중에는 변경되지 않습니다.
@@ -149,7 +149,7 @@ steps:
 - id: announce-server-mode
   kind: Message
   spec:
-    message: "Running from deck server — fetching artifacts remotely"
+    message: "Running from deck server, fetching artifacts remotely"
   when: context.workflow.isServer == true
 ```
 
@@ -244,7 +244,7 @@ phases:
         # If a step inside also has its own when:, both conditions must be true.
 
       - path: host-prereqs.yaml
-        # No import-level when: — steps inside keep their own conditions.
+        # No import-level when:, steps inside keep their own conditions.
 ```
 
 이는 import 수준에서 넓은 가드(OS 계열, 역할)를 적용하고 스텝 수준에서 더
@@ -267,7 +267,7 @@ deck plan
 deck plan vars
 ```
 
-이는 유효한 `vars`와 초기 `runtime` 값을 보여줍니다 — `vars.role`가 예상한
+이는 유효한 `vars`와 초기 `runtime` 값을 보여줍니다, `vars.role`가 예상한
 값으로 해석되었는지, `runtime.host.os.family`가 대상 호스트의 OS와
 일치하는지 확인하세요.
 
@@ -277,18 +277,18 @@ deck plan vars
 
 ## 제한 사항과 주의점
 
-**CEL은 타입이 있는 표현식 언어이며, 범용 스크립팅 언어가 아닙니다.** 셸
+CEL은 타입이 있는 표현식 언어이며, 범용 스크립팅 언어가 아닙니다. 셸
 확장, 문자열에 대한 산술 연산, 또는 CEL에 내장되지 않은 함수 호출을
 지원하지 않습니다. 조건은 단순하게 유지하세요: 동등 비교, 비교 연산, 불
 and/or, 문자열 포함 여부(`has()`).
 
-**타입 규칙은 엄격합니다.** `vars.deckServer == true`는 `deckServer`가
+타입 규칙은 엄격합니다. `vars.deckServer == true`는 `deckServer`가
 `vars.yaml`에서 불리언일 때 동작합니다. 만약 문자열 `"true"`라면, 비교는
 조용히 실패하고 스텝은 건너뜁니다. deck이 해석한 Go 타입을 확인하려면
 `deck plan vars`를 확인하세요.
 
-**미정의 변수 처리.** `vars.role`이 전혀 설정되지 않은 경우 — `all:`에
-기본값이 없고 호스트가 `hosts:`에 없기 때문에 — CEL 표현식은
+미정의 변수 처리. `vars.role`이 전혀 설정되지 않은 경우, `all:`에
+기본값이 없고 호스트가 `hosts:`에 없기 때문에, CEL 표현식은
 `E_CONDITION_EVAL`을 발생시킵니다. 분기 대상이 되는 모든 필드에 대해 항상
 `all:` 기본값을 제공하세요.
 
@@ -298,15 +298,15 @@ A가 `joinCipher`를 등록하지만, A가 건너뛰어졌거나 아직 실행�
 경우, 그 값은 미정의이며 `E_CONDITION_EVAL`을 일으킵니다. 생성자가 먼저
 실행되도록 보장하려면 단계나 직렬 순서를 사용하세요.
 
-**컴포넌트 프래그먼트 내의 `when:`**은 import하는 시나리오의 컨텍스트에서
+컴포넌트 프래그먼트 내의 `when:`은 import하는 시나리오의 컨텍스트에서
 평가됩니다. 프래그먼트는 `vars.*`와 `runtime.*`를 자유롭게 참조할 수
 있지만, 자체적인 변수 스코프를 갖지는 않습니다.
 
 ## 관련 레퍼런스
 
-- [Workflow Model — `when`](../workflow-model.md#when--conditional-execution) — 표준 `when` 및 조건부 import 레퍼런스
-- [Workflow Model — `register`](../workflow-model.md#register--capture-step-output) — 스텝 출력을 `runtime.*`로 내보내는 방법
-- [Workflow Model — Built-In Runtime Fields](../workflow-model.md#built-in-runtime-fields) — 전체 `runtime.host` 필드 테이블
-- [Variables and templating](variables-and-templating.md) — `vars.*`가 어떻게 빌드되고 우선순위가 어떻게 동작하는지
-- [Authoring workflows](authoring-workflows.md) — `when:`을 전체 시나리오에 적용하기
-- [Troubleshooting](../troubleshooting.md) — `E_CONDITION_EVAL` 및 관련 오류 진단
+- [Workflow Model, `when`](../workflow-model.md#when--conditional-execution): 표준 `when` 및 조건부 import 레퍼런스
+- [Workflow Model, `register`](../workflow-model.md#register--capture-step-output): 스텝 출력을 `runtime.*`로 내보내는 방법
+- [Workflow Model, Built-In Runtime Fields](../workflow-model.md#built-in-runtime-fields): 전체 `runtime.host` 필드 테이블
+- [Variables and templating](variables-and-templating.md): `vars.*`가 어떻게 빌드되고 우선순위가 어떻게 동작하는지
+- [Authoring workflows](authoring-workflows.md): `when:`을 전체 시나리오에 적용하기
+- [Troubleshooting](../troubleshooting.md): `E_CONDITION_EVAL` 및 관련 오류 진단

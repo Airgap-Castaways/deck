@@ -11,7 +11,7 @@ source_hash: 1aa05d2da06ff384e05f5a25d4cfcd584226d766
 | 단계 | 플랫폼 |
 |---|---|
 | 작성, 린트, prepare, 번들링 | macOS, Linux, Windows |
-| 적용(대상) | Linux — RHEL / Rocky / CentOS 또는 Debian / Ubuntu |
+| 적용(대상) | Linux, RHEL / Rocky / CentOS 또는 Debian / Ubuntu |
 
 대상 머신에 Go를 설치할 필요는 **없습니다**. `deck` 바이너리뿐 아니라 워크플로 실행에 필요한 모든 것이 번들 하나에 담겨 함께 이동합니다. 워크플로를 작성하고 prepare하는 머신에만 PATH에 `deck` 바이너리가 있으면 됩니다.
 
@@ -44,7 +44,7 @@ brew install Airgap-Castaways/tap/deck
 압축을 풀고 바이너리를 PATH에 둡니다.
 
 ```bash
-# Example for Linux amd64 — adjust the filename for your version and arch
+# Example for Linux amd64, adjust the filename for your version and arch
 tar -xzf deck_<version>_linux_amd64.tar.gz
 sudo mv deck /usr/local/bin/deck
 ```
@@ -117,25 +117,31 @@ deck completion powershell | Out-String | Invoke-Expression
 
 셸 초기화 파일에 sourcing 명령을 추가해 두면 새 세션을 열 때마다 자동 완성이 자동으로 로드됩니다.
 
-**bash** — `~/.bashrc`에 추가합니다.
+### bash
+
+`~/.bashrc`에 추가합니다.
 
 ```bash
 source <(deck completion bash)
 ```
 
-**zsh** — `~/.zshrc`에 추가합니다.
+### zsh
+
+`~/.zshrc`에 추가합니다.
 
 ```bash
 source <(deck completion zsh)
 ```
 
-**fish** — fish 자동 완성 디렉터리에 기록합니다.
+### fish
+
+fish 자동 완성 디렉터리에 기록합니다.
 
 ```bash
 deck completion fish > ~/.config/fish/completions/deck.fish
 ```
 
-**PowerShell** — `$PROFILE`에 추가합니다.
+**PowerShell**: `$PROFILE`에 추가합니다.
 
 ```powershell
 deck completion powershell | Out-String | Invoke-Expression

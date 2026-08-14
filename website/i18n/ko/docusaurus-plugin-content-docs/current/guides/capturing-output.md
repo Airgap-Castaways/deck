@@ -4,7 +4,7 @@ source_hash: 39f4b5de108363c3fa91f796875718dc9d1395e0
 ---
 # register로 스텝 출력 캡처하기
 
-일부 스텝은 이후 스텝이 필요로 하는 값을 생성합니다 — kubeadm join 파일 경로,
+일부 스텝은 이후 스텝이 필요로 하는 값을 생성합니다, kubeadm join 파일 경로,
 운영자가 제공한 IP 주소, 암호화된 join 블록 등입니다. `register`는 셸 변수
 꼼수나 하드코딩된 경로 없이 그러한 값을 전달하는 메커니즘입니다.
 
@@ -13,14 +13,14 @@ source_hash: 39f4b5de108363c3fa91f796875718dc9d1395e0
 ## register가 해결하는 문제
 
 원시 셸 스크립트에서는 명령의 출력을 변수에 캡처해 이후에 참조할 수 있습니다.
-deck 워크플로에서 스텝은 격리된 타입 지정 연산이며 — 공유되는 셸 상태가
+deck 워크플로에서 스텝은 격리된 타입 지정 연산이며, 공유되는 셸 상태가
 없습니다. `register`는 한 스텝의 출력에서 이후 스텝의 입력으로 이어지는 타입
 지정된 이름 있는 다리를 제공합니다.
 
 `register` 없이:
 
 ```yaml
-# BAD: join file path hard-coded in two places — fragile, easy to break.
+# BAD: join file path hard-coded in two places, fragile, easy to break.
 - id: init-cluster
   kind: InitKubeadm
   spec:
@@ -80,7 +80,7 @@ register:
 
 ## 등록된 값 소비하기
 
-### 스텝 `spec` 필드에서 — Go 템플릿
+### 스텝 `spec` 필드에서: Go 템플릿
 
 이중 중괄호 템플릿 표현식 안에서 `.runtime.<name>`을 사용합니다:
 
@@ -99,7 +99,7 @@ register:
           | openssl enc -aes-256-cbc -pbkdf2 -salt -base64 -A -pass env:DECK_JOIN_PASS
 ```
 
-### `when` 조건에서 — CEL 표현식
+### `when` 조건에서: CEL 표현식
 
 CEL 표현식에서는 `runtime.<name>`(점 접두사 없음, 중괄호 없음)을 사용합니다:
 
@@ -139,7 +139,7 @@ CEL 표현식에서는 `runtime.<name>`(점 접두사 없음, 중괄호 없음)�
     required: true
 ```
 
-시크릿 `Input` 스텝 이후에 실행이 중단되면 그 값은 사라집니다 — 애초에 유지된
+시크릿 `Input` 스텝 이후에 실행이 중단되면 그 값은 사라집니다, 애초에 유지된
 적이 없습니다. 다음 실행에서 해당 스텝은 운영자에게 다시 입력을 요청합니다.
 
 ### 암호화된 join 패턴
@@ -155,7 +155,7 @@ offline-kubernetes 예제는 두 시나리오에 걸쳐 이 패턴을 사용합�
    암호문을 붙여넣고(`Input`, `joinCipher`로 등록) 패스프레이즈를 다시
    입력합니다(`Input`, `secret: true`, `joinPass`로 등록). `Command` 스텝이
    join 명령을 로컬에서 복호화합니다. 등록된 두 값은 모두 환경 변수로
-   전달되며 — 명령 문자열에 인라인되거나 상태에 기록되지 않습니다.
+   전달되며, 명령 문자열에 인라인되거나 상태에 기록되지 않습니다.
 
 전체 예제는
 [examples/README.md](../examples/README.md#encrypted-join-pattern)를 참조하세요.
@@ -169,7 +169,7 @@ offline-kubernetes 예제는 두 시나리오에 걸쳐 이 패턴을 사용합�
 runtime 스냅샷에서 시작하며 서로의 `register` 출력을 볼 수 없습니다.
 
 ```yaml
-# This is invalid — both steps are in the same batch.
+# This is invalid, both steps are in the same batch.
 steps:
   - id: get-passphrase
     kind: Input
@@ -205,7 +205,7 @@ steps:
 - id: get-ip
   kind: Command
   register:
-    nodeIP: stdout     # Command has no declared outputs — this fails validation
+    nodeIP: stdout     # Command has no declared outputs, this fails validation
   spec:
     command: [hostname, -I]
 ```
@@ -259,8 +259,8 @@ steps:
 
 ## 관련 레퍼런스
 
-- [Workflow Model — register](../workflow-model.md#register--capture-step-output)
-- [Workflow Model — Step Envelope Contract](../workflow-model.md#step-envelope-contract)
+- [Workflow Model, register](../workflow-model.md#register--capture-step-output)
+- [Workflow Model, Step Envelope Contract](../workflow-model.md#step-envelope-contract)
 - [단계와 병렬성](phases-and-parallelism.md)
 - [Input step kind](../step-kinds/input.md)
 - [InitKubeadm step kind](../step-kinds/init-kubeadm.md)
