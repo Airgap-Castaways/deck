@@ -131,7 +131,7 @@ See [CLI Reference](cli.md#verbosity---v) for the full verbosity table.
 
 **Cause:** Reuse metadata written by a previous `prepare` run (`outputs/images/.deck-cache-images.json` for images, package index metadata for packages) no longer matches what is on disk.
 
-**Fix:** Run `deck prepare --refresh` to ignore cached metadata and fetch fresh copies. Use `deck prepare --clean` to remove the prepared outputs directory before writing — this is the most thorough reset when the outputs tree is in an inconsistent state.
+**Fix:** Run `deck prepare --refresh` to ignore cached metadata and fetch fresh copies. Use `deck prepare --clean` to remove the prepared outputs directory before writing, this is the most thorough reset when the outputs tree is in an inconsistent state.
 
 ### Missing container runtime (`E_PREPARE_RUNTIME_NOT_FOUND`, `E_PREPARE_RUNTIME_UNSUPPORTED`)
 
@@ -188,7 +188,7 @@ See [bundle-layout.md](bundle-layout.md#apply-time-manifest-verification) for th
 
 `deck apply` stores progress as a state file keyed by a fingerprint of the workflow, vars, and execution context. Completed phases are recorded. On the next non-fresh run, completed phases are skipped and execution resumes at the first incomplete phase.
 
-A failed phase is rerun from its first step on the next run. Partial progress inside a failed phase is not reused — the whole phase reruns.
+A failed phase is rerun from its first step on the next run. Partial progress inside a failed phase is not reused, the whole phase reruns.
 
 ```bash
 # Check what has completed and what would run next
@@ -212,7 +212,7 @@ deck apply --root . --scenario apply --fresh
 
 ### Why state may reset (new state key)
 
-If the workflow file content, the effective vars, or the execution context changes, deck computes a different state key. The old state is not deleted — it is simply no longer matched by the new key. This means a resumed run after editing the workflow will start from the beginning.
+If the workflow file content, the effective vars, or the execution context changes, deck computes a different state key. The old state is not deleted, it is simply no longer matched by the new key. This means a resumed run after editing the workflow will start from the beginning.
 
 Use `deck plan --root . --scenario apply` before applying to see the resolved state key and which steps would run or skip. Use `deck state list` to see all state files on disk.
 
@@ -261,10 +261,10 @@ content: "cluster: {{ .vars.clusterName }}"
 **Fix:** Check the CEL expression. Variable references in `when` use `vars.NAME`, `runtime.NAME`, and `context.NAME` (no braces, no leading dot):
 
 ```yaml
-# Wrong — Go template syntax in a CEL field
+# Wrong, Go template syntax in a CEL field
 when: "{{ .vars.role == \"control-plane\" }}"
 
-# Correct — CEL expression
+# Correct, CEL expression
 when: vars.role == "control-plane"
 ```
 

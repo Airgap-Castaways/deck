@@ -4,7 +4,7 @@
 
 ## Location
 
-Place `.deckignore` at the workspace root — the same directory that contains `workflows/`, `outputs/`, and `.deck/`. `deck init` creates a starter file there automatically.
+Place `.deckignore` at the workspace root, the same directory that contains `workflows/`, `outputs/`, and `.deck/`. `deck init` creates a starter file there automatically.
 
 ## Syntax
 
@@ -22,10 +22,10 @@ Patterns are compiled to Go `regexp` by the `github.com/sabhiram/go-gitignore` l
 | Single `*` wildcard | Yes | Does not cross directory boundaries |
 | `**` double-star | Yes | Matches across directories (`a/**/b` matches `a/b`, `a/x/b`, etc.) |
 | `?` wildcard | No | `?` is treated as a **literal** `?` character (the library escapes it to `\?` in the regexp); it does **not** match any single character |
-| Character classes `[…]` | Partial | Bracket classes **do** work as Go regexp character classes (e.g. `[abc]`, `[0-9]`). However, gitignore's negated form `[!abc]` does **not** negate — Go regexp requires `[^abc]`; a `[!…]` pattern will not behave as expected |
+| Character classes `[…]` | Partial | Bracket classes **do** work as Go regexp character classes (e.g. `[abc]`, `[0-9]`). However, gitignore's negated form `[!abc]` does **not** negate, Go regexp requires `[^abc]`; a `[!…]` pattern will not behave as expected |
 | Backslash escaping `\#`, `\!` | Yes | Treats `#` or `!` as a literal character |
 
-> **Note:** `.deckignore` uses `go-gitignore`, which compiles patterns to Go `regexp` rather than implementing the full gitignore spec. Two notable differences: `?` is treated as a literal character (not a single-character wildcard), and character class negation uses Go regexp syntax — `[!abc]` does **not** negate (use `[^abc]` if you need negation, but that is a raw regexp construct, not standard gitignore syntax).
+> **Note:** `.deckignore` uses `go-gitignore`, which compiles patterns to Go `regexp` rather than implementing the full gitignore spec. Two notable differences: `?` is treated as a literal character (not a single-character wildcard), and character class negation uses Go regexp syntax, `[!abc]` does **not** negate (use `[^abc]` if you need negation, but that is a raw regexp construct, not standard gitignore syntax).
 
 ### Rules applied by `Matches`
 
@@ -39,23 +39,23 @@ For directories, `deck` tests both `rel/` (trailing-slash form) and `rel`, so a 
 
 ## Behavior when the file is absent
 
-If `.deckignore` does not exist, `Load` returns an empty matcher and `Matches` always returns `false` — nothing is excluded. This is a no-op, not an error.
+If `.deckignore` does not exist, `Load` returns an empty matcher and `Matches` always returns `false`, nothing is excluded. This is a no-op, not an error.
 
 ## Where it applies
 
 `.deckignore` is enforced in four places:
 
-**Bundle building (`deck bundle build`)**
+### Bundle building (`deck bundle build`)
 `internal/bundle/collect.go` calls `deckignore.Load` once from the bundle root before walking the archive tree. Matched files are skipped; matched directories cause the entire subtree to be pruned (`filepath.SkipDir`).
 
-**Static file and workflow serving (`deck server up`)**
+### Static file and workflow serving (`deck server up`)
 `internal/server/http_static.go` loads `.deckignore` inside `resolveCategoryPath` and `buildWorkflowIndex`. Requests for a path that matches an ignore rule receive HTTP 404.
 
-**Browse UI (`deck server up`)**
+### Browse UI (`deck server up`)
 `internal/server/http_browse.go` (`listBrowseEntries`) loads `.deckignore` and omits matched entries from directory listings shown in the browser.
 
-**OCI registry catalog (`deck server up`)**
-`internal/server/http_registry.go` (`scanRegistryCatalog`) loads `.deckignore` before scanning `outputs/images/` and `images/` for `.tar` files. Any `.tar` whose path relative to the bundle root matches is excluded from the registry catalog — it will not appear in `/v2/_catalog` and cannot be pulled.
+### OCI registry catalog (`deck server up`)
+`internal/server/http_registry.go` (`scanRegistryCatalog`) loads `.deckignore` before scanning `outputs/images/` and `images/` for `.tar` files. Any `.tar` whose path relative to the bundle root matches is excluded from the registry catalog, it will not appear in `/v2/_catalog` and cannot be pulled.
 
 ## Default content
 
@@ -95,6 +95,6 @@ workflows/scenarios/internal/
 
 ## Related
 
-- [Workspace Layout](workspace-layout.md) — workspace directory structure
-- [Bundle Layout](bundle-layout.md) — what goes into a bundle archive
-- [Server Registry](server/registry.md) — OCI registry served by `deck server up`
+- [Workspace Layout](workspace-layout.md): workspace directory structure
+- [Bundle Layout](bundle-layout.md): what goes into a bundle archive
+- [Server Registry](server/registry.md): OCI registry served by `deck server up`

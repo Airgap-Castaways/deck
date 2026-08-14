@@ -1,6 +1,6 @@
 ---
 source: docs/core-concepts/README.md
-source_hash: b7f4b5f3ba047044b894c61baf9b8375c2750e8d
+source_hash: 2d04b1fa8d3d92cdf11893ed99f345c5cd15bb41
 ---
 # 개념
 

@@ -88,13 +88,13 @@ Two images from different registries can strip to the same alias. For example `q
 
 - The ambiguous alias is **omitted from the catalog** (`/v2/_catalog`).
 - Requests to the ambiguous alias for tags, manifests, or blobs return **`404 Not Found`** rather than silently serving an arbitrary one of the colliding images. Each rejection is recorded in the [server audit log](../server-audit-log.md) as a `registry_alias_collision` event listing the colliding canonical repositories.
-- The **canonical, domain-prefixed names always keep working** — pull `quay.io/calico/node` or `registry.example.com/calico/node` explicitly to disambiguate.
+- The **canonical, domain-prefixed names always keep working**: pull `quay.io/calico/node` or `registry.example.com/calico/node` explicitly to disambiguate.
 
 If a requested name is simultaneously a canonical repository and an alias of another image, the canonical repository wins.
 
 ## Read-only enforcement
 
-Any method other than `GET` or `HEAD` — including `POST`, `PUT`, `DELETE`, and `PATCH` — returns `405 Method Not Allowed` before any path dispatch occurs. There are no push, delete, or upload endpoints.
+Any method other than `GET` or `HEAD`, including `POST`, `PUT`, `DELETE`, and `PATCH`, returns `405 Method Not Allowed` before any path dispatch occurs. There are no push, delete, or upload endpoints.
 
 ## `.deckignore`
 

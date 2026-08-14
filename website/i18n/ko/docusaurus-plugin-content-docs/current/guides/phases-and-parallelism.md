@@ -1,6 +1,6 @@
 ---
 source: docs/guides/phases-and-parallelism.md
-source_hash: f0aab1ae65f7c982ef08efdf5ed772a1472a64d3
+source_hash: 7a69a72bf0cae8a2f86e1388e6ae13e9120e3091
 ---
 # 단계와 병렬성
 

@@ -7,7 +7,7 @@
 | Stage | Platforms |
 |---|---|
 | Author, lint, prepare, bundle | macOS, Linux, Windows |
-| Apply (target) | Linux — RHEL / Rocky / CentOS or Debian / Ubuntu |
+| Apply (target) | Linux, RHEL / Rocky / CentOS or Debian / Ubuntu |
 
 You do **not** need Go installed on the target machine. The `deck` binary (and everything else the workflow needs) travels inside the bundle. Only the machine where you author and prepare workflows needs a `deck` binary in PATH.
 
@@ -40,7 +40,7 @@ Archive names follow the pattern `deck_<version>_<os>_<arch>.tar.gz`, for exampl
 Extract and place the binary on your PATH:
 
 ```bash
-# Example for Linux amd64 — adjust the filename for your version and arch
+# Example for Linux amd64, adjust the filename for your version and arch
 tar -xzf deck_<version>_linux_amd64.tar.gz
 sudo mv deck /usr/local/bin/deck
 ```
@@ -89,7 +89,7 @@ Confirm the binary is installed and reachable:
 deck version
 ```
 
-You should see version, commit, and build date. If the binary was installed via `go install` without ldflags, the version fields will be empty — that is expected for unversioned source builds.
+You should see version, commit, and build date. If the binary was installed via `go install` without ldflags, the version fields will be empty, that is expected for unversioned source builds.
 
 ## Shell completion
 
@@ -113,25 +113,25 @@ deck completion powershell | Out-String | Invoke-Expression
 
 Add the sourcing command to your shell's initialization file so completion loads automatically in every new session.
 
-**bash** — add to `~/.bashrc`:
+### bash
 
 ```bash
 source <(deck completion bash)
 ```
 
-**zsh** — add to `~/.zshrc`:
+### zsh
 
 ```bash
 source <(deck completion zsh)
 ```
 
-**fish** — write to the fish completions directory:
+### fish
 
 ```bash
 deck completion fish > ~/.config/fish/completions/deck.fish
 ```
 
-**PowerShell** — add to your `$PROFILE`:
+### PowerShell
 
 ```powershell
 deck completion powershell | Out-String | Invoke-Expression

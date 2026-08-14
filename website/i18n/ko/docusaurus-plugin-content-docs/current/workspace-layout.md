@@ -1,6 +1,6 @@
 ---
 source: docs/workspace-layout.md
-source_hash: 422c14266d5206e3c6be0270e507c9fc9685cffc
+source_hash: 2caa540f377369bb4af0d577863bd90447c391b1
 ---
 # 워크스페이스 레이아웃
 

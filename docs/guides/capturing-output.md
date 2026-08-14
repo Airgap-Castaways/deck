@@ -1,6 +1,6 @@
 # Capturing step output with register
 
-Some steps produce values that later steps need — a kubeadm join file path, an
+Some steps produce values that later steps need, a kubeadm join file path, an
 operator-supplied IP address, an encrypted join block. `register` is the
 mechanism for forwarding those values without shell variable hacks or
 hard-coded paths.
@@ -11,13 +11,13 @@ hard-coded paths.
 
 In a raw shell script, you might capture a command's output into a variable
 and reference it later. In a deck workflow, steps are isolated typed
-operations — there is no shared shell state. `register` gives you a typed,
+operations, there is no shared shell state. `register` gives you a typed,
 named bridge from one step's output to a later step's input.
 
 Without `register`:
 
 ```yaml
-# BAD: join file path hard-coded in two places — fragile, easy to break.
+# BAD: join file path hard-coded in two places, fragile, easy to break.
 - id: init-cluster
   kind: InitKubeadm
   spec:
@@ -78,7 +78,7 @@ validation.
 
 ## Consuming registered values
 
-### In step `spec` fields — Go templates
+### In step `spec` fields: Go templates
 
 Use `.runtime.<name>` inside double-brace template expressions:
 
@@ -97,7 +97,7 @@ Use `.runtime.<name>` inside double-brace template expressions:
           | openssl enc -aes-256-cbc -pbkdf2 -salt -base64 -A -pass env:DECK_JOIN_PASS
 ```
 
-### In `when` conditions — CEL expressions
+### In `when` conditions: CEL expressions
 
 Use `runtime.<name>` (no dot prefix, no braces) in CEL expressions:
 
@@ -137,7 +137,7 @@ passphrases, tokens, and anything else that should not reach disk.
     required: true
 ```
 
-If a run is interrupted after a secret `Input` step, the value is gone — it
+If a run is interrupted after a secret `Input` step, the value is gone, it
 was never persisted. On the next run the step re-prompts the operator.
 
 ### The encrypted-join pattern
@@ -153,7 +153,7 @@ The offline-kubernetes example uses this pattern across two scenarios:
    operator pastes the ciphertext (`Input`, registered as `joinCipher`) and
    re-enters the passphrase (`Input`, `secret: true`, registered as
    `joinPass`). A `Command` step decrypts the join command locally. Both
-   registered values are passed as environment variables — never inlined in
+   registered values are passed as environment variables, never inlined in
    command strings or written to state.
 
 For the full example, see
@@ -169,7 +169,7 @@ in the same batch start from the same runtime snapshot and cannot see each
 other's `register` outputs.
 
 ```yaml
-# This is invalid — both steps are in the same batch.
+# This is invalid, both steps are in the same batch.
 steps:
   - id: get-passphrase
     kind: Input
@@ -206,7 +206,7 @@ batch rules.
 - id: get-ip
   kind: Command
   register:
-    nodeIP: stdout     # Command has no declared outputs — this fails validation
+    nodeIP: stdout     # Command has no declared outputs, this fails validation
   spec:
     command: [hostname, -I]
 ```
@@ -262,8 +262,8 @@ steps:
 
 ## Related references
 
-- [Workflow Model — register](../workflow-model.md#register--capture-step-output)
-- [Workflow Model — Step Envelope Contract](../workflow-model.md#step-envelope-contract)
+- [Workflow Model, register](../workflow-model.md#register--capture-step-output)
+- [Workflow Model, Step Envelope Contract](../workflow-model.md#step-envelope-contract)
 - [Phases and parallelism](phases-and-parallelism.md)
 - [Input step kind](../step-kinds/input.md)
 - [InitKubeadm step kind](../step-kinds/init-kubeadm.md)

@@ -75,7 +75,7 @@ deck apply
 
 `apply` executes the scenario locally on the machine that needs the change. Run it from a workspace or unpacked bundle root that contains `workflows/`. No SSH, no controller, no external reach-back required.
 
-On success you will see phase and step progress on stderr, with a final completion summary. A run that completes cleanly exits 0 and leaves saved apply state under `.deck/state/apply/` — useful for auditing what ran and for resuming at phase boundaries if the run is interrupted. If anything fails, `deck apply` exits non-zero and prints the failing step with its error. See [Troubleshooting](troubleshooting.md) if the run does not progress as expected.
+On success you will see phase and step progress on stderr, with a final completion summary. A run that completes cleanly exits 0 and leaves saved apply state under `.deck/state/apply/`, useful for auditing what ran and for resuming at phase boundaries if the run is interrupted. If anything fails, `deck apply` exits non-zero and prints the failing step with its error. See [Troubleshooting](troubleshooting.md) if the run does not progress as expected.
 
 ## 6. Optional: add site assistance
 

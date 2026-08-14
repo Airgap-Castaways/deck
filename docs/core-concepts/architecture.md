@@ -210,7 +210,7 @@ Some documentation metadata is layered on top so examples and field descriptions
 
 ## Ask authoring architecture
 
-`deck ask` is an AI-assisted authoring helper that operates on real workspace files through a bounded tool loop. It follows the same source-of-truth direction as the rest of the system — it may project canonical facts for prompting, but it does not own a second copy of step validity, field enums, or workspace path rules. It requires an LLM provider configured in your environment. For usage and configuration, see [Using deck ask](../ask.md).
+`deck ask` is an AI-assisted authoring helper that operates on real workspace files through a bounded tool loop. It follows the same source-of-truth direction as the rest of the system, it may project canonical facts for prompting, but it does not own a second copy of step validity, field enums, or workspace path rules. It requires an LLM provider configured in your environment. For usage and configuration, see [Using deck ask](../ask.md).
 
 ## Site-local helper model
 

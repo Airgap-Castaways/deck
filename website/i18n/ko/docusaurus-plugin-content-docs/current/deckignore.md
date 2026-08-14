@@ -1,6 +1,6 @@
 ---
 source: docs/deckignore.md
-source_hash: 70e5a75a438808d52a19654e8748ec9d6263e00f
+source_hash: 9c58b38d8d30d723ebbd94d3b1cd19d22df2670c
 ---
 # .deckignore
 

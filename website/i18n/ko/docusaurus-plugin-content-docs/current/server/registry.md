@@ -1,6 +1,6 @@
 ---
 source: docs/server/registry.md
-source_hash: 95ea7de6a9aec0197165e9a0f8c84e656ff13780
+source_hash: 0f3a11818eb64151a9aeaf6f8578cde96feb4476
 ---
 # Server registry
 

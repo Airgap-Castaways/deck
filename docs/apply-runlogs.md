@@ -84,7 +84,7 @@ Short example:
 
 ## `events.jsonl`
 
-A newline-delimited JSON stream. Each line is one event emitted by the apply engine as steps start, finish, or are skipped. Unlike `record.json`, events are never rewritten — each line is appended and fsynced immediately, making `events.jsonl` the most reliable source of timing and ordering data.
+A newline-delimited JSON stream. Each line is one event emitted by the apply engine as steps start, finish, or are skipped. Unlike `record.json`, events are never rewritten, each line is appended and fsynced immediately, making `events.jsonl` the most reliable source of timing and ordering data.
 
 Fields on each event line:
 

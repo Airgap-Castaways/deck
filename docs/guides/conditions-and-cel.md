@@ -10,21 +10,21 @@ Every step in a workflow accepts an optional `when:` field. Its value is a
 [CEL](https://cel.dev) expression that deck evaluates before the step runs:
 
 - When `when:` evaluates to `true` (or is absent), the step runs normally.
-- When `when:` evaluates to `false`, the step is **skipped** — it is not
+- When `when:` evaluates to `false`, the step is **skipped**: it is not
   treated as an error, and execution continues with the next step.
 - When `when:` fails to evaluate (for example, because a referenced variable
   is the wrong type), deck reports `E_CONDITION_EVAL` and aborts.
 
-Use `when:` to express legitimate optionality — steps that should run only on
+Use `when:` to express legitimate optionality, steps that should run only on
 certain host types, roles, or after certain conditions are met. Do not use it
 to mask prerequisite failures; use `CheckHost` for hard suitability gates.
 
 ## Available namespaces
 
 CEL expressions can reference three namespaces: `vars.*`, `runtime.*`, and
-`context.*`. Use these without braces — `when:` is not Go template syntax.
+`context.*`. Use these without braces, `when:` is not Go template syntax.
 
-### `vars.*` — static input variables
+### `vars.*`: static input variables
 
 References the fully merged variable map built from `vars.yaml`, `-f`
 overlays, the scenario `vars:` block, and `--var` flags (in increasing
@@ -55,11 +55,11 @@ precedence order). Node-scoped `hosts:` selection has already run by the time
   when: vars.deckServer == true
 ```
 
-### `runtime.*` — detected facts and registered outputs
+### `runtime.*`: detected facts and registered outputs
 
 `runtime.*` provides two kinds of values:
 
-**Built-in host facts under `runtime.host`** — populated automatically from
+**Built-in host facts under `runtime.host`**: populated automatically from
 the local OS before any step runs. No `CheckHost` step is required to
 populate these; they are always available.
 
@@ -99,7 +99,7 @@ populate these; they are always available.
   when: runtime.host.os.family == "rhel"
 ```
 
-**Registered step outputs under `runtime.<name>`** — populated when an
+**Registered step outputs under `runtime.<name>`**: populated when an
 earlier step uses `register:` to export an output. The registered value is
 available to all later steps in the same phase, or in later phases. If the
 producing step is inside a `parallelGroup`, the value becomes visible only
@@ -122,7 +122,7 @@ steps:
     when: runtime.joinCipher != ""   # gate on the registered value
 ```
 
-### `context.*` — deck execution metadata
+### `context.*`: deck execution metadata
 
 `context.*` carries deck-supplied metadata about the current invocation.
 These values are resolved when the command starts and do not change during
@@ -143,7 +143,7 @@ execution.
 - id: announce-server-mode
   kind: Message
   spec:
-    message: "Running from deck server — fetching artifacts remotely"
+    message: "Running from deck server, fetching artifacts remotely"
   when: context.workflow.isServer == true
 ```
 
@@ -236,7 +236,7 @@ phases:
         # If a step inside also has its own when:, both conditions must be true.
 
       - path: host-prereqs.yaml
-        # No import-level when: — steps inside keep their own conditions.
+        # No import-level when:, steps inside keep their own conditions.
 ```
 
 This means you can apply a broad guard (OS family, role) at the import level
@@ -259,7 +259,7 @@ For variables used in conditions, also run:
 deck plan vars
 ```
 
-This shows the effective `vars` and initial `runtime` values — confirm that
+This shows the effective `vars` and initial `runtime` values, confirm that
 `vars.role` resolved to the expected value and that `runtime.host.os.family`
 matches the target host's OS.
 
@@ -269,36 +269,36 @@ condition-related codes.
 
 ## Limitations and gotchas
 
-**CEL is a typed expression language, not a general scripting language.**
+CEL is a typed expression language, not a general scripting language.
 It does not support shell expansions, arithmetic on strings, or function calls
 that are not built into CEL. Keep conditions simple: equality checks,
 comparisons, boolean and/or, and string containment (`has()`).
 
-**Type rules are strict.** `vars.deckServer == true` works when `deckServer`
+Type rules are strict. `vars.deckServer == true` works when `deckServer`
 is a boolean in `vars.yaml`. If it is the string `"true"`, the comparison
 fails silently and the step is skipped. Check `deck plan vars` to confirm the
 Go type that deck resolved.
 
-**Undefined variable handling.** If `vars.role` is not set at all — because
-`all:` has no default and the host is not in `hosts:` — the CEL expression
+Undefined variable handling. If `vars.role` is not set at all, because
+`all:` has no default and the host is not in `hosts:`, the CEL expression
 raises `E_CONDITION_EVAL`. Always provide `all:` defaults for every field you
 branch on.
 
-**`runtime.*` values from `register` are not available before the producing
+`runtime.*` values from `register` are not available before the producing
 step runs.** If step B gates on `runtime.joinCipher` and step A registers
 `joinCipher`, but A is skipped or has not run yet, the value is undefined and
 causes `E_CONDITION_EVAL`. Use phases or serial ordering to guarantee the
 producer runs first.
 
-**`when:` in component fragments** is evaluated in the context of the
+`when:` in component fragments is evaluated in the context of the
 importing scenario. Fragments can reference `vars.*` and `runtime.*` freely,
 but they do not have their own variable scope.
 
 ## Related references
 
-- [Workflow Model — `when`](../workflow-model.md#when--conditional-execution) — canonical `when` and conditional imports reference
-- [Workflow Model — `register`](../workflow-model.md#register--capture-step-output) — how to export step outputs to `runtime.*`
-- [Workflow Model — Built-In Runtime Fields](../workflow-model.md#built-in-runtime-fields) — full `runtime.host` field table
-- [Variables and templating](variables-and-templating.md) — how `vars.*` is built and how precedence works
-- [Authoring workflows](authoring-workflows.md) — putting `when:` into a full scenario
-- [Troubleshooting](../troubleshooting.md) — diagnosing `E_CONDITION_EVAL` and related errors
+- [Workflow Model, `when`](../workflow-model.md#when--conditional-execution): canonical `when` and conditional imports reference
+- [Workflow Model, `register`](../workflow-model.md#register--capture-step-output): how to export step outputs to `runtime.*`
+- [Workflow Model, Built-In Runtime Fields](../workflow-model.md#built-in-runtime-fields): full `runtime.host` field table
+- [Variables and templating](variables-and-templating.md): how `vars.*` is built and how precedence works
+- [Authoring workflows](authoring-workflows.md): putting `when:` into a full scenario
+- [Troubleshooting](../troubleshooting.md): diagnosing `E_CONDITION_EVAL` and related errors

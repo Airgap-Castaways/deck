@@ -1,6 +1,6 @@
 ---
 source: docs/guides/capturing-output.md
-source_hash: 42956a3d59b9fac84681aa2f8dc89e363cd1948e
+source_hash: 39f4b5de108363c3fa91f796875718dc9d1395e0
 ---
 # register로 스텝 출력 캡처하기
 

@@ -1,6 +1,6 @@
 ---
 source: docs/core-concepts/lifecycle.md
-source_hash: 95a762f8ae30ac80b038e4b27697a35fc6b5547f
+source_hash: 95542b3e56a26b337c3fc8d5d77e9c44b0fd814e
 ---
 # deck 라이프사이클
 

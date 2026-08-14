@@ -8,12 +8,12 @@ files and CLI flags, and how to use them safely inside workflow steps.
 Static `vars` come from four sources. **Later sources win over earlier ones.**
 The order from lowest to highest precedence is:
 
-1. `workflows/vars.yaml` — shared workspace defaults
-2. CLI `-f, --vars-file` overlays — site or node files passed at run time
-3. Scenario `vars:` block — overrides declared inside the workflow file
-4. CLI `--var key=value` — per-invocation overrides
+1. `workflows/vars.yaml`, shared workspace defaults
+2. CLI `-f, --vars-file` overlays, site or node files passed at run time
+3. Scenario `vars:` block, overrides declared inside the workflow file
+4. CLI `--var key=value`, per-invocation overrides
 
-**Why this order matters:**
+Why this order matters:
 
 A value set with `--var` always beats a value in `vars.yaml` or the scenario
 file. This means:
@@ -29,7 +29,7 @@ When `workflows/vars.yaml` contains a `hosts:` section, deck applies an
 additional selection step after the four sources above. See
 [Node-scoped vars](#node-scoped-vars) below for the full ordering.
 
-## `workflows/vars.yaml` — shared workspace defaults
+## `workflows/vars.yaml`: shared workspace defaults
 
 Define values that every scenario in the workspace shares:
 
@@ -75,7 +75,7 @@ The scenario `vars:` block is deep-merged on top of `vars.yaml` values, so
 you only need to list the keys you want to override. All other `vars.yaml`
 keys remain available.
 
-## CLI vars files — `-f, --vars-file`
+## CLI vars files: `-f, --vars-file`
 
 Layer site- or environment-specific values at run time without editing
 `vars.yaml`:
@@ -102,7 +102,7 @@ cluster:
   controlPlaneEndpoint: 10.0.1.5:6443
 ```
 
-## CLI `--var` — single-key overrides
+## CLI `--var`: single-key overrides
 
 Override one key without creating a file:
 
@@ -166,7 +166,7 @@ When `deck apply` runs on a machine whose hostname is `cp-1`:
 
 If the local hostname does not appear in `hosts:`, execution continues using
 only the `all:` values. Provide safe defaults in `all:` for any field your
-workflow branches on — for example `role: ""` — to prevent CEL evaluation
+workflow branches on, for example `role: ""`, to prevent CEL evaluation
 errors on unmatched hosts.
 
 Hostname matching tries the full detected hostname first, then the short
@@ -199,13 +199,13 @@ registered runtime outputs, use `.runtime.NAME` (see
 In `when:` conditions, use the CEL namespace without braces:
 
 ```yaml
-when: vars.role == "control-plane"         # CEL — no braces
+when: vars.role == "control-plane"         # CEL, no braces
 ```
 
 Not:
 
 ```yaml
-when: "{{ .vars.role }} == control-plane"  # wrong — this is template syntax
+when: "{{ .vars.role }} == control-plane"  # wrong, this is template syntax
 ```
 
 See [Conditions with when (CEL)](conditions-and-cel.md) for the full reference.
@@ -271,7 +271,7 @@ content: "cluster: {{ .vars.clusterName }}"
 
 ## Related references
 
-- [Workflow Model — Variables](../workflow-model.md#variables) — canonical precedence rules and node-scoped vars
-- [Authoring workflows](authoring-workflows.md) — how to structure a scenario from scratch
-- [Conditions with when (CEL)](conditions-and-cel.md) — using vars in CEL `when:` expressions
-- [Troubleshooting](../troubleshooting.md) — diagnosing variable resolution errors
+- [Workflow Model, Variables](../workflow-model.md#variables): canonical precedence rules and node-scoped vars
+- [Authoring workflows](authoring-workflows.md): how to structure a scenario from scratch
+- [Conditions with when (CEL)](conditions-and-cel.md): using vars in CEL `when:` expressions
+- [Troubleshooting](../troubleshooting.md): diagnosing variable resolution errors
