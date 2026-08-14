@@ -1,6 +1,6 @@
 ---
 source: docs/ask.md
-source_hash: 14eb58db748b9b3c6bd234ef0f19c6b74a4e338f
+source_hash: 442cb3c55bdba384f6180e51b6dd6f9bc806415d
 sidebar_label: "Using deck ask"
 ---
 
