@@ -15,14 +15,14 @@ Every step in a workflow accepts an optional `when:` field. Its value is a
 - When `when:` fails to evaluate (for example, because a referenced variable
   is the wrong type), deck reports `E_CONDITION_EVAL` and aborts.
 
-Use `when:` to express legitimate optionality, steps that should run only on
+Use `when:` to express legitimate optionality: steps that should run only on
 certain host types, roles, or after certain conditions are met. Do not use it
 to mask prerequisite failures; use `CheckHost` for hard suitability gates.
 
 ## Available namespaces
 
 CEL expressions can reference three namespaces: `vars.*`, `runtime.*`, and
-`context.*`. Use these without braces, `when:` is not Go template syntax.
+`context.*`. Use these without braces; `when:` is not Go template syntax.
 
 ### `vars.*`: static input variables
 
@@ -236,7 +236,7 @@ phases:
         # If a step inside also has its own when:, both conditions must be true.
 
       - path: host-prereqs.yaml
-        # No import-level when:, steps inside keep their own conditions.
+        # No import-level when: steps inside keep their own conditions.
 ```
 
 This means you can apply a broad guard (OS family, role) at the import level
@@ -259,7 +259,7 @@ For variables used in conditions, also run:
 deck plan vars
 ```
 
-This shows the effective `vars` and initial `runtime` values, confirm that
+This shows the effective `vars` and initial `runtime` values. Confirm that
 `vars.role` resolved to the expected value and that `runtime.host.os.family`
 matches the target host's OS.
 
@@ -285,7 +285,7 @@ raises `E_CONDITION_EVAL`. Always provide `all:` defaults for every field you
 branch on.
 
 `runtime.*` values from `register` are not available before the producing
-step runs.** If step B gates on `runtime.joinCipher` and step A registers
+step runs. If step B gates on `runtime.joinCipher` and step A registers
 `joinCipher`, but A is skipped or has not run yet, the value is undefined and
 causes `E_CONDITION_EVAL`. Use phases or serial ordering to guarantee the
 producer runs first.

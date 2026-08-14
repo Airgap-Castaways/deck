@@ -41,9 +41,9 @@ Default state is user-scoped.
 
 ## What identifies saved state {#what-identifies-saved-state}
 
-The state key is a fingerprint of three things: the resolved workflow bytes after imports expand, the effective vars for the run, and the apply execution context. This means that changing the workflow file, supplying different `--var` overrides or `-f` vars files, or changing the bundle root will produce a **new** state key, and any prior resume progress stored under the old key will be orphaned, not resumed. The old state file is not deleted or treated as corrupt; it simply will not be selected the next time deck computes a different key.
+The state key is a fingerprint of three things: the resolved workflow bytes after imports expand, the effective vars for the run, and the apply execution context. This means that changing the workflow file, supplying different `--var` overrides or `-f` vars files, or changing the bundle root will produce a **new** state key. Any prior resume progress stored under the old key will be orphaned, not resumed. The old state file is not deleted or treated as corrupt; it simply will not be selected the next time deck computes a different key.
 
-If you are unsure which state file a given invocation will use, run `deck state show` with the same flags you intend to pass to `deck apply`, it prints the resolved state key and file path without running anything. See [troubleshooting.md](troubleshooting.md) if saved state is not being picked up as expected.
+If you are unsure which state file a given invocation will use, run `deck state show` with the same flags you intend to pass to `deck apply`. It prints the resolved state key and file path without running anything. See [troubleshooting.md](troubleshooting.md) if saved state is not being picked up as expected.
 
 ## Migration
 

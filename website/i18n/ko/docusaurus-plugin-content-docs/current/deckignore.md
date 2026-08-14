@@ -1,6 +1,6 @@
 ---
 source: docs/deckignore.md
-source_hash: 9c58b38d8d30d723ebbd94d3b1cd19d22df2670c
+source_hash: 7ee04b20d0b8d82bbaee02a11fc1c4cac3d2daa8
 ---
 # .deckignore
 
@@ -8,7 +8,7 @@ source_hash: 9c58b38d8d30d723ebbd94d3b1cd19d22df2670c
 
 ## 위치
 
-`.deckignore`는 워크스페이스 루트, `workflows/`, `outputs/`, `.deck/`를 포함하는 동일한 디렉터리, 에 배치하세요. `deck init`이 자동으로 시작용 파일을 그곳에 생성합니다.
+`.deckignore`는 워크스페이스 루트에 배치하세요. 이 위치는 `workflows/`, `outputs/`, `.deck/`를 포함하는 동일한 디렉터리입니다. `deck init`이 자동으로 시작용 파일을 그곳에 생성합니다.
 
 ## 구문
 
@@ -29,7 +29,7 @@ source_hash: 9c58b38d8d30d723ebbd94d3b1cd19d22df2670c
 | 문자 클래스 `[…]` | 부분적 | 브래킷 클래스는 Go regexp 문자 클래스로 **동작함** (예: `[abc]`, `[0-9]`). 그러나 gitignore의 부정 형태 `[!abc]`는 **부정하지 않음**: Go regexp는 `[^abc]`를 요구하며, `[!…]` 패턴은 예상대로 동작하지 않음 |
 | 백슬래시 이스케이프 `\#`, `\!` | 예 | `#` 또는 `!`를 리터럴 문자로 처리함 |
 
-> **참고:** `.deckignore`는 `go-gitignore`를 사용하며, 이는 전체 gitignore 사양을 구현하는 대신 패턴을 Go `regexp`로 컴파일합니다. 두 가지 주목할 만한 차이점: `?`는 리터럴 문자로 처리되며(단일 문자 와일드카드가 아님), 문자 클래스 부정은 Go regexp 구문을 사용합니다, `[!abc]`는 **부정하지 않습니다**(부정이 필요하면 `[^abc]`를 사용하되, 이는 표준 gitignore 구문이 아닌 원시 regexp 구문입니다).
+> **참고:** `.deckignore`는 `go-gitignore`를 사용하며, 이는 전체 gitignore 사양을 구현하는 대신 패턴을 Go `regexp`로 컴파일합니다. 두 가지 주목할 만한 차이점: `?`는 리터럴 문자로 처리되며(단일 문자 와일드카드가 아님), 문자 클래스 부정은 Go regexp 구문을 사용합니다: `[!abc]`는 **부정하지 않습니다**(부정이 필요하면 `[^abc]`를 사용하되, 이는 표준 gitignore 구문이 아닌 원시 regexp 구문입니다).
 
 ### `Matches`가 적용하는 규칙
 

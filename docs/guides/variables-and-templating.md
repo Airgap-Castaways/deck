@@ -205,7 +205,7 @@ when: vars.role == "control-plane"         # CEL, no braces
 Not:
 
 ```yaml
-when: "{{ .vars.role }} == control-plane"  # wrong, this is template syntax
+when: "{{ .vars.role }} == control-plane"  # wrong: this is template syntax
 ```
 
 See [Conditions with when (CEL)](conditions-and-cel.md) for the full reference.

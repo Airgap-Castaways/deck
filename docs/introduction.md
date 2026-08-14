@@ -8,7 +8,7 @@ slug: /
 
 `deck` is a structured workflow tool for air-gapped, disconnected, and operationally constrained environments. It replaces the growing shell scripts that accumulate around offline Kubernetes bootstraps, package installations, and host configuration with typed, validated steps packed into a self-contained bundle.
 
-The tool is designed for operators who cannot assume internet access or a reachable control plane when they actually run a procedure. Regulated data centers, industrial edge sites, government networks, and any environment where "SSH into the target and pull from the internet" is not an option, these are the environments deck was built for.
+The tool is designed for operators who cannot assume internet access or a reachable control plane when they actually run a procedure. Regulated data centers, industrial edge sites, government networks: these are the environments deck was built for, where "SSH into the target and pull from the internet" is simply not an option.
 
 A single static `deck` binary handles everything: authoring, validation, artifact gathering, bundling, and local execution on the target. The target machine needs no pre-installed runtime and no network reach-back. Everything it needs travels with the bundle.
 

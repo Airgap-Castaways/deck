@@ -1,6 +1,6 @@
 ---
 source: docs/installation.md
-source_hash: 1aa05d2da06ff384e05f5a25d4cfcd584226d766
+source_hash: 9352097dac05965cae3403d89b1e169e67ef581d
 ---
 # 설치
 
@@ -93,7 +93,7 @@ make build
 deck version
 ```
 
-버전, commit, 빌드 날짜가 표시됩니다. ldflags 없이 `go install`로 설치했다면 버전 필드가 비어 있는데, 이는 버전 정보가 없는 소스 빌드에서는 정상적인 현상입니다.
+버전, commit, 빌드 날짜가 표시됩니다. ldflags 없이 `go install`로 설치했다면 버전 필드가 비어 있습니다. 이는 버전 정보가 없는 소스 빌드에서는 정상적인 현상입니다.
 
 ## 셸 자동 완성
 

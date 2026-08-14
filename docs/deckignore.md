@@ -4,7 +4,7 @@
 
 ## Location
 
-Place `.deckignore` at the workspace root, the same directory that contains `workflows/`, `outputs/`, and `.deck/`. `deck init` creates a starter file there automatically.
+Place `.deckignore` at the workspace root: the same directory that contains `workflows/`, `outputs/`, and `.deck/`. `deck init` creates a starter file there automatically.
 
 ## Syntax
 
@@ -25,7 +25,7 @@ Patterns are compiled to Go `regexp` by the `github.com/sabhiram/go-gitignore` l
 | Character classes `[…]` | Partial | Bracket classes **do** work as Go regexp character classes (e.g. `[abc]`, `[0-9]`). However, gitignore's negated form `[!abc]` does **not** negate, Go regexp requires `[^abc]`; a `[!…]` pattern will not behave as expected |
 | Backslash escaping `\#`, `\!` | Yes | Treats `#` or `!` as a literal character |
 
-> **Note:** `.deckignore` uses `go-gitignore`, which compiles patterns to Go `regexp` rather than implementing the full gitignore spec. Two notable differences: `?` is treated as a literal character (not a single-character wildcard), and character class negation uses Go regexp syntax, `[!abc]` does **not** negate (use `[^abc]` if you need negation, but that is a raw regexp construct, not standard gitignore syntax).
+> **Note:** `.deckignore` uses `go-gitignore`, which compiles patterns to Go `regexp` rather than implementing the full gitignore spec. Two notable differences: `?` is treated as a literal character (not a single-character wildcard), and character class negation uses Go regexp syntax: `[!abc]` does **not** negate (use `[^abc]` if you need negation, but that is a raw regexp construct, not standard gitignore syntax).
 
 ### Rules applied by `Matches`
 
@@ -39,7 +39,7 @@ For directories, `deck` tests both `rel/` (trailing-slash form) and `rel`, so a 
 
 ## Behavior when the file is absent
 
-If `.deckignore` does not exist, `Load` returns an empty matcher and `Matches` always returns `false`, nothing is excluded. This is a no-op, not an error.
+If `.deckignore` does not exist, `Load` returns an empty matcher and `Matches` always returns `false`: nothing is excluded. This is a no-op, not an error.
 
 ## Where it applies
 
@@ -55,7 +55,7 @@ If `.deckignore` does not exist, `Load` returns an empty matcher and `Matches` a
 `internal/server/http_browse.go` (`listBrowseEntries`) loads `.deckignore` and omits matched entries from directory listings shown in the browser.
 
 ### OCI registry catalog (`deck server up`)
-`internal/server/http_registry.go` (`scanRegistryCatalog`) loads `.deckignore` before scanning `outputs/images/` and `images/` for `.tar` files. Any `.tar` whose path relative to the bundle root matches is excluded from the registry catalog, it will not appear in `/v2/_catalog` and cannot be pulled.
+`internal/server/http_registry.go` (`scanRegistryCatalog`) loads `.deckignore` before scanning `outputs/images/` and `images/` for `.tar` files. Any `.tar` whose path relative to the bundle root matches is excluded from the registry catalog; it will not appear in `/v2/_catalog` and cannot be pulled.
 
 ## Default content
 
@@ -68,7 +68,7 @@ If `.deckignore` does not exist, `Load` returns an empty matcher and `Matches` a
 /*.tar
 ```
 
-This hides version-control internals, the ignore files themselves, and any loose `.tar` archives at the workspace root from the bundle and server.
+This hides version-control internals, the ignore files themselves, and any loose `.tar` archives at the workspace root.
 
 ## Example
 

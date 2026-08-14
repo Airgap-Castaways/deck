@@ -71,7 +71,7 @@ offline-kubernetes/
    ```bash
    ./deck apply scenarios/bootstrap.yaml
    ```
-   During bootstrap, the operator is prompted for a passphrase. The kubeadm join command is then printed to the log as an **encrypted block** only, no plaintext join file is served. Copy the text between `BEGIN ENCRYPTED JOIN` and `END ENCRYPTED JOIN`.
+   During bootstrap, the operator is prompted for a passphrase. The kubeadm join command is then printed to the log as an **encrypted block** only; no plaintext join file is served. Copy the text between `BEGIN ENCRYPTED JOIN` and `END ENCRYPTED JOIN`.
 5. **Join**: on each worker node, run:
    ```bash
    ./deck apply scenarios/join.yaml --server 192.0.2.10:5000

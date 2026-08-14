@@ -1,6 +1,6 @@
 ---
 source: docs/apply-state.md
-source_hash: 2c8f3738a05c03fc44693d1ff08e7c6eb40c0159
+source_hash: eb8678cfddd798c04f4539107b529a6f8e1b381d
 ---
 # 적용 상태(Apply state)
 

@@ -111,7 +111,7 @@ over `Command` because:
 
 **Use `Command` when:**
 
-No typed step models the action, for example, a vendor-specific CLI call or a
+No typed step models the action: for example, a vendor-specific CLI call or a
 one-off probe that deck does not yet support directly. `Command` is the escape
 hatch, not the default choice.
 
@@ -121,7 +121,7 @@ group.
 ## Structuring a multi-phase scenario
 
 Use `phases` when the procedure has natural boundaries. Phases are also the
-resume boundary for `deck apply`, if a run stops, it resumes from the last
+resume boundary for `deck apply`: if a run stops, it resumes from the last
 incomplete phase.
 
 ### Importing component fragments
@@ -182,7 +182,7 @@ steps:
       persistFile: /etc/modules-load.d/kubernetes.conf
 ```
 
-A component fragment has no `version` or `vars`, those belong to the
+A component fragment has no `version` or `vars`; those belong to the
 importing scenario.
 
 ## Branching with `when`
@@ -268,7 +268,7 @@ deck plan vars   # show the fully-resolved variable snapshot
 
 `deck plan` prints the phases and steps that would run, with conditions
 evaluated where possible. `deck plan vars` prints the effective `vars`,
-resolved `context`, and initial `runtime` values, useful for verifying that
+resolved `context`, and initial `runtime` values. Useful for verifying that
 node-scoped vars resolved correctly before you run `apply`.
 
 ## Related references

@@ -1,6 +1,6 @@
 ---
 source: docs/offline-kubernetes.md
-source_hash: 4257918aeb39dc3184d47d3c46efc841de39f517
+source_hash: b87ddfc835cde99bf633262c1d1a456c35e0409f
 sidebar_label: "튜토리얼: 오프라인 Kubernetes"
 ---
 

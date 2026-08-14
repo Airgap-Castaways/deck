@@ -1,6 +1,6 @@
 # Workflow Model
 
-`deck` uses a YAML workflow model so larger procedures stay reviewable. The goal is not to invent a DSL, it is to give air-gapped operational work a clearer structure than a growing shell script, where typed steps express intent and named phases show the operator what the procedure is doing before they read every detail.
+`deck` uses a YAML workflow model so larger procedures stay reviewable. The goal is not to invent a DSL. It is to give air-gapped operational work a clearer structure than a growing shell script, where typed steps express intent and named phases show the operator what the procedure is doing before they read every detail.
 
 ## Top-level fields
 
@@ -314,7 +314,7 @@ steps:
 
 For a guided walkthrough, see [Phases and parallelism](guides/phases-and-parallelism.md).
 
-Use phases when the procedure has natural boundaries, a host-prereqs block that must complete before a runtime block, for example. For simple apply workflows with a handful of steps, flat `steps:` is fine.
+Use phases when the procedure has natural boundaries: a host-prereqs block that must complete before a runtime block, for example. For simple apply workflows with a handful of steps, flat `steps:` is fine.
 
 Each phase can import component fragments, include inline steps, or both. Phases are also the persisted resume boundary for `apply`.
 
@@ -354,7 +354,7 @@ phases:
       - path: gpu/setup.yaml
         when: "vars.gpu == true"   # applied (AND) to every step imported from gpu/setup.yaml
       - path: base.yaml
-        # no when, steps from base.yaml keep their own conditions unchanged
+        # no when: steps from base.yaml keep their own conditions unchanged
 ```
 
 Use `vars.` to test static variables and `runtime.` to test runtime facts, the same as in a step-level `when`.

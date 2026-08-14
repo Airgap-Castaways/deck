@@ -9,7 +9,7 @@ concurrently inside a phase using `parallelGroup` and `maxParallelism`.
 ## Flat steps vs. named phases
 
 A workflow can express all its work in one `steps:` list or break it into
-named `phases:`. The two forms are mutually exclusive, a workflow must choose
+named `phases:`. The two forms are mutually exclusive; a workflow must choose
 one at the top level.
 
 ```yaml
@@ -29,7 +29,7 @@ steps:
 ```
 
 Flat steps execute as an implicit phase named `default`. That is fine until
-the procedure grows past a handful of steps, at that point naming the phases
+the procedure grows past a handful of steps. At that point, naming the phases
 makes the intent visible before an operator has to read every step.
 
 Use named phases when:
@@ -53,8 +53,8 @@ Phases are the persisted resume boundary for `deck apply`.
 
 This means that a phase represents a meaningful unit of work that is either
 entirely done or starts over. Choose phase boundaries at natural "safe to
-restart from here" points, after packages are installed, after the runtime is
-configured, before a one-way operation like `kubeadm init`.
+restart from here" points: after packages are installed, after the runtime is
+configured, or before a one-way operation like `kubeadm init`.
 
 For full details on what is persisted, see [Apply State](../apply-state.md).
 
@@ -105,7 +105,7 @@ phases:
 ```
 
 Component files contain only a `steps:` list. They cannot have their own
-`phases:` or `vars:`, shared defaults belong in `workflows/vars.yaml` or the
+`phases:` or `vars:`; shared defaults belong in `workflows/vars.yaml` or the
 importing scenario's `vars:` block.
 
 ### Conditional imports
@@ -125,7 +125,7 @@ phases:
         when: runtime.host.os.family == "debian"   # all steps in this file
       - path: repo/offline-repo-rhel.yaml
         when: runtime.host.os.family == "rhel"
-      - path: host-prereqs.yaml                    # no filter, all nodes
+      - path: host-prereqs.yaml                    # no filter: all nodes
 ```
 
 A phase may also mix imports with inline `steps:`:
@@ -230,7 +230,7 @@ phases:
 ```
 
 This is useful when running many parallel downloads on a machine with limited
-resources, set `maxParallelism: 4` to keep concurrency bounded without
+resources. Set `maxParallelism: 4` to keep concurrency bounded without
 serializing work entirely.
 
 ---
@@ -248,7 +248,7 @@ phases:
   - name: prepare-artifacts
     maxParallelism: 2
     steps:
-      # Both steps share parallelGroup "downloads", they start at the same time.
+      # Both steps share parallelGroup "downloads"; they start at the same time.
       - id: extract-containerd
         kind: ExtractArchive
         parallelGroup: downloads
@@ -322,7 +322,7 @@ steps:
 
   - id: join-node
     kind: JoinKubeadm
-    parallelGroup: kube-init          # WRONG, same batch
+    parallelGroup: kube-init          # WRONG: same batch
     spec:
       joinFile: "{{ .runtime.joinFile }}"
 ```

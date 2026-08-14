@@ -5,8 +5,8 @@
 ## What a release publishes
 
 - GitHub Release assets for `deck`
-- Cross-platform tarballs (`.tar.gz`) for macOS and Linux, each archive includes the full `docs/` tree and `README.ko.md` for offline use
-- Linux packages (`.deb` and `.rpm`), each package installs docs under `/usr/share/doc/deck/docs/` and `README.ko.md` alongside the binary
+- Cross-platform tarballs (`.tar.gz`) for macOS and Linux; each archive includes the full `docs/` tree and `README.ko.md` for offline use
+- Linux packages (`.deb` and `.rpm`); each package installs docs under `/usr/share/doc/deck/docs/` and `README.ko.md` alongside the binary
 - `checksums.txt`
 - A Homebrew tap formula in `Airgap-Castaways/homebrew-tap`
 

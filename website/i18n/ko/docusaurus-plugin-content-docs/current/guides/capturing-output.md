@@ -1,10 +1,10 @@
 ---
 source: docs/guides/capturing-output.md
-source_hash: 39f4b5de108363c3fa91f796875718dc9d1395e0
+source_hash: cc0c29c7c92d423b1dd116f8a5d8cce6823e9124
 ---
 # register로 스텝 출력 캡처하기
 
-일부 스텝은 이후 스텝이 필요로 하는 값을 생성합니다, kubeadm join 파일 경로,
+일부 스텝은 이후 스텝이 필요로 하는 값을 생성합니다: kubeadm join 파일 경로,
 운영자가 제공한 IP 주소, 암호화된 join 블록 등입니다. `register`는 셸 변수
 꼼수나 하드코딩된 경로 없이 그러한 값을 전달하는 메커니즘입니다.
 
@@ -139,7 +139,7 @@ CEL 표현식에서는 `runtime.<name>`(점 접두사 없음, 중괄호 없음)�
     required: true
 ```
 
-시크릿 `Input` 스텝 이후에 실행이 중단되면 그 값은 사라집니다, 애초에 유지된
+시크릿 `Input` 스텝 이후에 실행이 중단되면 그 값은 사라집니다. 애초에 유지된
 적이 없습니다. 다음 실행에서 해당 스텝은 운영자에게 다시 입력을 요청합니다.
 
 ### 암호화된 join 패턴

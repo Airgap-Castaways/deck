@@ -1,6 +1,6 @@
 ---
 source: docs/guides/conditions-and-cel.md
-source_hash: 101a4499f3642509adae78dc9994027dbe94ad42
+source_hash: 2cb24974f76ee7d2c227a1131a769eddeb5f78c2
 ---
 # `when`을 사용한 조건 (CEL)
 
@@ -20,7 +20,7 @@ source_hash: 101a4499f3642509adae78dc9994027dbe94ad42
 - `when:`이 평가에 실패하면 (예를 들어, 참조된 변수의 타입이 잘못된
   경우), deck은 `E_CONDITION_EVAL`을 보고하고 중단합니다.
 
-`when:`은 정당한 선택성을 표현하는 데 사용하세요, 특정 호스트 유형,
+`when:`은 정당한 선택성을 표현하는 데 사용하세요: 특정 호스트 유형이나
 역할에서만, 또는 특정 조건이 충족된 후에만 실행되어야 하는 스텝 등입니다.
 전제 조건 실패를 가리는 데 사용하지 마세요. 강제적인 적합성 게이트에는
 `CheckHost`를 사용하세요.

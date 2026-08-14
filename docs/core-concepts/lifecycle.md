@@ -20,11 +20,11 @@ flowchart LR
     end
 ```
 
-**Prepare** runs in a connected environment. The operator authors a typed workflow, lints it, then runs `deck prepare` to download packages, images, and files into the workspace's `outputs/` tree. Preparation is declared through the same typed workflow model used for apply, there is no separate ad hoc download script.
+**Prepare** runs in a connected environment. The operator authors a typed workflow, lints it, then runs `deck prepare` to download packages, images, and files into the workspace's `outputs/` tree. Preparation is declared through the same typed workflow model used for apply. There is no separate ad hoc download script.
 
 **Bundle** turns the prepared workspace into a single, self-contained archive (`bundle.tar`). The binary, all workflow files, all prepared artifacts, and the integrity manifest are packed together. After this step, no external connectivity is required.
 
-**Apply** runs locally on the target node inside the air gap. The operator unpacks the bundle, optionally verifies it with `deck bundle verify`, then runs `deck apply`. The workflow executes entirely on the node using only what the bundle contains, no SSH, no controller, no reach-back.
+**Apply** runs locally on the target node inside the air gap. The operator unpacks the bundle, optionally verifies it with `deck bundle verify`, then runs `deck apply`. The workflow executes entirely on the node using only what the bundle contains. No SSH, no controller, no reach-back.
 
 ## What lives in a bundle and why
 
@@ -38,7 +38,7 @@ flowchart LR
 | `outputs/images/` | Container image archives fetched during prepare |
 | `.deck/manifest.json` | SHA-256 integrity manifest; `deck bundle verify` and `deck apply` both check this before any work begins |
 
-Everything the workflow needs on the target machine must be inside the bundle. If a step needs a file at apply time, it should come from `outputs/`, the target node should not need to reach back to any external source.
+Everything the workflow needs on the target machine must be inside the bundle. If a step needs a file at apply time, it should come from `outputs/`. The target node should not need to reach back to any external source.
 
 ## Workspace vs. bundle
 
@@ -50,7 +50,7 @@ A **bundle** is the sealed, transportable artefact produced by `deck bundle buil
 
 | | Workspace | Bundle |
 |---|---|---|
-| State | Mutable, you author and prepare here | Immutable, sealed for transport |
+| State | Mutable: you author and prepare here | Immutable: sealed for transport |
 | Location | Connected environment | Crosses the air gap |
 | Created by | `deck init` | `deck bundle build` |
 | Used by | `deck lint`, `deck prepare` | `deck bundle verify`, `deck apply` |

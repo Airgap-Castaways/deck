@@ -40,7 +40,7 @@ Archive names follow the pattern `deck_<version>_<os>_<arch>.tar.gz`, for exampl
 Extract and place the binary on your PATH:
 
 ```bash
-# Example for Linux amd64, adjust the filename for your version and arch
+# Example for Linux amd64: adjust the filename for your version and arch
 tar -xzf deck_<version>_linux_amd64.tar.gz
 sudo mv deck /usr/local/bin/deck
 ```
@@ -89,7 +89,7 @@ Confirm the binary is installed and reachable:
 deck version
 ```
 
-You should see version, commit, and build date. If the binary was installed via `go install` without ldflags, the version fields will be empty, that is expected for unversioned source builds.
+You should see version, commit, and build date. If the binary was installed via `go install` without ldflags, the version fields will be empty. That is expected for unversioned source builds.
 
 ## Shell completion
 

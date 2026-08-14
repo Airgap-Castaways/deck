@@ -1,6 +1,6 @@
 ---
 source: docs/bundle-layout.md
-source_hash: d8d79ff494c81f8adeed0c08e87d9a1c9c0cc35c
+source_hash: 78017be71214f8505fa7a2c0ad5c68cbad0361cc
 ---
 title: Bundle layout
 ---

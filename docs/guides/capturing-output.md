@@ -1,6 +1,6 @@
 # Capturing step output with register
 
-Some steps produce values that later steps need, a kubeadm join file path, an
+Some steps produce values that later steps need: a kubeadm join file path, an
 operator-supplied IP address, an encrypted join block. `register` is the
 mechanism for forwarding those values without shell variable hacks or
 hard-coded paths.
@@ -11,7 +11,7 @@ hard-coded paths.
 
 In a raw shell script, you might capture a command's output into a variable
 and reference it later. In a deck workflow, steps are isolated typed
-operations, there is no shared shell state. `register` gives you a typed,
+operations; there is no shared shell state. `register` gives you a typed,
 named bridge from one step's output to a later step's input.
 
 Without `register`:
@@ -137,7 +137,7 @@ passphrases, tokens, and anything else that should not reach disk.
     required: true
 ```
 
-If a run is interrupted after a secret `Input` step, the value is gone, it
+If a run is interrupted after a secret `Input` step, the value is gone; it
 was never persisted. On the next run the step re-prompts the operator.
 
 ### The encrypted-join pattern
@@ -169,7 +169,7 @@ in the same batch start from the same runtime snapshot and cannot see each
 other's `register` outputs.
 
 ```yaml
-# This is invalid, both steps are in the same batch.
+# This is invalid: both steps are in the same batch.
 steps:
   - id: get-passphrase
     kind: Input
@@ -206,7 +206,7 @@ batch rules.
 - id: get-ip
   kind: Command
   register:
-    nodeIP: stdout     # Command has no declared outputs, this fails validation
+    nodeIP: stdout     # Command has no declared outputs; this fails validation
   spec:
     command: [hostname, -I]
 ```

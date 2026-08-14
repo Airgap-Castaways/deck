@@ -1,10 +1,10 @@
 ---
 source: docs/guides/authoring-workflows.md
-source_hash: 901de7e41c6cf087687bae8c801a764266d06fb5
+source_hash: bb3c293595a17a622a863cc3fdc17eb277947b98
 ---
 # 워크플로 작성하기
 
-이 가이드는 deck 워크플로를 처음부터 작성하는 과정을 안내합니다, `deck init`이
+이 가이드는 deck 워크플로를 처음부터 작성하는 과정을 안내합니다. `deck init`이
 생성하는 파일에서 시작해 컴포넌트 프래그먼트를 임포트하고 호스트 유형에 따라
 분기하는 다중 단계 시나리오까지 다룹니다.
 

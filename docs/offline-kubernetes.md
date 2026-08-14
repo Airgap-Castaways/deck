@@ -103,7 +103,7 @@ Copy the text between the `BEGIN` and `END` markers (a single line of base64). N
 
 ### Calico CNI
 
-Calico images are prepared and available in the bundle's image store. The CNI manifest (Tigera operator or `calico.yaml`) is applied **out-of-band** after bootstrap, for example, by placing the manifest in the bundle and running `kubectl apply -f` from a terminal with cluster access once `kubeconfig` is available.
+Calico images are prepared and available in the bundle's image store. The CNI manifest (Tigera operator or `calico.yaml`) is applied **out-of-band** after bootstrap: for example, by placing the manifest in the bundle and running `kubectl apply -f` from a terminal with cluster access once `kubeconfig` is available.
 
 ## 5. Join worker nodes
 

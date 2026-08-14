@@ -1,6 +1,6 @@
 ---
 source: docs/diagnostics/error-codes.md
-source_hash: ba2281b9b3920f2dca9026ee8a8339cb77bd5f65
+source_hash: a8c0538185d6eab7444ee7ec59b9d42049da00bc
 ---
 # 진단: 에러 코드
 

@@ -1,6 +1,6 @@
 ---
 source: docs/guides/variables-and-templating.md
-source_hash: 48f8b107b6488084084ef251ac5181d2f8f5f0b4
+source_hash: 3048cd454ead17c92d169cfc30b90ac17343b23d
 ---
 # 변수와 템플릿화
 

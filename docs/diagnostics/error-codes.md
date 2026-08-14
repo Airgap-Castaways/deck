@@ -2,7 +2,7 @@
 
 deck renders CLI errors in the form `CODE: message` (see `internal/errcode`). The codes below are stable, machine-readable identifiers you can match against in scripts and logs.
 
-> **Contributors:** When adding a new `E_*` code in source, add a row to the appropriate section below, the `internal/doccheck` drift test fails the build until the code is documented.
+> **Contributors:** When adding a new `E_*` code in source, add a row to the appropriate section below; the `internal/doccheck` drift test fails the build until the code is documented.
 
 ## Bundle
 
