@@ -1,6 +1,6 @@
 ---
 source: docs/guides/phases-and-parallelism.md
-source_hash: f0aab1ae65f7c982ef08efdf5ed772a1472a64d3
+source_hash: 52719ef40b82820bc9c7d6b3c5a65564c159ceb6
 ---
 # 단계와 병렬성
 
@@ -14,11 +14,11 @@ source_hash: f0aab1ae65f7c982ef08efdf5ed772a1472a64d3
 ## 평면적 스텝 vs. 명명된 단계
 
 워크플로는 모든 작업을 하나의 `steps:` 목록으로 표현하거나 명명된 `phases:`로
-나눌 수 있습니다. 두 형식은 상호 배타적입니다 — 워크플로는 최상위 수준에서
+나눌 수 있습니다. 두 형식은 상호 배타적입니다; 워크플로는 최상위 수준에서
 하나를 선택해야 합니다.
 
 ```yaml
-# Flat — fine for small, self-contained procedures.
+# Flat, fine for small, self-contained procedures.
 version: v1alpha1
 steps:
   - id: ensure-state-dir
@@ -34,7 +34,7 @@ steps:
 ```
 
 평면적 스텝은 `default`라는 이름의 암묵적 단계로 실행됩니다. 절차가 몇 개의 스텝을
-넘어서기 전까지는 괜찮습니다 — 그 지점부터는 단계를 명명하면 운영자가 모든 스텝을
+넘어서기 전까지는 괜찮습니다. 그 지점부터는 단계를 명명하면 운영자가 모든 스텝을
 읽기 전에 의도를 드러낼 수 있습니다.
 
 명명된 단계는 다음의 경우에 사용하세요:
@@ -57,7 +57,7 @@ steps:
 
 이는 단계가 전체가 완료되거나 처음부터 다시 시작되는 의미 있는 작업 단위를
 나타낸다는 의미입니다. 단계 경계는 자연스러운 "여기서부터 재시작해도 안전한"
-지점에서 선택하세요 — 패키지가 설치된 후, 런타임이 구성된 후, `kubeadm init` 같은
+지점에서 선택하세요: 패키지가 설치된 후, 런타임이 구성된 후, `kubeadm init` 같은
 단방향 작업 전에.
 
 영속화되는 내용에 대한 전체 세부 사항은 [Apply State](../apply-state.md)를
@@ -90,7 +90,7 @@ phases:
 ## 컴포넌트 프래그먼트 임포트하기
 
 단계는 `workflows/components/`에서 재사용 가능한 스텝 파일을 임포트할 수 있습니다.
-경로는 항상 `components/` 디렉터리를 기준으로 한 상대 경로이며 — 절대 `../` 경로가
+경로는 항상 `components/` 디렉터리를 기준으로 한 상대 경로이며, 절대 `../` 경로가
 아닙니다.
 
 ```yaml
@@ -111,7 +111,7 @@ phases:
 ```
 
 컴포넌트 파일은 `steps:` 목록만 포함합니다. 자체 `phases:`나 `vars:`를 가질 수
-없습니다 — 공유 기본값은 `workflows/vars.yaml`이나 임포트하는 시나리오의 `vars:`
+없습니다, 공유 기본값은 `workflows/vars.yaml`이나 임포트하는 시나리오의 `vars:`
 블록에 속합니다.
 
 ### 조건부 임포트
@@ -131,7 +131,7 @@ phases:
         when: runtime.host.os.family == "debian"   # all steps in this file
       - path: repo/offline-repo-rhel.yaml
         when: runtime.host.os.family == "rhel"
-      - path: host-prereqs.yaml                    # no filter — all nodes
+      - path: host-prereqs.yaml                    # no filter, all nodes
 ```
 
 단계는 또한 임포트와 인라인 `steps:`를 혼합할 수도 있습니다:
@@ -232,7 +232,7 @@ phases:
       - path: runtime/containerd.yaml
 ```
 
-이는 리소스가 제한된 머신에서 많은 병렬 다운로드를 실행할 때 유용합니다 — 작업을
+이는 리소스가 제한된 머신에서 많은 병렬 다운로드를 실행할 때 유용합니다, 작업을
 완전히 직렬화하지 않으면서 동시성을 제한하려면 `maxParallelism: 4`로
 설정하세요.
 
@@ -251,7 +251,7 @@ phases:
   - name: prepare-artifacts
     maxParallelism: 2
     steps:
-      # Both steps share parallelGroup "downloads" — they start at the same time.
+      # Both steps share parallelGroup "downloads", they start at the same time.
       - id: extract-containerd
         kind: ExtractArchive
         parallelGroup: downloads
@@ -325,7 +325,7 @@ steps:
 
   - id: join-node
     kind: JoinKubeadm
-    parallelGroup: kube-init          # WRONG — same batch
+    parallelGroup: kube-init          # WRONG, same batch
     spec:
       joinFile: "{{ .runtime.joinFile }}"
 ```
@@ -336,7 +336,7 @@ steps:
 
 ## 관련 참고 자료
 
-- [Workflow Model — Phases](../workflow-model.md#phases)
-- [Workflow Model — Parallel batches](../workflow-model.md#parallel-batches)
-- [Apply State — Phase-based resume](../apply-state.md#phase-based-resume)
+- [Workflow Model, Phases](../workflow-model.md#phases)
+- [Workflow Model, Parallel batches](../workflow-model.md#parallel-batches)
+- [Apply State, Phase-based resume](../apply-state.md#phase-based-resume)
 - [register로 스텝 출력 캡처하기](capturing-output.md)

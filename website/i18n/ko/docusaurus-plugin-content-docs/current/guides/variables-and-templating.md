@@ -1,6 +1,6 @@
 ---
 source: docs/guides/variables-and-templating.md
-source_hash: 9a9bc9ed49b247e226033f4118a1d28d0748a52f
+source_hash: 3048cd454ead17c92d169cfc30b90ac17343b23d
 ---
 # 변수와 템플릿화
 
@@ -10,12 +10,12 @@ source_hash: 9a9bc9ed49b247e226033f4118a1d28d0748a52f
 
 정적 `vars`는 네 가지 소스에서 옵니다. **뒤쪽 소스가 앞쪽 소스를 덮어씁니다.** 우선순위가 낮은 것에서 높은 것 순서는 다음과 같습니다.
 
-1. `workflows/vars.yaml` — 워크스페이스 공통 기본값
-2. CLI `-f, --vars-file` 오버레이 — 실행 시점에 전달하는 사이트별 또는 노드별 파일
-3. 시나리오 `vars:` 블록 — 워크플로 파일 안에서 선언하는 재정의
-4. CLI `--var key=value` — 호출 단위 재정의
+1. `workflows/vars.yaml`, 워크스페이스 공통 기본값
+2. CLI `-f, --vars-file` 오버레이, 실행 시점에 전달하는 사이트별 또는 노드별 파일
+3. 시나리오 `vars:` 블록, 워크플로 파일 안에서 선언하는 재정의
+4. CLI `--var key=value`, 호출 단위 재정의
 
-**이 순서가 중요한 이유는 다음과 같습니다.**
+이 순서가 중요한 이유는 다음과 같습니다.
 
 `--var`로 설정한 값은 `vars.yaml`이나 시나리오 파일의 값을 항상 이깁니다. 이를 활용하는 방법은 다음과 같습니다.
 
@@ -26,7 +26,7 @@ source_hash: 9a9bc9ed49b247e226033f4118a1d28d0748a52f
 
 `workflows/vars.yaml`에 `hosts:` 섹션이 있으면 deck은 위 네 소스에 더해 추가 선택 단계를 적용합니다. 전체 순서는 아래 [노드 스코프 변수](#node-scoped-vars)를 참고하십시오.
 
-## `workflows/vars.yaml` — 워크스페이스 공통 기본값
+## `workflows/vars.yaml`: 워크스페이스 공통 기본값
 
 워크스페이스의 모든 시나리오가 공유하는 값을 정의합니다.
 
@@ -69,7 +69,7 @@ phases:
 
 시나리오 `vars:` 블록은 `vars.yaml` 값 위에 깊은 병합(deep-merge)됩니다. 따라서 재정의할 키만 나열하면 되고, 나머지 `vars.yaml` 키는 그대로 사용됩니다.
 
-## CLI 변수 파일 — `-f, --vars-file`
+## CLI 변수 파일: `-f, --vars-file`
 
 `vars.yaml`을 수정하지 않고 실행 시점에 사이트별 또는 환경별 값을 얹습니다.
 
@@ -94,7 +94,7 @@ cluster:
   controlPlaneEndpoint: 10.0.1.5:6443
 ```
 
-## CLI `--var` — 단일 키 재정의
+## CLI `--var`: 단일 키 재정의
 
 파일을 만들지 않고 키 하나만 재정의합니다.
 
@@ -178,13 +178,13 @@ hosts:
 `when:` 조건에서는 중괄호 없이 CEL 네임스페이스를 사용합니다.
 
 ```yaml
-when: vars.role == "control-plane"         # CEL — no braces
+when: vars.role == "control-plane"         # CEL, no braces
 ```
 
 다음과 같이 쓰면 안 됩니다.
 
 ```yaml
-when: "{{ .vars.role }} == control-plane"  # wrong — this is template syntax
+when: "{{ .vars.role }} == control-plane"  # wrong, this is template syntax
 ```
 
 전체 레퍼런스는 [when 조건 (CEL)](conditions-and-cel.md)을 참고하십시오.
@@ -241,7 +241,7 @@ content: "cluster: {{ .vars.clusterName }}"
 
 ## 관련 레퍼런스
 
-- [워크플로 모델 — 변수](../workflow-model.md#variables) — 우선순위 규칙과 노드 스코프 변수의 표준 정의
-- [워크플로 작성하기](authoring-workflows.md) — 시나리오를 처음부터 구성하는 방법
-- [when 조건 (CEL)](conditions-and-cel.md) — CEL `when:` 표현식에서 변수 사용하기
-- [문제 해결](../troubleshooting.md) — 변수 해석 오류 진단하기
+- [워크플로 모델, 변수](../workflow-model.md#variables): 우선순위 규칙과 노드 스코프 변수의 표준 정의
+- [워크플로 작성하기](authoring-workflows.md): 시나리오를 처음부터 구성하는 방법
+- [when 조건 (CEL)](conditions-and-cel.md): CEL `when:` 표현식에서 변수 사용하기
+- [문제 해결](../troubleshooting.md): 변수 해석 오류 진단하기

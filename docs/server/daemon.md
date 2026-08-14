@@ -4,7 +4,7 @@
 mechanism differs by platform: Linux uses a transient systemd service; macOS
 and Windows use a detached background process tracked by a pid file.
 
-## Linux — transient systemd service
+## Linux: transient systemd service
 
 On Linux, `deck server up --daemon` invokes `systemd-run` to launch a
 transient service unit. Both `systemd-run` and `systemctl` must be present on
@@ -30,7 +30,7 @@ journalctl -u deck-server.service
 
 or via `deck server logs --source journal --unit deck-server.service`.
 
-## macOS and Windows — detached background process
+## macOS and Windows: detached background process
 
 On macOS and Windows, `deck server up --daemon` spawns a detached child
 process:

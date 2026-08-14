@@ -1,10 +1,10 @@
 ---
 source: docs/guides/authoring-workflows.md
-source_hash: 4aa76a5cdd6a9bf2ab915fd6a6baef333376bc3e
+source_hash: bb3c293595a17a622a863cc3fdc17eb277947b98
 ---
 # 워크플로 작성하기
 
-이 가이드는 deck 워크플로를 처음부터 작성하는 과정을 안내합니다 — `deck init`이
+이 가이드는 deck 워크플로를 처음부터 작성하는 과정을 안내합니다. `deck init`이
 생성하는 파일에서 시작해 컴포넌트 프래그먼트를 임포트하고 호스트 유형에 따라
 분기하는 다중 단계 시나리오까지 다룹니다.
 
@@ -67,8 +67,8 @@ steps:
     spec:                  # required; kind-specific payload
       path: /etc/motd
       content: |
-        deck maintenance session in progress — {{ .vars.clusterName }}
-    when: ""               # optional; CEL expression — step is skipped when false
+        deck maintenance session in progress, {{ .vars.clusterName }}
+    when: ""               # optional; CEL expression, step is skipped when false
     register: {}           # optional; export step outputs as runtime.NAME
     timeout: 30s           # optional; duration string
     metadata:              # optional; free-form annotation map
@@ -115,7 +115,7 @@ steps:
 
 **`Command`를 사용해야 하는 경우:**
 
-해당 작업을 모델링하는 타입 지정 스텝이 없을 때 — 예를 들어 벤더 특화 CLI
+해당 작업을 모델링하는 타입 지정 스텝이 없을 때, 예를 들어 벤더 특화 CLI
 호출이나 deck이 아직 직접 지원하지 않는 일회성 프로브. `Command`는 기본
 선택지가 아니라 탈출구입니다.
 
@@ -124,14 +124,14 @@ steps:
 ## 다중 단계 시나리오 구조화하기
 
 절차에 자연스러운 경계가 있을 때 `phases`를 사용합니다. 단계는 `deck apply`의
-재개 경계이기도 합니다 — 실행이 중단되면 마지막으로 완료되지 않은 단계부터
+재개 경계이기도 합니다, 실행이 중단되면 마지막으로 완료되지 않은 단계부터
 재개됩니다.
 
 ### 컴포넌트 프래그먼트 임포트하기
 
 컴포넌트는 `workflows/components/` 아래에 위치합니다. 이들은 `steps:` 목록만
 포함합니다. `phases[].imports`를 사용해 단계로 임포트합니다. 경로는
-`workflows/components/`를 기준으로 합니다 — `../components/k8s/prereq.yaml`이
+`workflows/components/`를 기준으로 합니다, `../components/k8s/prereq.yaml`이
 아니라 `k8s/prereq.yaml`로 작성하세요.
 
 ```yaml
@@ -185,7 +185,7 @@ steps:
       persistFile: /etc/modules-load.d/kubernetes.conf
 ```
 
-컴포넌트 프래그먼트에는 `version`이나 `vars`가 없습니다 — 이들은 임포트하는
+컴포넌트 프래그먼트에는 `version`이나 `vars`가 없습니다, 이들은 임포트하는
 시나리오에 속합니다.
 
 ## `when`으로 분기하기
@@ -269,13 +269,13 @@ deck plan vars   # show the fully-resolved variable snapshot
 
 `deck plan`은 실행될 단계와 스텝을 출력하며, 가능한 경우 조건을 평가합니다.
 `deck plan vars`는 유효한 `vars`, 해석된 `context`, 초기 `runtime` 값을
-출력합니다 — `apply`를 실행하기 전에 노드 범위 vars가 올바르게 해석되었는지
+출력합니다, `apply`를 실행하기 전에 노드 범위 vars가 올바르게 해석되었는지
 확인하는 데 유용합니다.
 
 ## 관련 참고 자료
 
-- [워크플로 모델](../workflow-model.md) — 권위 있는 스키마 및 필드 참조
-- [스텝 종류](../step-kinds.md) — 단계와 그룹별 전체 색인
-- [변수와 템플릿](variables-and-templating.md) — vars 우선순위 및 `{{ .vars.NAME }}` 문법
-- [when으로 조건 지정하기 (CEL)](conditions-and-cel.md) — 전체 `when` 참조
-- [워크스페이스 레이아웃](../workspace-layout.md) — 컴포넌트와 시나리오를 위한 디렉터리 계약
+- [워크플로 모델](../workflow-model.md): 권위 있는 스키마 및 필드 참조
+- [스텝 종류](../step-kinds.md): 단계와 그룹별 전체 색인
+- [변수와 템플릿](variables-and-templating.md): vars 우선순위 및 `{{ .vars.NAME }}` 문법
+- [when으로 조건 지정하기 (CEL)](conditions-and-cel.md): 전체 `when` 참조
+- [워크스페이스 레이아웃](../workspace-layout.md): 컴포넌트와 시나리오를 위한 디렉터리 계약

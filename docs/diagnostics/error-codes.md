@@ -2,7 +2,7 @@
 
 deck renders CLI errors in the form `CODE: message` (see `internal/errcode`). The codes below are stable, machine-readable identifiers you can match against in scripts and logs.
 
-> **Contributors:** When adding a new `E_*` code in source, add a row to the appropriate section below — the `internal/doccheck` drift test fails the build until the code is documented.
+> **Contributors:** When adding a new `E_*` code in source, add a row to the appropriate section below; the `internal/doccheck` drift test fails the build until the code is documented.
 
 ## Bundle
 
@@ -55,7 +55,7 @@ deck renders CLI errors in the form `CODE: message` (see `internal/errcode`). Th
 | `E_PREPARE_CHECKHOST_FAILED` | A `CheckHost` step failed during the prepare phase | Host pre-check execution in prepare |
 | `E_PREPARE_OUTPUT_ROOT_INVALID` | A step's output path escapes the allowed output root directory | Output path validation in prepare parallel steps |
 
-## Install (Apply) Phase — General
+## Install (Apply) Phase: General
 
 | Code | Meaning | Context |
 |------|---------|---------|
@@ -68,7 +68,7 @@ deck renders CLI errors in the form `CODE: message` (see `internal/errcode`). Th
 | `E_INSTALL_INTERACTION_FAILED` | An operator interaction step (prompt/input) failed | `Input`, `Confirm` step execution |
 | `E_INSTALL_INTERACTION_UNSUPPORTED` | An interaction step tried to render a secret runtime value in its message | Operator interaction message rendering |
 
-## Install — Package Management
+## Install: Package Management
 
 | Code | Meaning | Context |
 |------|---------|---------|
@@ -80,7 +80,7 @@ deck renders CLI errors in the form `CODE: message` (see `internal/errcode`). Th
 | `E_INSTALL_REPOCONFIG_PATH_REQUIRED` | A `ConfigureRepository` step has no `path` field | `ConfigureRepository` step validation |
 | `E_INSTALL_PACKAGECACHE_MANAGER_INVALID` | A `RefreshRepository` step specifies an invalid package manager | `RefreshRepository` step validation |
 
-## Install — File Operations
+## Install: File Operations
 
 | Code | Meaning | Context |
 |------|---------|---------|
@@ -96,7 +96,7 @@ deck renders CLI errors in the form `CODE: message` (see `internal/errcode`). Th
 | `E_INSTALL_SYMLINK_PATH_REQUIRED` | A `CreateSymlink` step has no `path` field | `CreateSymlink` step validation |
 | `E_INSTALL_SYMLINK_TARGET_REQUIRED` | A `CreateSymlink` step has no `target` field | `CreateSymlink` step validation |
 
-## Install — System Configuration
+## Install: System Configuration
 
 | Code | Meaning | Context |
 |------|---------|---------|
@@ -110,7 +110,7 @@ deck renders CLI errors in the form `CODE: message` (see `internal/errcode`). Th
 | `E_INSTALL_SYSTEMD_UNIT_CONTENT_CONFLICT` | A `WriteSystemdUnit` step specifies both inline content and a source file | `WriteSystemdUnit` step validation |
 | `E_INSTALL_SYSTEMD_UNIT_SERVICE_NAME_REQUIRED` | A `WriteSystemdUnit` step requires a service name but none was provided | `WriteSystemdUnit` step validation |
 
-## Install — Command Execution
+## Install: Command Execution
 
 | Code | Meaning | Context |
 |------|---------|---------|
@@ -118,7 +118,7 @@ deck renders CLI errors in the form `CODE: message` (see `internal/errcode`). Th
 | `E_INSTALL_RUNCOMMAND_TIMEOUT` | A `Command` step exceeded its configured timeout | `Command` step execution |
 | `E_INSTALL_RUNCOMMAND_FAILED` | A `Command` step's process exited with a non-zero status | `Command` step execution |
 
-## Install — Wait Steps
+## Install: Wait Steps
 
 | Code | Meaning | Context |
 |------|---------|---------|
@@ -129,7 +129,7 @@ deck renders CLI errors in the form `CODE: message` (see `internal/errcode`). Th
 | `E_INSTALL_WAITPATH_POLL_INTERVAL_INVALID` | A path-based wait step specifies an invalid poll interval | `WaitForFile`/`WaitForMissingFile` step validation |
 | `E_INSTALL_WAITPATH_TIMEOUT` | A path-based wait step timed out | `WaitForFile`/`WaitForMissingFile` step execution |
 
-## Install — Image Verification
+## Install: Image Verification
 
 | Code | Meaning | Context |
 |------|---------|---------|
@@ -137,7 +137,7 @@ deck renders CLI errors in the form `CODE: message` (see `internal/errcode`). Th
 | `E_INSTALL_VERIFY_IMAGES_COMMAND_FAILED` | The image verification command (e.g., `crictl`) failed | `VerifyImage` step execution |
 | `E_INSTALL_VERIFY_IMAGES_NOT_FOUND` | One or more required images are not present on the host | `VerifyImage` step execution |
 
-## Install — Artifacts
+## Install: Artifacts
 
 | Code | Meaning | Context |
 |------|---------|---------|
@@ -145,7 +145,7 @@ deck renders CLI errors in the form `CODE: message` (see `internal/errcode`). Th
 | `E_INSTALL_ARTIFACT_ARCH_UNSUPPORTED` | No artifact in the bundle matches the host architecture | Artifact architecture selection |
 | `E_INSTALL_ARTIFACT_SOURCE_INVALID` | The artifact source specification is invalid | Artifact source validation during install |
 
-## Install — Kubernetes (kubeadm)
+## Install: Kubernetes (kubeadm)
 
 | Code | Meaning | Context |
 |------|---------|---------|

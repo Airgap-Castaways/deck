@@ -1,6 +1,6 @@
 ---
 source: docs/examples/README.md
-source_hash: 9687e8035337de8c6084787389454eb8ce29cdf8
+source_hash: 452a7ed3629ae3479f82bb0bc7ede073ac72aac1
 sidebar_label: "Examples"
 ---
 
@@ -66,20 +66,20 @@ offline-kubernetes/
 
 ### 설치 흐름
 
-1. **준비** — 연결된 환경에서 `prepare.yaml`에 대해 `deck prepare`를 실행합니다. 이 단계는 Debian 패키지, Kubernetes 바이너리(kubelet, kubeadm, kubectl, containerd, runc, CNI 플러그인), kubeadm 이미지, Calico CNI 이미지를 `outputs/`로 다운로드합니다.
-2. **빌드** — `deck bundle build`가 모든 것을 이식 가능한 `bundle.tar`로 패키징합니다.
-3. **전송** — `bundle.tar`를 승인된 경로를 통해 에어갭(망분리) 사이트로 이동합니다.
-4. **부트스트랩** — control-plane 노드(예: `cp-1`, `192.0.2.10`)에서 번들을 풀고 다음을 실행합니다:
+1. **준비**: 연결된 환경에서 `prepare.yaml`에 대해 `deck prepare`를 실행합니다. 이 단계는 Debian 패키지, Kubernetes 바이너리(kubelet, kubeadm, kubectl, containerd, runc, CNI 플러그인), kubeadm 이미지, Calico CNI 이미지를 `outputs/`로 다운로드합니다.
+2. **빌드**: `deck bundle build`가 모든 것을 이식 가능한 `bundle.tar`로 패키징합니다.
+3. **전송**: `bundle.tar`를 승인된 경로를 통해 에어갭(망분리) 사이트로 이동합니다.
+4. **부트스트랩**: control-plane 노드(예: `cp-1`, `192.0.2.10`)에서 번들을 풀고 다음을 실행합니다:
    ```bash
    ./deck apply scenarios/bootstrap.yaml
    ```
-   부트스트랩 중에 운영자는 패스프레이즈를 입력하라는 프롬프트를 받습니다. 그런 다음 kubeadm join 명령은 **암호화된 블록**으로만 로그에 출력됩니다 — 평문 join 파일은 제공되지 않습니다. `BEGIN ENCRYPTED JOIN`과 `END ENCRYPTED JOIN` 사이의 텍스트를 복사하세요.
-5. **조인** — 각 워커 노드에서 다음을 실행합니다:
+   부트스트랩 중에 운영자는 패스프레이즈를 입력하라는 프롬프트를 받습니다. 그런 다음 kubeadm join 명령은 **암호화된 블록**으로만 로그에 출력됩니다, 평문 join 파일은 제공되지 않습니다. `BEGIN ENCRYPTED JOIN`과 `END ENCRYPTED JOIN` 사이의 텍스트를 복사하세요.
+5. **조인**: 각 워커 노드에서 다음을 실행합니다:
    ```bash
    ./deck apply scenarios/join.yaml --server 192.0.2.10:5000
    ```
    프롬프트가 나타나면 암호문을 한 줄로 붙여넣고, 부트스트랩에서 선택한 패스프레이즈를 입력합니다. 워커는 join 명령을 로컬에서 복호화하며 로그나 apply 상태에 절대 기록하지 않습니다.
-6. **검증** — 두 시나리오 모두 클러스터와 노드 준비 상태를 확인하는 verify 단계를 포함합니다.
+6. **검증**: 두 시나리오 모두 클러스터와 노드 준비 상태를 확인하는 verify 단계를 포함합니다.
 
 ### 암호화 조인 패턴 {#encrypted-join-pattern}
 
@@ -87,7 +87,7 @@ offline-kubernetes/
 
 ### Calico CNI
 
-Calico 이미지(`quay.io/calico/*`, `quay.io/tigera/operator`)는 `prepare.yaml`에 의해 다운로드되어 번들의 이미지 저장소에서 제공됩니다. CNI 매니페스트(Tigera operator 또는 `calico.yaml`)는 부트스트랩 이후 **대역 외(out-of-band)**로 적용됩니다 — 일반적으로 연결된 터미널에서 `kubectl apply -f`를 사용하거나, 매니페스트를 번들에 넣고 수동으로 실행합니다.
+Calico 이미지(`quay.io/calico/*`, `quay.io/tigera/operator`)는 `prepare.yaml`에 의해 다운로드되어 번들의 이미지 저장소에서 제공됩니다. CNI 매니페스트(Tigera operator 또는 `calico.yaml`)는 부트스트랩 이후 **대역 외(out-of-band)**로 적용됩니다, 일반적으로 연결된 터미널에서 `kubectl apply -f`를 사용하거나, 매니페스트를 번들에 넣고 수동으로 실행합니다.
 
 ### 리셋 범위
 

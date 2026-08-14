@@ -1,6 +1,6 @@
 # Authoring workflows
 
-This guide walks you through writing a deck workflow from scratch — from the
+This guide walks you through writing a deck workflow from scratch, from the
 files that `deck init` creates to a multi-phase scenario that imports component
 fragments and branches on host type.
 
@@ -63,8 +63,8 @@ steps:
     spec:                  # required; kind-specific payload
       path: /etc/motd
       content: |
-        deck maintenance session in progress — {{ .vars.clusterName }}
-    when: ""               # optional; CEL expression — step is skipped when false
+        deck maintenance session in progress, {{ .vars.clusterName }}
+    when: ""               # optional; CEL expression, step is skipped when false
     register: {}           # optional; export step outputs as runtime.NAME
     timeout: 30s           # optional; duration string
     metadata:              # optional; free-form annotation map
@@ -111,7 +111,7 @@ over `Command` because:
 
 **Use `Command` when:**
 
-No typed step models the action — for example, a vendor-specific CLI call or a
+No typed step models the action: for example, a vendor-specific CLI call or a
 one-off probe that deck does not yet support directly. `Command` is the escape
 hatch, not the default choice.
 
@@ -121,14 +121,14 @@ group.
 ## Structuring a multi-phase scenario
 
 Use `phases` when the procedure has natural boundaries. Phases are also the
-resume boundary for `deck apply` — if a run stops, it resumes from the last
+resume boundary for `deck apply`: if a run stops, it resumes from the last
 incomplete phase.
 
 ### Importing component fragments
 
 Components live under `workflows/components/`. They contain only a `steps:`
 list. Import them into a phase using `phases[].imports`. Paths are relative to
-`workflows/components/` — write `k8s/prereq.yaml`, not
+`workflows/components/`, write `k8s/prereq.yaml`, not
 `../components/k8s/prereq.yaml`.
 
 ```yaml
@@ -182,7 +182,7 @@ steps:
       persistFile: /etc/modules-load.d/kubernetes.conf
 ```
 
-A component fragment has no `version` or `vars` — those belong to the
+A component fragment has no `version` or `vars`; those belong to the
 importing scenario.
 
 ## Branching with `when`
@@ -237,8 +237,8 @@ you target only control-plane or worker steps:
     when: vars.role == "worker"
 ```
 
-For more patterns — including conditional imports and register-gated
-conditions — see [Conditions with when (CEL)](conditions-and-cel.md).
+For more patterns, including conditional imports and register-gated
+conditions, see [Conditions with when (CEL)](conditions-and-cel.md).
 
 ## Validate before committing
 
@@ -268,13 +268,13 @@ deck plan vars   # show the fully-resolved variable snapshot
 
 `deck plan` prints the phases and steps that would run, with conditions
 evaluated where possible. `deck plan vars` prints the effective `vars`,
-resolved `context`, and initial `runtime` values — useful for verifying that
+resolved `context`, and initial `runtime` values. Useful for verifying that
 node-scoped vars resolved correctly before you run `apply`.
 
 ## Related references
 
-- [Workflow Model](../workflow-model.md) — authoritative schema and field reference
-- [Step Kinds](../step-kinds.md) — full index by phase and group
-- [Variables and templating](variables-and-templating.md) — vars precedence and `{{ .vars.NAME }}` syntax
-- [Conditions with when (CEL)](conditions-and-cel.md) — full `when` reference
-- [Workspace Layout](../workspace-layout.md) — directory contract for components and scenarios
+- [Workflow Model](../workflow-model.md): authoritative schema and field reference
+- [Step Kinds](../step-kinds.md): full index by phase and group
+- [Variables and templating](variables-and-templating.md): vars precedence and `{{ .vars.NAME }}` syntax
+- [Conditions with when (CEL)](conditions-and-cel.md): full `when` reference
+- [Workspace Layout](../workspace-layout.md): directory contract for components and scenarios

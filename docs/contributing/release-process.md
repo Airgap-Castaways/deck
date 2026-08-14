@@ -5,8 +5,8 @@
 ## What a release publishes
 
 - GitHub Release assets for `deck`
-- Cross-platform tarballs (`.tar.gz`) for macOS and Linux — each archive includes the full `docs/` tree and `README.ko.md` for offline use
-- Linux packages (`.deb` and `.rpm`) — each package installs docs under `/usr/share/doc/deck/docs/` and `README.ko.md` alongside the binary
+- Cross-platform tarballs (`.tar.gz`) for macOS and Linux; each archive includes the full `docs/` tree and `README.ko.md` for offline use
+- Linux packages (`.deb` and `.rpm`); each package installs docs under `/usr/share/doc/deck/docs/` and `README.ko.md` alongside the binary
 - `checksums.txt`
 - A Homebrew tap formula in `Airgap-Castaways/homebrew-tap`
 
@@ -83,7 +83,7 @@ Sync-merge commits (`Merge pull request`, `Merge branch`, `Merge remote-tracking
 
 For releases where a human-written summary adds value, a maintainer can create `docs/releases/v<MAJOR>.<MINOR>.<PATCH>.md` before pushing the tag (copy `docs/releases/TEMPLATE.md`). The file must start with a `## Highlights` heading followed by 3–6 user-facing bullet points.
 
-When `.github/workflows/release.yml` runs, it checks for that file and — if present — loads it into the `DECK_RELEASE_HIGHLIGHTS` environment variable. GoReleaser's `release.header` renders the highlights above the auto-generated English changelog in the GitHub Release. If the file is absent the release proceeds with only the default header text.
+When `.github/workflows/release.yml` runs, it checks for that file and, if present, loads it into the `DECK_RELEASE_HIGHLIGHTS` environment variable. GoReleaser's `release.header` renders the highlights above the auto-generated English changelog in the GitHub Release. If the file is absent the release proceeds with only the default header text.
 
 Providing a highlights file is optional. See [docs/releases/README.md](../releases/README.md) for the format and further details.
 

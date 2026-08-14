@@ -1,6 +1,6 @@
 ---
 source: docs/bundle-layout.md
-source_hash: f1e7d2655d3aa901d6dba4c5cd45f6b7b990827f
+source_hash: 78017be71214f8505fa7a2c0ad5c68cbad0361cc
 ---
 title: Bundle layout
 ---
@@ -67,9 +67,9 @@ outputs/files/kubeadm.conf
 
 검증은 다음 세 가지 경우에 자동으로 실행됩니다.
 
-- **워크스페이스에서의 단순 `deck apply`** — 명시적 경로를 주지 않으면, 현재 디렉터리에 `workflows/` 트리가 있을 경우 deck은 그 디렉터리를 번들 루트로 사용하고 그에 대해 검증을 실행합니다.
-- **`deck apply --root <dir>`** — 명시한 루트를 번들 루트로 사용하고 검증을 실행합니다.
-- **`deck apply <bundle-path>`** — 위치 인자로 준 디렉터리나 `.tar` 아카이브를 번들 루트로 사용하고 검증을 실행합니다. `.tar` 아카이브를 준 경우, deck은 먼저 이를 키 기반 캐시 디렉터리로 추출한 다음 추출한 콘텐츠를 검증합니다.
+- **워크스페이스에서의 단순 `deck apply`**: 명시적 경로를 주지 않으면, 현재 디렉터리에 `workflows/` 트리가 있을 경우 deck은 그 디렉터리를 번들 루트로 사용하고 그에 대해 검증을 실행합니다.
+- **`deck apply --root <dir>`**: 명시한 루트를 번들 루트로 사용하고 검증을 실행합니다.
+- **`deck apply <bundle-path>`**: 위치 인자로 준 디렉터리나 `.tar` 아카이브를 번들 루트로 사용하고 검증을 실행합니다. `.tar` 아카이브를 준 경우, deck은 먼저 이를 키 기반 캐시 디렉터리로 추출한 다음 추출한 콘텐츠를 검증합니다.
 
 검증은 번들 루트가 전혀 해석되지 않을 때만 건너뜁니다. 예를 들어 위치 인자 번들 없이 `--workflow <path>`을 주거나, 위치 인자 번들 없이 `--scenario <name> --source server`을 주는 경우입니다.
 

@@ -1,6 +1,6 @@
 ---
 source: docs/deckignore.md
-source_hash: 70e5a75a438808d52a19654e8748ec9d6263e00f
+source_hash: 7ee04b20d0b8d82bbaee02a11fc1c4cac3d2daa8
 ---
 # .deckignore
 
@@ -8,7 +8,7 @@ source_hash: 70e5a75a438808d52a19654e8748ec9d6263e00f
 
 ## 위치
 
-`.deckignore`는 워크스페이스 루트 — `workflows/`, `outputs/`, `.deck/`를 포함하는 동일한 디렉터리 — 에 배치하세요. `deck init`이 자동으로 시작용 파일을 그곳에 생성합니다.
+`.deckignore`는 워크스페이스 루트에 배치하세요. 이 위치는 `workflows/`, `outputs/`, `.deck/`를 포함하는 동일한 디렉터리입니다. `deck init`이 자동으로 시작용 파일을 그곳에 생성합니다.
 
 ## 구문
 
@@ -26,10 +26,10 @@ source_hash: 70e5a75a438808d52a19654e8748ec9d6263e00f
 | 단일 `*` 와일드카드 | 예 | 디렉터리 경계를 넘지 않음 |
 | `**` 더블 스타 | 예 | 디렉터리를 넘어 매칭됨 (`a/**/b`는 `a/b`, `a/x/b` 등을 매칭) |
 | `?` 와일드카드 | 아니오 | `?`는 **리터럴** `?` 문자로 처리됨 (라이브러리가 regexp에서 `\?`로 이스케이프함); 임의의 단일 문자와 **매칭되지 않음** |
-| 문자 클래스 `[…]` | 부분적 | 브래킷 클래스는 Go regexp 문자 클래스로 **동작함** (예: `[abc]`, `[0-9]`). 그러나 gitignore의 부정 형태 `[!abc]`는 **부정하지 않음** — Go regexp는 `[^abc]`를 요구하며, `[!…]` 패턴은 예상대로 동작하지 않음 |
+| 문자 클래스 `[…]` | 부분적 | 브래킷 클래스는 Go regexp 문자 클래스로 **동작함** (예: `[abc]`, `[0-9]`). 그러나 gitignore의 부정 형태 `[!abc]`는 **부정하지 않음**: Go regexp는 `[^abc]`를 요구하며, `[!…]` 패턴은 예상대로 동작하지 않음 |
 | 백슬래시 이스케이프 `\#`, `\!` | 예 | `#` 또는 `!`를 리터럴 문자로 처리함 |
 
-> **참고:** `.deckignore`는 `go-gitignore`를 사용하며, 이는 전체 gitignore 사양을 구현하는 대신 패턴을 Go `regexp`로 컴파일합니다. 두 가지 주목할 만한 차이점: `?`는 리터럴 문자로 처리되며(단일 문자 와일드카드가 아님), 문자 클래스 부정은 Go regexp 구문을 사용합니다 — `[!abc]`는 **부정하지 않습니다**(부정이 필요하면 `[^abc]`를 사용하되, 이는 표준 gitignore 구문이 아닌 원시 regexp 구문입니다).
+> **참고:** `.deckignore`는 `go-gitignore`를 사용하며, 이는 전체 gitignore 사양을 구현하는 대신 패턴을 Go `regexp`로 컴파일합니다. 두 가지 주목할 만한 차이점: `?`는 리터럴 문자로 처리되며(단일 문자 와일드카드가 아님), 문자 클래스 부정은 Go regexp 구문을 사용합니다: `[!abc]`는 **부정하지 않습니다**(부정이 필요하면 `[^abc]`를 사용하되, 이는 표준 gitignore 구문이 아닌 원시 regexp 구문입니다).
 
 ### `Matches`가 적용하는 규칙
 
@@ -43,23 +43,23 @@ source_hash: 70e5a75a438808d52a19654e8748ec9d6263e00f
 
 ## 파일이 없을 때의 동작
 
-`.deckignore`가 존재하지 않으면, `Load`는 빈 매처를 반환하고 `Matches`는 항상 `false`를 반환합니다 — 아무것도 제외되지 않습니다. 이는 오류가 아니라 no-op입니다.
+`.deckignore`가 존재하지 않으면, `Load`는 빈 매처를 반환하고 `Matches`는 항상 `false`를 반환합니다, 아무것도 제외되지 않습니다. 이는 오류가 아니라 no-op입니다.
 
 ## 적용되는 위치
 
 `.deckignore`는 네 곳에서 적용됩니다:
 
-**번들 빌드 (`deck bundle build`)**
+### 번들 빌드 (`deck bundle build`)
 `internal/bundle/collect.go`는 아카이브 트리를 순회하기 전에 번들 루트에서 `deckignore.Load`를 한 번 호출합니다. 매칭된 파일은 건너뛰고, 매칭된 디렉터리는 전체 서브트리를 가지치기합니다(`filepath.SkipDir`).
 
-**정적 파일 및 워크플로 서빙 (`deck server up`)**
+### 정적 파일 및 워크플로 서빙 (`deck server up`)
 `internal/server/http_static.go`는 `resolveCategoryPath`와 `buildWorkflowIndex` 내부에서 `.deckignore`를 로드합니다. 무시 규칙에 매칭되는 경로에 대한 요청은 HTTP 404를 받습니다.
 
-**Browse UI (`deck server up`)**
+### Browse UI (`deck server up`)
 `internal/server/http_browse.go`(`listBrowseEntries`)는 `.deckignore`를 로드하고 브라우저에 표시되는 디렉터리 목록에서 매칭된 항목을 생략합니다.
 
-**OCI 레지스트리 카탈로그 (`deck server up`)**
-`internal/server/http_registry.go`(`scanRegistryCatalog`)는 `.tar` 파일을 찾기 위해 `outputs/images/`와 `images/`를 스캔하기 전에 `.deckignore`를 로드합니다. 번들 루트를 기준으로 한 경로가 매칭되는 `.tar`는 레지스트리 카탈로그에서 제외됩니다 — `/v2/_catalog`에 나타나지 않으며 풀(pull)할 수 없습니다.
+### OCI 레지스트리 카탈로그 (`deck server up`)
+`internal/server/http_registry.go`(`scanRegistryCatalog`)는 `.tar` 파일을 찾기 위해 `outputs/images/`와 `images/`를 스캔하기 전에 `.deckignore`를 로드합니다. 번들 루트를 기준으로 한 경로가 매칭되는 `.tar`는 레지스트리 카탈로그에서 제외됩니다, `/v2/_catalog`에 나타나지 않으며 풀(pull)할 수 없습니다.
 
 ## 기본 내용
 
@@ -99,6 +99,6 @@ workflows/scenarios/internal/
 
 ## 관련 문서
 
-- [Workspace Layout](workspace-layout.md) — 워크스페이스 디렉터리 구조
-- [Bundle Layout](bundle-layout.md) — 번들 아카이브에 들어가는 내용
-- [Server Registry](server/registry.md) — `deck server up`이 서빙하는 OCI 레지스트리
+- [Workspace Layout](workspace-layout.md): 워크스페이스 디렉터리 구조
+- [Bundle Layout](bundle-layout.md): 번들 아카이브에 들어가는 내용
+- [Server Registry](server/registry.md): `deck server up`이 서빙하는 OCI 레지스트리

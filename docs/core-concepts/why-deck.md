@@ -2,7 +2,7 @@
 
 `deck` started from a narrow but recurring operational problem: air-gapped Linux maintenance work. When you can't assume internet access, when SSH is heavily restricted, and when your procedures have grown beyond what a simple shell script can safely handle, you need a different approach.
 
-Shell scripts are easy to write and can run almost anywhere. However, they stop being reliable once a procedure becomes complex. Code review turns into reverse-engineering. Code reuse turns into copy-and-paste. The most important question—"What is this procedure actually trying to do?"—gets buried under implementation details.
+Shell scripts are easy to write and can run almost anywhere. However, they stop being reliable once a procedure becomes complex. Code review turns into reverse-engineering. Code reuse turns into copy-and-paste. The most important question, "What is this procedure actually trying to do?", gets buried under implementation details.
 
 `deck` exists to convert those fragile, Bash-driven procedures into verifiable, bundle-based workflows.
 

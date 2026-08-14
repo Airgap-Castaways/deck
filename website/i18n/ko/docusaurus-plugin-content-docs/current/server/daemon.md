@@ -1,6 +1,6 @@
 ---
 source: docs/server/daemon.md
-source_hash: 3e46c166432be5b4e15018371fcb3181f069a8df
+source_hash: 11adc377c28f520bf360a9ea1983f145fa166173
 ---
 # 서버 데몬 모드
 
@@ -9,7 +9,7 @@ source_hash: 3e46c166432be5b4e15018371fcb3181f069a8df
 macOS와 Windows는 pid 파일로 추적되는 분리된(detached) 백그라운드 프로세스를
 사용합니다.
 
-## Linux — 일시적 systemd 서비스
+## Linux: 일시적 systemd 서비스
 
 Linux에서 `deck server up --daemon`은 `systemd-run`을 호출하여 일시적
 서비스 유닛을 실행합니다. `systemd-run`과 `systemctl`이 모두 `PATH`에
@@ -36,7 +36,7 @@ journalctl -u deck-server.service
 또는 `deck server logs --source journal --unit deck-server.service`를
 통해서도 확인할 수 있습니다.
 
-## macOS 및 Windows — 분리된 백그라운드 프로세스
+## macOS 및 Windows: 분리된 백그라운드 프로세스
 
 macOS와 Windows에서 `deck server up --daemon`은 분리된 자식 프로세스를
 생성합니다:

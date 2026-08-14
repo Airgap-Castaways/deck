@@ -64,20 +64,20 @@ offline-kubernetes/
 
 ### Install flow
 
-1. **Prepare** — in the connected environment, run `deck prepare` against `prepare.yaml`. This downloads Debian packages, Kubernetes binaries (kubelet, kubeadm, kubectl, containerd, runc, CNI plugins), kubeadm images, and Calico CNI images into `outputs/`.
-2. **Build** — `deck bundle build` packages everything into a portable `bundle.tar`.
-3. **Transfer** — move `bundle.tar` through the approved path into the air-gapped site.
-4. **Bootstrap** — on the control-plane node (e.g. `cp-1`, `192.0.2.10`), unpack the bundle and run:
+1. **Prepare**: in the connected environment, run `deck prepare` against `prepare.yaml`. This downloads Debian packages, Kubernetes binaries (kubelet, kubeadm, kubectl, containerd, runc, CNI plugins), kubeadm images, and Calico CNI images into `outputs/`.
+2. **Build**: `deck bundle build` packages everything into a portable `bundle.tar`.
+3. **Transfer**: move `bundle.tar` through the approved path into the air-gapped site.
+4. **Bootstrap**: on the control-plane node (e.g. `cp-1`, `192.0.2.10`), unpack the bundle and run:
    ```bash
    ./deck apply scenarios/bootstrap.yaml
    ```
-   During bootstrap, the operator is prompted for a passphrase. The kubeadm join command is then printed to the log as an **encrypted block** only — no plaintext join file is served. Copy the text between `BEGIN ENCRYPTED JOIN` and `END ENCRYPTED JOIN`.
-5. **Join** — on each worker node, run:
+   During bootstrap, the operator is prompted for a passphrase. The kubeadm join command is then printed to the log as an **encrypted block** only; no plaintext join file is served. Copy the text between `BEGIN ENCRYPTED JOIN` and `END ENCRYPTED JOIN`.
+5. **Join**: on each worker node, run:
    ```bash
    ./deck apply scenarios/join.yaml --server 192.0.2.10:5000
    ```
    Paste the ciphertext as a single line when prompted, then enter the passphrase chosen at bootstrap. The worker decrypts the join command locally and never writes it to logs or apply state.
-6. **Verify** — both scenarios include a verify phase that checks cluster and node readiness.
+6. **Verify**: both scenarios include a verify phase that checks cluster and node readiness.
 
 ### Encrypted-join pattern {#encrypted-join-pattern}
 
@@ -85,7 +85,7 @@ Bootstrap prints the join command only in encrypted form via `openssl enc -aes-2
 
 ### Calico CNI
 
-Calico images (`quay.io/calico/*`, `quay.io/tigera/operator`) are downloaded by `prepare.yaml` and served from the bundle's image store. The CNI manifest (Tigera operator or `calico.yaml`) is applied **out-of-band** after bootstrap — typically with `kubectl apply -f` from a connected terminal or by placing the manifest in the bundle and running it manually.
+Calico images (`quay.io/calico/*`, `quay.io/tigera/operator`) are downloaded by `prepare.yaml` and served from the bundle's image store. The CNI manifest (Tigera operator or `calico.yaml`) is applied **out-of-band** after bootstrap, typically with `kubectl apply -f` from a connected terminal or by placing the manifest in the bundle and running it manually.
 
 ### Reset scope
 

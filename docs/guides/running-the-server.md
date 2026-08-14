@@ -2,7 +2,7 @@
 
 `deck server up` turns a prepared bundle root into a shared HTTP endpoint. All
 nodes in an air-gapped site can pull bundles, browse available scenarios, and
-have containerd pull container images from the same source — without any
+have containerd pull container images from the same source without any
 external network access.
 
 ---
@@ -22,7 +22,7 @@ directly against the local filesystem.
 
 ## Starting the server
 
-The server requires a bundle root — the directory that contains `workflows/`
+The server requires a bundle root: the directory that contains `workflows/`
 and `outputs/` (the output of `deck prepare`).
 
 ### Foreground mode
@@ -61,7 +61,7 @@ server log: /home/ubuntu/.local/state/deck/server/deck-server.log
 ```
 
 Use daemon mode when the server needs to stay running between `deck apply`
-invocations on worker nodes — for example, on a control-plane node that serves
+invocations on worker nodes: for example, on a control-plane node that serves
 all workers during a multi-day rollout.
 
 For full platform details including journal access on Linux, see
@@ -82,7 +82,7 @@ deck server up --root /path/to/bundle --addr :5443 --tls-self-signed
 
 Deck generates a self-signed certificate at startup. Worker nodes will need to
 configure `skipVerify: true` in their containerd registry mirror entries (the
-offline-kubernetes example already does this — see
+offline-kubernetes example already does this; see
 `vars.runtime.containerd.mirrorHosts[*].skipVerify`).
 
 ### Bring your own certificate
@@ -109,7 +109,7 @@ and `--tls-key` must be provided together.
 | Browse UI | Static site at `/` for exploring available bundles (human-readable). |
 | `/healthz` | Health probe endpoint; returns `200 OK` when the server is ready. |
 
-For registry details — endpoint list, alias rules, read-only enforcement — see
+For registry details, endpoint list, alias rules, and read-only enforcement, see
 [Server Registry](../server/registry.md).
 
 ---
@@ -316,8 +316,8 @@ deck server down
 
 ## Related references
 
-- [Server Registry](../server/registry.md) — OCI `/v2` endpoint details
-- [Server Daemon Mode](../server/daemon.md) — systemd and pid-file mechanics
-- [Server Audit Log](../server-audit-log.md) — audit record schema
-- [Offline Kubernetes example](../examples/README.md) — full multi-node walkthrough
-- [CLI Reference — deck server up](../cli/deck_server_up.md)
+- [Server Registry](../server/registry.md): OCI `/v2` endpoint details
+- [Server Daemon Mode](../server/daemon.md): systemd and pid-file mechanics
+- [Server Audit Log](../server-audit-log.md): audit record schema
+- [Offline Kubernetes example](../examples/README.md): full multi-node walkthrough
+- [CLI Reference, deck server up](../cli/deck_server_up.md)

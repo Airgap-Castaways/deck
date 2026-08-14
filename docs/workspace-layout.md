@@ -34,7 +34,7 @@ Scenarios are the primary entrypoints for `deck apply`.
 - Typical filenames: `apply.yaml`, `bootstrap.yaml`, `worker-join.yaml`.
 
 ### Components (`workflows/components/`)
-Components are **Component Fragments**—reusable sets of steps that are imported into scenarios.
+Components are component fragments: reusable sets of steps that are imported into scenarios.
 - Files here follow the **Component Fragment Schema**.
 - They only contain a `steps:` list.
 - They are imported via `phases[].imports` in a scenario.
@@ -92,8 +92,8 @@ These directories hold the prepared source material that `apply` consumes.
 ## Internal Metadata (`.deck/`)
 
 This directory is managed by `deck` and should not be edited manually.
-- `.deck/manifest.json` — digest manifest of canonical prepared outputs (`outputs/{files,packages,images,bin}`). `workflows/` and the deck launcher itself are not tracked. Used as the integrity baseline for `bundle verify` and at apply start.
-- `.deck/state/apply/` — phase-based apply state (see [apply-state.md](apply-state.md)). Apply run logs (record.json / events.jsonl) are written to `$XDG_STATE_HOME/deck/runs/<run-id>/`, not inside the workspace (see [apply-runlogs.md](apply-runlogs.md)).
+- `.deck/manifest.json`: digest manifest of canonical prepared outputs (`outputs/{files,packages,images,bin}`). `workflows/` and the deck launcher itself are not tracked. Used as the integrity baseline for `bundle verify` and at apply start.
+- `.deck/state/apply/`: phase-based apply state (see [apply-state.md](apply-state.md)). Apply run logs (record.json / events.jsonl) are written to `$XDG_STATE_HOME/deck/runs/<run-id>/`, not inside the workspace (see [apply-runlogs.md](apply-runlogs.md)).
 
 ## Related References
 

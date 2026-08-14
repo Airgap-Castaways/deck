@@ -63,7 +63,7 @@ The bundle includes `outputs/packages/`, `outputs/images/`, `outputs/files/`, `o
 
 ## 3. Transfer the bundle into the air-gapped site
 
-Move `bundle.tar` through the approved path for your environment. Common mechanisms include USB or removable media handed through a physical checkpoint, a secure gateway or file-drop service that bridges the boundary, or rsync over a controlled jump host with an outbound-only transfer rule. Whichever path you use, **verify the bundle on the target side before running apply** — a truncated or corrupted transfer will produce an integrity failure mid-run rather than before it starts:
+Move `bundle.tar` through the approved path for your environment. Common mechanisms include USB or removable media handed through a physical checkpoint, a secure gateway or file-drop service that bridges the boundary, or rsync over a controlled jump host with an outbound-only transfer rule. Whichever path you use, **verify the bundle on the target side before running apply**: a truncated or corrupted transfer will produce an integrity failure mid-run rather than before it starts:
 
 ```bash
 deck bundle verify --file ./bundle.tar
@@ -83,11 +83,11 @@ cd bundle
 
 The bootstrap scenario runs these phases in order:
 
-1. **host-prereqs** — verifies node selection, applies offline Debian repo, installs OS packages
-2. **runtime** — installs Kubernetes binaries, containerd, and kubelet
-3. **image-source** — configures the containerd registry mirror pointing at the bundle server
-4. **bootstrap** — runs `kubeadm init`, prints the encrypted join block, configures kubeconfig
-5. **verify** — checks cluster readiness
+1. **host-prereqs**: verifies node selection, applies offline Debian repo, installs OS packages
+2. **runtime**: installs Kubernetes binaries, containerd, and kubelet
+3. **image-source**: configures the containerd registry mirror pointing at the bundle server
+4. **bootstrap**: runs `kubeadm init`, prints the encrypted join block, configures kubeconfig
+5. **verify**: checks cluster readiness
 
 ### Encrypted join block
 
@@ -103,7 +103,7 @@ Copy the text between the `BEGIN` and `END` markers (a single line of base64). N
 
 ### Calico CNI
 
-Calico images are prepared and available in the bundle's image store. The CNI manifest (Tigera operator or `calico.yaml`) is applied **out-of-band** after bootstrap — for example, by placing the manifest in the bundle and running `kubectl apply -f` from a terminal with cluster access once `kubeconfig` is available.
+Calico images are prepared and available in the bundle's image store. The CNI manifest (Tigera operator or `calico.yaml`) is applied **out-of-band** after bootstrap: for example, by placing the manifest in the bundle and running `kubectl apply -f` from a terminal with cluster access once `kubeconfig` is available.
 
 ## 5. Join worker nodes
 
@@ -117,8 +117,8 @@ cd bundle
 
 The join scenario prompts the operator for two inputs:
 
-1. **Ciphertext** — paste the encrypted join block as a single line (no line breaks).
-2. **Passphrase** — the passphrase chosen at bootstrap; entered as a secret (not echoed).
+1. **Ciphertext**: paste the encrypted join block as a single line (no line breaks).
+2. **Passphrase**: the passphrase chosen at bootstrap; entered as a secret (not echoed).
 
 The worker decrypts the join command locally and writes it to a temp file used by `JoinKubeadm`. The plaintext never traverses the network and is not stored in apply state or logs.
 

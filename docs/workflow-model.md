@@ -1,6 +1,6 @@
 # Workflow Model
 
-`deck` uses a YAML workflow model so larger procedures stay reviewable. The goal is not to invent a DSL — it is to give air-gapped operational work a clearer structure than a growing shell script, where typed steps express intent and named phases show the operator what the procedure is doing before they read every detail.
+`deck` uses a YAML workflow model so larger procedures stay reviewable. The goal is not to invent a DSL. It is to give air-gapped operational work a clearer structure than a growing shell script, where typed steps express intent and named phases show the operator what the procedure is doing before they read every detail.
 
 ## Top-level fields
 
@@ -109,13 +109,13 @@ Runtime values flow separately through `register` outputs and built-in runtime f
 
 Use `deck plan vars` to inspect the input snapshot before running `prepare` or `apply`. It prints effective `vars`, resolved `context`, initial `runtime` values known before execution, and planned runtime keys that may be registered by workflow steps. Registered runtime values are not predicted before their producing step runs.
 
-**`workflows/vars.yaml`** — define shared defaults once:
+**`workflows/vars.yaml`**: define shared defaults once:
 
 ```yaml
 clusterName: prod-k8s
 ```
 
-**Scenario `vars:` block** — override or extend for the specific scenario:
+**Scenario `vars:` block**: override or extend for the specific scenario:
 
 ```yaml
 version: v1alpha1
@@ -123,7 +123,7 @@ vars:
   clusterName: staging-k8s   # overrides vars.yaml
 ```
 
-**CLI vars files** — overlay site or node values without editing `workflows/vars.yaml`:
+**CLI vars files**: overlay site or node values without editing `workflows/vars.yaml`:
 
 ```bash
 deck apply --root . --scenario apply -f vars/site.yaml -f vars/cp1.yaml
@@ -137,7 +137,7 @@ Vars file paths are relative to the same `workflows/` location that contains `va
 - Deck extracts `all:` and `hosts:` node-scoped values after vars-file overlays are merged.
 - `--var` remains the final override with the highest precedence.
 
-**Template interpolation** — use `{{ .vars.NAME }}` inside string fields:
+**Template interpolation**: use `{{ .vars.NAME }}` inside string fields:
 
 ```yaml
 - id: write-hostname
@@ -147,7 +147,7 @@ Vars file paths are relative to the same `workflows/` location that contains `va
     content: "{{ .vars.clusterName }}\n"
 ```
 
-**CEL expressions** — use `vars.NAME`, `runtime.NAME`, and `context.NAME` (no braces) in `when:` conditions:
+**CEL expressions**: use `vars.NAME`, `runtime.NAME`, and `context.NAME` (no braces) in `when:` conditions:
 
 ```yaml
 - id: install-rhel-packages
@@ -253,7 +253,7 @@ Shared envelope rules:
 - if a step runs inside a parallel batch, its `register` outputs become visible only after the full batch succeeds
 - `spec` is always validated again against the selected step kind after the shared envelope passes
 
-### `when` — conditional execution {#when--conditional-execution}
+### `when`: conditional execution {#when--conditional-execution}
 
 For a guided walkthrough, see [Conditions with when (CEL)](guides/conditions-and-cel.md).
 
@@ -286,7 +286,7 @@ steps:
 
 Use `CheckHost` when the workflow should fail fast on host suitability checks such as `swap`, `kernelModules`, or required binaries. `CheckHost` validates those conditions, but `runtime.host` exists even when the workflow does not include a `CheckHost` step.
 
-### `register` — capture step output {#register--capture-step-output}
+### `register`: capture step output {#register--capture-step-output}
 
 For a guided walkthrough, see [Capturing step output with register](guides/capturing-output.md).
 
@@ -314,7 +314,7 @@ steps:
 
 For a guided walkthrough, see [Phases and parallelism](guides/phases-and-parallelism.md).
 
-Use phases when the procedure has natural boundaries — a host-prereqs block that must complete before a runtime block, for example. For simple apply workflows with a handful of steps, flat `steps:` is fine.
+Use phases when the procedure has natural boundaries: a host-prereqs block that must complete before a runtime block, for example. For simple apply workflows with a handful of steps, flat `steps:` is fine.
 
 Each phase can import component fragments, include inline steps, or both. Phases are also the persisted resume boundary for `apply`.
 
@@ -354,7 +354,7 @@ phases:
       - path: gpu/setup.yaml
         when: "vars.gpu == true"   # applied (AND) to every step imported from gpu/setup.yaml
       - path: base.yaml
-        # no when — steps from base.yaml keep their own conditions unchanged
+        # no when: steps from base.yaml keep their own conditions unchanged
 ```
 
 Use `vars.` to test static variables and `runtime.` to test runtime facts, the same as in a step-level `when`.

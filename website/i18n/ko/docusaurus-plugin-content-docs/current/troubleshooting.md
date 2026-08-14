@@ -1,6 +1,6 @@
 ---
 source: docs/troubleshooting.md
-source_hash: 4223f04f91a7e3d16a14cfa1ab423be8963fc49b
+source_hash: b5072b3f342fd41399ad8c2131e988f3498a8d8d
 ---
 # 문제 해결
 
@@ -135,7 +135,7 @@ deck apply --root . --scenario apply --v=2 --log-format=json 2>apply.log
 
 **원인:** 이전 `prepare` 실행이 기록한 재사용 메타데이터(이미지의 경우 `outputs/images/.deck-cache-images.json`, 패키지의 경우 패키지 인덱스 메타데이터)가 더 이상 디스크에 있는 내용과 일치하지 않습니다.
 
-**해결:** `deck prepare --refresh`를 실행하여 캐시된 메타데이터를 무시하고 새 복사본을 가져오세요. 쓰기 전에 준비된 outputs 디렉터리를 제거하려면 `deck prepare --clean`을 사용하세요 — outputs 트리가 일관되지 않은 상태일 때 가장 철저한 초기화 방법입니다.
+**해결:** `deck prepare --refresh`를 실행하여 캐시된 메타데이터를 무시하고 새 복사본을 가져오세요. 쓰기 전에 준비된 outputs 디렉터리를 제거하려면 `deck prepare --clean`을 사용하세요, outputs 트리가 일관되지 않은 상태일 때 가장 철저한 초기화 방법입니다.
 
 ### 컨테이너 런타임 누락 (`E_PREPARE_RUNTIME_NOT_FOUND`, `E_PREPARE_RUNTIME_UNSUPPORTED`)
 
@@ -192,7 +192,7 @@ deck apply --root . --scenario apply --v=2 --log-format=json 2>apply.log
 
 `deck apply`는 워크플로, vars, 실행 컨텍스트의 지문(fingerprint)을 키로 하는 상태 파일에 진행 상황을 저장합니다. 완료된 단계가 기록됩니다. 다음 비-fresh 실행에서는 완료된 단계를 건너뛰고 첫 번째 미완료 단계에서 실행을 재개합니다.
 
-실패한 단계는 다음 실행에서 첫 스텝부터 다시 실행됩니다. 실패한 단계 내부의 부분 진행 상황은 재사용되지 않으며 — 단계 전체가 다시 실행됩니다.
+실패한 단계는 다음 실행에서 첫 스텝부터 다시 실행됩니다. 실패한 단계 내부의 부분 진행 상황은 재사용되지 않으며, 단계 전체가 다시 실행됩니다.
 
 ```bash
 # 무엇이 완료되었고 다음에 무엇이 실행될지 확인
@@ -216,7 +216,7 @@ deck apply --root . --scenario apply --fresh
 
 ### 상태가 초기화될 수 있는 이유 (새 상태 키)
 
-워크플로 파일 내용, 유효한 vars, 또는 실행 컨텍스트가 변경되면, deck은 다른 상태 키를 계산합니다. 기존 상태는 삭제되지 않으며 — 단지 새 키로는 더 이상 매칭되지 않을 뿐입니다. 이는 워크플로를 편집한 후 재개한 실행이 처음부터 시작됨을 의미합니다.
+워크플로 파일 내용, 유효한 vars, 또는 실행 컨텍스트가 변경되면, deck은 다른 상태 키를 계산합니다. 기존 상태는 삭제되지 않으며, 단지 새 키로는 더 이상 매칭되지 않을 뿐입니다. 이는 워크플로를 편집한 후 재개한 실행이 처음부터 시작됨을 의미합니다.
 
 적용 전에 `deck plan --root . --scenario apply`를 사용하여 해석된 상태 키와 어떤 스텝이 실행되거나 건너뛰어질지 확인하세요. 디스크에 있는 모든 상태 파일을 보려면 `deck state list`를 사용하세요.
 
@@ -265,10 +265,10 @@ content: "cluster: {{ .vars.clusterName }}"
 **해결:** CEL 표현식을 확인하세요. `when`의 변수 참조는 `vars.NAME`, `runtime.NAME`, `context.NAME`을 사용합니다(중괄호 없음, 앞에 붙는 점 없음):
 
 ```yaml
-# 잘못됨 — CEL 필드에 Go 템플릿 문법
+# 잘못됨, CEL 필드에 Go 템플릿 문법
 when: "{{ .vars.role == \"control-plane\" }}"
 
-# 올바름 — CEL 표현식
+# 올바름, CEL 표현식
 when: vars.role == "control-plane"
 ```
 
