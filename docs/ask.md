@@ -30,19 +30,7 @@ Contributors working on the internal pipeline should see [Ask Agent Runtime](htt
 
 `deck ask` now uses a split runtime: read-only analysis for answer-oriented requests, and a bounded authoring runtime for create/edit work.
 
-```mermaid
-flowchart LR
-  A[Request] --> B[Normalize and inspect workspace]
-  B --> C{Route}
-  C -- Question / Explain / Review --> D[Analyze mode]
-  C -- Plan --> E[Read-only plan artifact]
-  C -- Draft / Refine --> F[Author mode preflight]
-  D --> G[Answer with local and optional external evidence]
-  F --> H[Bounded tool loop]
-  H --> I[Candidate file state]
-  I --> J[deck_lint]
-  J --> K[Write files on success]
-```
+![deck ask routing](./diagrams/ask-routing.svg)
 
 ### Step 1: Normalize and route the request
 

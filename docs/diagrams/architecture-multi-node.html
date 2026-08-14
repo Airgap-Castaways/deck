@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>deck multi-node flow</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #fffdf8;
+      --color-ink:     #3a2a1a;
+      --color-muted:   #6b4e2e;
+      --color-accent:  #c8822f;
+      --font-sans:     'Hanken Grotesk', system-ui, sans-serif;
+      --font-serif:    'Fraunces', Georgia, serif;
+      --font-mono:     'JetBrains Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture</p>
+    <h1>Multi-node flow</h1>
+    <svg viewBox="0 0 1000 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="arch-multi-title arch-multi-desc">
+      <title id="arch-multi-title">deck multi-node flow</title>
+      <desc id="arch-multi-desc">Diagram showing how deck prepares artifacts and builds a bundle in a connected environment, transfers it to an air-gapped site where one node runs as a server and distributes to client nodes that apply locally.</desc>
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#6b4e2e"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#c8822f"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#fffdf8"/>
+      <!-- Zone: Connected environment -->
+      <rect x="32" y="40" width="296" height="160" rx="8" fill="rgba(58,42,26,0.02)" stroke="rgba(58,42,26,0.10)" stroke-width="0.8"/>
+      <rect x="104" y="44" width="152" height="12" rx="2" fill="#fffdf8"/>
+      <text x="180" y="53" fill="rgba(58,42,26,0.40)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.14em">CONNECTED ENVIRONMENT</text>
+      <!-- Zone: Air-gapped site (outer) -->
+      <rect x="448" y="40" width="520" height="360" rx="8" fill="rgba(58,42,26,0.02)" stroke="rgba(58,42,26,0.10)" stroke-width="0.8"/>
+      <rect x="632" y="44" width="152" height="12" rx="2" fill="#fffdf8"/>
+      <text x="708" y="53" fill="rgba(58,42,26,0.40)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.14em">AIR-GAPPED SITE</text>
+      <!-- Sub-zone: Server node -->
+      <rect x="472" y="88" width="224" height="120" rx="8" fill="rgba(58,42,26,0.02)" stroke="rgba(58,42,26,0.08)" stroke-width="0.8"/>
+      <rect x="536" y="92" width="96" height="12" rx="2" fill="#fffdf8"/>
+      <text x="584" y="101" fill="rgba(58,42,26,0.40)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.14em">SERVER NODE</text>
+      <!-- Sub-zone: Client nodes -->
+      <rect x="472" y="248" width="224" height="120" rx="8" fill="rgba(58,42,26,0.02)" stroke="rgba(58,42,26,0.08)" stroke-width="0.8"/>
+      <rect x="536" y="252" width="96" height="12" rx="2" fill="#fffdf8"/>
+      <text x="584" y="261" fill="rgba(58,42,26,0.40)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.14em">CLIENT NODES</text>
+      <!-- Arrows -->
+      <!-- Prepare -> Build -->
+      <path d="M 188,120 H 224" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- Build -> Transfer (exits zone) -->
+      <path d="M 340,120 H 388" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- Transfer -> Run server (accent, crosses air gap, enters site) -->
+      <path d="M 500,120 H 536" fill="none" stroke="#c8822f" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <rect x="492" y="104" width="48" height="12" rx="2" fill="#fffdf8"/>
+      <text x="516" y="113" fill="#8a5a2b" font-size="8" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.06em">AIR GAP</text>
+      <!-- Run server -> Pull deck (vertical, within site) -->
+      <path d="M 584,164 V 292" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="560" y="220" width="48" height="12" rx="2" fill="#fffdf8"/>
+      <text x="584" y="229" fill="#8a5a2b" font-size="8" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.06em">SERVE</text>
+      <!-- Pull deck -> Apply -->
+      <path d="M 636,320 H 672" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- Node: Prepare artifacts -->
+      <rect x="76" y="92" width="112" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="76" y="92" width="112" height="56" rx="6" fill="#ffffff" stroke="#3a2a1a" stroke-width="1"/>
+      <rect x="84" y="98" width="32" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="100" y="107" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PREP</text>
+      <text x="132" y="123" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Prepare</text>
+      <text x="132" y="137" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">artifacts</text>
+      <!-- Node: Build bundle (focal) -->
+      <rect x="224" y="88" width="116" height="64" rx="6" fill="#fffdf8"/>
+      <rect x="224" y="88" width="116" height="64" rx="6" fill="rgba(200,130,47,0.08)" stroke="#c8822f" stroke-width="1"/>
+      <rect x="232" y="94" width="36" height="12" rx="2" fill="transparent" stroke="rgba(200,130,47,0.40)" stroke-width="0.8"/>
+      <text x="250" y="103" fill="rgba(200,130,47,0.80)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">BUILD</text>
+      <text x="282" y="123" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Build bundle</text>
+      <text x="282" y="138" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">bundle.tar</text>
+      <!-- Node: Transfer bundle -->
+      <rect x="388" y="92" width="112" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="388" y="92" width="112" height="56" rx="6" fill="rgba(58,42,26,0.03)" stroke="rgba(58,42,26,0.30)" stroke-width="1"/>
+      <rect x="396" y="98" width="44" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="418" y="107" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TRANSFER</text>
+      <text x="444" y="123" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Transfer</text>
+      <text x="444" y="137" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">bundle</text>
+      <!-- Node: Run server -->
+      <rect x="524" y="108" width="120" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="524" y="108" width="120" height="56" rx="6" fill="#ffffff" stroke="#3a2a1a" stroke-width="1"/>
+      <rect x="532" y="114" width="36" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="550" y="123" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SERVE</text>
+      <text x="584" y="139" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Run server</text>
+      <text x="584" y="153" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">deck server</text>
+      <!-- Node: Pull deck -->
+      <rect x="524" y="292" width="112" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="524" y="292" width="112" height="56" rx="6" fill="#ffffff" stroke="#3a2a1a" stroke-width="1"/>
+      <rect x="532" y="298" width="32" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="548" y="307" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PULL</text>
+      <text x="580" y="323" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Pull deck</text>
+      <text x="580" y="337" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">binary + files</text>
+      <!-- Node: Apply -->
+      <rect x="672" y="292" width="112" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="672" y="292" width="112" height="56" rx="6" fill="#ffffff" stroke="#3a2a1a" stroke-width="1"/>
+      <rect x="680" y="298" width="32" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="696" y="307" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">RUN</text>
+      <text x="728" y="323" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Apply</text>
+      <text x="728" y="337" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">deck apply</text>
+    </svg>
+  </div>
+</body>
+</html>

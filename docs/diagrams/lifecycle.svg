@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1000 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="lifecycle-title lifecycle-desc">
+      <title id="lifecycle-title">deck lifecycle</title>
+      <desc id="lifecycle-desc">Workflow showing how deck prepares artifacts in a connected environment, bundles them, transfers across an air gap, and applies on a target node.</desc>
+      <defs><style>@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,400&amp;family=Hanken+Grotesk:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap');</style>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#6b4e2e"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#c8822f"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#fffdf8"/>
+      <!-- Zone: Connected environment -->
+      <rect x="32" y="48" width="352" height="224" rx="8" fill="rgba(58,42,26,0.02)" stroke="rgba(58,42,26,0.10)" stroke-width="0.8"/>
+      <rect x="120" y="52" width="176" height="12" rx="2" fill="#fffdf8"/>
+      <text x="208" y="61" fill="rgba(58,42,26,0.40)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.14em">CONNECTED ENVIRONMENT</text>
+      <!-- Zone: Air-gapped site -->
+      <rect x="616" y="48" width="352" height="224" rx="8" fill="rgba(58,42,26,0.02)" stroke="rgba(58,42,26,0.10)" stroke-width="0.8"/>
+      <rect x="724" y="52" width="136" height="12" rx="2" fill="#fffdf8"/>
+      <text x="792" y="61" fill="rgba(58,42,26,0.40)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.14em">AIR-GAPPED SITE</text>
+      <!-- Arrows -->
+      <path d="M 144,160 H 180" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 296,160 H 340" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 460,160 H 660" fill="none" stroke="#c8822f" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <path d="M 720,160 H 740" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 856,160 H 892" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="536" y="144" width="48" height="12" rx="2" fill="#fffdf8"/>
+      <text x="560" y="153" fill="#8a5a2b" font-size="8" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.06em">AIR GAP</text>
+      <!-- Node A: Author and lint workflow -->
+      <rect x="32" y="132" width="112" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="32" y="132" width="112" height="56" rx="6" fill="rgba(58,42,26,0.03)" stroke="rgba(58,42,26,0.30)" stroke-width="1"/>
+      <rect x="40" y="138" width="28" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="54" y="147" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">STEP</text>
+      <text x="88" y="160" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Author and</text>
+      <text x="88" y="174" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">lint workflow</text>
+      <!-- Node B: deck prepare -->
+      <rect x="180" y="132" width="112" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="180" y="132" width="112" height="56" rx="6" fill="#ffffff" stroke="#3a2a1a" stroke-width="1"/>
+      <rect x="188" y="138" width="28" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="202" y="147" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CMD</text>
+      <text x="236" y="163" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">deck prepare</text>
+      <text x="236" y="177" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">download artifacts</text>
+      <!-- Node C: deck bundle build (focal) -->
+      <rect x="340" y="128" width="120" height="64" rx="6" fill="#fffdf8"/>
+      <rect x="340" y="128" width="120" height="64" rx="6" fill="rgba(200,130,47,0.08)" stroke="#c8822f" stroke-width="1"/>
+      <rect x="348" y="134" width="36" height="12" rx="2" fill="transparent" stroke="rgba(200,130,47,0.40)" stroke-width="0.8"/>
+      <text x="366" y="143" fill="rgba(200,130,47,0.80)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">BUILD</text>
+      <text x="400" y="163" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">deck bundle build</text>
+      <text x="400" y="178" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">bundle.tar</text>
+      <!-- Node D: Transfer bundle -->
+      <rect x="660" y="132" width="60" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="660" y="132" width="60" height="56" rx="6" fill="rgba(58,42,26,0.03)" stroke="rgba(58,42,26,0.30)" stroke-width="1"/>
+      <text x="690" y="155" fill="#3a2a1a" font-size="11" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Transfer</text>
+      <text x="690" y="169" fill="#3a2a1a" font-size="11" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">bundle</text>
+      <!-- Node E: deck bundle verify -->
+      <rect x="740" y="132" width="112" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="740" y="132" width="112" height="56" rx="6" fill="#ffffff" stroke="#3a2a1a" stroke-width="1"/>
+      <rect x="748" y="138" width="44" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="770" y="147" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">VERIFY</text>
+      <text x="796" y="163" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">deck bundle</text>
+      <text x="796" y="177" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">verify</text>
+      <!-- Node F: deck apply -->
+      <rect x="892" y="132" width="104" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="892" y="132" width="104" height="56" rx="6" fill="#ffffff" stroke="#3a2a1a" stroke-width="1"/>
+      <rect x="900" y="138" width="32" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="916" y="147" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">RUN</text>
+      <text x="944" y="163" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">deck apply</text>
+      <text x="944" y="177" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">local execution</text>
+    </svg>

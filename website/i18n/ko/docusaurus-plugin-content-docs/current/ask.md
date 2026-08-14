@@ -1,6 +1,6 @@
 ---
 source: docs/ask.md
-source_hash: 14eb58db748b9b3c6bd234ef0f19c6b74a4e338f
+source_hash: 442cb3c55bdba384f6180e51b6dd6f9bc806415d
 sidebar_label: "Using deck ask"
 ---
 
@@ -32,19 +32,7 @@ kubeadm 워크플로를 작성할 때는 토폴로지를 명시하는 방식이 
 
 `deck ask`은 이제 두 갈래로 분리된 런타임을 사용합니다. 답변 중심 요청에는 읽기 전용 분석을, 생성·편집 작업에는 범위가 제한된 작성 런타임을 사용합니다.
 
-```mermaid
-flowchart LR
-  A[Request] --> B[Normalize and inspect workspace]
-  B --> C{Route}
-  C -- Question / Explain / Review --> D[Analyze mode]
-  C -- Plan --> E[Read-only plan artifact]
-  C -- Draft / Refine --> F[Author mode preflight]
-  D --> G[Answer with local and optional external evidence]
-  F --> H[Bounded tool loop]
-  H --> I[Candidate file state]
-  I --> J[deck_lint]
-  J --> K[Write files on success]
-```
+![deck ask routing](/diagrams/ask-routing.svg)
 
 ### 1단계: 요청 정규화 및 라우팅
 

@@ -50,19 +50,7 @@ That is why the architecture emphasizes:
 
 The simplest `deck` workflow is just `prepare -> bundle -> apply`.
 
-```mermaid
-flowchart LR
-    subgraph Online[Connected environment]
-        A[Prepare artifacts]
-        B[Build bundle]
-        A --> B
-    end
-    B --> C[Transfer bundle]
-    subgraph Offline[Air-gapped site]
-        D[Apply on node]
-    end
-    C --> D
-```
+![deck single-node flow](../diagrams/architecture-single-node.svg)
 
 - In the connected environment, the operator prepares the artifacts the workflow will need at run time.
 - The prepared outputs, workflow files, manifest, and `deck` binary are packaged into a bundle.
@@ -78,29 +66,7 @@ For multi-node work, the core shape is still `prepare -> bundle -> apply`. The d
 
 In practice, that server can act as a local web or file server for the `deck` binary, workflows, and prepared files, and it can also expose a pull-only container registry for prepared images. That keeps the overall model the same while making offline distribution easier inside the site.
 
-```mermaid
-flowchart LR
-    subgraph Online[Connected environment]
-        A[Prepare artifacts]
-        B[Build bundle]
-        A --> B
-    end
-    B --> C[Transfer bundle]
-    subgraph Offline[Air-gapped site]
-        subgraph ServerNode[Server node]
-            direction TB
-            D[Run server]
-        end
-        subgraph ClientNodes[Client nodes]
-            direction TB
-            E[Pull deck]
-            F[Apply]
-            E --> F
-        end
-        D --> E
-    end
-    C --> D
-```
+![deck multi-node flow](../diagrams/architecture-multi-node.svg)
 
 - In the connected environment, the operator prepares artifacts and builds the bundle in the same way as the single-node flow.
 - After the bundle crosses into the site, one node can take the server role and run `deck server`.

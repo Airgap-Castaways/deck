@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>deck ask routing</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #fffdf8;
+      --color-ink:     #3a2a1a;
+      --color-muted:   #6b4e2e;
+      --color-accent:  #c8822f;
+      --font-sans:     'Hanken Grotesk', system-ui, sans-serif;
+      --font-serif:    'Fraunces', Georgia, serif;
+      --font-mono:     'JetBrains Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Flowchart</p>
+    <h1>deck ask routing</h1>
+    <svg viewBox="0 0 1000 660" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ask-routing-title ask-routing-desc">
+      <title id="ask-routing-title">deck ask routing</title>
+      <desc id="ask-routing-desc">Flowchart showing how deck ask normalizes a request, routes it to a read-only analyze path or an authoring path that writes files after linting succeeds.</desc>
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#6b4e2e"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#c8822f"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#fffdf8"/>
+
+      <!-- Layout plan:
+           Column A (left):  x=40-200   Plan artifact terminal
+           Column B (center):x=340-660  Request -> Normalize -> Route -> Author path (down)
+           Column C (right): x=720-960  Analyze mode -> Answer path (down)
+           Row 1: y=48-104   Request
+           Row 2: y=148-204  Normalize
+           Row 3: y=244-316  Route diamond / Plan / Analyze
+           Row 4: y=372-428  Author preflight
+           Row 5: y=468-524  Tool loop / deck_lint / Write files / Answer
+      -->
+
+      <!-- Arrows (drawn before nodes) -->
+
+      <!-- Request -> Normalize (vertical center) -->
+      <path d="M 500,104 V 148" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- Normalize -> Route (vertical center) -->
+      <path d="M 500,204 V 244" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- Route -> Plan artifact (left horizontal from diamond left tip) -->
+      <path d="M 412,280 H 344" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="352" y="264" width="32" height="12" rx="2" fill="#fffdf8"/>
+      <text x="368" y="273" fill="#8a5a2b" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.06em">PLAN</text>
+
+      <!-- Route -> Analyze mode (right horizontal from diamond right tip, then the path continues down on the right side) -->
+      <path d="M 588,280 H 656" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="596" y="264" width="56" height="12" rx="2" fill="#fffdf8"/>
+      <text x="624" y="273" fill="#8a5a2b" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.06em">QUESTION</text>
+
+      <!-- Route -> Author mode preflight (down from diamond bottom, accent) -->
+      <path d="M 500,316 V 372" fill="none" stroke="#c8822f" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <rect x="460" y="336" width="80" height="12" rx="2" fill="#fffdf8"/>
+      <text x="500" y="345" fill="#8a5a2b" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.06em">DRAFT / REFINE</text>
+
+      <!-- Analyze mode -> Answer (down, right, down to far-right terminal) -->
+      <!-- Exit Analyze bottom at (736, 308), down to y=400, right to x=924, down to Answer top y=468 -->
+      <path d="M 736,308 V 400 H 932 V 468" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- Author preflight -> Bounded tool loop (down center) -->
+      <!-- Author box bottom: y=428. Tool loop top: y=468 -->
+      <path d="M 500,428 V 468" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- Tool loop -> deck_lint (right horizontal) -->
+      <!-- Tool loop box: x=340-492, right edge x=492, center y=496 -->
+      <!-- deck_lint box: x=540-668, left edge x=540 -->
+      <path d="M 492,496 H 540" fill="none" stroke="#6b4e2e" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- deck_lint -> Write files (right horizontal, accent success path) -->
+      <!-- deck_lint right edge: x=668. Write files left edge: x=716 -->
+      <path d="M 668,496 H 716" fill="none" stroke="#c8822f" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+
+      <!-- Node: Request (oval start) -->
+      <rect x="444" y="48" width="112" height="56" rx="28" fill="#fffdf8"/>
+      <rect x="444" y="48" width="112" height="56" rx="28" fill="rgba(107,78,46,0.10)" stroke="#8a5a2b" stroke-width="1"/>
+      <text x="500" y="80" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Request</text>
+
+      <!-- Node: Normalize and inspect workspace -->
+      <rect x="388" y="148" width="224" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="388" y="148" width="224" height="56" rx="6" fill="#ffffff" stroke="#3a2a1a" stroke-width="1"/>
+      <rect x="396" y="154" width="36" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="414" y="163" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">STEP</text>
+      <text x="500" y="180" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Normalize and</text>
+      <text x="500" y="194" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">inspect workspace</text>
+
+      <!-- Node: Route (diamond decision) -->
+      <path d="M 500,244 L 588,280 L 500,316 L 412,280 Z" fill="#fffdf8" stroke="#3a2a1a" stroke-width="1"/>
+      <text x="500" y="276" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Route</text>
+      <text x="500" y="290" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">classify</text>
+
+      <!-- Node: Plan artifact (left terminal) -->
+      <rect x="200" y="252" width="144" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="200" y="252" width="144" height="56" rx="6" fill="rgba(58,42,26,0.05)" stroke="#6b4e2e" stroke-width="1"/>
+      <rect x="208" y="258" width="40" height="12" rx="2" fill="transparent" stroke="rgba(107,78,46,0.30)" stroke-width="0.8"/>
+      <text x="228" y="267" fill="rgba(107,78,46,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">OUTPUT</text>
+      <text x="272" y="284" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Read-only</text>
+      <text x="272" y="298" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">plan artifact</text>
+
+      <!-- Node: Analyze mode (right branch) -->
+      <rect x="656" y="252" width="160" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="656" y="252" width="160" height="56" rx="6" fill="#ffffff" stroke="#3a2a1a" stroke-width="1"/>
+      <rect x="664" y="258" width="44" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="686" y="267" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ANALYZE</text>
+      <text x="736" y="284" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Analyze mode</text>
+      <text x="736" y="298" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">question / explain / review</text>
+
+      <!-- Node: Author mode preflight (focal, center) -->
+      <rect x="388" y="372" width="224" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="388" y="372" width="224" height="56" rx="6" fill="rgba(200,130,47,0.08)" stroke="#c8822f" stroke-width="1"/>
+      <rect x="396" y="378" width="40" height="12" rx="2" fill="transparent" stroke="rgba(200,130,47,0.40)" stroke-width="0.8"/>
+      <text x="416" y="387" fill="rgba(200,130,47,0.80)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">AUTHOR</text>
+      <text x="500" y="404" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Author mode preflight</text>
+      <text x="500" y="418" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">scope / preflight</text>
+
+      <!-- Node: Bounded tool loop (center, row 5) -->
+      <rect x="340" y="468" width="152" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="340" y="468" width="152" height="56" rx="6" fill="#ffffff" stroke="#3a2a1a" stroke-width="1"/>
+      <rect x="348" y="474" width="36" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="366" y="483" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">LOOP</text>
+      <text x="416" y="500" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Bounded tool loop</text>
+      <text x="416" y="514" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">read / write / edit</text>
+
+      <!-- Node: deck_lint (center-right, row 5) -->
+      <rect x="540" y="468" width="128" height="56" rx="6" fill="#fffdf8"/>
+      <rect x="540" y="468" width="128" height="56" rx="6" fill="#ffffff" stroke="#3a2a1a" stroke-width="1"/>
+      <rect x="548" y="474" width="32" height="12" rx="2" fill="transparent" stroke="rgba(58,42,26,0.30)" stroke-width="0.8"/>
+      <text x="564" y="483" fill="rgba(58,42,26,0.60)" font-size="7" font-family="'JetBrains Mono', monospace" text-anchor="middle" letter-spacing="0.08em">LINT</text>
+      <text x="604" y="500" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">deck_lint</text>
+      <text x="604" y="514" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">validate</text>
+
+      <!-- Node: Write files on success (accent terminal, far right, row 5) -->
+      <rect x="716" y="468" width="136" height="56" rx="28" fill="#fffdf8"/>
+      <rect x="716" y="468" width="136" height="56" rx="28" fill="rgba(200,130,47,0.08)" stroke="#c8822f" stroke-width="1"/>
+      <text x="784" y="494" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Write files</text>
+      <text x="784" y="508" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">on success</text>
+
+      <!-- Node: Answer (right-side terminal, row 5, offset right to avoid Write files) -->
+      <!-- Answer box at x=860-960 won't fit well. Instead place Answer BELOW Analyze mode, offset to the right -->
+      <!-- Actually let's put Answer at far right column, row 5 but shifted right -->
+      <!-- Write files is x=716-852. Answer should be separate. Let's put Answer at x=860-996 -->
+      <rect x="872" y="468" width="120" height="56" rx="28" fill="#fffdf8"/>
+      <rect x="872" y="468" width="120" height="56" rx="28" fill="rgba(58,42,26,0.05)" stroke="#6b4e2e" stroke-width="1"/>
+      <text x="932" y="494" fill="#3a2a1a" font-size="12" font-weight="600" font-family="'Hanken Grotesk', sans-serif" text-anchor="middle">Answer</text>
+      <text x="932" y="508" fill="#6b4e2e" font-size="9" font-family="'JetBrains Mono', monospace" text-anchor="middle">read-only</text>
+
+      <!-- Fix: Analyze mode -> Answer arrow needs to reach x=924 -->
+      <!-- Re-route: exit Analyze bottom at (736, 308), down to y=400, right to x=924, down to Answer top y=468 -->
+    </svg>
+  </div>
+</body>
+</html>
